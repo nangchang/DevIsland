@@ -6,10 +6,6 @@ struct DevIslandApp: App {
     @ObservedObject private var state = AppState.shared
 
     var body: some Scene {
-        Settings {
-            Text("DevIsland Settings").padding()
-        }
-
         MenuBarExtra {
             MenuBarMenu()
         } label: {
