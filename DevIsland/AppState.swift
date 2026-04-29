@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AppKit
 
 // MARK: - Pending Request
 
@@ -164,5 +165,61 @@ class AppState: ObservableObject {
 
     func deny() {
         sendDecision(approved: false)
+    }
+}
+
+class GlobalShortcutManager {
+    static let shared = GlobalShortcutManager()
+    private var monitor: Any?
+
+    private init() {}
+
+    func start() {
+        guard AXIsProcessTrusted() else {
+            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+            AXIsProcessTrustedWithOptions(options)
+            return
+        }
+
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            self.handle(event)
+        }
+    }
+
+    private func handle(_ event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard flags == [.command, .shift], AppState.shared.isNotchExpanded else { return }
+
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "y":
+            DispatchQueue.main.async { AppState.shared.approve() }
+        case "n":
+            DispatchQueue.main.async { AppState.shared.deny() }
+        default:
+            break
+        }
+    }
+}
+
+class TerminalFocuser {
+    private static let candidates: [(bundleId: String, name: String)] = [
+        ("com.mitchellh.ghostty", "Ghostty"),
+        ("com.googlecode.iterm2", "iTerm2"),
+        ("dev.warp.Warp-Stable", "Warp"),
+        ("com.apple.Terminal", "Terminal")
+    ]
+
+    static func focusTerminal() {
+        guard let match = candidates.first(where: {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
+        }) else {
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            var error: NSDictionary?
+            NSAppleScript(source: "tell application \"\(match.name)\" to activate")?
+                .executeAndReturnError(&error)
+        }
     }
 }
