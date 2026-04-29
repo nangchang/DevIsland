@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        run: xcodegen generate
+
+      - name: Build App
+        run: |
+          xcodebuild archive \
+            -project DevIsland.xcodeproj \
+            -scheme DevIsland \
+            -configuration Release \
+            -archivePath build/DevIsland.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Export App
+        run: |
+          mkdir -p build/Export
+          cp -R build/DevIsland.xcarchive/Products/Applications/DevIsland.app build/Export/
+
+      - name: Zip App
+        run: |
+          cd build/Export
+          zip -r ../../DevIsland.zip DevIsland.app
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: DevIsland.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
