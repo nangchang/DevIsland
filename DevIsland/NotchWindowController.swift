@@ -4,9 +4,13 @@ import SwiftUI
 // MARK: - Window Controller
 
 class NotchWindowController: NSWindowController {
+    private var localMouseMonitor: Any?
+    private var globalMouseMonitor: Any?
+    private static let animationCanvasSize = NSSize(width: 600, height: 400)
+
     convenience init() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+            contentRect: NSRect(origin: .zero, size: Self.animationCanvasSize),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
@@ -18,6 +22,7 @@ class NotchWindowController: NSWindowController {
         panel.isOpaque = false
         panel.hasShadow = false
         panel.ignoresMouseEvents = false
+        panel.acceptsMouseMovedEvents = true
         panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
@@ -29,6 +34,17 @@ class NotchWindowController: NSWindowController {
         panel.contentView = notchView
 
         positionUnderNotch()
+        installMousePassthrough()
+        updateMousePassthroughForCurrentMouseLocation()
+    }
+
+    deinit {
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+        }
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
+        }
     }
 
     func positionUnderNotch() {
@@ -38,6 +54,46 @@ class NotchWindowController: NSWindowController {
         let x = (screenRect.width - windowRect.width) / 2
         let y = screenRect.height - windowRect.height
         window.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func installMousePassthrough() {
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown]) { [weak self] event in
+            self?.updateMousePassthrough(windowPoint: event.locationInWindow)
+            return event
+        }
+
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
+            guard let self, let window = self.window else { return }
+            let mouse = NSEvent.mouseLocation
+            let point = NSPoint(x: mouse.x - window.frame.minX, y: mouse.y - window.frame.minY)
+            self.updateMousePassthrough(windowPoint: point)
+        }
+    }
+
+    private func updateMousePassthroughForCurrentMouseLocation() {
+        guard let window else { return }
+        let mouse = NSEvent.mouseLocation
+        let point = NSPoint(x: mouse.x - window.frame.minX, y: mouse.y - window.frame.minY)
+        updateMousePassthrough(windowPoint: point)
+    }
+
+    private func updateMousePassthrough(windowPoint: NSPoint) {
+        guard let window else { return }
+        window.ignoresMouseEvents = !notchHitRect(in: window.frame.size).contains(windowPoint)
+    }
+
+    private func notchHitRect(in windowSize: NSSize) -> NSRect {
+        let size = Self.notchSize(expanded: AppState.shared.isNotchExpanded)
+        return NSRect(
+            x: (windowSize.width - size.width) / 2,
+            y: windowSize.height - size.height,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    private static func notchSize(expanded: Bool) -> NSSize {
+        expanded ? NSSize(width: 440, height: 220) : NSSize(width: 140, height: 28)
     }
 }
 
