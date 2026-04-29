@@ -142,6 +142,17 @@ struct NotchView: View {
 
                 Spacer()
 
+                // Queue count badge
+                if state.pendingCount > 1 {
+                    Text("+\(state.pendingCount - 1)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.2))
+                        .clipShape(Capsule())
+                }
+
                 // Session ID badge
                 if !state.currentSessionId.isEmpty {
                     Text(state.currentSessionId)

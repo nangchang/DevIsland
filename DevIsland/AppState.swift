@@ -1,6 +1,20 @@
 import SwiftUI
 import Combine
 
+// MARK: - Pending Request
+
+struct PendingRequest: Identifiable {
+    let id = UUID()
+    let sessionId: String
+    let eventName: String
+    let toolName: String
+    let message: String
+    let responseHandler: (String) -> Void
+    let receivedAt: Date
+}
+
+// MARK: - App State
+
 class AppState: ObservableObject {
     static let shared = AppState()
 
@@ -10,8 +24,10 @@ class AppState: ObservableObject {
     @Published var currentToolName: String = ""
     @Published var currentEventName: String = ""
     @Published var timeoutProgress: Double = 1.0
+    @Published var pendingCount: Int = 0  // Requests waiting in queue
 
     private var server = HookSocketServer()
+    private var pendingQueue: [PendingRequest] = []
     private var currentResponseHandler: ((String) -> Void)?
     private var timeoutTimer: Timer?
     private let timeoutDuration: Double = 300
@@ -26,18 +42,18 @@ class AppState: ObservableObject {
     private func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
         guard let data = message.data(using: .utf8) else { return }
 
-        self.currentResponseHandler = responseHandler
+        var event     = "Unknown"
+        var toolName  = ""
+        var sessionId = ""
+        var displayMsg = ""
 
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                // Claude Code hook payload keys
-                let event     = json["hook_event_name"] as? String ?? "Unknown"
-                let toolName  = json["tool_name"] as? String ?? ""
+                event     = json["hook_event_name"] as? String ?? "Unknown"
+                toolName  = json["tool_name"] as? String ?? ""
+                sessionId = json["session_id"] as? String ?? ""
                 let toolInput = json["tool_input"] as? [String: Any]
-                let sessionId = json["session_id"] as? String ?? ""
 
-                // Extract most relevant display string from tool_input
-                var displayMsg = ""
                 if let command = toolInput?["command"] as? String {
                     displayMsg = command
                 } else if let filePath = toolInput?["file_path"] as? String {
@@ -47,27 +63,42 @@ class AppState: ObservableObject {
                 } else if let input = toolInput {
                     displayMsg = input.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
                 }
-
-                DispatchQueue.main.async {
-                    self.currentEventName = event
-                    self.currentToolName  = toolName
-                    self.currentMessage   = displayMsg
-                    self.currentSessionId = String(sessionId.prefix(8))
-                    self.isNotchExpanded  = true
-                    self.startTimeout()
-                }
             }
         } catch {
             print("JSON parse error: \(error)")
-            DispatchQueue.main.async {
-                self.currentMessage   = message
-                self.currentToolName  = ""
-                self.currentEventName = "Unknown"
-                self.currentSessionId = ""
-                self.isNotchExpanded  = true
-                self.startTimeout()
+            displayMsg = message
+        }
+
+        let request = PendingRequest(
+            sessionId: sessionId,
+            eventName: event,
+            toolName: toolName,
+            message: displayMsg,
+            responseHandler: responseHandler,
+            receivedAt: Date()
+        )
+
+        DispatchQueue.main.async {
+            self.pendingQueue.append(request)
+            self.pendingCount = self.pendingQueue.count
+            if !self.isNotchExpanded {
+                self.showNextRequest()
             }
         }
+    }
+
+    private func showNextRequest() {
+        guard let next = pendingQueue.first else {
+            isNotchExpanded = false
+            return
+        }
+        currentResponseHandler = next.responseHandler
+        currentEventName  = next.eventName
+        currentToolName   = next.toolName
+        currentMessage    = next.message
+        currentSessionId  = String(next.sessionId.prefix(8))
+        isNotchExpanded   = true
+        startTimeout()
     }
 
     private func startTimeout() {
@@ -101,8 +132,12 @@ class AppState: ObservableObject {
         timeoutTimer?.invalidate()
 
         DispatchQueue.main.async {
-            self.isNotchExpanded  = false
-            self.timeoutProgress  = 1.0
+            self.timeoutProgress = 1.0
+            if !self.pendingQueue.isEmpty {
+                self.pendingQueue.removeFirst()
+                self.pendingCount = self.pendingQueue.count
+            }
+            self.showNextRequest()
         }
     }
 
