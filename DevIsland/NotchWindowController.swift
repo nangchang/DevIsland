@@ -1,11 +1,12 @@
 import AppKit
 import SwiftUI
+import Combine
 
 // MARK: - Window Controller
 
 class NotchWindowController: NSWindowController {
-    private var localMouseMonitor: Any?
-    private var globalMouseMonitor: Any?
+    private var cancellables = Set<AnyCancellable>()
+    private var pendingSettle: DispatchWorkItem?
     private static let animationCanvasSize = NSSize(width: 600, height: 400)
 
     convenience init() {
@@ -33,63 +34,47 @@ class NotchWindowController: NSWindowController {
         notchView.layer?.backgroundColor = .clear
         panel.contentView = notchView
 
-        positionUnderNotch()
-        installMousePassthrough()
-        updateMousePassthroughForCurrentMouseLocation()
+        setFrame(size: Self.notchSize(expanded: AppState.shared.isNotchExpanded))
+
+        AppState.shared.$isNotchExpanded
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] expanded in
+                self?.handleExpansionChange(expanded)
+            }
+            .store(in: &cancellables)
     }
 
-    deinit {
-        if let localMouseMonitor {
-            NSEvent.removeMonitor(localMouseMonitor)
-        }
-        if let globalMouseMonitor {
-            NSEvent.removeMonitor(globalMouseMonitor)
+    private func handleExpansionChange(_ expanded: Bool) {
+        pendingSettle?.cancel()
+
+        if !expanded {
+            let work = DispatchWorkItem { [weak self] in
+                self?.setFrame(size: Self.notchSize(expanded: false))
+            }
+            pendingSettle = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
         }
     }
 
-    func positionUnderNotch() {
+    func expandFromCollapsedWindow() {
+        guard !AppState.shared.isNotchExpanded else { return }
+        setFrame(size: Self.animationCanvasSize)
+        DispatchQueue.main.async {
+            AppState.shared.isNotchExpanded = true
+        }
+    }
+
+    private func setFrame(size: NSSize) {
         guard let window = self.window, let screen = NSScreen.main else { return }
-        let screenRect = screen.frame
-        let windowRect = window.frame
-        let x = (screenRect.width - windowRect.width) / 2
-        let y = screenRect.height - windowRect.height
-        window.setFrameOrigin(NSPoint(x: x, y: y))
-    }
-
-    private func installMousePassthrough() {
-        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown]) { [weak self] event in
-            self?.updateMousePassthrough(windowPoint: event.locationInWindow)
-            return event
-        }
-
-        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
-            guard let self, let window = self.window else { return }
-            let mouse = NSEvent.mouseLocation
-            let point = NSPoint(x: mouse.x - window.frame.minX, y: mouse.y - window.frame.minY)
-            self.updateMousePassthrough(windowPoint: point)
-        }
-    }
-
-    private func updateMousePassthroughForCurrentMouseLocation() {
-        guard let window else { return }
-        let mouse = NSEvent.mouseLocation
-        let point = NSPoint(x: mouse.x - window.frame.minX, y: mouse.y - window.frame.minY)
-        updateMousePassthrough(windowPoint: point)
-    }
-
-    private func updateMousePassthrough(windowPoint: NSPoint) {
-        guard let window else { return }
-        window.ignoresMouseEvents = !notchHitRect(in: window.frame.size).contains(windowPoint)
-    }
-
-    private func notchHitRect(in windowSize: NSSize) -> NSRect {
-        let size = Self.notchSize(expanded: AppState.shared.isNotchExpanded)
-        return NSRect(
-            x: (windowSize.width - size.width) / 2,
-            y: windowSize.height - size.height,
+        let frame = NSRect(
+            x: screen.frame.midX - size.width / 2,
+            y: screen.frame.maxY - size.height,
             width: size.width,
             height: size.height
         )
+        window.setFrame(frame, display: true, animate: false)
     }
 
     private static func notchSize(expanded: Bool) -> NSSize {
@@ -104,18 +89,29 @@ class NotchHostingView: NSHostingView<NotchView> {
     override var isOpaque: Bool { false }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        let expanded = AppState.shared.isNotchExpanded
-        let notchW: CGFloat = expanded ? 440 : 140
-        let notchH: CGFloat = expanded ? 220 : 28
-        // NSView 좌표계: y=0이 아래쪽, 노치는 뷰 상단에 위치
-        let rect = CGRect(
-            x: (bounds.width - notchW) / 2,
-            y: bounds.height - notchH,
-            width: notchW,
-            height: notchH
+        guard notchHitRect().contains(point) else { return nil }
+        return super.hitTest(point) ?? self  // SwiftUI 내부 이벤트 라우팅 유지
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if !AppState.shared.isNotchExpanded {
+            (window?.windowController as? NotchWindowController)?.expandFromCollapsedWindow()
+            return
+        }
+
+        super.mouseDown(with: event)
+    }
+
+    private func notchHitRect() -> CGRect {
+        let size = AppState.shared.isNotchExpanded
+            ? CGSize(width: 440, height: 220)
+            : bounds.size
+        return CGRect(
+            x: (bounds.width - size.width) / 2,
+            y: bounds.height - size.height,
+            width: size.width,
+            height: size.height
         )
-        guard rect.contains(point) else { return nil }
-        return super.hitTest(point)  // SwiftUI 내부 이벤트 라우팅 유지
     }
 }
 
@@ -176,6 +172,12 @@ struct NotchView: View {
                 width:  state.isNotchExpanded ? 440 : 140,
                 height: state.isNotchExpanded ? 220 : 28
             )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if !state.isNotchExpanded {
+                    state.isNotchExpanded = true
+                }
+            }
             .animation(.spring(response: 0.42, dampingFraction: 0.72), value: state.isNotchExpanded)
 
             Spacer()
