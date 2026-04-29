@@ -24,6 +24,8 @@ class NotchWindowController: NSWindowController {
         self.init(window: panel)
 
         let notchView = NotchHostingView(rootView: NotchView())
+        notchView.wantsLayer = true
+        notchView.layer?.backgroundColor = .clear
         panel.contentView = notchView
 
         positionUnderNotch()
@@ -42,7 +44,9 @@ class NotchWindowController: NSWindowController {
 // MARK: - Passthrough Hosting View
 
 class NotchHostingView: NSHostingView<NotchView> {
-    /// 실제 노치 도형 바깥 영역은 클릭을 하위 윈도우로 통과시킴
+    // 투명 픽셀 영역에서 OS 수준 click-through가 동작하도록 비불투명 처리
+    override var isOpaque: Bool { false }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         let expanded = AppState.shared.isNotchExpanded
         let notchW: CGFloat = expanded ? 440 : 140
@@ -54,7 +58,8 @@ class NotchHostingView: NSHostingView<NotchView> {
             width: notchW,
             height: notchH
         )
-        return rect.contains(point) ? self : nil
+        guard rect.contains(point) else { return nil }
+        return super.hitTest(point)  // SwiftUI 내부 이벤트 라우팅 유지
     }
 }
 
