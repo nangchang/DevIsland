@@ -18,6 +18,7 @@ class NotchWindowController: NSWindowController {
         panel.isOpaque = false
         panel.hasShadow = false
         panel.ignoresMouseEvents = false
+        panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
         self.init(window: panel)
@@ -80,6 +81,8 @@ struct NotchView: View {
                     style: .continuous
                 )
                 .fill(Color.black)
+                .allowsHitTesting(!state.isNotchExpanded)
+                .onTapGesture { state.isNotchExpanded = true }
 
                 if state.isNotchExpanded {
                     expandedContent
@@ -94,9 +97,6 @@ struct NotchView: View {
                 height: state.isNotchExpanded ? 220 : 28
             )
             .animation(.spring(response: 0.42, dampingFraction: 0.72), value: state.isNotchExpanded)
-            .onTapGesture {
-                if !state.isNotchExpanded { state.isNotchExpanded = true }
-            }
 
             Spacer()
         }
