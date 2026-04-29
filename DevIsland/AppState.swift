@@ -37,6 +37,7 @@ class AppState: ObservableObject {
             self?.handleMessage(message, responseHandler: responseHandler)
         }
         server.start()
+        GlobalShortcutManager.shared.start()
     }
 
     private func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
