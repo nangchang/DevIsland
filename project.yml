@@ -2,6 +2,7 @@ name: DevIsland
 options:
   bundleIdPrefix: kr.or.nes
   xcodeVersion: "15.0"
+  objectVersion: 56
 targets:
   DevIsland:
     type: application
