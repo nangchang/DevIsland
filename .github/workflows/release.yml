@@ -12,6 +12,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
@@ -25,24 +28,26 @@ jobs:
             -scheme DevIsland \
             -configuration Release \
             -archivePath build/DevIsland.xcarchive \
+            -destination "platform=macOS" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            SKIP_INSTALL=NO
 
       - name: Export App
         run: |
           mkdir -p build/Export
           cp -R build/DevIsland.xcarchive/Products/Applications/DevIsland.app build/Export/
 
-      - name: Zip App
+      - name: Create DMG
         run: |
-          cd build/Export
-          zip -r ../../DevIsland.zip DevIsland.app
+          ln -s /Applications build/Export/Applications
+          hdiutil create -volname "DevIsland" -srcfolder build/Export -ov -format UDZO DevIsland.dmg
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: DevIsland.zip
+          files: DevIsland.dmg
           draft: false
           prerelease: false
           generate_release_notes: true
