@@ -1,0 +1,14 @@
+name: DevIsland
+options:
+  bundleIdPrefix: kr.or.nes
+targets:
+  DevIsland:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources: [DevIsland]
+    info:
+      path: DevIsland/Info.plist
+      properties:
+        LSUIElement: true
+        NSHighResolutionCapable: true
