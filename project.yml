@@ -12,3 +12,4 @@ targets:
       properties:
         LSUIElement: true
         NSHighResolutionCapable: true
+        NSAppleEventsUsageDescription: "Approve/Deny 후 터미널 앱을 포커스하기 위해 사용합니다."

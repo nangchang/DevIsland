@@ -139,6 +139,7 @@ class AppState: ObservableObject {
             }
             self.showNextRequest()
         }
+        TerminalFocuser.focusTerminal()
     }
 
     func approve() {
