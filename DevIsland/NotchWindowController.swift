@@ -72,8 +72,14 @@ struct NotchView: View {
     var body: some View {
         VStack {
             ZStack {
-                RoundedRectangle(cornerRadius: state.isNotchExpanded ? 22 : 14, style: .continuous)
-                    .fill(Color.black)
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 0,
+                    bottomLeadingRadius: state.isNotchExpanded ? 22 : 14,
+                    bottomTrailingRadius: state.isNotchExpanded ? 22 : 14,
+                    topTrailingRadius: 0,
+                    style: .continuous
+                )
+                .fill(Color.black)
 
                 if state.isNotchExpanded {
                     expandedContent
