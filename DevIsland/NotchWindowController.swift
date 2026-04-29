@@ -23,7 +23,7 @@ class NotchWindowController: NSWindowController {
 
         self.init(window: panel)
 
-        let notchView = NSHostingView(rootView: NotchView())
+        let notchView = NotchHostingView(rootView: NotchView())
         panel.contentView = notchView
 
         positionUnderNotch()
@@ -36,6 +36,25 @@ class NotchWindowController: NSWindowController {
         let x = (screenRect.width - windowRect.width) / 2
         let y = screenRect.height - windowRect.height
         window.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+}
+
+// MARK: - Passthrough Hosting View
+
+class NotchHostingView: NSHostingView<NotchView> {
+    /// 실제 노치 도형 바깥 영역은 클릭을 하위 윈도우로 통과시킴
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let expanded = AppState.shared.isNotchExpanded
+        let notchW: CGFloat = expanded ? 440 : 140
+        let notchH: CGFloat = expanded ? 220 : 28
+        // NSView 좌표계: y=0이 아래쪽, 노치는 뷰 상단에 위치
+        let rect = CGRect(
+            x: (bounds.width - notchW) / 2,
+            y: bounds.height - notchH,
+            width: notchW,
+            height: notchH
+        )
+        return rect.contains(point) ? self : nil
     }
 }
 
