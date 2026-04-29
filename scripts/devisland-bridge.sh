@@ -8,11 +8,10 @@ EVENT=$(echo "$PAYLOAD" | python3 -c \
   "import sys,json; print(json.load(sys.stdin).get('hook_event_name','PermissionRequest'))" \
   2>/dev/null || echo "PermissionRequest")
 
-# 4-2: 앱 미실행 시 자동 허용 (Claude가 멈추는 것 방지)
-if ! nc -z localhost 9090 2>/dev/null; then
-  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"$EVENT\",\"decision\":{\"behavior\":\"allow\"}}}"
-  exit 0
-fi
+# 앱이 뜰 때까지 대기 (2초 간격 폴링)
+while ! nc -z localhost 9090 2>/dev/null; do
+  sleep 2
+done
 
 # 앱으로 전달 후 응답 대기 (최대 300초)
 RAW=$(echo "$PAYLOAD" | nc -w 300 localhost 9090)
