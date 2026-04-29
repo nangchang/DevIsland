@@ -13,6 +13,13 @@ struct PendingRequest: Identifiable {
     let receivedAt: Date
 }
 
+struct PendingItem: Identifiable {
+    let id: UUID
+    let toolName: String
+    let message: String
+    let sessionId: String
+}
+
 // MARK: - App State
 
 class AppState: ObservableObject {
@@ -24,7 +31,8 @@ class AppState: ObservableObject {
     @Published var currentToolName: String = ""
     @Published var currentEventName: String = ""
     @Published var timeoutProgress: Double = 1.0
-    @Published var pendingCount: Int = 0  // Requests waiting in queue
+    @Published var pendingCount: Int = 0
+    @Published var pendingItems: [PendingItem] = []
 
     private var server = HookSocketServer()
     private var pendingQueue: [PendingRequest] = []
@@ -81,6 +89,12 @@ class AppState: ObservableObject {
 
         DispatchQueue.main.async {
             self.pendingQueue.append(request)
+            self.pendingItems.append(PendingItem(
+                id: request.id,
+                toolName: request.toolName,
+                message: request.message,
+                sessionId: String(request.sessionId.prefix(8))
+            ))
             self.pendingCount = self.pendingQueue.count
             if !self.isNotchExpanded {
                 self.showNextRequest()
@@ -136,6 +150,7 @@ class AppState: ObservableObject {
             self.timeoutProgress = 1.0
             if !self.pendingQueue.isEmpty {
                 self.pendingQueue.removeFirst()
+                if !self.pendingItems.isEmpty { self.pendingItems.removeFirst() }
                 self.pendingCount = self.pendingQueue.count
             }
             self.showNextRequest()
