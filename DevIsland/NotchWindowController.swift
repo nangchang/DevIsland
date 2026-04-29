@@ -139,10 +139,121 @@ func toolInfo(for name: String) -> ToolInfo {
     }
 }
 
+// MARK: - Buddy Mascot
+
+struct CodexBuddyView: View {
+    let accent: Color
+    let isActive: Bool
+    let compact: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            let bob = isActive ? -size * 0.05 : size * 0.03
+
+            ZStack {
+                Capsule()
+                    .fill(accent.opacity(0.18))
+                    .frame(width: size * 0.62, height: size * 0.13)
+                    .blur(radius: size * 0.03)
+                    .offset(y: size * 0.39)
+
+                buddyBody(size: size)
+                    .offset(y: bob)
+
+                threadMark(size: size)
+                    .offset(x: -size * 0.02, y: bob - size * 0.02)
+
+                eyes(size: size)
+                    .offset(y: bob)
+
+                if !compact {
+                    toolBadge(size: size)
+                        .offset(x: size * 0.27, y: -size * 0.24 + bob)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .accessibilityLabel("Codex Buddy")
+    }
+
+    private func buddyBody(size: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.12, green: 0.14, blue: 0.18),
+                        Color(red: 0.04, green: 0.05, blue: 0.07)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                    .stroke(accent.opacity(0.65), lineWidth: max(1, size * 0.045))
+            )
+            .overlay(
+                Circle()
+                    .fill(accent.opacity(0.24))
+                    .frame(width: size * 0.22, height: size * 0.22)
+                    .blur(radius: size * 0.08)
+                    .offset(x: -size * 0.18, y: -size * 0.16)
+            )
+            .frame(width: size * 0.74, height: size * 0.68)
+    }
+
+    private func threadMark(size: CGFloat) -> some View {
+        Path { path in
+            path.move(to: CGPoint(x: size * 0.35, y: size * 0.35))
+            path.addCurve(
+                to: CGPoint(x: size * 0.64, y: size * 0.35),
+                control1: CGPoint(x: size * 0.43, y: size * 0.16),
+                control2: CGPoint(x: size * 0.59, y: size * 0.16)
+            )
+            path.addCurve(
+                to: CGPoint(x: size * 0.36, y: size * 0.62),
+                control1: CGPoint(x: size * 0.70, y: size * 0.53),
+                control2: CGPoint(x: size * 0.52, y: size * 0.70)
+            )
+        }
+        .stroke(accent.opacity(0.82), style: StrokeStyle(lineWidth: max(1, size * 0.045), lineCap: .round))
+        .frame(width: size, height: size)
+    }
+
+    private func eyes(size: CGFloat) -> some View {
+        HStack(spacing: size * 0.12) {
+            Capsule()
+                .fill(Color.white.opacity(0.86))
+                .frame(width: size * 0.08, height: size * 0.11)
+            Capsule()
+                .fill(Color.white.opacity(0.86))
+                .frame(width: size * 0.08, height: size * 0.11)
+        }
+        .offset(y: size * 0.04)
+    }
+
+    private func toolBadge(size: CGFloat) -> some View {
+        Circle()
+            .fill(Color.black.opacity(0.9))
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(0.16), lineWidth: max(1, size * 0.025))
+            )
+            .overlay(
+                Image(systemName: "sparkles")
+                    .font(.system(size: size * 0.18, weight: .bold))
+                    .foregroundColor(accent)
+            )
+            .frame(width: size * 0.32, height: size * 0.32)
+    }
+}
+
 // MARK: - Notch View
 
 struct NotchView: View {
     @ObservedObject var state = AppState.shared
+    @State private var buddyPulse = false
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
 
@@ -184,6 +295,9 @@ struct NotchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
+            withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
+                buddyPulse = true
+            }
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
         }
     }
@@ -192,9 +306,8 @@ struct NotchView: View {
 
     var collapsedContent: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(Color.white.opacity(0.25))
-                .frame(width: 6, height: 6)
+            CodexBuddyView(accent: tool.color, isActive: buddyPulse, compact: true)
+                .frame(width: 18, height: 18)
             Text("DevIsland")
                 .foregroundColor(.white.opacity(0.6))
                 .font(.system(size: 11, weight: .semibold))
@@ -208,10 +321,8 @@ struct NotchView: View {
 
             // ── Header ──────────────────────────────────
             HStack(spacing: 8) {
-                Image(systemName: tool.icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(tool.color)
-                    .frame(width: 22)
+                CodexBuddyView(accent: tool.color, isActive: buddyPulse, compact: false)
+                    .frame(width: 38, height: 38)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tool.label)
