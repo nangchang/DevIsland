@@ -9,14 +9,18 @@
 /* Begin PBXBuildFile section */
 		383DC715CB8FA44A65E60799 /* HookSocketServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2641939622E5AF51417E48A3 /* HookSocketServer.swift */; };
 		46C8980C325BB8875DAC1F3F /* NotchWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47A9EEA29B5C5F7728EF5483 /* NotchWindowController.swift */; };
+		BF9A909642F24A14928C126E /* TerminalFocuser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 036DA92FF3F0BB639926AAED /* TerminalFocuser.swift */; };
 		CE9F875D32F8792D6554B7F3 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75B4E969E02A31AAA7429C11 /* AppState.swift */; };
 		E1F7EF88467F78B5636B38A5 /* DevIslandApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC617AABFC8B08F45C3F2A1 /* DevIslandApp.swift */; };
+		E200A78746CF1962B454D5CA /* GlobalShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A5A859FB59899688A464531 /* GlobalShortcutManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		036DA92FF3F0BB639926AAED /* TerminalFocuser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalFocuser.swift; sourceTree = "<group>"; };
 		13C8582D409087F811D99347 /* DevIsland.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DevIsland.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2641939622E5AF51417E48A3 /* HookSocketServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookSocketServer.swift; sourceTree = "<group>"; };
 		47A9EEA29B5C5F7728EF5483 /* NotchWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchWindowController.swift; sourceTree = "<group>"; };
+		6A5A859FB59899688A464531 /* GlobalShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutManager.swift; sourceTree = "<group>"; };
 		75B4E969E02A31AAA7429C11 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		9EC617AABFC8B08F45C3F2A1 /* DevIslandApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevIslandApp.swift; sourceTree = "<group>"; };
 		F5F146B913A411EB87E5E8E9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -44,9 +48,11 @@
 			children = (
 				75B4E969E02A31AAA7429C11 /* AppState.swift */,
 				9EC617AABFC8B08F45C3F2A1 /* DevIslandApp.swift */,
+				6A5A859FB59899688A464531 /* GlobalShortcutManager.swift */,
 				2641939622E5AF51417E48A3 /* HookSocketServer.swift */,
 				F5F146B913A411EB87E5E8E9 /* Info.plist */,
 				47A9EEA29B5C5F7728EF5483 /* NotchWindowController.swift */,
+				036DA92FF3F0BB639926AAED /* TerminalFocuser.swift */,
 			);
 			path = DevIsland;
 			sourceTree = "<group>";
@@ -108,8 +114,10 @@
 			files = (
 				CE9F875D32F8792D6554B7F3 /* AppState.swift in Sources */,
 				E1F7EF88467F78B5636B38A5 /* DevIslandApp.swift in Sources */,
+				E200A78746CF1962B454D5CA /* GlobalShortcutManager.swift in Sources */,
 				383DC715CB8FA44A65E60799 /* HookSocketServer.swift in Sources */,
 				46C8980C325BB8875DAC1F3F /* NotchWindowController.swift in Sources */,
+				BF9A909642F24A14928C126E /* TerminalFocuser.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
