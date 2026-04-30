@@ -23,6 +23,8 @@ echo "DevIsland 브리지 스크립트 설치 중..."
 mkdir -p "$HOOKS_DIR"
 
 # Symlink when running from source; copy when running from app bundle
+# Always remove the destination first to properly replace any existing symlink
+rm -f "$BRIDGE_DEST"
 if [[ "$SCRIPT_DIR" == *.app/Contents/Resources* ]]; then
     cp "$BRIDGE_SRC" "$BRIDGE_DEST"
     echo "✓ 브리지 스크립트 복사 완료: $BRIDGE_DEST"

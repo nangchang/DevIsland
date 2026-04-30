@@ -101,13 +101,18 @@ enum BridgeInstaller {
 
     private static func patchSettings(at url: URL, bridgePath: String) throws {
         let fm = FileManager.default
-        if !fm.fileExists(atPath: url.path) {
+        var settings: [String: Any] = [:]
+        if fm.fileExists(atPath: url.path) {
+            let data = try Data(contentsOf: url)
+            guard let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw NSError(domain: "BridgeInstaller", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "settings.json 파싱 실패: 유효하지 않은 JSON 형식입니다."])
+            }
+            settings = parsed
+        } else {
             try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try "{}".write(to: url, atomically: true, encoding: .utf8)
         }
 
-        let data = try Data(contentsOf: url)
-        var settings = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
 
         let hookConfig: [String: Any] = [
@@ -126,9 +131,8 @@ enum BridgeInstaller {
         for (key, config) in entries {
             var list = (hooks[key] as? [[String: Any]]) ?? []
             let alreadyRegistered = list.contains { entry in
-                guard let d = try? JSONSerialization.data(withJSONObject: entry),
-                      let s = String(data: d, encoding: .utf8) else { return false }
-                return s.contains(bridgePath)
+                let subHooks = entry["hooks"] as? [[String: Any]] ?? []
+                return subHooks.contains { ($0["command"] as? String) == bridgePath }
             }
             if !alreadyRegistered { list.append(config) }
             hooks[key] = list
@@ -136,7 +140,7 @@ enum BridgeInstaller {
 
         settings["hooks"] = hooks
         let out = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
-        try out.write(to: url)
+        try out.write(to: url, options: .atomic)
     }
 
     private static func showAlert(title: String, message: String, isError: Bool) {
