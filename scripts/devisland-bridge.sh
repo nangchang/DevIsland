@@ -16,11 +16,13 @@ elif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
   TERM_TITLE=$(osascript -e 'tell application "Terminal" to get name of selected tab of front window' 2>/dev/null || echo "Terminal")
 elif [ -n "$GHOSTTY_BIN_DIR" ]; then
   TERM_TITLE="Ghostty"
+elif [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
+  TERM_TITLE="Warp"
 fi
 
-# 페이로드에 터미널 정보 추가
-PAYLOAD=$(echo "$PAYLOAD" | python3 -c \
-  "import sys,json; d=json.load(sys.stdin); d['terminal_title']='$TERM_TITLE'; print(json.dumps(d))")
+# 페이로드에 터미널 정보 추가 (환경 변수로 전달해 특수문자 안전 처리)
+PAYLOAD=$(TERM_TITLE="$TERM_TITLE" echo "$PAYLOAD" | python3 -c \
+  "import sys,json,os; d=json.load(sys.stdin); d['terminal_title']=os.environ.get('TERM_TITLE','Terminal'); print(json.dumps(d))")
 
 # 이벤트 종류 추출 (PermissionRequest / PreToolUse / Stop / ...)
 EVENT=$(echo "$PAYLOAD" | python3 -c \
@@ -28,8 +30,8 @@ EVENT=$(echo "$PAYLOAD" | python3 -c \
   2>/dev/null || echo "PermissionRequest")
 
 # 디버그 로그 기록
-echo "[$(date '+%H-%m-%d %H:%M:%S')] Raw Payload: $PAYLOAD" >> /tmp/DevIsland.bridge.log
-echo "[$(date '+%H-%m-%d %H:%M:%S')] Event Detected: $EVENT" >> /tmp/DevIsland.bridge.log
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Raw Payload: $PAYLOAD" >> /tmp/DevIsland.bridge.log
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Event Detected: $EVENT" >> /tmp/DevIsland.bridge.log
 
 # 앱으로 전달 후 응답 대기 (최대 300초)
 RAW=$(echo "$PAYLOAD" | nc -w 300 localhost 9090)
@@ -37,7 +39,6 @@ RESULT=$(echo "$RAW" | python3 -c \
   "import sys,json; print(json.load(sys.stdin).get('response','denied'))" \
   2>/dev/null || echo "denied")
 
-# 4-1: 이벤트별 응답 형식 분기
 # PermissionRequest → behavior: deny  /  PreToolUse → behavior: block
 if [ "$RESULT" = "approved" ]; then
   echo "{\"hookSpecificOutput\":{\"hookEventName\":\"$EVENT\",\"decision\":{\"behavior\":\"allow\"}}}"
