@@ -1,11 +1,10 @@
 #!/bin/bash
 set -e
 
-BRIDGE_SRC="/Volumes/data/Github/DevIsland/scripts/devisland-bridge.sh"
 HOOKS_DIR="$HOME/.claude/hooks"
 BRIDGE_DEST="$HOOKS_DIR/devisland-bridge.sh"
 SETTINGS_FILE="$HOME/.claude/settings.json"
-SCRIPT_DIR="/Volumes/data/Github/DevIsland/scripts"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "Linking DevIsland bridge script..."
 

@@ -340,7 +340,7 @@ struct SessionRowView: View {
                     }
                     
                     HStack(spacing: 6) {
-                        Text(session.id)
+                        Text(String(session.id.prefix(8)))
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundColor(.white.opacity(0.4))
                         
@@ -491,7 +491,7 @@ struct NotchView: View {
                     }
                     
                     HStack(spacing: 6) {
-                        TagView(icon: "terminal.fill", text: state.currentSessionId.isEmpty ? "No Session" : state.currentSessionId)
+                        TagView(icon: "terminal.fill", text: state.currentSessionId.isEmpty ? "No Session" : String(state.currentSessionId.prefix(8)))
                         TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == state.currentSessionId })?.terminalTitle ?? "Unknown")
                         if state.pendingCount > 1 {
                             TagView(icon: "list.bullet", text: "\(state.pendingCount) tasks queued", color: .orange.opacity(0.2))
@@ -503,7 +503,7 @@ struct NotchView: View {
 
                 // Close Button
                 Button {
-                    state.isNotchExpanded = false
+                    state.dismissCurrentRequest()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 20))

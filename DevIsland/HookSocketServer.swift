@@ -36,12 +36,17 @@ class HookSocketServer {
     
     private func handleConnection(_ connection: NWConnection) {
         connection.start(queue: .global())
-        receiveData(on: connection)
+        receiveData(on: connection, accumulatedData: Data())
     }
     
-    private func receiveData(on connection: NWConnection) {
+    private func receiveData(on connection: NWConnection, accumulatedData: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, context, isComplete, error in
-            if let data = data, let message = String(data: data, encoding: .utf8) {
+            var payload = accumulatedData
+            if let data {
+                payload.append(data)
+            }
+
+            if isComplete, let message = String(data: payload, encoding: .utf8) {
                 print("Received data: \(message)")
                 DispatchQueue.main.async {
                     self?.onMessageReceived?(message) { response in
@@ -57,7 +62,7 @@ class HookSocketServer {
             } else if isComplete || error != nil {
                 connection.cancel()
             } else {
-                self?.receiveData(on: connection)
+                self?.receiveData(on: connection, accumulatedData: payload)
             }
         }
     }

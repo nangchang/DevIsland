@@ -19,8 +19,8 @@ elif [ -n "$GHOSTTY_BIN_DIR" ]; then
 fi
 
 # 페이로드에 터미널 정보 추가
-PAYLOAD=$(echo "$PAYLOAD" | python3 -c \
-  "import sys,json; d=json.load(sys.stdin); d['terminal_title']='$TERM_TITLE'; print(json.dumps(d))")
+PAYLOAD=$(echo "$PAYLOAD" | TERM_TITLE="$TERM_TITLE" python3 -c \
+  'import os,sys,json; d=json.load(sys.stdin); d["terminal_title"]=os.environ.get("TERM_TITLE", "Terminal"); print(json.dumps(d))')
 
 # 이벤트 종류 추출 (PermissionRequest / PreToolUse / Stop / ...)
 EVENT=$(echo "$PAYLOAD" | python3 -c \

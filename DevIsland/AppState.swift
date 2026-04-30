@@ -24,7 +24,7 @@ struct PendingItem: Identifiable, Equatable {
 }
 
 struct ActiveSession: Identifiable, Equatable {
-    let id: String // sessionId
+    let id: String // full sessionId
     var terminalTitle: String
     var lastToolName: String
     var lastEventName: String
@@ -81,7 +81,7 @@ class AppState: ObservableObject {
     /// 현재 화면에 표시할 데이터를 선택된 세션 정보로 업데이트
     func syncDisplayToSelectedSession() {
         // 선택된 세션이 있으면 그 데이터를, 없으면 현재 진행 중인 세션 데이터를 우선 표시
-        let sessionId = selectedSessionId ?? String(currentSessionId.prefix(8))
+        let sessionId = selectedSessionId ?? currentSessionId
         
         if let session = activeSessions.first(where: { $0.id == sessionId }) {
             DispatchQueue.main.async {
@@ -131,10 +131,10 @@ class AppState: ObservableObject {
         let isNotification = notificationEvents.contains(event.lowercased())
 
         if isStop {
-            let shortSessionId = sessionId.isEmpty ? "Default" : String(sessionId.prefix(8))
+            let fullSessionId = sessionId.isEmpty ? "Default" : sessionId
             DispatchQueue.main.async {
-                self.activeSessions.removeAll { $0.id == shortSessionId }
-                if self.selectedSessionId == shortSessionId {
+                self.activeSessions.removeAll { $0.id == fullSessionId }
+                if self.selectedSessionId == fullSessionId {
                     self.selectedSessionId = self.activeSessions.first?.id
                 }
             }
@@ -143,9 +143,9 @@ class AppState: ObservableObject {
         }
 
         if isNotification {
-            let shortSessionId = sessionId.isEmpty ? "Default" : String(sessionId.prefix(8))
+            let fullSessionId = sessionId.isEmpty ? "Default" : sessionId
             self.updateActiveSession(
-                sessionId: shortSessionId,
+                sessionId: fullSessionId,
                 terminalTitle: terminalTitle,
                 toolName: toolName,
                 eventName: event,
@@ -154,7 +154,7 @@ class AppState: ObservableObject {
             )
             
             DispatchQueue.main.async {
-                self.selectedSessionId = shortSessionId
+                self.selectedSessionId = fullSessionId
                 self.syncDisplayToSelectedSession()
             }
             
@@ -173,13 +173,12 @@ class AppState: ObservableObject {
 
         DispatchQueue.main.async {
             self.pendingQueue.append(request)
-            let shortSessionId = String(request.sessionId.prefix(8))
             
             let newItem = PendingItem(
                 id: request.id,
                 toolName: request.toolName,
                 message: request.message,
-                sessionId: shortSessionId,
+                sessionId: request.sessionId,
                 terminalTitle: terminalTitle,
                 receivedAt: request.receivedAt
             )
@@ -187,7 +186,7 @@ class AppState: ObservableObject {
             self.pendingCount = self.pendingQueue.count
             
             self.updateActiveSession(
-                sessionId: shortSessionId,
+                sessionId: request.sessionId,
                 terminalTitle: terminalTitle,
                 toolName: request.toolName,
                 eventName: request.eventName,
@@ -195,7 +194,7 @@ class AppState: ObservableObject {
                 isPending: true
             )
             
-            self.selectedSessionId = shortSessionId
+            self.selectedSessionId = request.sessionId
             
             if !self.isNotchExpanded {
                 self.showNextRequest()
@@ -250,7 +249,7 @@ class AppState: ObservableObject {
         currentEventName  = next.eventName
         currentToolName   = next.toolName
         currentMessage    = next.message
-        currentSessionId  = String(next.sessionId.prefix(8))
+        currentSessionId  = next.sessionId
         
         // 그 다음 확장 신호 발생
         DispatchQueue.main.async {
@@ -273,7 +272,7 @@ class AppState: ObservableObject {
 
             if elapsed >= self.timeoutDuration {
                 timer.invalidate()
-                if self.isNotchExpanded {
+                if self.currentResponseHandler != nil {
                     self.sendDecision(approved: false, reason: "Timeout")
                 }
             }
@@ -292,15 +291,14 @@ class AppState: ObservableObject {
             self.timeoutProgress = 1.0
             if !self.pendingQueue.isEmpty {
                 let removed = self.pendingQueue.removeFirst()
-                let shortId = String(removed.sessionId.prefix(8))
                 
                 if !self.pendingItems.isEmpty { self.pendingItems.removeFirst() }
                 self.pendingCount = self.pendingQueue.count
                 
                 // Update session state to not pending
-                if let index = self.activeSessions.firstIndex(where: { $0.id == shortId }) {
+                if let index = self.activeSessions.firstIndex(where: { $0.id == removed.sessionId }) {
                     // Check if there are other pending items for this session
-                    let stillPending = self.pendingQueue.contains { String($0.sessionId.prefix(8)) == shortId }
+                    let stillPending = self.pendingQueue.contains { $0.sessionId == removed.sessionId }
                     self.activeSessions[index].isPending = stillPending
                 }
             }
@@ -315,5 +313,13 @@ class AppState: ObservableObject {
 
     func deny() {
         sendDecision(approved: false)
+    }
+
+    func dismissCurrentRequest() {
+        if currentResponseHandler != nil {
+            sendDecision(approved: false, reason: "Dismissed")
+        } else {
+            isNotchExpanded = false
+        }
     }
 }
