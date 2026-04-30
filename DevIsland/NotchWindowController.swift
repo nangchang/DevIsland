@@ -7,7 +7,8 @@ import Combine
 class NotchWindowController: NSWindowController {
     private var cancellables = Set<AnyCancellable>()
     private var pendingSettle: DispatchWorkItem?
-    private static let collapsedSize = NSSize(width: 190, height: 30)
+    private var pinnedCenterX: CGFloat?
+    private static let collapsedSize = NSSize(width: 190, height: 28)
     private static let expandedSize = NSSize(width: 680, height: 300)
 
     convenience init() {
@@ -49,6 +50,7 @@ class NotchWindowController: NSWindowController {
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
+                self?.pinnedCenterX = nil
                 self?.updateWindowFrame(animate: false)
             }
             .store(in: &cancellables)
@@ -56,6 +58,7 @@ class NotchWindowController: NSWindowController {
         NotificationCenter.default.publisher(for: NSWindow.didChangeScreenNotification, object: panel)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
+                self?.pinnedCenterX = nil
                 self?.updateWindowFrame(animate: false)
             }
             .store(in: &cancellables)
@@ -84,9 +87,11 @@ class NotchWindowController: NSWindowController {
         let expanded = AppState.shared.isNotchExpanded
         let size = sizeOverride ?? (expanded ? Self.expandedSize : Self.collapsedSize)
         
-        let visibleFrame = screen.visibleFrame
-        let x = visibleFrame.midX - size.width / 2
-        let y = visibleFrame.maxY - size.height
+        let centerX = pinnedCenterX ?? round(screen.frame.midX)
+        pinnedCenterX = centerX
+
+        let x = centerX - size.width / 2
+        let y = screen.frame.maxY - size.height
         
         let newFrame = NSRect(origin: NSPoint(x: x, y: y), size: size)
         window.setFrame(newFrame, display: true, animate: animate)
@@ -95,17 +100,13 @@ class NotchWindowController: NSWindowController {
     func expandFromCollapsedWindow() {
         guard !AppState.shared.isNotchExpanded else { return }
         
-        // 1. 프레임을 먼저 키움 (캔버스 확보)
+        // 프레임과 SwiftUI 상태를 같은 런루프에서 바꿔 중간 위치가 보이지 않게 한다.
         updateWindowFrame(animate: false, sizeOverride: Self.expandedSize)
-        
-        // 2. 아주 미세한 딜레이 후 SwiftUI 확장 시작
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-            AppState.shared.isNotchExpanded = true
-        }
+        AppState.shared.isNotchExpanded = true
     }
 
     private static func notchSize(expanded: Bool) -> NSSize {
-        expanded ? NSSize(width: 680, height: 300) : NSSize(width: 190, height: 30)
+        expanded ? NSSize(width: 680, height: 300) : NSSize(width: 190, height: 28)
     }
 
     private func targetScreen(for window: NSWindow) -> NSScreen {
@@ -430,7 +431,7 @@ struct NotchView: View {
                     )
                     .fill(Color.black)
                     .frame(
-                        width:  state.isNotchExpanded ? 680 : 140,
+                        width:  state.isNotchExpanded ? 680 : 190,
                         height: state.isNotchExpanded ? 300 : 28,
                         alignment: .top
                     )
@@ -449,14 +450,14 @@ struct NotchView: View {
                         }
                     }
                     .frame(
-                        width:  state.isNotchExpanded ? 680 : 140,
+                        width:  state.isNotchExpanded ? 680 : 190,
                         height: state.isNotchExpanded ? 300 : 28,
                         alignment: .top
                     )
                 }
             }
             .frame(
-                width:  state.isNotchExpanded ? 680 : 140,
+                width:  state.isNotchExpanded ? 680 : 190,
                 height: state.isNotchExpanded ? 300 : 28,
                 alignment: .top
             )
@@ -482,13 +483,17 @@ struct NotchView: View {
     // MARK: Collapsed
 
     var collapsedContent: some View {
-        HStack(spacing: 6) {
-            CodexBuddyView(accent: tool.color, isActive: buddyPulse, compact: true)
-                .frame(width: 18, height: 18)
+        HStack(spacing: 0) {
             Text("DevIsland")
                 .foregroundColor(.white.opacity(0.6))
                 .font(.system(size: 11, weight: .semibold))
+
+            Spacer(minLength: 0)
+
+            CodexBuddyView(accent: tool.color, isActive: buddyPulse, compact: true)
+                .frame(width: 18, height: 18)
         }
+        .padding(.horizontal, 12)
     }
 
     // MARK: Expanded
