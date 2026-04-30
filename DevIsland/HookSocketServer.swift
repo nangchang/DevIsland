@@ -5,6 +5,7 @@ import Combine
 class HookSocketServer {
     private var listener: NWListener?
     private let port: NWEndpoint.Port = 9090
+    private let maxPayloadSize = 1_048_576
     
     var onMessageReceived: ((String, @escaping (String) -> Void) -> Void)?
     
@@ -36,12 +37,24 @@ class HookSocketServer {
     
     private func handleConnection(_ connection: NWConnection) {
         connection.start(queue: .global())
-        receiveData(on: connection)
+        receiveData(on: connection, accumulatedData: Data())
     }
     
-    private func receiveData(on connection: NWConnection) {
+    private func receiveData(on connection: NWConnection, accumulatedData: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, context, isComplete, error in
-            if let data = data, let message = String(data: data, encoding: .utf8) {
+            var payload = accumulatedData
+            if let data {
+                payload.append(data)
+            }
+
+            let maxPayloadSize = self?.maxPayloadSize ?? 0
+            if payload.count > maxPayloadSize {
+                print("Received payload exceeds size limit")
+                connection.cancel()
+                return
+            }
+
+            if isComplete, let message = String(data: payload, encoding: .utf8) {
                 print("Received data: \(message)")
                 DispatchQueue.main.async {
                     self?.onMessageReceived?(message) { response in
@@ -57,7 +70,7 @@ class HookSocketServer {
             } else if isComplete || error != nil {
                 connection.cancel()
             } else {
-                self?.receiveData(on: connection)
+                self?.receiveData(on: connection, accumulatedData: payload)
             }
         }
     }

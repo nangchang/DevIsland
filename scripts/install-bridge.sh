@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOKS_DIR="$HOME/.claude/hooks"
 BRIDGE_DEST="$HOOKS_DIR/devisland-bridge.sh"
 SETTINGS_FILE="$HOME/.claude/settings.json"
