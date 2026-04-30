@@ -76,6 +76,20 @@ chmod +x ~/.claude/hooks/devisland-bridge.sh
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh" }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh" }
+        ]
+      }
+    ],
     "PermissionRequest": [
       {
         "matcher": ".*",

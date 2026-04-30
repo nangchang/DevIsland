@@ -46,6 +46,8 @@ notif_config = {
 
 data['hooks']['SessionStart'] = [notif_config]
 data['hooks']['Stop'] = [notif_config]
+data['hooks']['PostToolUse'] = [notif_config]
+data['hooks']['Notification'] = [notif_config]
 data['hooks']['PermissionRequest'] = [hook_config]
 data['hooks']['PreToolUse'] = [hook_config]
 
