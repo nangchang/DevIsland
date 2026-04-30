@@ -77,7 +77,7 @@ Claude Code (hook event)
 Events are classified into three buckets:
 
 1. **Stop events** (`stop`, `exit`, `shutdown`, `sessionend`) — remove the session from `activeSessions`, respond `approved` immediately.
-2. **Notification events** (`sessionstart`, `posttooluse`, `notification`, `stop`, etc.) — update session state, respond `approved` immediately (no user action needed).
+2. **Notification events** (`sessionstart`, `session_start`, `posttooluse`, `post_tool_use`, `notification`, etc.) — update session state, respond `approved` immediately (no user action needed).
 3. **Everything else** — treated as a permission request; added to `pendingQueue` and shown in the UI for user decision.
 
 ### Window Mechanics
@@ -95,4 +95,4 @@ On collapse, the frame shrinks after a 0.45 s delay (matching the SwiftUI spring
 
 `project.yml` is the XcodeGen spec. Changing any build setting, adding a new source file to the target, or modifying entitlements should be done here, not in a hand-edited `.xcodeproj`. Re-run `xcodegen generate` after any edit.
 
-The app is an `LSUIElement` (no Dock icon). It needs two entitlements already declared in `project.yml`: Apple Events (for `TerminalFocuser`) and Accessibility (for `GlobalShortcutManager`).
+The app is an `LSUIElement` (no Dock icon). It needs two privacy permissions already declared in `project.yml`: Apple Events (for `TerminalFocuser`) and Accessibility (for `GlobalShortcutManager`).
