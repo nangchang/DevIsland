@@ -20,13 +20,8 @@ fi
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 swiftc \
-  DevIsland/AppState.swift \
-  DevIsland/DevIslandApp.swift \
-  DevIsland/GlobalShortcutManager.swift \
-  DevIsland/HookSocketServer.swift \
-  DevIsland/NotchWindowController.swift \
-  DevIsland/TerminalFocuser.swift \
-  -target arm64-apple-macos14.0 \
+  DevIsland/*.swift \
+  -target "$(uname -m)-apple-macos14.0" \
   -o "$EXECUTABLE"
 
 cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST

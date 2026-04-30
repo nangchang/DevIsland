@@ -4,16 +4,17 @@ import Combine
 
 // MARK: - Window Controller
 
+fileprivate let collapsedNotchSize = NSSize(width: 190, height: 28)
+fileprivate let expandedNotchSize = NSSize(width: 680, height: 300)
+
 class NotchWindowController: NSWindowController {
     private var cancellables = Set<AnyCancellable>()
     private var pendingSettle: DispatchWorkItem?
     private var pinnedCenterX: CGFloat?
-    private static let collapsedSize = NSSize(width: 190, height: 28)
-    private static let expandedSize = NSSize(width: 680, height: 300)
 
     convenience init() {
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: Self.expandedSize),
+            contentRect: NSRect(origin: .zero, size: expandedNotchSize),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
@@ -85,7 +86,7 @@ class NotchWindowController: NSWindowController {
         let screen = targetScreen(for: window)
         
         let expanded = AppState.shared.isNotchExpanded
-        let size = sizeOverride ?? (expanded ? Self.expandedSize : Self.collapsedSize)
+        let size = sizeOverride ?? Self.notchSize(expanded: expanded)
         
         let centerX = pinnedCenterX ?? round(screen.frame.midX)
         pinnedCenterX = centerX
@@ -101,12 +102,12 @@ class NotchWindowController: NSWindowController {
         guard !AppState.shared.isNotchExpanded else { return }
         
         // 프레임과 SwiftUI 상태를 같은 런루프에서 바꿔 중간 위치가 보이지 않게 한다.
-        updateWindowFrame(animate: false, sizeOverride: Self.expandedSize)
+        updateWindowFrame(animate: false, sizeOverride: expandedNotchSize)
         AppState.shared.isNotchExpanded = true
     }
 
     private static func notchSize(expanded: Bool) -> NSSize {
-        expanded ? NSSize(width: 680, height: 300) : NSSize(width: 190, height: 28)
+        expanded ? expandedNotchSize : collapsedNotchSize
     }
 
     private func targetScreen(for window: NSWindow) -> NSScreen {
@@ -414,6 +415,9 @@ struct NotchView: View {
     @State private var buddyPulse = false
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
+    private var notchSize: NSSize {
+        state.isNotchExpanded ? expandedNotchSize : collapsedNotchSize
+    }
 
     var body: some View {
         HStack {
@@ -431,8 +435,8 @@ struct NotchView: View {
                     )
                     .fill(Color.black)
                     .frame(
-                        width:  state.isNotchExpanded ? 680 : 190,
-                        height: state.isNotchExpanded ? 300 : 28,
+                        width: notchSize.width,
+                        height: notchSize.height,
                         alignment: .top
                     )
 
@@ -450,15 +454,15 @@ struct NotchView: View {
                         }
                     }
                     .frame(
-                        width:  state.isNotchExpanded ? 680 : 190,
-                        height: state.isNotchExpanded ? 300 : 28,
+                        width: notchSize.width,
+                        height: notchSize.height,
                         alignment: .top
                     )
                 }
             }
             .frame(
-                width:  state.isNotchExpanded ? 680 : 190,
-                height: state.isNotchExpanded ? 300 : 28,
+                width: notchSize.width,
+                height: notchSize.height,
                 alignment: .top
             )
             .contentShape(Rectangle())
