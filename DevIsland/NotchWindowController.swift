@@ -176,10 +176,41 @@ func toolInfo(for name: String) -> ToolInfo {
 
 // MARK: - Buddy Mascot
 
-struct CodexBuddyView: View {
+enum BuddyKind {
+    case codex
+    case claudeCode
+
+    init(from terminalTitle: String) {
+        let lower = terminalTitle.lowercased()
+        if lower.contains("claude") {
+            self = .claudeCode
+        } else {
+            self = .codex
+        }
+    }
+}
+
+private struct PixelCell {
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
+    let color: Color
+
+    init(_ x: Int, _ y: Int, _ width: Int, _ height: Int, _ color: Color) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.color = color
+    }
+}
+
+struct CLIBuddyView: View {
     let accent: Color
     let isActive: Bool
     let compact: Bool
+    let kind: BuddyKind
 
     var body: some View {
         GeometryReader { geo in
@@ -188,100 +219,119 @@ struct CodexBuddyView: View {
 
             ZStack {
                 Capsule()
-                    .fill(accent.opacity(0.18))
-                    .frame(width: size * 0.62, height: size * 0.13)
-                    .blur(radius: size * 0.03)
-                    .offset(y: size * 0.39)
+                    .fill(accent.opacity(0.22))
+                    .frame(width: size * 0.64, height: size * 0.12)
+                    .blur(radius: size * 0.02)
+                    .offset(y: size * 0.38)
 
-                buddyBody(size: size)
+                pixelBody(size: size)
                     .offset(y: bob)
-
-                threadMark(size: size)
-                    .offset(x: -size * 0.02, y: bob - size * 0.02)
-
-                eyes(size: size)
-                    .offset(y: bob)
-
-                if !compact {
-                    toolBadge(size: size)
-                        .offset(x: size * 0.27, y: -size * 0.24 + bob)
-                }
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
-        .accessibilityLabel("Codex Buddy")
+        .accessibilityLabel(kind == .codex ? "Codex Buddy" : "Claude Code Buddy")
     }
 
-    private func buddyBody(size: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.12, green: 0.14, blue: 0.18),
-                        Color(red: 0.04, green: 0.05, blue: 0.07)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                    .stroke(accent.opacity(0.65), lineWidth: max(1, size * 0.045))
-            )
-            .overlay(
-                Circle()
-                    .fill(accent.opacity(0.24))
-                    .frame(width: size * 0.22, height: size * 0.22)
-                    .blur(radius: size * 0.08)
-                    .offset(x: -size * 0.18, y: -size * 0.16)
-            )
-            .frame(width: size * 0.74, height: size * 0.68)
-    }
-
-    private func threadMark(size: CGFloat) -> some View {
-        Path { path in
-            path.move(to: CGPoint(x: size * 0.35, y: size * 0.35))
-            path.addCurve(
-                to: CGPoint(x: size * 0.64, y: size * 0.35),
-                control1: CGPoint(x: size * 0.43, y: size * 0.16),
-                control2: CGPoint(x: size * 0.59, y: size * 0.16)
-            )
-            path.addCurve(
-                to: CGPoint(x: size * 0.36, y: size * 0.62),
-                control1: CGPoint(x: size * 0.70, y: size * 0.53),
-                control2: CGPoint(x: size * 0.52, y: size * 0.70)
-            )
+    private func pixelBody(size: CGFloat) -> some View {
+        return ZStack {
+            mascotSprite(size: size)
+                .shadow(color: Color.black.opacity(0.25), radius: size * 0.04, y: size * 0.03)
         }
-        .stroke(accent.opacity(0.82), style: StrokeStyle(lineWidth: max(1, size * 0.045), lineCap: .round))
         .frame(width: size, height: size)
     }
 
-    private func eyes(size: CGFloat) -> some View {
-        HStack(spacing: size * 0.12) {
-            Capsule()
-                .fill(Color.white.opacity(0.86))
-                .frame(width: size * 0.08, height: size * 0.11)
-            Capsule()
-                .fill(Color.white.opacity(0.86))
-                .frame(width: size * 0.08, height: size * 0.11)
-        }
-        .offset(y: size * 0.04)
+    private func mascotSprite(size: CGFloat) -> some View {
+        pixelGrid(size: size, cells: kind == .codex ? codexCells : claudeCells)
     }
 
-    private func toolBadge(size: CGFloat) -> some View {
-        Circle()
-            .fill(Color.black.opacity(0.9))
-            .overlay(
-                Circle()
-                    .stroke(Color.white.opacity(0.16), lineWidth: max(1, size * 0.025))
-            )
-            .overlay(
-                Image(systemName: "sparkles")
-                    .font(.system(size: size * 0.18, weight: .bold))
-                    .foregroundColor(accent)
-            )
-            .frame(width: size * 0.32, height: size * 0.32)
+    private var codexCells: [PixelCell] {
+        let fur = Color(red: 0.34, green: 0.38, blue: 1.0)
+        let shade = Color(red: 0.15, green: 0.22, blue: 0.88)
+        let ink = Color.white.opacity(0.94)
+
+        return terminalBaseCells(kind: .codex) + [
+            PixelCell(2, 1, 2, 3, fur),
+            PixelCell(12, 1, 2, 3, fur),
+            PixelCell(3, 3, 10, 1, fur),
+            PixelCell(1, 4, 14, 1, fur),
+            PixelCell(0, 5, 16, 6, fur),
+            PixelCell(1, 11, 14, 1, shade),
+            PixelCell(3, 12, 10, 1, shade),
+            PixelCell(5, 6, 1, 1, ink),
+            PixelCell(6, 7, 1, 1, ink),
+            PixelCell(5, 8, 1, 1, ink),
+            PixelCell(9, 9, 4, 1, ink)
+        ]
     }
+
+    private var claudeCells: [PixelCell] {
+        let fur = Color(red: 0.82, green: 0.42, blue: 0.30)
+        let dark = Color(red: 0.47, green: 0.22, blue: 0.16)
+        let ink = Color(red: 0.09, green: 0.04, blue: 0.03)
+
+        return terminalBaseCells(kind: .claudeCode) + [
+            PixelCell(3, 1, 2, 2, fur),
+            PixelCell(11, 1, 2, 2, fur),
+            PixelCell(3, 3, 3, 1, fur),
+            PixelCell(10, 3, 3, 1, fur),
+            PixelCell(4, 4, 8, 1, fur),
+            PixelCell(2, 5, 12, 1, fur),
+            PixelCell(1, 6, 14, 4, fur),
+            PixelCell(2, 10, 12, 2, fur),
+            PixelCell(4, 12, 8, 1, dark),
+            PixelCell(0, 8, 3, 2, fur),
+            PixelCell(13, 8, 3, 2, fur),
+            PixelCell(0, 10, 2, 1, fur),
+            PixelCell(14, 10, 2, 1, fur),
+            PixelCell(5, 7, 1, 1, ink),
+            PixelCell(10, 7, 1, 1, ink),
+            PixelCell(4, 11, 2, 1, dark),
+            PixelCell(10, 11, 2, 1, dark),
+            PixelCell(3, 13, 3, 1, dark),
+            PixelCell(10, 13, 3, 1, dark)
+        ]
+    }
+
+    private func terminalBaseCells(kind: BuddyKind) -> [PixelCell] {
+        let shell = kind == .codex
+            ? Color(red: 0.08, green: 0.09, blue: 0.12)
+            : Color(red: 0.09, green: 0.08, blue: 0.07)
+        let rim = kind == .codex
+            ? Color(red: 0.24, green: 0.27, blue: 0.34)
+            : Color(red: 0.32, green: 0.24, blue: 0.20)
+        let title = kind == .codex
+            ? rim
+            : rim
+        let text = kind == .codex
+            ? Color.white.opacity(0.45)
+            : Color.white.opacity(0.42)
+
+        return [
+            PixelCell(1, 13, 14, 1, rim),
+            PixelCell(1, 14, 14, 2, shell),
+            PixelCell(1, 14, 14, 1, title),
+            PixelCell(3, 14, 1, 1, Color.red.opacity(0.82)),
+            PixelCell(5, 14, 1, 1, Color.yellow.opacity(0.82)),
+            PixelCell(7, 14, 1, 1, Color.green.opacity(0.82)),
+            PixelCell(9, 15, 4, 1, text.opacity(0.36))
+        ]
+    }
+
+    private func pixelGrid(size: CGFloat, cells: [PixelCell]) -> some View {
+        let unit = size / 16
+
+        return ZStack(alignment: .topLeading) {
+            ForEach(cells.indices, id: \.self) { index in
+                let cell = cells[index]
+                Rectangle()
+                    .fill(cell.color)
+                    .frame(width: unit * CGFloat(cell.width), height: unit * CGFloat(cell.height))
+                    .offset(x: unit * CGFloat(cell.x), y: unit * CGFloat(cell.y))
+            }
+        }
+        .frame(width: size, height: size, alignment: .topLeading)
+    }
+
 }
 
 // MARK: - Components
@@ -419,6 +469,12 @@ struct NotchView: View {
         state.isNotchExpanded ? expandedNotchSize : collapsedNotchSize
     }
 
+    private var currentBuddyKind: BuddyKind {
+        let session = state.activeSessions.first { $0.id == state.selectedSessionId }
+            ?? state.activeSessions.first
+        return BuddyKind(from: session?.terminalTitle ?? "")
+    }
+
     var body: some View {
         HStack {
             Spacer()
@@ -494,7 +550,7 @@ struct NotchView: View {
 
             Spacer(minLength: 0)
 
-            CodexBuddyView(accent: tool.color, isActive: buddyPulse, compact: true)
+            CLIBuddyView(accent: tool.color, isActive: buddyPulse, compact: true, kind: currentBuddyKind)
                 .frame(width: 18, height: 18)
         }
         .padding(.horizontal, 12)
@@ -511,7 +567,7 @@ struct NotchView: View {
                     Circle()
                         .fill(tool.color.opacity(0.15))
                         .frame(width: 48, height: 48)
-                    CodexBuddyView(accent: tool.color, isActive: buddyPulse, compact: false)
+                    CLIBuddyView(accent: tool.color, isActive: buddyPulse, compact: false, kind: currentBuddyKind)
                         .frame(width: 34, height: 34)
                 }
 
