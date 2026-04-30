@@ -44,12 +44,14 @@ notif_config = {
     "hooks": [{"type": "command", "command": bridge_path}]
 }
 
-data['hooks']['SessionStart'] = [notif_config]
-data['hooks']['Stop'] = [notif_config]
-data['hooks']['PostToolUse'] = [notif_config]
-data['hooks']['Notification'] = [notif_config]
-data['hooks']['PermissionRequest'] = [hook_config]
-data['hooks']['PreToolUse'] = [hook_config]
+for key, config in [
+    ('SessionStart', notif_config), ('Stop', notif_config),
+    ('PostToolUse', notif_config), ('Notification', notif_config),
+    ('PermissionRequest', hook_config), ('PreToolUse', hook_config),
+]:
+    data['hooks'].setdefault(key, [])
+    if not any(bridge_path in json.dumps(h) for h in data['hooks'][key]):
+        data['hooks'][key].append(config)
 
 with open(path, 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)

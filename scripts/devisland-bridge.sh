@@ -20,12 +20,12 @@ elif [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
   TERM_TITLE="Warp"
 fi
 
-# 페이로드에 터미널 정보 추가 (환경 변수로 전달해 특수문자 안전 처리)
-PAYLOAD=$(TERM_TITLE="$TERM_TITLE" echo "$PAYLOAD" | python3 -c \
+# 페이로드에 터미널 정보 추가 (python3 앞에 환경 변수 설정해 파이프 오른쪽 프로세스에 전달)
+PAYLOAD=$(printf "%s" "$PAYLOAD" | TERM_TITLE="$TERM_TITLE" python3 -c \
   "import sys,json,os; d=json.load(sys.stdin); d['terminal_title']=os.environ.get('TERM_TITLE','Terminal'); print(json.dumps(d))")
 
 # 이벤트 종류 추출 (PermissionRequest / PreToolUse / Stop / ...)
-EVENT=$(echo "$PAYLOAD" | python3 -c \
+EVENT=$(printf "%s" "$PAYLOAD" | python3 -c \
   "import sys,json; d=json.load(sys.stdin); print(d.get('hook_event_name', d.get('event', 'PermissionRequest')))" \
   2>/dev/null || echo "PermissionRequest")
 
@@ -34,8 +34,8 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Raw Payload: $PAYLOAD" >> /tmp/DevIsland.br
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Event Detected: $EVENT" >> /tmp/DevIsland.bridge.log
 
 # 앱으로 전달 후 응답 대기 (최대 300초)
-RAW=$(echo "$PAYLOAD" | nc -w 300 localhost 9090)
-RESULT=$(echo "$RAW" | python3 -c \
+RAW=$(printf "%s" "$PAYLOAD" | nc -w 300 localhost 9090)
+RESULT=$(printf "%s" "$RAW" | python3 -c \
   "import sys,json; print(json.load(sys.stdin).get('response','denied'))" \
   2>/dev/null || echo "denied")
 
