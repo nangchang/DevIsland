@@ -7,7 +7,7 @@ import Combine
 class NotchWindowController: NSWindowController {
     private var cancellables = Set<AnyCancellable>()
     private var pendingSettle: DispatchWorkItem?
-    private static let collapsedSize = NSSize(width: 140, height: 28)
+    private static let collapsedSize = NSSize(width: 190, height: 30)
     private static let expandedSize = NSSize(width: 680, height: 300)
 
     convenience init() {
@@ -45,6 +45,20 @@ class NotchWindowController: NSWindowController {
                 self?.handleExpansionChange(expanded)
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateWindowFrame(animate: false)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSWindow.didChangeScreenNotification, object: panel)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateWindowFrame(animate: false)
+            }
+            .store(in: &cancellables)
     }
 
     private func handleExpansionChange(_ expanded: Bool) {
@@ -64,14 +78,15 @@ class NotchWindowController: NSWindowController {
     }
 
     func updateWindowFrame(animate: Bool = true, sizeOverride: NSSize? = nil) {
-        guard let window = window, let screen = NSScreen.main else { return }
+        guard let window = window else { return }
+        let screen = targetScreen(for: window)
         
         let expanded = AppState.shared.isNotchExpanded
         let size = sizeOverride ?? (expanded ? Self.expandedSize : Self.collapsedSize)
         
-        // 화면 중앙(midX)과 상단(maxY)을 기준으로 좌표 계산
-        let x = screen.frame.midX - size.width / 2
-        let y = screen.frame.maxY - size.height
+        let visibleFrame = screen.visibleFrame
+        let x = visibleFrame.midX - size.width / 2
+        let y = visibleFrame.maxY - size.height
         
         let newFrame = NSRect(origin: NSPoint(x: x, y: y), size: size)
         window.setFrame(newFrame, display: true, animate: animate)
@@ -90,7 +105,20 @@ class NotchWindowController: NSWindowController {
     }
 
     private static func notchSize(expanded: Bool) -> NSSize {
-        expanded ? NSSize(width: 680, height: 300) : NSSize(width: 140, height: 28)
+        expanded ? NSSize(width: 680, height: 300) : NSSize(width: 190, height: 30)
+    }
+
+    private func targetScreen(for window: NSWindow) -> NSScreen {
+        if let windowScreen = window.screen {
+            return windowScreen
+        }
+
+        let mouseLocation = NSEvent.mouseLocation
+        if let mouseScreen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) {
+            return mouseScreen
+        }
+
+        return NSScreen.main ?? NSScreen.screens.first!
     }
 }
 
