@@ -58,6 +58,9 @@ hook_config = {
     "matcher": ".*",
     "hooks": [{"type": "command", "command": bridge_path, "timeout": 86400}]
 }
+approval_config = {
+    "hooks": [{"type": "command", "command": bridge_path, "timeout": 86400}]
+}
 notif_config = {
     "hooks": [{"type": "command", "command": bridge_path}]
 }
@@ -66,7 +69,7 @@ for key, config in [
     ('SessionStart', notif_config), ('Stop', notif_config), ('SubagentStop', notif_config),
     ('SessionEnd', notif_config), ('StopFailure', notif_config),
     ('PostToolUse', notif_config), ('Notification', notif_config), ('PreCompact', notif_config),
-    ('PermissionRequest', notif_config), ('PreToolUse', hook_config),
+    ('PermissionRequest', approval_config), ('PreToolUse', hook_config),
 ]:
     data['hooks'].setdefault(key, [])
     data['hooks'][key] = [

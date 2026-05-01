@@ -119,6 +119,9 @@ enum BridgeInstaller {
             "matcher": ".*",
             "hooks": [["type": "command", "command": bridgePath, "timeout": 86400]]
         ]
+        let approvalConfig: [String: Any] = [
+            "hooks": [["type": "command", "command": bridgePath, "timeout": 86400]]
+        ]
         let notifConfig: [String: Any] = [
             "hooks": [["type": "command", "command": bridgePath]]
         ]
@@ -126,7 +129,7 @@ enum BridgeInstaller {
             ("SessionStart", notifConfig), ("Stop", notifConfig), ("SubagentStop", notifConfig),
             ("SessionEnd", notifConfig), ("StopFailure", notifConfig),
             ("PostToolUse", notifConfig), ("Notification", notifConfig), ("PreCompact", notifConfig),
-            ("PermissionRequest", notifConfig),
+            ("PermissionRequest", approvalConfig),
             ("PreToolUse", hookConfig),
         ]
 

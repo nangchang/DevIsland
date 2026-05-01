@@ -129,6 +129,14 @@ class AppState: ObservableObject {
                 } else if let input = toolInput {
                     displayMsg = input.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
                 }
+                if displayMsg.isEmpty {
+                    displayMsg = json["message"] as? String ?? ""
+                }
+                if displayMsg.isEmpty, let suggestions = json["permission_suggestions"] as? [[String: Any]] {
+                    displayMsg = suggestions.compactMap { suggestion in
+                        suggestion["behavior"] as? String
+                    }.map { "Suggested: \($0)" }.joined(separator: "\n")
+                }
             }
         } catch {
             print("JSON parse error: \(error)")
@@ -140,13 +148,16 @@ class AppState: ObservableObject {
             .replacingOccurrences(of: "_", with: "")
             .replacingOccurrences(of: "-", with: "")
         let stopEvents = ["stop", "subagentstop", "exit", "shutdown", "sessionend"]
-        let notificationEvents = ["sessionstart", "notification", "posttooluse", "precompact", "permissionrequest"]
+        let notificationEvents = ["sessionstart", "notification", "pretooluse", "posttooluse", "precompact"]
         let isStop = stopEvents.contains(normalizedEvent)
         let isNotification = notificationEvents.contains(normalizedEvent)
 
         if isStop {
             let fullSessionId = sessionId.isEmpty ? "Default" : sessionId
             DispatchQueue.main.async {
+                self.pendingQueue
+                    .filter { $0.sessionId == fullSessionId }
+                    .forEach { $0.responseHandler("{\"response\": \"denied\"}") }
                 self.pendingQueue.removeAll { $0.sessionId == fullSessionId }
                 self.pendingItems.removeAll { $0.sessionId == fullSessionId }
                 self.pendingCount = self.pendingQueue.count

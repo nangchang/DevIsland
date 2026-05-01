@@ -68,16 +68,7 @@ result = os.environ.get("RESULT", "denied")
 approved = result == "approved"
 message = "DevIsland에서 거절되었습니다."
 
-if event == "PreToolUse":
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow" if approved else "deny",
-        }
-    }
-    if not approved:
-        output["hookSpecificOutput"]["permissionDecisionReason"] = message
-elif event == "PermissionRequest":
+if event == "PermissionRequest":
     output = {"permissionDecision": "allow" if approved else "deny"}
     if not approved:
         output["reason"] = message
