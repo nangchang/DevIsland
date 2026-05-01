@@ -58,9 +58,14 @@ elif [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
   TERM_TITLE="Warp"
 fi
 
-# 타이틀을 얻지 못한 경우 현재 디렉토리 이름으로 폴백
-if [ -z "$TERM_TITLE" ]; then
-  TERM_TITLE=$(basename "$PWD" 2>/dev/null || echo "Claude")
+# 타이틀을 얻지 못한 경우 현재 디렉토리 이름으로 폴백 (루트 '/' 제외)
+if [ -z "$TERM_TITLE" ] || [ "$TERM_TITLE" = "Terminal" ]; then
+  _dir=$(basename "$PWD" 2>/dev/null)
+  if [ -n "$_dir" ] && [ "$_dir" != "/" ]; then
+    TERM_TITLE="$_dir"
+  else
+    TERM_TITLE="Claude"
+  fi
 fi
 
 # 페이로드에 터미널 정보 추가 (python3 앞에 환경 변수 설정해 파이프 오른쪽 프로세스에 전달)

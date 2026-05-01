@@ -58,6 +58,8 @@ class AppState: ObservableObject {
         }
     }
 
+    private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
+
     private var server = HookSocketServer()
     private var pendingQueue: [PendingRequest] = []
     private var currentResponseHandler: ((String) -> Void)?
@@ -117,10 +119,9 @@ class AppState: ObservableObject {
                 sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? "Default"
                 terminalTitle = json["terminal_title"] as? String ?? "Terminal"
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
-                let genericDefaults = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
-                if genericDefaults.contains(terminalTitle), let cwd = json["cwd"] as? String {
+                if Self.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
                     let label = URL(fileURLWithPath: cwd).lastPathComponent
-                    if !label.isEmpty { terminalTitle = label }
+                    if !label.isEmpty && label != "/" { terminalTitle = label }
                 }
                 let toolInput = json["tool_input"] as? [String: Any]
                 
@@ -258,10 +259,9 @@ class AppState: ObservableObject {
     }
 
     private func updateActiveSession(sessionId: String, terminalTitle: String, toolName: String, eventName: String, message: String, isPending: Bool) {
-        let genericTitles = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
         if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) {
-            let shouldUpdateTitle = !genericTitles.contains(terminalTitle)
-                || genericTitles.contains(activeSessions[index].terminalTitle)
+            let shouldUpdateTitle = !Self.genericTitles.contains(terminalTitle)
+                || Self.genericTitles.contains(activeSessions[index].terminalTitle)
             if shouldUpdateTitle {
                 activeSessions[index].terminalTitle = terminalTitle
             }
