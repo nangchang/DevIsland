@@ -4,8 +4,9 @@ import Combine
 
 // MARK: - Window Controller
 
-fileprivate let collapsedNotchSize = NSSize(width: 190, height: 28)
+fileprivate let collapsedNotchSize = NSSize(width: 248, height: 32)
 fileprivate let expandedNotchSize = NSSize(width: 680, height: 300)
+fileprivate let notchHorizontalOffset: CGFloat = -10
 
 class NotchWindowController: NSWindowController {
     private var cancellables = Set<AnyCancellable>()
@@ -77,7 +78,7 @@ class NotchWindowController: NSWindowController {
                 self?.updateWindowFrame(animate: false)
             }
             pendingSettle = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: work)
         }
     }
 
@@ -88,7 +89,7 @@ class NotchWindowController: NSWindowController {
         let expanded = AppState.shared.isNotchExpanded
         let size = sizeOverride ?? Self.notchSize(expanded: expanded)
         
-        let centerX = pinnedCenterX ?? round(screen.frame.midX)
+        let centerX = pinnedCenterX ?? (Self.notchCenterX(on: screen) + notchHorizontalOffset)
         pinnedCenterX = centerX
 
         let x = centerX - size.width / 2
@@ -108,6 +109,17 @@ class NotchWindowController: NSWindowController {
 
     private static func notchSize(expanded: Bool) -> NSSize {
         expanded ? expandedNotchSize : collapsedNotchSize
+    }
+
+    private static func notchCenterX(on screen: NSScreen) -> CGFloat {
+        if let leftArea = screen.auxiliaryTopLeftArea,
+           let rightArea = screen.auxiliaryTopRightArea,
+           !leftArea.isEmpty,
+           !rightArea.isEmpty {
+            return round((leftArea.maxX + rightArea.minX) / 2)
+        }
+
+        return round(screen.frame.midX)
     }
 
     private func targetScreen(for window: NSWindow) -> NSScreen {
@@ -475,6 +487,12 @@ struct NotchView: View {
         return BuddyKind(from: session?.terminalTitle ?? "")
     }
 
+    private var notchExpansionAnimation: Animation {
+        state.isNotchExpanded
+            ? .spring(response: 0.35, dampingFraction: 0.75)
+            : .easeOut(duration: 0.28)
+    }
+
     var body: some View {
         HStack {
             Spacer()
@@ -527,7 +545,7 @@ struct NotchView: View {
                     (NSApp.windows.first { $0.windowController is NotchWindowController }?.windowController as? NotchWindowController)?.expandFromCollapsedWindow()
                 }
             }
-            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: state.isNotchExpanded)
+            .animation(notchExpansionAnimation, value: state.isNotchExpanded)
 
             Spacer()
         }
@@ -543,15 +561,27 @@ struct NotchView: View {
     // MARK: Collapsed
 
     var collapsedContent: some View {
-        HStack(spacing: 0) {
+        ZStack {
             Text("DevIsland")
                 .foregroundColor(.white.opacity(0.6))
                 .font(.system(size: 11, weight: .semibold))
 
-            Spacer(minLength: 0)
-
-            CLIBuddyView(accent: tool.color, isActive: buddyPulse, compact: true, kind: currentBuddyKind)
+            HStack {
+                CLIBuddyView(
+                    accent: Color(red: 0.82, green: 0.42, blue: 0.30),
+                    isActive: buddyPulse,
+                    compact: true,
+                    kind: .claudeCode
+                )
                 .frame(width: 18, height: 18)
+                .offset(x: -4, y: 4)
+
+                Spacer(minLength: 0)
+
+                CLIBuddyView(accent: tool.color, isActive: buddyPulse, compact: true, kind: currentBuddyKind)
+                    .frame(width: 18, height: 18)
+                    .offset(x: 4, y: 4)
+            }
         }
         .padding(.horizontal, 12)
     }
