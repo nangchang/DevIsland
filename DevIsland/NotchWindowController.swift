@@ -461,7 +461,7 @@ struct SessionRowView: View {
     var body: some View {
         Button(action: { AppState.shared.selectedSessionId = session.id }) {
             HStack(spacing: 12) {
-                ZStack(alignment: .bottomTrailing) {
+                ZStack(alignment: .topTrailing) {
                     AgentRequestBadge(
                         kind: session.agentKind,
                         tool: tool,
@@ -474,7 +474,7 @@ struct SessionRowView: View {
                             .fill(Color.orange)
                             .frame(width: 10, height: 10)
                             .overlay(Circle().stroke(Color.black, lineWidth: 2))
-                            .offset(x: 7, y: 7)
+                            .offset(x: 4, y: -4)
                     }
                 }
                 .frame(width: 36, height: 36)
