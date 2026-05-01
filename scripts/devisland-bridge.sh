@@ -59,12 +59,32 @@ RESULT=$(printf "%s" "$RAW" | python3 -c \
   2>/dev/null || echo "denied")
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Result: $RESULT" >> /tmp/DevIsland.bridge.log
 
-# PermissionRequest → behavior: deny  /  PreToolUse → behavior: block
-if [ "$RESULT" = "approved" ]; then
-  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"$EVENT\",\"decision\":{\"behavior\":\"allow\"}}}"
-else
-  BEHAVIOR=$( [ "$EVENT" = "PreToolUse" ] && echo "block" || echo "deny" )
-  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"$EVENT\",\"decision\":{\"behavior\":\"$BEHAVIOR\",\"message\":\"DevIsland에서 거절되었습니다.\"}}}"
-fi
+EVENT="$EVENT" RESULT="$RESULT" python3 -c '
+import json
+import os
+
+event = os.environ.get("EVENT", "")
+result = os.environ.get("RESULT", "denied")
+approved = result == "approved"
+message = "DevIsland에서 거절되었습니다."
+
+if event == "PreToolUse":
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow" if approved else "deny",
+        }
+    }
+    if not approved:
+        output["hookSpecificOutput"]["permissionDecisionReason"] = message
+elif event == "PermissionRequest":
+    output = {"permissionDecision": "allow" if approved else "deny"}
+    if not approved:
+        output["reason"] = message
+else:
+    output = {"continue": True, "suppressOutput": True}
+
+print(json.dumps(output, ensure_ascii=False))
+'
 
 exit 0
