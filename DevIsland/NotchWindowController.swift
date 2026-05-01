@@ -486,6 +486,9 @@ struct NotchView: View {
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var hasApprovalRequest: Bool { state.pendingCount > 0 }
     private var headerTitle: String { hasApprovalRequest ? tool.label : "Sessions" }
+    private var displayedSessionId: String {
+        state.currentSessionId.isEmpty ? (state.selectedSessionId ?? "") : state.currentSessionId
+    }
     private var notchSize: NSSize {
         state.isNotchExpanded ? expandedNotchSize : collapsedNotchSize
     }
@@ -622,10 +625,10 @@ struct NotchView: View {
                         )
                     }
                     
-                    if !state.currentSessionId.isEmpty {
+                    if !displayedSessionId.isEmpty {
                         HStack(spacing: 6) {
-                            TagView(icon: "terminal.fill", text: String(state.currentSessionId.prefix(8)))
-                            TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == state.currentSessionId })?.terminalTitle ?? "Unknown")
+                            TagView(icon: "terminal.fill", text: String(displayedSessionId.prefix(8)))
+                            TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == displayedSessionId })?.terminalTitle ?? "Unknown")
                             if state.pendingCount > 1 {
                                 TagView(icon: "list.bullet", text: "\(state.pendingCount) tasks queued", color: .orange.opacity(0.2))
                             }
@@ -788,7 +791,7 @@ struct NotchView: View {
                 ForEach(state.activeSessions) { session in
                     SessionRowView(
                         session: session,
-                        isCurrent: session.id == state.currentSessionId
+                        isCurrent: session.id == displayedSessionId
                     )
                 }
             }

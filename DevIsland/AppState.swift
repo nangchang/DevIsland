@@ -66,6 +66,7 @@ class AppState: ObservableObject {
     private var timeoutTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let timeoutDuration: Double = 120
+    private let lifecycleSessionTimeout: Double = 15 * 60
 
     private init() {
         server.onMessageReceived = { [weak self] message, responseHandler in
@@ -439,7 +440,9 @@ class AppState: ObservableObject {
         
         DispatchQueue.main.async {
             self.activeSessions.removeAll { session in
-                !session.isPending && !session.isLifecycleTracked && now.timeIntervalSince(session.lastActiveAt) > threshold
+                let inactiveFor = now.timeIntervalSince(session.lastActiveAt)
+                let maxInactiveDuration = session.isLifecycleTracked ? self.lifecycleSessionTimeout : threshold
+                return !session.isPending && inactiveFor > maxInactiveDuration
             }
         }
     }
@@ -539,9 +542,6 @@ class AppState: ObservableObject {
                         }
                     } else {
                         self.activeSessions[index].isPending = false
-                        if self.selectedSessionId == nil {
-                            self.selectedSessionId = removed.sessionId
-                        }
                     }
                 }
             }

@@ -61,26 +61,32 @@ lifecycle_config = {
     "hooks": [{"type": "command", "command": bridge_path}]
 }
 
+def remove_bridge_hooks(entries):
+    cleaned = []
+    for entry in entries:
+        sub_hooks = [
+            sub_hook for sub_hook in entry.get("hooks", [])
+            if sub_hook.get("command") != bridge_path
+        ]
+        if sub_hooks:
+            updated = dict(entry)
+            updated["hooks"] = sub_hooks
+            cleaned.append(updated)
+    return cleaned
+
 for key, config in [
     ('SessionStart', lifecycle_config),
     ('SessionEnd', lifecycle_config),
     ('PermissionRequest', approval_config),
 ]:
     data['hooks'].setdefault(key, [])
-    data['hooks'][key] = [
-        h for h in data['hooks'][key]
-        if not any(sub_hook.get("command") == bridge_path for sub_hook in h.get("hooks", []))
-    ]
+    data['hooks'][key] = remove_bridge_hooks(data['hooks'][key])
     data['hooks'][key].append(config)
 
 for key in [
     'Stop', 'SubagentStop', 'PreToolUse', 'PostToolUse', 'Notification', 'PreCompact', 'StopFailure',
 ]:
-    entries = data['hooks'].get(key, [])
-    entries = [
-        h for h in entries
-        if not any(sub_hook.get("command") == bridge_path for sub_hook in h.get("hooks", []))
-    ]
+    entries = remove_bridge_hooks(data['hooks'].get(key, []))
     if entries:
         data['hooks'][key] = entries
     else:
