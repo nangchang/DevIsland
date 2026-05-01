@@ -207,6 +207,15 @@ enum BuddyKind {
         case .claudeCode: return Color(red: 0.82, green: 0.42, blue: 0.30)
         }
     }
+
+    var accessibilityName: String {
+        switch self {
+        case .codex:
+            return "Codex"
+        case .claudeCode:
+            return "Claude Code"
+        }
+    }
 }
 
 private struct PixelCell {
@@ -392,6 +401,52 @@ struct TagView: View {
     }
 }
 
+struct AgentRequestBadge: View {
+    let kind: BuddyKind
+    let tool: ToolInfo
+    let isActive: Bool
+    var size: CGFloat = 48
+
+    private var mascotSize: CGFloat { size * 0.72 }
+    private var requestBadgeSize: CGFloat { size * 0.38 }
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Circle()
+                .fill(kind.accentColor.opacity(0.18))
+                .frame(width: size, height: size)
+                .overlay(
+                    Circle()
+                        .stroke(kind.accentColor.opacity(0.28), lineWidth: 1)
+                )
+
+            CLIBuddyView(accent: kind.accentColor, isActive: isActive, compact: size < 40, kind: kind)
+                .frame(width: mascotSize, height: mascotSize)
+                .offset(x: -size * 0.04, y: size * 0.03)
+
+            Circle()
+                .fill(Color.black.opacity(0.92))
+                .frame(width: requestBadgeSize, height: requestBadgeSize)
+                .overlay(
+                    Circle()
+                        .fill(tool.color.opacity(0.22))
+                )
+                .overlay(
+                    Image(systemName: tool.icon)
+                        .font(.system(size: size * 0.18, weight: .black))
+                        .foregroundColor(tool.color)
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.black, lineWidth: max(1.5, size * 0.04))
+                )
+                .offset(x: size * 0.05, y: size * 0.04)
+        }
+        .frame(width: size + size * 0.08, height: size + size * 0.08)
+        .accessibilityLabel("\(kind.accessibilityName) \(tool.label)")
+    }
+}
+
 // MARK: - Session Row
 
 struct SessionRowView: View {
@@ -406,23 +461,23 @@ struct SessionRowView: View {
     var body: some View {
         Button(action: { AppState.shared.selectedSessionId = session.id }) {
             HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(tool.color.opacity(0.15))
-                        .frame(width: 32, height: 32)
-                    
-                    Image(systemName: tool.icon)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(tool.color)
-                    
+                ZStack(alignment: .bottomTrailing) {
+                    AgentRequestBadge(
+                        kind: session.agentKind,
+                        tool: tool,
+                        isActive: session.isPending,
+                        size: 32
+                    )
+
                     if session.isPending {
                         Circle()
                             .fill(Color.orange)
                             .frame(width: 10, height: 10)
                             .overlay(Circle().stroke(Color.black, lineWidth: 2))
-                            .offset(x: 12, y: 12)
+                            .offset(x: 7, y: 7)
                     }
                 }
+                .frame(width: 36, height: 36)
                 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
@@ -494,9 +549,10 @@ struct NotchView: View {
     }
 
     private var currentBuddyKind: BuddyKind {
-        let session = state.activeSessions.first { $0.id == state.selectedSessionId }
+        let session = state.activeSessions.first { $0.id == state.currentSessionId }
+            ?? state.activeSessions.first { $0.id == state.selectedSessionId }
             ?? state.activeSessions.first
-        return BuddyKind(from: session?.terminalTitle ?? "")
+        return session?.agentKind ?? BuddyKind(from: "")
     }
 
     private var notchExpansionAnimation: Animation {
@@ -605,13 +661,12 @@ struct NotchView: View {
 
             // ── Header ──────────────────────────────────
             HStack(spacing: 16) {
-                ZStack {
-                    Circle()
-                        .fill(tool.color.opacity(0.15))
-                        .frame(width: 48, height: 48)
-                    CLIBuddyView(accent: tool.color, isActive: buddyPulse, compact: false, kind: currentBuddyKind)
-                        .frame(width: 34, height: 34)
-                }
+                AgentRequestBadge(
+                    kind: currentBuddyKind,
+                    tool: tool,
+                    isActive: buddyPulse,
+                    size: 48
+                )
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
