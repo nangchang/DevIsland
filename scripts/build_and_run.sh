@@ -19,6 +19,9 @@ fi
 
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
+cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$RESOURCES_DIR/"
+cp "$ROOT_DIR/scripts/install-bridge.sh" "$RESOURCES_DIR/"
+
 swiftc \
   DevIsland/*.swift \
   -target "$(uname -m)-apple-macos14.0" \

@@ -123,18 +123,20 @@ enum BridgeInstaller {
             "hooks": [["type": "command", "command": bridgePath]]
         ]
         let entries: [(String, [String: Any])] = [
-            ("SessionStart", notifConfig), ("Stop", notifConfig),
-            ("PostToolUse", notifConfig), ("Notification", notifConfig),
-            ("PermissionRequest", hookConfig), ("PreToolUse", hookConfig),
+            ("SessionStart", notifConfig), ("Stop", notifConfig), ("SubagentStop", notifConfig),
+            ("SessionEnd", notifConfig), ("StopFailure", notifConfig),
+            ("PostToolUse", notifConfig), ("Notification", notifConfig), ("PreCompact", notifConfig),
+            ("PermissionRequest", notifConfig),
+            ("PreToolUse", hookConfig),
         ]
 
         for (key, config) in entries {
             var list = (hooks[key] as? [[String: Any]]) ?? []
-            let alreadyRegistered = list.contains { entry in
+            list.removeAll { entry in
                 let subHooks = entry["hooks"] as? [[String: Any]] ?? []
                 return subHooks.contains { ($0["command"] as? String) == bridgePath }
             }
-            if !alreadyRegistered { list.append(config) }
+            list.append(config)
             hooks[key] = list
         }
 

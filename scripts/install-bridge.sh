@@ -63,13 +63,17 @@ notif_config = {
 }
 
 for key, config in [
-    ('SessionStart', notif_config), ('Stop', notif_config),
-    ('PostToolUse', notif_config), ('Notification', notif_config),
-    ('PermissionRequest', hook_config), ('PreToolUse', hook_config),
+    ('SessionStart', notif_config), ('Stop', notif_config), ('SubagentStop', notif_config),
+    ('SessionEnd', notif_config), ('StopFailure', notif_config),
+    ('PostToolUse', notif_config), ('Notification', notif_config), ('PreCompact', notif_config),
+    ('PermissionRequest', notif_config), ('PreToolUse', hook_config),
 ]:
     data['hooks'].setdefault(key, [])
-    if not any(bridge_path in json.dumps(h) for h in data['hooks'][key]):
-        data['hooks'][key].append(config)
+    data['hooks'][key] = [
+        h for h in data['hooks'][key]
+        if not any(sub_hook.get("command") == bridge_path for sub_hook in h.get("hooks", []))
+    ]
+    data['hooks'][key].append(config)
 
 with open(path, 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
