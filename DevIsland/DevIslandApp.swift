@@ -64,6 +64,12 @@ struct MenuBarMenu: View {
             BridgeInstaller.install()
         }
 
+        if !GlobalShortcutManager.shared.hasAccessibilityPermission {
+            Button("접근성 권한 요청...") {
+                GlobalShortcutManager.shared.requestAccessibilityPermission()
+            }
+        }
+
         Divider()
 
         Button("Quit DevIsland") {

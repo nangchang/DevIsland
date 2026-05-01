@@ -6,16 +6,23 @@ class GlobalShortcutManager {
 
     private init() {}
 
+    var hasAccessibilityPermission: Bool {
+        AXIsProcessTrusted()
+    }
+
     func start() {
-        guard AXIsProcessTrusted() else {
-            // Accessibility 권한 없으면 시스템 다이얼로그 표시
-            let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-            AXIsProcessTrustedWithOptions(opts)
+        guard monitor == nil, hasAccessibilityPermission else {
             return
         }
+
         monitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] in
             self?.handle($0)
         }
+    }
+
+    func requestAccessibilityPermission() {
+        let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        AXIsProcessTrustedWithOptions(opts)
     }
 
     func stop() {
