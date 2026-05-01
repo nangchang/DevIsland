@@ -163,8 +163,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var notchWindowController: NotchWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        _ = AppState.shared
-        notchWindowController = NotchWindowController()
-        notchWindowController?.showWindow(nil)
+        let myPID = ProcessInfo.processInfo.processIdentifier
+        let others = NSWorkspace.shared.runningApplications
+            .filter { $0.localizedName == "DevIsland" && $0.processIdentifier != myPID }
+        others.forEach { $0.terminate() }
+
+        let delay: TimeInterval = others.isEmpty ? 0 : 0.3
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            _ = AppState.shared
+            self.notchWindowController = NotchWindowController()
+            self.notchWindowController?.showWindow(nil)
+        }
     }
 }
