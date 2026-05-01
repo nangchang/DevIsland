@@ -9,6 +9,9 @@ targets:
     platform: macOS
     deploymentTarget: "14.0"
     sources: [DevIsland]
+    resources:
+      - scripts/devisland-bridge.sh
+      - scripts/install-bridge.sh
     info:
       path: DevIsland/Info.plist
       properties:
