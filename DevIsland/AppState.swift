@@ -121,7 +121,7 @@ class AppState: ObservableObject {
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
                 if Self.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
                     let label = URL(fileURLWithPath: cwd).lastPathComponent
-                    if !label.isEmpty { terminalTitle = label }
+                    if !label.isEmpty && label != "/" { terminalTitle = label }
                 }
                 let toolInput = json["tool_input"] as? [String: Any]
                 

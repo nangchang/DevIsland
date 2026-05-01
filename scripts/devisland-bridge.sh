@@ -59,7 +59,7 @@ elif [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
 fi
 
 # 타이틀을 얻지 못한 경우 현재 디렉토리 이름으로 폴백 (루트 '/' 제외)
-if [ -z "$TERM_TITLE" ]; then
+if [ -z "$TERM_TITLE" ] || [ "$TERM_TITLE" = "Terminal" ]; then
   _dir=$(basename "$PWD" 2>/dev/null)
   if [ -n "$_dir" ] && [ "$_dir" != "/" ]; then
     TERM_TITLE="$_dir"
