@@ -8,16 +8,59 @@ if ! nc -z localhost 9090 2>/dev/null; then
   exit 0
 fi
 
-# 현재 터미널 창/탭 타이틀 추출
+# 현재 터미널 창/탭 타이틀 추출 (TTY로 정확한 창/탭 특정)
 TERM_TITLE="Terminal"
+CURRENT_TTY=$(tty 2>/dev/null)
+
 if [ "$TERM_PROGRAM" = "iTerm.app" ]; then
-  TERM_TITLE=$(osascript -e 'tell application "iTerm" to get name of current session of current window' 2>/dev/null || echo "iTerm")
+  if [ -n "$CURRENT_TTY" ]; then
+    TERM_TITLE=$(osascript << ASEOF
+tell application "iTerm"
+  set ttyPath to "$CURRENT_TTY"
+  repeat with aWindow in windows
+    repeat with aTab in tabs of aWindow
+      repeat with aSession in sessions of aTab
+        if tty of aSession is ttyPath then
+          return name of aSession
+        end if
+      end repeat
+    end repeat
+  end repeat
+  return name of current session of current window
+end tell
+ASEOF
+    2>/dev/null || echo "iTerm")
+  else
+    TERM_TITLE=$(osascript -e 'tell application "iTerm" to get name of current session of current window' 2>/dev/null || echo "iTerm")
+  fi
 elif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
-  TERM_TITLE=$(osascript -e 'tell application "Terminal" to get name of selected tab of front window' 2>/dev/null || echo "Terminal")
+  if [ -n "$CURRENT_TTY" ]; then
+    TERM_TITLE=$(osascript << ASEOF
+tell application "Terminal"
+  set ttyPath to "$CURRENT_TTY"
+  repeat with aWin in windows
+    repeat with aTab in tabs of aWin
+      if tty of aTab is ttyPath then
+        return name of aWin
+      end if
+    end repeat
+  end repeat
+  return name of front window
+end tell
+ASEOF
+    2>/dev/null)
+  else
+    TERM_TITLE=$(osascript -e 'tell application "Terminal" to get name of front window' 2>/dev/null)
+  fi
 elif [ -n "$GHOSTTY_BIN_DIR" ]; then
-  TERM_TITLE="Ghostty"
+  TERM_TITLE=$(osascript -e 'tell application "Ghostty" to get name of front window' 2>/dev/null || echo "Ghostty")
 elif [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
   TERM_TITLE="Warp"
+fi
+
+# 타이틀을 얻지 못한 경우 현재 디렉토리 이름으로 폴백
+if [ -z "$TERM_TITLE" ]; then
+  TERM_TITLE=$(basename "$PWD" 2>/dev/null || echo "Claude")
 fi
 
 # 페이로드에 터미널 정보 추가 (python3 앞에 환경 변수 설정해 파이프 오른쪽 프로세스에 전달)
