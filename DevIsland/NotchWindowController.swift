@@ -578,7 +578,7 @@ struct NotchView: View {
 
                 Spacer(minLength: 0)
 
-                CLIBuddyView(accent: tool.color, isActive: buddyPulse, compact: true, kind: currentBuddyKind)
+                CLIBuddyView(accent: Color(red: 0.34, green: 0.38, blue: 1.0), isActive: buddyPulse, compact: true, kind: .codex)
                     .frame(width: 18, height: 18)
                     .offset(x: 4, y: 4)
             }
