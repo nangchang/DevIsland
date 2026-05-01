@@ -114,7 +114,7 @@ class AppState: ObservableObject {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
                 toolName  = json["tool_name"] as? String ?? ""
-                sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? "Default"
+                sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
                 terminalTitle = json["terminal_title"] as? String ?? "Terminal"
                 let toolInput = json["tool_input"] as? [String: Any]
                 
@@ -153,7 +153,11 @@ class AppState: ObservableObject {
         let isNotification = notificationEvents.contains(normalizedEvent)
 
         if isStop {
-            let fullSessionId = sessionId.isEmpty ? "Default" : sessionId
+            guard !sessionId.isEmpty else {
+                responseHandler("{\"response\": \"approved\"}")
+                return
+            }
+            let fullSessionId = sessionId
             DispatchQueue.main.async {
                 self.pendingQueue
                     .filter { $0.sessionId == fullSessionId }
@@ -190,7 +194,11 @@ class AppState: ObservableObject {
 
         if isNotification {
             print("[DevIsland] notification event: \(event) for \(toolName) → auto-approved")
-            let fullSessionId = sessionId.isEmpty ? "Default" : sessionId
+            guard !sessionId.isEmpty else {
+                responseHandler("{\"response\": \"approved\"}")
+                return
+            }
+            let fullSessionId = sessionId
             self.updateActiveSession(
                 sessionId: fullSessionId,
                 terminalTitle: terminalTitle,
@@ -209,8 +217,12 @@ class AppState: ObservableObject {
             return
         }
 
+        let fallbackSessionId = selectedSessionId
+            ?? (currentSessionId.isEmpty ? nil : currentSessionId)
+            ?? activeSessions.first?.id
+        let resolvedSessionId = sessionId.isEmpty ? (fallbackSessionId ?? "Unscoped") : sessionId
         let request = PendingRequest(
-            sessionId: sessionId.isEmpty ? "Default" : sessionId,
+            sessionId: resolvedSessionId,
             eventName: event,
             toolName: toolName,
             message: displayMsg,
