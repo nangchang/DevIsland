@@ -112,9 +112,16 @@ approved = result == "approved"
 message = "DevIsland에서 거절되었습니다."
 
 if event == "PermissionRequest":
-    output = {"permissionDecision": "allow" if approved else "deny"}
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": {
+                "behavior": "allow" if approved else "deny",
+            },
+        }
+    }
     if not approved:
-        output["reason"] = message
+        output["hookSpecificOutput"]["decision"]["message"] = message
 else:
     output = {"continue": True, "suppressOutput": True}
 
