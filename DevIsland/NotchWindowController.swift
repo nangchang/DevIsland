@@ -200,6 +200,13 @@ enum BuddyKind {
             self = .codex
         }
     }
+
+    var accentColor: Color {
+        switch self {
+        case .codex:     return Color(red: 0.34, green: 0.38, blue: 1.0)
+        case .claudeCode: return Color(red: 0.82, green: 0.42, blue: 0.30)
+        }
+    }
 }
 
 private struct PixelCell {
@@ -568,7 +575,7 @@ struct NotchView: View {
 
             HStack {
                 CLIBuddyView(
-                    accent: Color(red: 0.82, green: 0.42, blue: 0.30),
+                    accent: BuddyKind.claudeCode.accentColor,
                     isActive: buddyPulse,
                     compact: true,
                     kind: .claudeCode
@@ -578,7 +585,7 @@ struct NotchView: View {
 
                 Spacer(minLength: 0)
 
-                CLIBuddyView(accent: tool.color, isActive: buddyPulse, compact: true, kind: currentBuddyKind)
+                CLIBuddyView(accent: BuddyKind.codex.accentColor, isActive: buddyPulse, compact: true, kind: .codex)
                     .frame(width: 18, height: 18)
                     .offset(x: 4, y: 4)
             }
