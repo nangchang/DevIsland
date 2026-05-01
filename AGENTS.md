@@ -30,7 +30,7 @@ Build target: **macOS 14.0+**, Xcode 15+. There are no tests in the project.
 For environments without Xcode (e.g. CI, Codex), use the shell build script:
 
 ```bash
-./script/build_and_run.sh
+./scripts/build_and_run.sh
 ```
 
 This compiles all `DevIsland/*.swift` sources with `swiftc`, assembles an app bundle under `dist/DevIsland.app`, and launches it. Pass `--verify` to assert the process started. This path is also wired as the `.codex/environments/environment.toml` Run action.
