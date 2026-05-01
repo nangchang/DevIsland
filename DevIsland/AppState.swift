@@ -220,7 +220,7 @@ class AppState: ObservableObject {
         let fallbackSessionId = selectedSessionId
             ?? (currentSessionId.isEmpty ? nil : currentSessionId)
             ?? activeSessions.first?.id
-        let resolvedSessionId = sessionId.isEmpty ? (fallbackSessionId ?? "Unscoped") : sessionId
+        let resolvedSessionId = sessionId.isEmpty ? (fallbackSessionId ?? "") : sessionId
         let request = PendingRequest(
             sessionId: resolvedSessionId,
             eventName: event,
@@ -243,17 +243,19 @@ class AppState: ObservableObject {
             )
             self.pendingItems.append(newItem)
             self.pendingCount = self.pendingQueue.count
-            
-            self.updateActiveSession(
-                sessionId: request.sessionId,
-                terminalTitle: terminalTitle,
-                toolName: request.toolName,
-                eventName: request.eventName,
-                message: request.message,
-                isPending: true
-            )
-            
-            self.selectedSessionId = request.sessionId
+
+            if !request.sessionId.isEmpty {
+                self.updateActiveSession(
+                    sessionId: request.sessionId,
+                    terminalTitle: terminalTitle,
+                    toolName: request.toolName,
+                    eventName: request.eventName,
+                    message: request.message,
+                    isPending: true
+                )
+
+                self.selectedSessionId = request.sessionId
+            }
             
             if !self.isNotchExpanded {
                 self.showNextRequest()
@@ -356,7 +358,7 @@ class AppState: ObservableObject {
                 self.pendingCount = self.pendingQueue.count
                 
                 // Update session state to not pending
-                if let index = self.activeSessions.firstIndex(where: { $0.id == removed.sessionId }) {
+                if !removed.sessionId.isEmpty, let index = self.activeSessions.firstIndex(where: { $0.id == removed.sessionId }) {
                     // Check if there are other pending items for this session
                     let stillPending = self.pendingQueue.contains { $0.sessionId == removed.sessionId }
                     self.activeSessions[index].isPending = stillPending
