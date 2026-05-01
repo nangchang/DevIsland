@@ -34,17 +34,48 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Raw Payload: $PAYLOAD" >> /tmp/DevIsland.br
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Event Detected: $EVENT" >> /tmp/DevIsland.bridge.log
 
 # 앱으로 전달 후 응답 대기 (최대 300초)
-RAW=$(printf "%s" "$PAYLOAD" | nc -N -w 300 localhost 9090)
+RAW=$(printf "%s" "$PAYLOAD" | python3 -c '
+import socket
+import sys
+
+payload = sys.stdin.buffer.read()
+with socket.create_connection(("127.0.0.1", 9090), timeout=5) as sock:
+    sock.settimeout(300)
+    sock.sendall(payload)
+    sock.shutdown(socket.SHUT_WR)
+
+    chunks = []
+    while True:
+        chunk = sock.recv(65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+
+sys.stdout.buffer.write(b"".join(chunks))
+' 2>/dev/null || true)
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Raw Response: $RAW" >> /tmp/DevIsland.bridge.log
 RESULT=$(printf "%s" "$RAW" | python3 -c \
   "import sys,json; print(json.load(sys.stdin).get('response','denied'))" \
   2>/dev/null || echo "denied")
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Result: $RESULT" >> /tmp/DevIsland.bridge.log
 
-# PermissionRequest → behavior: deny  /  PreToolUse → behavior: block
-if [ "$RESULT" = "approved" ]; then
-  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"$EVENT\",\"decision\":{\"behavior\":\"allow\"}}}"
-else
-  BEHAVIOR=$( [ "$EVENT" = "PreToolUse" ] && echo "block" || echo "deny" )
-  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"$EVENT\",\"decision\":{\"behavior\":\"$BEHAVIOR\",\"message\":\"DevIsland에서 거절되었습니다.\"}}}"
-fi
+EVENT="$EVENT" RESULT="$RESULT" python3 -c '
+import json
+import os
+
+event = os.environ.get("EVENT", "")
+result = os.environ.get("RESULT", "denied")
+approved = result == "approved"
+message = "DevIsland에서 거절되었습니다."
+
+if event == "PermissionRequest":
+    output = {"permissionDecision": "allow" if approved else "deny"}
+    if not approved:
+        output["reason"] = message
+else:
+    output = {"continue": True, "suppressOutput": True}
+
+print(json.dumps(output, ensure_ascii=False))
+'
 
 exit 0

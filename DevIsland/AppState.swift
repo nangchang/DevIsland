@@ -69,6 +69,15 @@ class AppState: ObservableObject {
         server.onMessageReceived = { [weak self] message, responseHandler in
             self?.handleMessage(message, responseHandler: responseHandler)
         }
+        server.onServerFailed = {
+            let alert = NSAlert()
+            alert.messageText = "포트 사용 중"
+            alert.informativeText = "9090 포트가 이미 사용 중입니다.\n다른 DevIsland 인스턴스를 종료 후 다시 실행해주세요."
+            alert.alertStyle = .critical
+            alert.addButton(withTitle: "종료")
+            alert.runModal()
+            NSApplication.shared.terminate(nil)
+        }
         server.start()
         GlobalShortcutManager.shared.start()
         
@@ -80,7 +89,7 @@ class AppState: ObservableObject {
 
     /// 현재 화면에 표시할 데이터를 선택된 세션 정보로 업데이트
     func syncDisplayToSelectedSession() {
-        // 선택된 세션이 있으면 그 데이터를, 없으면 현재 진행 중인 세션 데이터를 우선 표시
+        guard currentResponseHandler == nil else { return }
         let sessionId = selectedSessionId ?? currentSessionId
         
         if let session = activeSessions.first(where: { $0.id == sessionId }) {
@@ -120,22 +129,59 @@ class AppState: ObservableObject {
                 } else if let input = toolInput {
                     displayMsg = input.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
                 }
+                if displayMsg.isEmpty {
+                    displayMsg = json["message"] as? String ?? ""
+                }
+                if displayMsg.isEmpty, let suggestions = json["permission_suggestions"] as? [[String: Any]] {
+                    displayMsg = suggestions.compactMap { suggestion in
+                        suggestion["behavior"] as? String
+                    }.map { "Suggested: \($0)" }.joined(separator: "\n")
+                }
             }
         } catch {
             print("JSON parse error: \(error)")
             displayMsg = message
         }
 
-        let isStop = ["stop", "exit", "shutdown", "sessionend"].contains(event.lowercased())
-        let notificationEvents = ["sessionstart", "notification", "posttooluse", "session_start", "post_tool_use", "sessionend", "stop"]
-        let isNotification = notificationEvents.contains(event.lowercased())
+        let normalizedEvent = event
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+        let stopEvents = ["stop", "subagentstop", "exit", "shutdown", "sessionend"]
+        let notificationEvents = ["sessionstart", "notification", "pretooluse", "posttooluse", "precompact"]
+        let isStop = stopEvents.contains(normalizedEvent)
+        let isNotification = notificationEvents.contains(normalizedEvent)
 
         if isStop {
             let fullSessionId = sessionId.isEmpty ? "Default" : sessionId
             DispatchQueue.main.async {
+                self.pendingQueue
+                    .filter { $0.sessionId == fullSessionId }
+                    .forEach { $0.responseHandler("{\"response\": \"denied\"}") }
+                self.pendingQueue.removeAll { $0.sessionId == fullSessionId }
+                self.pendingItems.removeAll { $0.sessionId == fullSessionId }
+                self.pendingCount = self.pendingQueue.count
                 self.activeSessions.removeAll { $0.id == fullSessionId }
+
+                if self.currentSessionId == fullSessionId {
+                    self.currentResponseHandler = nil
+                    self.timeoutTimer?.invalidate()
+                    self.timeoutProgress = 1.0
+                    self.currentSessionId = ""
+                    self.currentToolName = ""
+                    self.currentEventName = ""
+                    self.currentMessage = ""
+                }
+
                 if self.selectedSessionId == fullSessionId {
                     self.selectedSessionId = self.activeSessions.first?.id
+                }
+
+                if self.pendingQueue.isEmpty {
+                    self.isNotchExpanded = false
+                    self.syncDisplayToSelectedSession()
+                } else if self.currentResponseHandler == nil {
+                    self.showNextRequest()
                 }
             }
             responseHandler("{\"response\": \"approved\"}")
@@ -143,6 +189,7 @@ class AppState: ObservableObject {
         }
 
         if isNotification {
+            print("[DevIsland] notification event: \(event) for \(toolName) → auto-approved")
             let fullSessionId = sessionId.isEmpty ? "Default" : sessionId
             self.updateActiveSession(
                 sessionId: fullSessionId,
@@ -152,12 +199,12 @@ class AppState: ObservableObject {
                 message: event.lowercased().contains("start") ? "Session Started" : displayMsg,
                 isPending: false
             )
-            
+
             DispatchQueue.main.async {
                 self.selectedSessionId = fullSessionId
                 self.syncDisplayToSelectedSession()
             }
-            
+
             responseHandler("{\"response\": \"approved\"}")
             return
         }
@@ -243,15 +290,14 @@ class AppState: ObservableObject {
             isNotchExpanded = false
             return
         }
-        
-        // 데이터 먼저 준비
+
+        print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
         currentResponseHandler = next.responseHandler
         currentEventName  = next.eventName
         currentToolName   = next.toolName
         currentMessage    = next.message
         currentSessionId  = next.sessionId
-        
-        // 그 다음 확장 신호 발생
+
         DispatchQueue.main.async {
             self.isNotchExpanded = true
         }
@@ -283,7 +329,9 @@ class AppState: ObservableObject {
         let payload = approved
             ? "{\"response\": \"approved\"}"
             : "{\"response\": \"denied\"}"
+        print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
         currentResponseHandler?(payload)
+        print("[DevIsland] sendDecision: response payload sent")
         currentResponseHandler = nil
         timeoutTimer?.invalidate()
 
@@ -308,10 +356,12 @@ class AppState: ObservableObject {
     }
 
     func approve() {
+        print("[DevIsland] approve() called, handler=\(currentResponseHandler != nil ? "SET" : "NIL")")
         sendDecision(approved: true)
     }
 
     func deny() {
+        print("[DevIsland] deny() called")
         sendDecision(approved: false)
     }
 
