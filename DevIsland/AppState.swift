@@ -20,13 +20,30 @@ struct PendingItem: Identifiable, Equatable {
     let message: String
     let sessionId: String
     let terminalTitle: String
+    let terminalWindowId: String
+    let terminalTabIndex: String
     let receivedAt: Date
+}
+
+enum SessionStatus: Equatable {
+    case idle
+    case pending
+    case timeoutBypassed(Date)
+
+    var isTimeoutBypassed: Bool {
+        if case .timeoutBypassed = self { return true }
+        return false
+    }
 }
 
 struct ActiveSession: Identifiable, Equatable {
     let id: String // full sessionId
     var terminalTitle: String
     var agentKind: BuddyKind
+    var terminalApp: String
+    var terminalTTY: String
+    var terminalWindowId: String
+    var terminalTabIndex: String
     var lastToolName: String
     var lastEventName: String
     var lastMessage: String
@@ -34,6 +51,7 @@ struct ActiveSession: Identifiable, Equatable {
     var lastActiveAt: Date
     var isPending: Bool
     var isLifecycleTracked: Bool
+    var status: SessionStatus
 }
 
 // MARK: - App State
@@ -114,6 +132,10 @@ class AppState: ObservableObject {
         var sessionId = ""
         var terminalTitle = "Terminal"
         var agentKind = BuddyKind.codex
+        var terminalApp = ""
+        var terminalTTY = ""
+        var terminalWindowId = ""
+        var terminalTabIndex = ""
         var displayMsg = ""
         var notificationType = ""
 
@@ -123,6 +145,10 @@ class AppState: ObservableObject {
                 toolName  = json["tool_name"] as? String ?? ""
                 sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
                 terminalTitle = json["terminal_title"] as? String ?? "Terminal"
+                terminalApp = json["terminal_app"] as? String ?? ""
+                terminalTTY = json["terminal_tty"] as? String ?? ""
+                terminalWindowId = json["terminal_window_id"] as? String ?? ""
+                terminalTabIndex = json["terminal_tab_index"] as? String ?? ""
                 notificationType = json["notification_type"] as? String ?? ""
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
                 if Self.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
@@ -212,6 +238,10 @@ class AppState: ObservableObject {
                 sessionId: fullSessionId,
                 terminalTitle: terminalTitle,
                 agentKind: agentKind,
+                terminalApp: terminalApp,
+                terminalTTY: terminalTTY,
+                terminalWindowId: terminalWindowId,
+                terminalTabIndex: terminalTabIndex,
                 toolName: toolName,
                 eventName: event,
                 message: sessionMessage,
@@ -260,6 +290,8 @@ class AppState: ObservableObject {
                 message: request.message,
                 sessionId: request.sessionId,
                 terminalTitle: terminalTitle,
+                terminalWindowId: terminalWindowId,
+                terminalTabIndex: terminalTabIndex,
                 receivedAt: request.receivedAt
             )
             self.pendingItems.append(newItem)
@@ -270,6 +302,10 @@ class AppState: ObservableObject {
                     sessionId: request.sessionId,
                     terminalTitle: terminalTitle,
                     agentKind: agentKind,
+                    terminalApp: terminalApp,
+                    terminalTTY: terminalTTY,
+                    terminalWindowId: terminalWindowId,
+                    terminalTabIndex: terminalTabIndex,
                     toolName: request.toolName,
                     eventName: request.eventName,
                     message: request.message,
@@ -429,7 +465,22 @@ class AppState: ObservableObject {
         return BuddyKind(from: terminalTitle)
     }
 
-    private func updateActiveSession(sessionId: String, terminalTitle: String, agentKind: BuddyKind, toolName: String, eventName: String, message: String, isPending: Bool, preserveMessage: Bool = false, isLifecycleTracked: Bool = false) {
+    private func updateActiveSession(
+        sessionId: String,
+        terminalTitle: String,
+        agentKind: BuddyKind,
+        terminalApp: String,
+        terminalTTY: String,
+        terminalWindowId: String,
+        terminalTabIndex: String,
+        toolName: String,
+        eventName: String,
+        message: String,
+        isPending: Bool,
+        preserveMessage: Bool = false,
+        isLifecycleTracked: Bool = false,
+        status: SessionStatus? = nil
+    ) {
         if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) {
             let shouldUpdateTitle = !Self.genericTitles.contains(terminalTitle)
                 || Self.genericTitles.contains(activeSessions[index].terminalTitle)
@@ -437,6 +488,18 @@ class AppState: ObservableObject {
                 activeSessions[index].terminalTitle = terminalTitle
             }
             activeSessions[index].agentKind = agentKind
+            if !terminalApp.isEmpty {
+                activeSessions[index].terminalApp = terminalApp
+            }
+            if !terminalTTY.isEmpty {
+                activeSessions[index].terminalTTY = terminalTTY
+            }
+            if !terminalWindowId.isEmpty {
+                activeSessions[index].terminalWindowId = terminalWindowId
+            }
+            if !terminalTabIndex.isEmpty {
+                activeSessions[index].terminalTabIndex = terminalTabIndex
+            }
             activeSessions[index].lastToolName = toolName
             activeSessions[index].lastEventName = eventName
             if !preserveMessage {
@@ -444,6 +507,7 @@ class AppState: ObservableObject {
             }
             activeSessions[index].lastActiveAt = Date()
             activeSessions[index].isPending = isPending
+            activeSessions[index].status = status ?? (isPending ? .pending : .idle)
             if isLifecycleTracked {
                 activeSessions[index].isLifecycleTracked = true
             }
@@ -452,13 +516,18 @@ class AppState: ObservableObject {
                 id: sessionId,
                 terminalTitle: terminalTitle,
                 agentKind: agentKind,
+                terminalApp: terminalApp,
+                terminalTTY: terminalTTY,
+                terminalWindowId: terminalWindowId,
+                terminalTabIndex: terminalTabIndex,
                 lastToolName: toolName,
                 lastEventName: eventName,
                 lastMessage: message,
                 startTime: Date(),
                 lastActiveAt: Date(),
                 isPending: isPending,
-                isLifecycleTracked: isLifecycleTracked
+                isLifecycleTracked: isLifecycleTracked,
+                status: status ?? (isPending ? .pending : .idle)
             )
             activeSessions.insert(session, at: 0)
         }
@@ -535,13 +604,13 @@ class AppState: ObservableObject {
             if elapsed >= self.timeoutDuration {
                 timer.invalidate()
                 if self.currentResponseHandler != nil {
-                    self.sendDecision(approved: false, reason: "Timeout")
+                    self.sendDecision(approved: true, reason: "Timeout", status: .timeoutBypassed(Date()))
                 }
             }
         }
     }
 
-    private func sendDecision(approved: Bool, reason: String? = nil) {
+    private func sendDecision(approved: Bool, reason: String? = nil, status: SessionStatus? = nil) {
         let payload = approved
             ? "{\"response\": \"approved\"}"
             : "{\"response\": \"denied\"}"
@@ -553,8 +622,10 @@ class AppState: ObservableObject {
 
         DispatchQueue.main.async {
             self.timeoutProgress = 1.0
+            var completedSessionId: String?
             if !self.pendingQueue.isEmpty {
                 let removed = self.pendingQueue.removeFirst()
+                completedSessionId = removed.sessionId
                 
                 if !self.pendingItems.isEmpty { self.pendingItems.removeFirst() }
                 self.pendingCount = self.pendingQueue.count
@@ -565,6 +636,11 @@ class AppState: ObservableObject {
                     let stillPending = self.pendingQueue.contains { $0.sessionId == removed.sessionId }
                     if stillPending {
                         self.activeSessions[index].isPending = true
+                        self.activeSessions[index].status = .pending
+                    } else if status?.isTimeoutBypassed == true {
+                        self.activeSessions[index].isPending = false
+                        self.activeSessions[index].status = status ?? .idle
+                        self.activeSessions[index].lastActiveAt = Date()
                     } else if !self.activeSessions[index].isLifecycleTracked {
                         self.activeSessions.remove(at: index)
                         if self.selectedSessionId == removed.sessionId {
@@ -572,12 +648,17 @@ class AppState: ObservableObject {
                         }
                     } else {
                         self.activeSessions[index].isPending = false
+                        self.activeSessions[index].status = status ?? .idle
                     }
                 }
             }
             self.showNextRequest()
+            if status?.isTimeoutBypassed == true, self.pendingQueue.isEmpty, let completedSessionId {
+                self.selectedSessionId = completedSessionId
+                self.isNotchExpanded = true
+                self.syncDisplayToSelectedSession()
+            }
         }
-        TerminalFocuser.focusTerminal()
     }
 
     func approve() {
@@ -596,5 +677,19 @@ class AppState: ObservableObject {
         } else {
             isNotchExpanded = false
         }
+    }
+
+    func focusTerminal(for sessionId: String? = nil) {
+        let targetId = sessionId ?? (currentSessionId.isEmpty ? selectedSessionId : currentSessionId)
+        let session = targetId.flatMap { id in
+            activeSessions.first { $0.id == id }
+        }
+        TerminalFocuser.focusTerminal(
+            appName: session?.terminalApp,
+            title: session?.terminalTitle,
+            tty: session?.terminalTTY,
+            windowId: session?.terminalWindowId,
+            tabIndex: session?.terminalTabIndex
+        )
     }
 }

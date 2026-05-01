@@ -49,6 +49,8 @@ struct MenuBarMenu: View {
         }
 
         if state.isNotchExpanded {
+            Button("Focus Terminal") { state.focusTerminal() }
+            Divider()
             Button("Approve  ⌘⇧Y") { state.approve() }
                 .keyboardShortcut("y", modifiers: [.command, .shift])
             Button("Deny  ⌘⇧N") { state.deny() }

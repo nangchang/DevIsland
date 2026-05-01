@@ -10,9 +10,40 @@ fi
 
 # 현재 터미널 창/탭 타이틀 추출 (TTY로 정확한 창/탭 특정)
 TERM_TITLE="Terminal"
-CURRENT_TTY=$(tty 2>/dev/null)
+TERM_APP="${TERM_PROGRAM:-}"
+TERM_WINDOW_ID=""
+TERM_TAB_INDEX=""
+
+current_tty() {
+  local tty_path
+  tty_path=$(tty 2>/dev/null)
+  if [ -n "$tty_path" ] && [ "$tty_path" != "not a tty" ]; then
+    printf '%s\n' "$tty_path"
+    return
+  fi
+
+  local pid="$$"
+  local tty_name
+  local parent
+  while [ -n "$pid" ] && [ "$pid" != "0" ]; do
+    tty_name=$(ps -o tty= -p "$pid" 2>/dev/null | awk '{print $1}')
+    if [ -n "$tty_name" ] && [ "$tty_name" != "??" ] && [ "$tty_name" != "?" ]; then
+      case "$tty_name" in
+        /dev/*) printf '%s\n' "$tty_name" ;;
+        *) printf '/dev/%s\n' "$tty_name" ;;
+      esac
+      return
+    fi
+    parent=$(ps -o ppid= -p "$pid" 2>/dev/null | awk '{print $1}')
+    [ "$parent" = "$pid" ] && break
+    pid="$parent"
+  done
+}
+
+CURRENT_TTY=$(current_tty)
 
 if [ "$TERM_PROGRAM" = "iTerm.app" ]; then
+  TERM_APP="iTerm"
   if [ -n "$CURRENT_TTY" ]; then
     TERM_TITLE=$(osascript << ASEOF
 tell application "iTerm"
@@ -34,27 +65,35 @@ ASEOF
     TERM_TITLE=$(osascript -e 'tell application "iTerm" to get name of current session of current window' 2>/dev/null || echo "iTerm")
   fi
 elif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
+  TERM_APP="Terminal"
   if [ -n "$CURRENT_TTY" ]; then
-    TERM_TITLE=$(osascript << ASEOF
+    TERM_INFO=$(osascript << ASEOF
 tell application "Terminal"
   set ttyPath to "$CURRENT_TTY"
   repeat with aWin in windows
+    set tabIndex to 0
     repeat with aTab in tabs of aWin
+      set tabIndex to tabIndex + 1
       if tty of aTab is ttyPath then
-        return name of aWin
+        return (name of aWin) & "\t" & (id of aWin as text) & "\t" & (tabIndex as text)
       end if
     end repeat
   end repeat
-  return name of front window
+  return (name of front window) & "\t" & (id of front window as text) & "\t1"
 end tell
 ASEOF
     2>/dev/null)
+    TERM_TITLE=$(printf '%s' "$TERM_INFO" | awk -F '\t' '{print $1}')
+    TERM_WINDOW_ID=$(printf '%s' "$TERM_INFO" | awk -F '\t' '{print $2}')
+    TERM_TAB_INDEX=$(printf '%s' "$TERM_INFO" | awk -F '\t' '{print $3}')
   else
     TERM_TITLE=$(osascript -e 'tell application "Terminal" to get name of front window' 2>/dev/null)
   fi
 elif [ -n "$GHOSTTY_BIN_DIR" ]; then
+  TERM_APP="Ghostty"
   TERM_TITLE=$(osascript -e 'tell application "Ghostty" to get name of front window' 2>/dev/null || echo "Ghostty")
 elif [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
+  TERM_APP="Warp"
   TERM_TITLE="Warp"
 fi
 
@@ -69,8 +108,8 @@ if [ -z "$TERM_TITLE" ] || [ "$TERM_TITLE" = "Terminal" ]; then
 fi
 
 # 페이로드에 터미널 정보 추가 (python3 앞에 환경 변수 설정해 파이프 오른쪽 프로세스에 전달)
-PAYLOAD=$(printf "%s" "$PAYLOAD" | TERM_TITLE="$TERM_TITLE" python3 -c \
-  'import os,sys,json; d=json.load(sys.stdin); d["terminal_title"]=os.environ.get("TERM_TITLE", "Terminal"); print(json.dumps(d))')
+PAYLOAD=$(printf "%s" "$PAYLOAD" | TERM_TITLE="$TERM_TITLE" TERM_APP="$TERM_APP" TERM_TTY="$CURRENT_TTY" TERM_WINDOW_ID="$TERM_WINDOW_ID" TERM_TAB_INDEX="$TERM_TAB_INDEX" python3 -c \
+  'import os,sys,json; d=json.load(sys.stdin); d["terminal_title"]=os.environ.get("TERM_TITLE", "Terminal"); d["terminal_app"]=os.environ.get("TERM_APP", ""); d["terminal_tty"]=os.environ.get("TERM_TTY", ""); d["terminal_window_id"]=os.environ.get("TERM_WINDOW_ID", ""); d["terminal_tab_index"]=os.environ.get("TERM_TAB_INDEX", ""); print(json.dumps(d))')
 
 # 이벤트 종류 추출 (PermissionRequest / PreToolUse / Stop / ...)
 EVENT=$(printf "%s" "$PAYLOAD" | python3 -c \
