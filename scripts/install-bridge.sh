@@ -54,29 +54,43 @@ with open(path) as f:
 
 data.setdefault('hooks', {})
 
-hook_config = {
-    "matcher": ".*",
-    "hooks": [{"type": "command", "command": bridge_path, "timeout": 86400}]
-}
 approval_config = {
     "hooks": [{"type": "command", "command": bridge_path, "timeout": 86400}]
 }
-notif_config = {
+lifecycle_config = {
     "hooks": [{"type": "command", "command": bridge_path}]
 }
 
+def remove_bridge_hooks(entries):
+    cleaned = []
+    for entry in entries:
+        sub_hooks = [
+            sub_hook for sub_hook in entry.get("hooks", [])
+            if sub_hook.get("command") != bridge_path
+        ]
+        if sub_hooks:
+            updated = dict(entry)
+            updated["hooks"] = sub_hooks
+            cleaned.append(updated)
+    return cleaned
+
 for key, config in [
-    ('SessionStart', notif_config), ('Stop', notif_config), ('SubagentStop', notif_config),
-    ('SessionEnd', notif_config), ('StopFailure', notif_config),
-    ('PostToolUse', notif_config), ('Notification', notif_config), ('PreCompact', notif_config),
-    ('PermissionRequest', approval_config), ('PreToolUse', hook_config),
+    ('SessionStart', lifecycle_config),
+    ('SessionEnd', lifecycle_config),
+    ('PermissionRequest', approval_config),
 ]:
     data['hooks'].setdefault(key, [])
-    data['hooks'][key] = [
-        h for h in data['hooks'][key]
-        if not any(sub_hook.get("command") == bridge_path for sub_hook in h.get("hooks", []))
-    ]
+    data['hooks'][key] = remove_bridge_hooks(data['hooks'][key])
     data['hooks'][key].append(config)
+
+for key in [
+    'Stop', 'SubagentStop', 'PreToolUse', 'PostToolUse', 'Notification', 'PreCompact', 'StopFailure',
+]:
+    entries = remove_bridge_hooks(data['hooks'].get(key, []))
+    if entries:
+        data['hooks'][key] = entries
+    else:
+        data['hooks'].pop(key, None)
 
 with open(path, 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)

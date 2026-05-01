@@ -7,7 +7,7 @@
 ## ✨ 주요 기능
 
 - **Dynamic Island 스타일 UI**: 평상시에는 노치 뒤에 숨어 있다가 에이전트 활동 시 우아하게 확장됩니다.
-- **실시간 모니터링**: 실행 중인 도구(Bash, Edit, Read 등)와 진행 상태를 실시간으로 확인할 수 있습니다.
+- **세션 모니터링**: 실행 중인 Claude Code 세션을 확인하고, 세션별 권한 요청 상태를 추적할 수 있습니다.
 - **스마트 세션 관리**: 여러 터미널에서 실행 중인 에이전트 세션을 개별적으로 추적하고 관리합니다.
 - **원클릭 승인/거부**: 에이전트의 권한 요청을 대시보드에서 즉시 처리할 수 있습니다. (Command+Shift+Y/N 단축키 지원)
 - **자동 정리**: 종료된 세션이나 장시간 활동이 없는 세션을 자동으로 감지하여 목록을 청결하게 유지합니다.
@@ -69,40 +69,17 @@ chmod +x ~/.claude/hooks/devisland-bridge.sh
         ]
       }
     ],
-    "Stop": [
-      {
-        "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh" }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh" }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh" }
-        ]
-      }
-    ],
     "PermissionRequest": [
       {
-        "matcher": ".*",
         "hooks": [
           { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh", "timeout": 86400 }
         ]
       }
     ],
-    "PreToolUse": [
+    "SessionEnd": [
       {
-        "matcher": ".*",
         "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh", "timeout": 86400 }
+          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh" }
         ]
       }
     ]
@@ -112,6 +89,7 @@ chmod +x ~/.claude/hooks/devisland-bridge.sh
 
 > `~/.claude/hooks/devisland-bridge.sh` 경로는 실제 파일 위치에 맞게 조정하세요.  
 > 기존 `settings.json`에 이미 `hooks` 키가 있다면 위 항목들을 병합하세요.
+> DevIsland는 중복 알림을 줄이기 위해 `PreToolUse`, `PostToolUse`, `Notification`, `Stop` 훅을 등록하지 않습니다. 권한 승인은 `PermissionRequest`에서만 처리하고, 세션 목록은 `SessionStart`/`SessionEnd`로 관리합니다.
 
 설치가 완료되면 Claude Code 실행 시 자동으로 DevIsland와 연결됩니다.
 

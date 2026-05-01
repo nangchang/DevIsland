@@ -81,6 +81,16 @@ EVENT=$(printf "%s" "$PAYLOAD" | python3 -c \
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Raw Payload: $PAYLOAD" >> /tmp/DevIsland.bridge.log
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Event Detected: $EVENT" >> /tmp/DevIsland.bridge.log
 
+case "$EVENT" in
+  PermissionRequest|SessionStart|SessionEnd)
+    ;;
+  *)
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Passive event suppressed before app: $EVENT" >> /tmp/DevIsland.bridge.log
+    printf '%s\n' '{"continue":true,"suppressOutput":true}'
+    exit 0
+    ;;
+esac
+
 # 앱으로 전달 후 응답 대기 (최대 300초)
 RAW=$(printf "%s" "$PAYLOAD" | python3 -c '
 import socket

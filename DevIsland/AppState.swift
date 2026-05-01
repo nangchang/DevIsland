@@ -32,6 +32,7 @@ struct ActiveSession: Identifiable, Equatable {
     let startTime: Date
     var lastActiveAt: Date
     var isPending: Bool
+    var isLifecycleTracked: Bool
 }
 
 // MARK: - App State
@@ -54,7 +55,6 @@ class AppState: ObservableObject {
             if let selected = selectedSessionId, !activeSessions.contains(where: { $0.id == selected }) {
                 selectedSessionId = activeSessions.first?.id
             }
-            syncDisplayToSelectedSession()
         }
     }
 
@@ -66,6 +66,7 @@ class AppState: ObservableObject {
     private var timeoutTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let timeoutDuration: Double = 120
+    private let lifecycleSessionTimeout: Double = 15 * 60
 
     private init() {
         server.onMessageReceived = { [weak self] message, responseHandler in
@@ -96,6 +97,7 @@ class AppState: ObservableObject {
         
         if let session = activeSessions.first(where: { $0.id == sessionId }) {
             DispatchQueue.main.async {
+                guard self.currentResponseHandler == nil else { return }
                 self.currentToolName = session.lastToolName
                 self.currentEventName = session.lastEventName
                 self.currentMessage = session.lastMessage
@@ -111,13 +113,15 @@ class AppState: ObservableObject {
         var sessionId = ""
         var terminalTitle = "Terminal"
         var displayMsg = ""
+        var notificationType = ""
 
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
                 toolName  = json["tool_name"] as? String ?? ""
-                sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? "Default"
+                sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
                 terminalTitle = json["terminal_title"] as? String ?? "Terminal"
+                notificationType = json["notification_type"] as? String ?? ""
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
                 if Self.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
                     let label = URL(fileURLWithPath: cwd).lastPathComponent
@@ -127,40 +131,30 @@ class AppState: ObservableObject {
                 
                 print("Parsed Hook: event=\(event), session=\(sessionId), title=\(terminalTitle)")
 
-                if let command = toolInput?["command"] as? String {
-                    displayMsg = command
-                } else if let filePath = toolInput?["file_path"] as? String {
-                    displayMsg = filePath
-                } else if let url = toolInput?["url"] as? String {
-                    displayMsg = url
-                } else if let input = toolInput {
-                    displayMsg = input.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
-                }
-                if displayMsg.isEmpty {
-                    displayMsg = json["message"] as? String ?? ""
-                }
-                if displayMsg.isEmpty, let suggestions = json["permission_suggestions"] as? [[String: Any]] {
-                    displayMsg = suggestions.compactMap { suggestion in
-                        suggestion["behavior"] as? String
-                    }.map { "Suggested: \($0)" }.joined(separator: "\n")
-                }
+                displayMsg = displayMessage(
+                    for: toolName,
+                    toolInput: toolInput,
+                    json: json,
+                    eventName: event
+                )
             }
         } catch {
             print("JSON parse error: \(error)")
             displayMsg = message
         }
 
-        let normalizedEvent = event
-            .lowercased()
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: "-", with: "")
+        let normalizedEvent = normalizedHookEventName(event)
         let stopEvents = ["stop", "subagentstop", "exit", "shutdown", "sessionend"]
         let notificationEvents = ["sessionstart", "notification", "pretooluse", "posttooluse", "precompact"]
         let isStop = stopEvents.contains(normalizedEvent)
         let isNotification = notificationEvents.contains(normalizedEvent)
 
         if isStop {
-            let fullSessionId = sessionId.isEmpty ? "Default" : sessionId
+            guard !sessionId.isEmpty else {
+                responseHandler("{\"response\": \"approved\"}")
+                return
+            }
+            let fullSessionId = sessionId
             DispatchQueue.main.async {
                 self.pendingQueue
                     .filter { $0.sessionId == fullSessionId }
@@ -197,27 +191,55 @@ class AppState: ObservableObject {
 
         if isNotification {
             print("[DevIsland] notification event: \(event) for \(toolName) → auto-approved")
-            let fullSessionId = sessionId.isEmpty ? "Default" : sessionId
+            guard !sessionId.isEmpty else {
+                responseHandler("{\"response\": \"approved\"}")
+                return
+            }
+            if normalizedEvent == "notification",
+               notificationType == "permission_prompt" || displayMsg.lowercased().contains("needs your permission") {
+                responseHandler("{\"response\": \"approved\"}")
+                return
+            }
+            let fullSessionId = sessionId
+            let hasPendingForSession = self.pendingQueue.contains { $0.sessionId == fullSessionId }
+            let sessionMessage = normalizedEvent == "sessionstart"
+                ? "Session Started"
+                : displayMsg
             self.updateActiveSession(
                 sessionId: fullSessionId,
                 terminalTitle: terminalTitle,
                 toolName: toolName,
                 eventName: event,
-                message: event.lowercased().contains("start") ? "Session Started" : displayMsg,
-                isPending: false
+                message: sessionMessage,
+                isPending: hasPendingForSession,
+                preserveMessage: normalizedEvent == "pretooluse" || sessionMessage.isEmpty,
+                isLifecycleTracked: normalizedEvent == "sessionstart"
             )
 
             DispatchQueue.main.async {
-                self.selectedSessionId = fullSessionId
-                self.syncDisplayToSelectedSession()
+                if normalizedEvent == "sessionstart" {
+                    self.selectedSessionId = fullSessionId
+                }
             }
 
             responseHandler("{\"response\": \"approved\"}")
             return
         }
 
+        guard normalizedEvent == "permissionrequest" else {
+            print("[DevIsland] ignoring non-approval event: \(event)")
+            responseHandler("{\"response\": \"approved\"}")
+            return
+        }
+
+        guard !toolName.isEmpty || !displayMsg.isEmpty else {
+            print("[DevIsland] ignoring empty approval request")
+            responseHandler("{\"response\": \"approved\"}")
+            return
+        }
+
         let request = PendingRequest(
-            sessionId: sessionId.isEmpty ? "Default" : sessionId,
+            sessionId: sessionId,
             eventName: event,
             toolName: toolName,
             message: displayMsg,
@@ -238,19 +260,21 @@ class AppState: ObservableObject {
             )
             self.pendingItems.append(newItem)
             self.pendingCount = self.pendingQueue.count
+
+            if !request.sessionId.isEmpty {
+                self.updateActiveSession(
+                    sessionId: request.sessionId,
+                    terminalTitle: terminalTitle,
+                    toolName: request.toolName,
+                    eventName: request.eventName,
+                    message: request.message,
+                    isPending: true
+                )
+
+                self.selectedSessionId = request.sessionId
+            }
             
-            self.updateActiveSession(
-                sessionId: request.sessionId,
-                terminalTitle: terminalTitle,
-                toolName: request.toolName,
-                eventName: request.eventName,
-                message: request.message,
-                isPending: true
-            )
-            
-            self.selectedSessionId = request.sessionId
-            
-            if !self.isNotchExpanded {
+            if self.currentResponseHandler == nil {
                 self.showNextRequest()
             } else {
                 self.syncDisplayToSelectedSession()
@@ -258,7 +282,126 @@ class AppState: ObservableObject {
         }
     }
 
-    private func updateActiveSession(sessionId: String, terminalTitle: String, toolName: String, eventName: String, message: String, isPending: Bool) {
+    private func normalizedHookEventName(_ event: String) -> String {
+        event
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+    }
+
+    private func displayMessage(for toolName: String, toolInput: [String: Any]?, json: [String: Any], eventName: String) -> String {
+        if normalizedHookEventName(eventName) == "posttooluse" {
+            return postToolMessage(from: json["tool_response"] as? [String: Any])
+        }
+
+        if let input = toolInput {
+            let lowerToolName = toolName.lowercased()
+            switch lowerToolName {
+            case "bash":
+                return joinedMessageLines([
+                    input["description"] as? String,
+                    input["command"] as? String
+                ])
+            case "write":
+                return joinedMessageLines([
+                    input["file_path"] as? String,
+                    input["content"] as? String
+                ])
+            case "edit":
+                return joinedMessageLines([
+                    input["file_path"] as? String,
+                    prefixedBlock("old", input["old_string"] as? String),
+                    prefixedBlock("new", input["new_string"] as? String)
+                ])
+            case "multiedit":
+                return multiEditMessage(from: input)
+            case "read":
+                return readMessage(from: input)
+            case "webfetch":
+                return joinedMessageLines([
+                    input["url"] as? String,
+                    input["prompt"] as? String
+                ])
+            default:
+                return input.keys.sorted().map { key in
+                    "\(key): \(input[key] ?? "")"
+                }.joined(separator: "\n")
+            }
+        }
+
+        if let message = json["message"] as? String, !message.isEmpty {
+            return message
+        }
+
+        if let suggestions = json["permission_suggestions"] as? [[String: Any]] {
+            return suggestions.compactMap { suggestion in
+                suggestion["behavior"] as? String
+            }.map { "Suggested: \($0)" }.joined(separator: "\n")
+        }
+
+        return ""
+    }
+
+    private func postToolMessage(from response: [String: Any]?) -> String {
+        guard let response = response else { return "Completed" }
+        if let stdout = response["stdout"] as? String, !stdout.isEmpty {
+            return stdout
+        }
+        if let stderr = response["stderr"] as? String, !stderr.isEmpty {
+            return stderr
+        }
+        return "Completed"
+    }
+
+    private func multiEditMessage(from input: [String: Any]) -> String {
+        var lines: [String] = []
+        if let filePath = input["file_path"] as? String {
+            lines.append(filePath)
+        }
+        if let edits = input["edits"] as? [[String: Any]] {
+            for (index, edit) in edits.enumerated() {
+                lines.append("edit \(index + 1)")
+                if let oldBlock = prefixedBlock("old", edit["old_string"] as? String) {
+                    lines.append(oldBlock)
+                }
+                if let newBlock = prefixedBlock("new", edit["new_string"] as? String) {
+                    lines.append(newBlock)
+                }
+            }
+        }
+        return joinedMessageLines(lines)
+    }
+
+    private func readMessage(from input: [String: Any]) -> String {
+        var lines: [String] = []
+        if let filePath = input["file_path"] as? String {
+            lines.append(filePath)
+        }
+        let details = ["offset", "limit"].compactMap { key -> String? in
+            guard let value = input[key] else { return nil }
+            return "\(key): \(value)"
+        }.joined(separator: ", ")
+        if !details.isEmpty {
+            lines.append(details)
+        }
+        return joinedMessageLines(lines)
+    }
+
+    private func prefixedBlock(_ label: String, _ value: String?) -> String? {
+        guard let value = value, !value.isEmpty else { return nil }
+        return "\(label):\n\(value)"
+    }
+
+    private func joinedMessageLines(_ lines: [String?]) -> String {
+        lines.compactMap { line in
+            guard let line = line?.trimmingCharacters(in: .whitespacesAndNewlines), !line.isEmpty else {
+                return nil
+            }
+            return line
+        }.joined(separator: "\n\n")
+    }
+
+    private func updateActiveSession(sessionId: String, terminalTitle: String, toolName: String, eventName: String, message: String, isPending: Bool, preserveMessage: Bool = false, isLifecycleTracked: Bool = false) {
         if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) {
             let shouldUpdateTitle = !Self.genericTitles.contains(terminalTitle)
                 || Self.genericTitles.contains(activeSessions[index].terminalTitle)
@@ -267,9 +410,14 @@ class AppState: ObservableObject {
             }
             activeSessions[index].lastToolName = toolName
             activeSessions[index].lastEventName = eventName
-            activeSessions[index].lastMessage = message
+            if !preserveMessage {
+                activeSessions[index].lastMessage = message
+            }
             activeSessions[index].lastActiveAt = Date()
             activeSessions[index].isPending = isPending
+            if isLifecycleTracked {
+                activeSessions[index].isLifecycleTracked = true
+            }
         } else {
             let session = ActiveSession(
                 id: sessionId,
@@ -279,7 +427,8 @@ class AppState: ObservableObject {
                 lastMessage: message,
                 startTime: Date(),
                 lastActiveAt: Date(),
-                isPending: isPending
+                isPending: isPending,
+                isLifecycleTracked: isLifecycleTracked
             )
             activeSessions.insert(session, at: 0)
         }
@@ -291,13 +440,25 @@ class AppState: ObservableObject {
         
         DispatchQueue.main.async {
             self.activeSessions.removeAll { session in
-                !session.isPending && now.timeIntervalSince(session.lastActiveAt) > threshold
+                let inactiveFor = now.timeIntervalSince(session.lastActiveAt)
+                let maxInactiveDuration = session.isLifecycleTracked ? self.lifecycleSessionTimeout : threshold
+                return !session.isPending && inactiveFor > maxInactiveDuration
             }
         }
     }
 
     private func showNextRequest() {
+        discardInvalidPendingRequests()
+
         guard let next = pendingQueue.first else {
+            currentResponseHandler = nil
+            timeoutTimer?.invalidate()
+            timeoutProgress = 1.0
+            currentEventName = ""
+            currentToolName = ""
+            currentMessage = ""
+            currentSessionId = ""
+            selectedSessionId = nil
             isNotchExpanded = false
             return
         }
@@ -313,6 +474,20 @@ class AppState: ObservableObject {
             self.isNotchExpanded = true
         }
         startTimeout()
+    }
+
+    private func discardInvalidPendingRequests() {
+        while let next = pendingQueue.first, !isValidApprovalRequest(next) {
+            let removed = pendingQueue.removeFirst()
+            pendingItems.removeAll { $0.id == removed.id }
+            removed.responseHandler("{\"response\": \"approved\"}")
+        }
+        pendingCount = pendingQueue.count
+    }
+
+    private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
+        normalizedHookEventName(request.eventName) == "permissionrequest"
+            && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 
     private func startTimeout() {
@@ -355,10 +530,19 @@ class AppState: ObservableObject {
                 self.pendingCount = self.pendingQueue.count
                 
                 // Update session state to not pending
-                if let index = self.activeSessions.firstIndex(where: { $0.id == removed.sessionId }) {
+                if !removed.sessionId.isEmpty, let index = self.activeSessions.firstIndex(where: { $0.id == removed.sessionId }) {
                     // Check if there are other pending items for this session
                     let stillPending = self.pendingQueue.contains { $0.sessionId == removed.sessionId }
-                    self.activeSessions[index].isPending = stillPending
+                    if stillPending {
+                        self.activeSessions[index].isPending = true
+                    } else if !self.activeSessions[index].isLifecycleTracked {
+                        self.activeSessions.remove(at: index)
+                        if self.selectedSessionId == removed.sessionId {
+                            self.selectedSessionId = nil
+                        }
+                    } else {
+                        self.activeSessions[index].isPending = false
+                    }
                 }
             }
             self.showNextRequest()

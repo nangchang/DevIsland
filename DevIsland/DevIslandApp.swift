@@ -115,32 +115,45 @@ enum BridgeInstaller {
 
         var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
 
-        let hookConfig: [String: Any] = [
-            "matcher": ".*",
-            "hooks": [["type": "command", "command": bridgePath, "timeout": 86400]]
-        ]
         let approvalConfig: [String: Any] = [
             "hooks": [["type": "command", "command": bridgePath, "timeout": 86400]]
         ]
-        let notifConfig: [String: Any] = [
+        let lifecycleConfig: [String: Any] = [
             "hooks": [["type": "command", "command": bridgePath]]
         ]
         let entries: [(String, [String: Any])] = [
-            ("SessionStart", notifConfig), ("Stop", notifConfig), ("SubagentStop", notifConfig),
-            ("SessionEnd", notifConfig), ("StopFailure", notifConfig),
-            ("PostToolUse", notifConfig), ("Notification", notifConfig), ("PreCompact", notifConfig),
+            ("SessionStart", lifecycleConfig),
+            ("SessionEnd", lifecycleConfig),
             ("PermissionRequest", approvalConfig),
-            ("PreToolUse", hookConfig),
+        ]
+        let retiredEntries = [
+            "Stop", "SubagentStop", "PreToolUse", "PostToolUse", "Notification", "PreCompact", "StopFailure"
         ]
 
-        for (key, config) in entries {
-            var list = (hooks[key] as? [[String: Any]]) ?? []
-            list.removeAll { entry in
-                let subHooks = entry["hooks"] as? [[String: Any]] ?? []
-                return subHooks.contains { ($0["command"] as? String) == bridgePath }
+        func removingBridgeHooks(from list: [[String: Any]]) -> [[String: Any]] {
+            list.compactMap { entry in
+                let subHooks = (entry["hooks"] as? [[String: Any]] ?? [])
+                    .filter { ($0["command"] as? String) != bridgePath }
+                guard !subHooks.isEmpty else { return nil }
+                var updatedEntry = entry
+                updatedEntry["hooks"] = subHooks
+                return updatedEntry
             }
+        }
+
+        for (key, config) in entries {
+            var list = removingBridgeHooks(from: (hooks[key] as? [[String: Any]]) ?? [])
             list.append(config)
             hooks[key] = list
+        }
+
+        for key in retiredEntries {
+            let list = removingBridgeHooks(from: (hooks[key] as? [[String: Any]]) ?? [])
+            if list.isEmpty {
+                hooks.removeValue(forKey: key)
+            } else {
+                hooks[key] = list
+            }
         }
 
         settings["hooks"] = hooks
