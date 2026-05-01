@@ -567,6 +567,15 @@ struct NotchView: View {
                 .font(.system(size: 11, weight: .semibold))
 
             HStack {
+                CLIBuddyView(
+                    accent: Color(red: 0.82, green: 0.42, blue: 0.30),
+                    isActive: buddyPulse,
+                    compact: true,
+                    kind: .claudeCode
+                )
+                .frame(width: 18, height: 18)
+                .offset(x: -4, y: 4)
+
                 Spacer(minLength: 0)
 
                 CLIBuddyView(accent: tool.color, isActive: buddyPulse, compact: true, kind: currentBuddyKind)
