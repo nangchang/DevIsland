@@ -26,6 +26,7 @@ struct PendingItem: Identifiable, Equatable {
 struct ActiveSession: Identifiable, Equatable {
     let id: String // full sessionId
     var terminalTitle: String
+    var agentKind: BuddyKind
     var lastToolName: String
     var lastEventName: String
     var lastMessage: String
@@ -112,6 +113,7 @@ class AppState: ObservableObject {
         var toolName  = ""
         var sessionId = ""
         var terminalTitle = "Terminal"
+        var agentKind = BuddyKind.codex
         var displayMsg = ""
         var notificationType = ""
 
@@ -127,6 +129,7 @@ class AppState: ObservableObject {
                     let label = URL(fileURLWithPath: cwd).lastPathComponent
                     if !label.isEmpty && label != "/" { terminalTitle = label }
                 }
+                agentKind = Self.agentKind(from: json, terminalTitle: terminalTitle)
                 let toolInput = json["tool_input"] as? [String: Any]
                 
                 print("Parsed Hook: event=\(event), session=\(sessionId), title=\(terminalTitle)")
@@ -208,6 +211,7 @@ class AppState: ObservableObject {
             self.updateActiveSession(
                 sessionId: fullSessionId,
                 terminalTitle: terminalTitle,
+                agentKind: agentKind,
                 toolName: toolName,
                 eventName: event,
                 message: sessionMessage,
@@ -265,6 +269,7 @@ class AppState: ObservableObject {
                 self.updateActiveSession(
                     sessionId: request.sessionId,
                     terminalTitle: terminalTitle,
+                    agentKind: agentKind,
                     toolName: request.toolName,
                     eventName: request.eventName,
                     message: request.message,
@@ -401,13 +406,37 @@ class AppState: ObservableObject {
         }.joined(separator: "\n\n")
     }
 
-    private func updateActiveSession(sessionId: String, terminalTitle: String, toolName: String, eventName: String, message: String, isPending: Bool, preserveMessage: Bool = false, isLifecycleTracked: Bool = false) {
+    private static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
+        let candidateKeys = [
+            "agent",
+            "agent_name",
+            "agentName",
+            "source",
+            "client",
+            "app",
+            "application",
+            "cli"
+        ]
+        let candidates = candidateKeys.compactMap { json[$0] as? String } + [terminalTitle]
+        let joined = candidates.joined(separator: " ").lowercased()
+
+        if joined.contains("claude") {
+            return .claudeCode
+        }
+        if joined.contains("codex") || joined.contains("openai") {
+            return .codex
+        }
+        return BuddyKind(from: terminalTitle)
+    }
+
+    private func updateActiveSession(sessionId: String, terminalTitle: String, agentKind: BuddyKind, toolName: String, eventName: String, message: String, isPending: Bool, preserveMessage: Bool = false, isLifecycleTracked: Bool = false) {
         if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) {
             let shouldUpdateTitle = !Self.genericTitles.contains(terminalTitle)
                 || Self.genericTitles.contains(activeSessions[index].terminalTitle)
             if shouldUpdateTitle {
                 activeSessions[index].terminalTitle = terminalTitle
             }
+            activeSessions[index].agentKind = agentKind
             activeSessions[index].lastToolName = toolName
             activeSessions[index].lastEventName = eventName
             if !preserveMessage {
@@ -422,6 +451,7 @@ class AppState: ObservableObject {
             let session = ActiveSession(
                 id: sessionId,
                 terminalTitle: terminalTitle,
+                agentKind: agentKind,
                 lastToolName: toolName,
                 lastEventName: eventName,
                 lastMessage: message,
