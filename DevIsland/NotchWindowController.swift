@@ -484,6 +484,8 @@ struct NotchView: View {
     @State private var buddyPulse = false
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
+    private var hasApprovalRequest: Bool { state.pendingCount > 0 }
+    private var headerTitle: String { hasApprovalRequest ? tool.label : "Sessions" }
     private var notchSize: NSSize {
         state.isNotchExpanded ? expandedNotchSize : collapsedNotchSize
     }
@@ -610,7 +612,7 @@ struct NotchView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        Text(tool.label)
+                        Text(headerTitle)
                             .font(.system(size: 18, weight: .black))
                             .foregroundColor(.white)
                         
@@ -620,10 +622,16 @@ struct NotchView: View {
                         )
                     }
                     
-                    HStack(spacing: 6) {
-                        TagView(icon: "terminal.fill", text: state.currentSessionId.isEmpty ? "No Session" : String(state.currentSessionId.prefix(8)))
-                        TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == state.currentSessionId })?.terminalTitle ?? "Unknown")
-                        if state.pendingCount > 1 {
+                    if !state.currentSessionId.isEmpty {
+                        HStack(spacing: 6) {
+                            TagView(icon: "terminal.fill", text: String(state.currentSessionId.prefix(8)))
+                            TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == state.currentSessionId })?.terminalTitle ?? "Unknown")
+                            if state.pendingCount > 1 {
+                                TagView(icon: "list.bullet", text: "\(state.pendingCount) tasks queued", color: .orange.opacity(0.2))
+                            }
+                        }
+                    } else if state.pendingCount > 1 {
+                        HStack(spacing: 6) {
                             TagView(icon: "list.bullet", text: "\(state.pendingCount) tasks queued", color: .orange.opacity(0.2))
                         }
                     }
@@ -646,128 +654,145 @@ struct NotchView: View {
             .padding(.top, 20)
 
             // ── Main Dashboard ──────────────────────────
-            HStack(alignment: .top, spacing: 0) {
-                
-                // LEFT: Focus Area
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("ACTIVE ACTION")
-                                .font(.system(size: 9, weight: .black))
-                                .foregroundColor(.white.opacity(0.3))
-                            Spacer()
-                            Text(state.currentEventName)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(tool.color)
-                        }
-                        .padding(.horizontal, 20)
-                        
-                        ScrollView {
-                            Text(state.currentMessage.isEmpty ? "Waiting for next agent request..." : state.currentMessage)
-                                .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                .foregroundColor(.white.opacity(0.9))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 12)
-                        }
-                        .background(Color.white.opacity(0.04))
-                        .cornerRadius(12)
-                        .padding(.horizontal, 16)
-                        .frame(maxHeight: 120)
-                    }
-                    
-                    Spacer()
-                    
-                    // Progress & Actions
-                    VStack(spacing: 12) {
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule()
-                                    .fill(Color.white.opacity(0.07))
-                                Capsule()
-                                    .fill(
-                                        LinearGradient(colors: [progressColor.opacity(0.8), progressColor], startPoint: .leading, endPoint: .trailing)
-                                    )
-                                    .frame(width: geo.size.width * state.timeoutProgress)
-                            }
-                        }
-                        .frame(height: 4)
-                        .padding(.horizontal, 20)
-                        
-                        HStack(spacing: 12) {
-                            Button(action: { state.deny() }) {
-                                HStack {
-                                    Image(systemName: "xmark.circle.fill")
-                                    Text("Deny Request")
-                                }
-                                .font(.system(size: 13, weight: .bold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.red.opacity(0.15))
-                                .foregroundColor(.red)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                            }
-                            .buttonStyle(.plain)
+            if hasApprovalRequest {
+                approvalContent
+            } else {
+                sessionsContent
+            }
+        }
+    }
 
-                            Button(action: { state.approve() }) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                    Text("Approve")
-                                }
-                                .font(.system(size: 13, weight: .bold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(tool.color.opacity(0.15))
-                                .foregroundColor(tool.color)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 16)
+    private var approvalContent: some View {
+        HStack(alignment: .top, spacing: 0) {
+            // LEFT: Focus Area
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("ACTIVE ACTION")
+                            .font(.system(size: 9, weight: .black))
+                            .foregroundColor(.white.opacity(0.3))
+                        Spacer()
+                        Text(state.currentEventName)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(tool.color)
                     }
-                    .padding(.bottom, 20)
+                    .padding(.horizontal, 20)
+                    
+                    ScrollView {
+                        Text(state.currentMessage)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.9))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                    }
+                    .background(Color.white.opacity(0.04))
+                    .cornerRadius(12)
+                    .padding(.horizontal, 16)
+                    .frame(maxHeight: 120)
                 }
-                .frame(width: 420)
                 
-                // Vertical Divider
+                Spacer()
+                
+                VStack(spacing: 12) {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.white.opacity(0.07))
+                            Capsule()
+                                .fill(
+                                    LinearGradient(colors: [progressColor.opacity(0.8), progressColor], startPoint: .leading, endPoint: .trailing)
+                                )
+                                .frame(width: geo.size.width * state.timeoutProgress)
+                        }
+                    }
+                    .frame(height: 4)
+                    .padding(.horizontal, 20)
+                    
+                    HStack(spacing: 12) {
+                        Button(action: { state.deny() }) {
+                            HStack {
+                                Image(systemName: "xmark.circle.fill")
+                                Text("Deny Request")
+                            }
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.red.opacity(0.15))
+                            .foregroundColor(.red)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: { state.approve() }) {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                Text("Approve")
+                            }
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(tool.color.opacity(0.15))
+                            .foregroundColor(tool.color)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 16)
+                }
+                .padding(.bottom, 20)
+            }
+            .frame(width: state.activeSessions.isEmpty ? 680 : 420)
+            
+            if !state.activeSessions.isEmpty {
                 Rectangle()
                     .fill(Color.white.opacity(0.06))
                     .frame(width: 1)
                     .padding(.vertical, 20)
                 
-                // RIGHT: Session List
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("AGENT SESSIONS")
-                        .font(.system(size: 9, weight: .black))
-                        .foregroundColor(.white.opacity(0.3))
-                        .padding(.horizontal, 20)
-                    
-                    ScrollView {
-                        VStack(spacing: 8) {
-                            ForEach(state.activeSessions) { session in
-                                SessionRowView(
-                                    session: session,
-                                    isCurrent: session.id == state.currentSessionId
-                                )
-                            }
-                            
-                            if state.activeSessions.isEmpty {
-                                VStack(spacing: 12) {
-                                    Image(systemName: "antenna.radiowaves.left.and.right")
-                                        .font(.system(size: 24))
-                                        .foregroundColor(.white.opacity(0.1))
-                                    Text("Listening for AI Agents...")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.2))
-                                }
-                                .padding(.top, 40)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                    }
-                }
-                .frame(maxWidth: .infinity)
+                sessionList
+                    .frame(maxWidth: .infinity)
             }
+        }
+        .padding(.top, 12)
+    }
+
+    private var sessionsContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("AGENT SESSIONS")
+                .font(.system(size: 9, weight: .black))
+                .foregroundColor(.white.opacity(0.3))
+                .padding(.horizontal, 20)
+            
+            if state.activeSessions.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.system(size: 24))
+                        .foregroundColor(.white.opacity(0.1))
+                    Text("Listening for AI Agents...")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.2))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                sessionList
+            }
+        }
+        .padding(.top, 18)
+        .padding(.bottom, 20)
+    }
+
+    private var sessionList: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                ForEach(state.activeSessions) { session in
+                    SessionRowView(
+                        session: session,
+                        isCurrent: session.id == state.currentSessionId
+                    )
+                }
+            }
+            .padding(.horizontal, 12)
             .padding(.top, 12)
         }
     }
