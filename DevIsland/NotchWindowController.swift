@@ -289,15 +289,20 @@ class NotchWindowController: NSWindowController {
             return bounds
         }
 
-        let bestDisplayId = frontmostWindows
-            .flatMap { windowBounds in
-                NSScreen.screens.map { screen in
-                    let displayBounds = CGDisplayBounds(screen.displayId)
-                    return (screen.displayId, windowBounds.intersection(displayBounds).area)
+        let screens = NSScreen.screens
+        let screenBounds = screens.reduce(into: [UInt32: CGRect]()) { dict, screen in
+            dict[screen.displayId] = CGDisplayBounds(screen.displayId)
+        }
+
+        let screenAreas = frontmostWindows.reduce(into: [UInt32: CGFloat]()) { dict, windowBounds in
+            for screen in screens {
+                if let displayBounds = screenBounds[screen.displayId] {
+                    dict[screen.displayId, default: 0] += windowBounds.intersection(displayBounds).area
                 }
             }
-            .max { (lhs: (UInt32, CGFloat), rhs: (UInt32, CGFloat)) in lhs.1 < rhs.1 }?
-            .0
+        }
+
+        let bestDisplayId = screenAreas.max { $0.value < $1.value }?.key
 
         guard let bestDisplayId, bestDisplayId != 0 else { return nil }
         return NSScreen.screens.first { $0.displayId == bestDisplayId }
