@@ -54,6 +54,22 @@ struct ActiveSession: Identifiable, Equatable {
     var status: SessionStatus
 }
 
+enum RequestDisplayTarget: String, CaseIterable, Identifiable {
+    case notch
+    case focused
+    case mouse
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .notch: return "노치 화면"
+        case .focused: return "포커스 화면"
+        case .mouse: return "마우스 화면"
+        }
+    }
+}
+
 enum NotchDisplayTarget: String, CaseIterable, Identifiable {
     case automatic
     case main
@@ -83,7 +99,7 @@ class AppState: ObservableObject {
         static let notchDisplayTarget = "notchDisplayTarget"
         static let selectedDisplayId = "selectedDisplayId"
         static let showInFullScreenApps = "showInFullScreenApps"
-        static let expandOnFocusedScreen = "expandOnFocusedScreen"
+        static let requestDisplayTarget = "requestDisplayTarget"
     }
 
     @Published var isNotchExpanded = false
@@ -106,9 +122,9 @@ class AppState: ObservableObject {
             UserDefaults.standard.set(showInFullScreenApps, forKey: DefaultsKey.showInFullScreenApps)
         }
     }
-    @Published var expandOnFocusedScreen = true {
+    @Published var requestDisplayTarget: RequestDisplayTarget = .focused {
         didSet {
-            UserDefaults.standard.set(expandOnFocusedScreen, forKey: DefaultsKey.expandOnFocusedScreen)
+            UserDefaults.standard.set(requestDisplayTarget.rawValue, forKey: DefaultsKey.requestDisplayTarget)
         }
     }
     @Published var selectedSessionId: String?
@@ -148,8 +164,9 @@ class AppState: ObservableObject {
         if defaults.object(forKey: DefaultsKey.showInFullScreenApps) != nil {
             showInFullScreenApps = defaults.bool(forKey: DefaultsKey.showInFullScreenApps)
         }
-        if defaults.object(forKey: DefaultsKey.expandOnFocusedScreen) != nil {
-            expandOnFocusedScreen = defaults.bool(forKey: DefaultsKey.expandOnFocusedScreen)
+        if let rawTarget = defaults.string(forKey: DefaultsKey.requestDisplayTarget),
+           let target = RequestDisplayTarget(rawValue: rawTarget) {
+            requestDisplayTarget = target
         }
         ensureSelectedDisplay()
 

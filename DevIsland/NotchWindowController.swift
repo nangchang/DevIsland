@@ -71,7 +71,7 @@ class NotchWindowController: NSWindowController {
             }
             .store(in: &cancellables)
 
-        AppState.shared.$expandOnFocusedScreen
+        AppState.shared.$requestDisplayTarget
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -138,12 +138,11 @@ class NotchWindowController: NSWindowController {
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] count in
-                guard count > 0,
-                      AppState.shared.isNotchExpanded,
-                      AppState.shared.expandOnFocusedScreen,
-                      let focusedScreen = Self.frontmostApplicationScreen() else { return }
+                guard count > 0, AppState.shared.isNotchExpanded else { return }
+                let override = Self.requestTargetScreen()
+                guard override != nil else { return }
                 self?.resetPinnedPosition()
-                self?.updateWindowFrame(animate: false, targetScreenOverride: focusedScreen)
+                self?.updateWindowFrame(animate: false, targetScreenOverride: override)
             }
             .store(in: &cancellables)
 
@@ -162,11 +161,10 @@ class NotchWindowController: NSWindowController {
                 resetPinnedPosition()
                 updateWindowFrame(animate: false)
             } else {
-                // 요청 확장: expandOnFocusedScreen이면 포커스 화면으로
-                let focusedScreen = AppState.shared.expandOnFocusedScreen
-                    ? Self.frontmostApplicationScreen() : nil
+                // 요청 확장: requestDisplayTarget에 따라 화면 결정
+                let override = Self.requestTargetScreen()
                 resetPinnedPosition()
-                updateWindowFrame(animate: false, targetScreenOverride: focusedScreen)
+                updateWindowFrame(animate: false, targetScreenOverride: override)
             }
         } else {
             // 축소 시: 핀 위치를 즉시 해제해 설정된 화면으로 돌아가도록 한다.
@@ -284,6 +282,16 @@ class NotchWindowController: NSWindowController {
         }
 
         return NSScreen.screens.first!
+    }
+
+    /// 요청 표시 위치 설정에 따라 override할 화면을 반환한다.
+    /// .notch는 기존 notchDisplayTarget을 따르므로 nil 반환.
+    private static func requestTargetScreen() -> NSScreen? {
+        switch AppState.shared.requestDisplayTarget {
+        case .notch:   return nil
+        case .focused: return frontmostApplicationScreen()
+        case .mouse:   return mouseScreen()
+        }
     }
 
     private static func mouseScreen() -> NSScreen? {

@@ -81,7 +81,11 @@ struct MenuBarMenu: View {
         }
 
         Toggle("전체 화면 앱 위에 표시", isOn: $state.showInFullScreenApps)
-        Toggle("승인 요청 시 작업 중인 화면에 표시", isOn: $state.expandOnFocusedScreen)
+        Picker("요청 표시 위치", selection: $state.requestDisplayTarget) {
+            ForEach(RequestDisplayTarget.allCases) { target in
+                Text(target.label).tag(target)
+            }
+        }
 
         Divider()
 
