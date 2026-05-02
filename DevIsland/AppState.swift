@@ -87,6 +87,7 @@ class AppState: ObservableObject {
     }
 
     @Published var isNotchExpanded = false
+    var isExpandingFromRequest = false
     @Published var notchDisplayTarget: NotchDisplayTarget = .automatic {
         didSet {
             if notchDisplayTarget == .specific {
@@ -672,6 +673,7 @@ class AppState: ObservableObject {
         currentSessionId  = next.sessionId
 
         DispatchQueue.main.async {
+            self.isExpandingFromRequest = true
             self.isNotchExpanded = true
         }
         startTimeout()

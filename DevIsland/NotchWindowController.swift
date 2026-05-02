@@ -146,7 +146,10 @@ class NotchWindowController: NSWindowController {
             resetPinnedPosition()
             updateWindowFrame(animate: false)
         } else {
-            // 축소 시: SwiftUI 애니메이션이 끝난 후 프레임을 줄여 점프 방지
+            // 축소 시: 핀 위치를 즉시 해제해 설정된 화면으로 돌아가도록 한다.
+            // 프레임 자체는 SwiftUI 애니메이션이 끝난 후 줄여 점프 방지.
+            AppState.shared.isExpandingFromRequest = false
+            resetPinnedPosition()
             let work = DispatchWorkItem { [weak self] in
                 self?.updateWindowFrame(animate: false)
             }
@@ -233,10 +236,12 @@ class NotchWindowController: NSWindowController {
     private func targetScreen(for window: NSWindow) -> NSScreen {
         let state = AppState.shared
 
-        if state.isNotchExpanded,
-           state.expandOnFocusedScreen,
-           let focusedScreen = Self.frontmostApplicationScreen() {
-            return focusedScreen
+        if state.isExpandingFromRequest {
+            defer { AppState.shared.isExpandingFromRequest = false }
+            if state.expandOnFocusedScreen,
+               let focusedScreen = Self.frontmostApplicationScreen() {
+                return focusedScreen
+            }
         }
 
         switch state.notchDisplayTarget {
