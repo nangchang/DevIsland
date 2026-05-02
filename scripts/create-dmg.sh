@@ -61,10 +61,6 @@ cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$RESOURCES_DIR/"
 cp "$ROOT_DIR/scripts/install-bridge.sh" "$RESOURCES_DIR/"
 cp "$ROOT_DIR/scripts/install-launch-agent.sh" "$RESOURCES_DIR/"
 
-# Also copy to DMG root for easy access
-cp "$ROOT_DIR/scripts/install-bridge.sh" "$EXPORT_DIR/"
-cp "$ROOT_DIR/scripts/install-launch-agent.sh" "$EXPORT_DIR/"
-
 echo "DMG 생성 중..."
 rm -f "$DMG_PATH"
 ln -sf /Applications "$EXPORT_DIR/Applications"
