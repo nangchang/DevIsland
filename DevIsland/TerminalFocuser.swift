@@ -8,14 +8,6 @@ class TerminalFocuser {
         ("com.apple.Terminal",      "Terminal"),
     ]
 
-    static func isBundleIdForApp(_ bundleId: String?, appName: String?) -> Bool {
-        guard let bundleId else { return false }
-        let targetName = normalizedAppName(appName)
-        let match = targetName.flatMap { name in candidates.first { $0.name == name } }
-            ?? candidates.first(where: { !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty })
-        return match?.bundleId == bundleId
-    }
-
     static func isSessionFrontmost(
         appName: String?,
         tty: String?,
@@ -191,15 +183,11 @@ class TerminalFocuser {
                     set frontmost of aWindow to true
                     set index of aWindow to 1
                     activate
-                    delay 0.05
-                    set selected tab of aWindow to aTab
-                    set selected of aTab to true
-                    set frontmost of aWindow to true
-                    set index of aWindow to 1
                     return
                   end if
                 end repeat
               end repeat
+              activate
             end tell
             """
         default:
