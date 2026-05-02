@@ -30,6 +30,7 @@ xcrun actool "$ROOT_DIR/DevIsland/Assets.xcassets" \
   --minimum-deployment-target 14.0 \
   --app-icon AppIcon \
   --output-partial-info-plist "$DIST_DIR/Assets-Partial.plist"
+rm "$DIST_DIR/Assets-Partial.plist" # Clean up unused partial plist
 
 # Compile Swift sources
 swiftc \
