@@ -77,6 +77,8 @@ def remove_bridge_hooks(entries):
 for key, config in [
     ('SessionStart', lifecycle_config),
     ('SessionEnd', lifecycle_config),
+    ('Notification', lifecycle_config),
+    ('Stop', lifecycle_config),
     ('PermissionRequest', approval_config),
 ]:
     data['hooks'].setdefault(key, [])
@@ -84,7 +86,7 @@ for key, config in [
     data['hooks'][key].append(config)
 
 for key in [
-    'Stop', 'SubagentStop', 'PreToolUse', 'PostToolUse', 'Notification', 'PreCompact', 'StopFailure',
+    'SubagentStop', 'PreToolUse', 'PostToolUse', 'PreCompact', 'StopFailure',
 ]:
     entries = remove_bridge_hooks(data['hooks'].get(key, []))
     if entries:
