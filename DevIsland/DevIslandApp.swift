@@ -204,6 +204,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .filter { $0.localizedName == "DevIsland" && $0.processIdentifier != myPID }
         others.forEach { $0.terminate() }
 
+        // 다른 인스턴스 종료 요청 후 이동 체크 — 복사 대상 번들이 사용 중일 경우를 방지
+        AppRelocator.checkAndPrompt()
+
         let delay: TimeInterval = others.isEmpty ? 0 : 0.3
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             _ = AppState.shared

@@ -14,6 +14,7 @@ DerivedData/
 dist/
 *.o
 *.d
+DevIsland/Info.plist
 
 # Swift Package Manager
 .build/
@@ -26,3 +27,4 @@ Pods/
 # Archives
 *.xcarchive
 *.xcodeproj
+*.dmg
