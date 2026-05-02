@@ -12,6 +12,14 @@ fileprivate let notchHorizontalOffset: CGFloat = -10
 class NotchWindowController: NSWindowController {
     private var cancellables = Set<AnyCancellable>()
     private var pendingSettle: DispatchWorkItem?
+    private var mouseMonitor: Any?
+
+    deinit {
+        if let monitor = mouseMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        cancellables.removeAll()
+    }
     private var pinnedCenterX: CGFloat?
     private var pinnedDisplayId: UInt32?
     private var isHiddenForFullScreen = false
@@ -153,7 +161,7 @@ class NotchWindowController: NSWindowController {
             .store(in: &cancellables)
 
         // 전역 마우스 클릭 감지: 마우스/포커스 이동 시 즉각적인 반응을 위해 사용 (접근성 권한 필요)
-        NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
+        self.mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
             guard let self = self else { return }
             let state = AppState.shared
             let isRequestShowing = state.isNotchExpanded && !state.pendingItems.isEmpty
