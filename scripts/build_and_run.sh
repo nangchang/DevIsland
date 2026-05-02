@@ -37,10 +37,10 @@ swiftc \
   -target "$(uname -m)-apple-macos14.0" \
   -o "$EXECUTABLE"
 
-# Extract metadata from project.yml
-VERSION=$(grep "CFBundleShortVersionString:" "$ROOT_DIR/project.yml" | sed -E 's/.*: "(.*)"/\1/' | xargs)
-BUILD=$(grep "CFBundleVersion:" "$ROOT_DIR/project.yml" | sed -E 's/.*: "(.*)"/\1/' | xargs)
-BUNDLE_ID_PREFIX=$(grep "bundleIdPrefix:" "$ROOT_DIR/project.yml" | sed -E 's/.*: (.*)/\1/' | xargs)
+# Extract metadata from project.yml (robustly handle missing keys or missing quotes)
+VERSION=$(grep "CFBundleShortVersionString:" "$ROOT_DIR/project.yml" | sed -E 's/.*: ?"?(.*)"?/\1/' | xargs 2>/dev/null || echo "")
+BUILD=$(grep "CFBundleVersion:" "$ROOT_DIR/project.yml" | sed -E 's/.*: ?"?(.*)"?/\1/' | xargs 2>/dev/null || echo "")
+BUNDLE_ID_PREFIX=$(grep "bundleIdPrefix:" "$ROOT_DIR/project.yml" | sed -E 's/.*: ?"?(.*)"?/\1/' | xargs 2>/dev/null || echo "com.hoin")
 BUNDLE_ID="${BUNDLE_ID_PREFIX}.${APP_NAME}"
 
 if [[ -z "$VERSION" ]]; then VERSION="1.0.0"; fi
