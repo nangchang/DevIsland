@@ -122,7 +122,9 @@ class NotchWindowController: NSWindowController {
                    app.processIdentifier == ProcessInfo.processInfo.processIdentifier {
                     return
                 }
-                if AppState.shared.expandOnFocusedScreen || AppState.shared.notchDisplayTarget == .focused {
+                let state = AppState.shared
+                if !state.isNotchExpanded,
+                   state.expandOnFocusedScreen || state.notchDisplayTarget == .focused {
                     self?.resetPinnedPosition()
                     self?.updateWindowFrame(animate: false)
                 } else {
