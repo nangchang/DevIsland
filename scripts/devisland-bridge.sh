@@ -162,19 +162,18 @@ import os
 
 event = os.environ.get("EVENT", "")
 result = os.environ.get("RESULT", "denied")
-approved = result == "approved"
 message = "DevIsland에서 거절되었습니다."
 
-if event == "PermissionRequest":
+if event == "PermissionRequest" and result in ("approved", "denied"):
     output = {
         "hookSpecificOutput": {
             "hookEventName": "PermissionRequest",
             "decision": {
-                "behavior": "allow" if approved else "deny",
+                "behavior": "allow" if result == "approved" else "deny",
             },
         }
     }
-    if not approved:
+    if result != "approved":
         output["hookSpecificOutput"]["decision"]["message"] = message
 else:
     output = {"continue": True, "suppressOutput": True}
