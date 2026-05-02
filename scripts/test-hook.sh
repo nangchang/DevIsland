@@ -34,34 +34,56 @@ send_event() {
     local payload="$1"
     
     if [ "$DELAY" -eq 1 ]; then
-        echo -n "⏳ 5초 후 실행합니다... "
+        printf "⏳ 5초 후 실행합니다... "
         for i in {5..1}; do
-            echo -n "$i "
+            printf "%s " "$i"
             sleep 1
         done
-        echo ""
+        printf "\n"
         DELAY=0 # 한 번 지연 후 초기화 (연속 호출 방지)
     fi
 
     # Pretty print payload for log if jq is available
     if command -v jq >/dev/null 2>&1; then
-        echo "==> Sending: $(echo "$payload" | jq -c .)"
+        printf "==> Sending: %s\n" "$(printf "%s" "$payload" | jq -c .)"
     else
-        echo "==> Sending: $payload"
+        printf "==> Sending: %s\n" "$payload"
     fi
     
     local response
-    response=$(echo "$payload" | "$BRIDGE_SCRIPT")
+    response=$(printf "%s" "$payload" | "$BRIDGE_SCRIPT")
     
-    echo "==> Response: $response"
-    if echo "$response" | grep -q "allow"; then
+    printf "==> Response: %s\n" "$response"
+    # Refined grep patterns for JSON structure
+    if printf "%s" "$response" | grep -q '"behavior":[[:space:]]*"allow"'; then
         echo "✅ APPROVED"
-    elif echo "$response" | grep -q "deny"; then
+    elif printf "%s" "$response" | grep -q '"behavior":[[:space:]]*"deny"'; then
         echo "❌ DENIED"
     else
         echo "ℹ️  CONTINUE (Passive Event)"
     fi
     echo ""
+}
+
+# Safer JSON construction using Python
+make_json() {
+    # Usage: make_json key1 value1 key2 value2 ...
+    # If a value starts with { it is treated as a JSON object
+    python3 -c '
+import sys, json
+args = sys.argv[1:]
+d = {}
+for i in range(0, len(args), 2):
+    k = args[i]
+    v = args[i+1]
+    if v.startswith("{") and v.endswith("}"):
+        try:
+            v = json.loads(v)
+        except:
+            pass
+    d[k] = v
+print(json.dumps(d))
+' "$@"
 }
 
 interactive() {
@@ -70,7 +92,7 @@ interactive() {
     echo "---------------------------"
     
     # 세션 시작 알림
-    send_event "{\"event\": \"SessionStart\", \"session_id\": \"$SESSION_ID\"}"
+    send_event "$(make_json event SessionStart session_id "$SESSION_ID")"
     
     while true; do
         echo "무엇을 테스트하시겠습니까?"
@@ -87,23 +109,27 @@ interactive() {
         
         case "$choice" in
             1)
-                send_event "{\"event\": \"PermissionRequest\", \"session_id\": \"$SESSION_ID\", \"tool_name\": \"bash\", \"tool_input\": {\"command\": \"ls -la\", \"description\": \"파일 목록 보기\"}}"
+                input=$(make_json command "ls -la" description "파일 목록 보기")
+                send_event "$(make_json event PermissionRequest session_id "$SESSION_ID" tool_name bash tool_input "$input")"
                 ;;
             2)
-                send_event "{\"event\": \"PermissionRequest\", \"session_id\": \"$SESSION_ID\", \"tool_name\": \"bash\", \"tool_input\": {\"command\": \"rm -rf /\", \"description\": \"전체 파일 삭제 (위험!)\"}}"
+                input=$(make_json command "rm -rf /" description "전체 파일 삭제 (위험!)")
+                send_event "$(make_json event PermissionRequest session_id "$SESSION_ID" tool_name bash tool_input "$input")"
                 ;;
             3)
-                send_event "{\"event\": \"PermissionRequest\", \"session_id\": \"$SESSION_ID\", \"tool_name\": \"write\", \"tool_input\": {\"file_path\": \"test.txt\", \"content\": \"Hello DevIsland!\"}}"
+                input=$(make_json file_path "test.txt" content "Hello DevIsland!")
+                send_event "$(make_json event PermissionRequest session_id "$SESSION_ID" tool_name write tool_input "$input")"
                 ;;
             4)
-                send_event "{\"event\": \"PermissionRequest\", \"session_id\": \"$SESSION_ID\", \"tool_name\": \"read\", \"tool_input\": {\"file_path\": \"DevIsland/AppState.swift\"}}"
+                input=$(make_json file_path "DevIsland/AppState.swift")
+                send_event "$(make_json event PermissionRequest session_id "$SESSION_ID" tool_name read tool_input "$input")"
                 ;;
             5)
                 read -p "알림 메시지: " msg
-                send_event "{\"event\": \"Notification\", \"session_id\": \"$SESSION_ID\", \"message\": \"$msg\"}"
+                send_event "$(make_json event Notification session_id "$SESSION_ID" message "$msg")"
                 ;;
             6)
-                send_event "{\"event\": \"SessionEnd\", \"session_id\": \"$SESSION_ID\"}"
+                send_event "$(make_json event SessionEnd session_id "$SESSION_ID")"
                 break
                 ;;
             d|D)
@@ -144,23 +170,25 @@ fi
 
 case "$COMMAND" in
     start)
-        send_event "{\"event\": \"SessionStart\", \"session_id\": \"$SESSION_ID\"}"
+        send_event "$(make_json event SessionStart session_id "$SESSION_ID")"
         ;;
     bash)
         CMD=${1:-"ls -la"}
-        send_event "{\"event\": \"PermissionRequest\", \"session_id\": \"$SESSION_ID\", \"tool_name\": \"bash\", \"tool_input\": {\"command\": \"$CMD\"}}"
+        input=$(make_json command "$CMD")
+        send_event "$(make_json event PermissionRequest session_id "$SESSION_ID" tool_name bash tool_input "$input")"
         ;;
     write)
         FILE=${1:-"test.txt"}
         CONTENT=${2:-"Hello World"}
-        send_event "{\"event\": \"PermissionRequest\", \"session_id\": \"$SESSION_ID\", \"tool_name\": \"write\", \"tool_input\": {\"file_path\": \"$FILE\", \"content\": \"$CONTENT\"}}"
+        input=$(make_json file_path "$FILE" content "$CONTENT")
+        send_event "$(make_json event PermissionRequest session_id "$SESSION_ID" tool_name write tool_input "$input")"
         ;;
     notification)
         MSG=${1:-"Hello from CLI"}
-        send_event "{\"event\": \"Notification\", \"session_id\": \"$SESSION_ID\", \"message\": \"$MSG\"}"
+        send_event "$(make_json event Notification session_id "$SESSION_ID" message "$MSG")"
         ;;
     stop)
-        send_event "{\"event\": \"SessionEnd\", \"session_id\": \"$SESSION_ID\"}"
+        send_event "$(make_json event SessionEnd session_id "$SESSION_ID")"
         ;;
     *)
         usage
