@@ -44,6 +44,7 @@ BUILD_CMD=(
   -configuration Release
   -archivePath "$ARCHIVE_PATH"
   -destination "platform=macOS"
+  -arch arm64
   CODE_SIGN_IDENTITY=""
   CODE_SIGNING_REQUIRED=NO
   CODE_SIGNING_ALLOWED=NO
