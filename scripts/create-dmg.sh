@@ -45,9 +45,9 @@ BUILD_CMD=(
   -archivePath "$ARCHIVE_PATH"
   -destination "platform=macOS"
   ARCHS=arm64
-  CODE_SIGN_IDENTITY=""
-  CODE_SIGNING_REQUIRED=NO
-  CODE_SIGNING_ALLOWED=NO
+  CODE_SIGN_IDENTITY="-"
+  CODE_SIGNING_REQUIRED=YES
+  CODE_SIGNING_ALLOWED=YES
   SKIP_INSTALL=NO
 )
 if command -v xcpretty &>/dev/null; then
@@ -61,11 +61,11 @@ rm -rf "$EXPORT_DIR"
 mkdir -p "$EXPORT_DIR"
 cp -R "$ARCHIVE_PATH/Products/Applications/$APP_NAME.app" "$EXPORT_DIR/"
 
-RESOURCES_DIR="$EXPORT_DIR/$APP_NAME.app/Contents/Resources"
-mkdir -p "$RESOURCES_DIR"
-cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$RESOURCES_DIR/"
-cp "$ROOT_DIR/scripts/install-bridge.sh" "$RESOURCES_DIR/"
-cp "$ROOT_DIR/scripts/install-launch-agent.sh" "$RESOURCES_DIR/"
+echo "Cleaning extended attributes..."
+xattr -cr "$EXPORT_DIR/$APP_NAME.app"
+
+# resources/scripts는 project.yml에 이미 resource로 등록되어 있어 xcodebuild가 처리함
+# 중복 복사 제거
 
 echo "DMG 생성 중 (create-dmg 사용)..."
 rm -f "$DMG_PATH"
