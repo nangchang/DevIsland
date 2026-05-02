@@ -231,7 +231,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let myPID = ProcessInfo.processInfo.processIdentifier
         let others = NSWorkspace.shared.runningApplications
             .filter { $0.localizedName == "DevIsland" && $0.processIdentifier != myPID }
-        others.forEach { $0.terminate() }
+        if !others.isEmpty {
+            print("[DevIsland] Found \(others.count) other instances. Terminating them.")
+            others.forEach { 
+                print("[DevIsland] Terminating other instance: pid=\($0.processIdentifier)")
+                $0.terminate() 
+            }
+        }
 
         // 다른 인스턴스 종료 요청 후 이동 체크 — 복사 대상 번들이 사용 중일 경우를 방지
         AppRelocator.checkAndPrompt()
