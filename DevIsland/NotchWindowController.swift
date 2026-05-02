@@ -263,11 +263,11 @@ class NotchWindowController: NSWindowController {
     private static func notchCenterX(on screen: NSScreen) -> CGFloat {
         // macOS 15+ has private/new APIs for auxiliary areas.
         // We check for them safely to avoid crashes on older versions.
-        let leftArea = (screen as NSObject).value(forKey: "auxiliaryTopLeftArea") as? CGRect
-        let rightArea = (screen as NSObject).value(forKey: "auxiliaryTopRightArea") as? CGRect
+        let leftValue = (screen as NSObject).value(forKey: "auxiliaryTopLeftArea") as? NSValue
+        let rightValue = (screen as NSObject).value(forKey: "auxiliaryTopRightArea") as? NSValue
 
-        if let leftArea = leftArea,
-           let rightArea = rightArea,
+        if let leftArea = leftValue?.rectValue,
+           let rightArea = rightValue?.rectValue,
            !leftArea.isEmpty,
            !rightArea.isEmpty {
             let mid = (leftArea.maxX + rightArea.minX) / 2
