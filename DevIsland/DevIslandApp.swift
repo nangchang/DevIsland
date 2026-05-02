@@ -199,6 +199,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var notchWindowController: NotchWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 응용 프로그램 폴더 이동 및 설치 파일 정리 체크
+        AppRelocator.checkAndPrompt()
+        
         let myPID = ProcessInfo.processInfo.processIdentifier
         let others = NSWorkspace.shared.runningApplications
             .filter { $0.localizedName == "DevIsland" && $0.processIdentifier != myPID }
