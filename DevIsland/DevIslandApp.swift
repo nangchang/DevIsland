@@ -24,6 +24,12 @@ struct DevIslandApp: App {
 
 struct MenuBarMenu: View {
     @ObservedObject var state = AppState.shared
+    
+    static let versionString: String = {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "DevIsland v\(version) (\(build))"
+    }()
 
     var body: some View {
         if state.pendingItems.isEmpty {
@@ -72,12 +78,11 @@ struct MenuBarMenu: View {
 
         Divider()
 
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-        Text("DevIsland v\(version) (\(build))")
-            .font(.system(size: 9))
-            .foregroundStyle(.tertiary)
+        Text(MenuBarMenu.versionString)
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 10)
+            .padding(.vertical, 2)
 
         Button("Quit DevIsland") {
             NSApplication.shared.terminate(nil)
