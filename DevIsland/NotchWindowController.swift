@@ -124,12 +124,26 @@ class NotchWindowController: NSWindowController {
                     return
                 }
                 let state = AppState.shared
-                if !state.isNotchExpanded,
+                if (!state.isNotchExpanded || state.pendingCount > 0),
                    state.expandOnFocusedScreen || state.notchDisplayTarget == .focused {
                     self?.resetPinnedPosition()
                     self?.updateWindowFrame(animate: false)
                 } else {
                     self?.updateFullScreenVisibility()
+                }
+            }
+            .store(in: &cancellables)
+
+        AppState.shared.$pendingCount
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] count in
+                // 이미 확장된 상태에서 새 요청이 들어오면 점프 플래그를 세우고 포커스 화면으로 이동 시도
+                if count > 0 && AppState.shared.isNotchExpanded && AppState.shared.expandOnFocusedScreen {
+                    AppState.shared.isExpandingFromRequest = true
+                    self?.resetPinnedPosition()
+                    self?.updateWindowFrame(animate: false)
                 }
             }
             .store(in: &cancellables)
@@ -242,12 +256,14 @@ class NotchWindowController: NSWindowController {
     private func targetScreen(for window: NSWindow) -> NSScreen {
         let state = AppState.shared
 
-        if state.isExpandingFromRequest {
-            defer { AppState.shared.isExpandingFromRequest = false }
-            if state.expandOnFocusedScreen,
-               let focusedScreen = Self.frontmostApplicationScreen() {
-                return focusedScreen
+        if (state.isExpandingFromRequest || (state.isNotchExpanded && state.pendingCount > 0)),
+           state.expandOnFocusedScreen,
+           let focusedScreen = Self.frontmostApplicationScreen() {
+            
+            if state.isExpandingFromRequest {
+                AppState.shared.isExpandingFromRequest = false
             }
+            return focusedScreen
         }
 
         switch state.notchDisplayTarget {
