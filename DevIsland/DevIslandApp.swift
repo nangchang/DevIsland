@@ -72,6 +72,13 @@ struct MenuBarMenu: View {
 
         Divider()
 
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        Text("DevIsland v\(version) (\(build))")
+            .font(.system(size: 9))
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 10)
+
         Button("Quit DevIsland") {
             NSApplication.shared.terminate(nil)
         }
