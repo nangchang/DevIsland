@@ -12,7 +12,7 @@ fi
 
 # Default session ID
 SESSION_ID=${SESSION_ID:-"test-session-$(date +%s | cut -c 6-10)"}
-DELAY=0
+DELAY=1
 
 usage() {
     echo "DevIsland Test CLI - 편하게 훅 호출을 테스트하세요"
@@ -22,10 +22,13 @@ usage() {
     echo "  $0 start                # 세션 시작"
     echo "  $0 bash [command]       # Bash 명령 승인 요청"
     echo "  $0 write [path] [cont]  # 파일 쓰기 승인 요청"
+    echo "  $0 idle                 # 입력 대기 알림 테스트"
+    echo "  $0 finish               # 작업 완료 알림 테스트"
     echo "  $0 stop                 # 세션 종료"
     echo ""
     echo "옵션:"
-    echo "  -d, --delay             # 실행 전 5초 대기"
+    echo "  -d, --delay             # 실행 전 5초 대기 (기본값)"
+    echo "  -n, --no-delay          # 대기 없이 즉시 실행"
     echo "  SESSION_ID=abc $0 ...   # 커스텀 세션 ID 지정"
     exit 1
 }
@@ -40,7 +43,7 @@ send_event() {
             sleep 1
         done
         printf "\n"
-        DELAY=0 # 한 번 지연 후 초기화 (연속 호출 방지)
+        # DELAY는 토글할 때만 변경되도록 유지
     fi
 
     # Pretty print payload for log if jq is available
@@ -100,8 +103,10 @@ interactive() {
         echo "2) 위험한 Bash 명령 (rm -rf /)"
         echo "3) 파일 쓰기 (example.txt)"
         echo "4) 파일 읽기 (AppState.swift)"
-        echo "5) 커스텀 알림 보내기"
-        echo "6) 세션 종료 및 나가기"
+        echo "5) 커스텀 알림 보내기 (Notification)"
+        echo "6) 입력 대기 알림 (idle_prompt)"
+        echo "7) 작업 완료 알림 (Stop)"
+        echo "8) 세션 종료 및 나가기 (SessionEnd)"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 그냥 종료 (세션 유지)"
         
@@ -129,6 +134,12 @@ interactive() {
                 send_event "$(make_json event Notification session_id "$SESSION_ID" message "$msg")"
                 ;;
             6)
+                send_event "$(make_json event Notification session_id "$SESSION_ID" notification_type idle_prompt message "클로드가 다음 입력을 기다리고 있습니다.")"
+                ;;
+            7)
+                send_event "$(make_json event Stop session_id "$SESSION_ID" message "작업이 모두 완료되었습니다.")"
+                ;;
+            8)
                 send_event "$(make_json event SessionEnd session_id "$SESSION_ID")"
                 break
                 ;;
@@ -152,6 +163,10 @@ while [[ "$1" =~ ^- ]]; do
     case "$1" in
         -d|--delay)
             DELAY=1
+            shift
+            ;;
+        -n|--no-delay)
+            DELAY=0
             shift
             ;;
         *)
@@ -186,6 +201,12 @@ case "$COMMAND" in
     notification)
         MSG=${1:-"Hello from CLI"}
         send_event "$(make_json event Notification session_id "$SESSION_ID" message "$MSG")"
+        ;;
+    idle)
+        send_event "$(make_json event Notification session_id "$SESSION_ID" notification_type idle_prompt message "입력을 기다리는 중...")"
+        ;;
+    finish)
+        send_event "$(make_json event Stop session_id "$SESSION_ID" message "완료되었습니다.")"
         ;;
     stop)
         send_event "$(make_json event SessionEnd session_id "$SESSION_ID")"
