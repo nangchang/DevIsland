@@ -90,6 +90,10 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 PLIST
 
 chmod +x "$EXECUTABLE"
+
+echo "Ad-hoc signing..."
+codesign -s - --force --deep "$APP_BUNDLE"
+
 /usr/bin/open -n "$APP_BUNDLE"
 
 if [[ "${1:-}" == "--verify" ]]; then
