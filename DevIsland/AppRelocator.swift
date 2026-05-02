@@ -3,20 +3,29 @@ import Foundation
 
 enum AppRelocator {
     static func checkAndPrompt() {
+        // applicationDidFinishLaunching 완료 후 실행해 메인 런루프 차단 방지
+        DispatchQueue.main.async {
+            _checkAndPrompt()
+        }
+    }
+
+    private static func _checkAndPrompt() {
         let bundleURL = Bundle.main.bundleURL
         guard let applicationsURL = FileManager.default.urls(for: .applicationDirectory, in: .localDomainMask).first else { return }
         let destinationURL = applicationsURL.appendingPathComponent(bundleURL.lastPathComponent)
-        
+
         // 1. 이미 /Applications 폴더에서 실행 중인지 확인
-        if bundleURL.path.hasPrefix(applicationsURL.path) {
-            // 설치가 완료된 상태라면 설치 파일(DMG) 정리 제안
+        // hasPrefix 단순 비교는 "/Applications Backup/" 같은 경로와 오탐할 수 있어 standardized + "/" 사용
+        let standardizedBundle = bundleURL.standardized.path
+        let standardizedApps = applicationsURL.standardized.path
+        if standardizedBundle.hasPrefix(standardizedApps + "/") || standardizedBundle == standardizedApps {
             checkAndPromptForDMGCleanup()
             return
         }
-        
+
         // 2. DMG 내부에서 실행 중인지 확인 (보통 /Volumes 아래에 마운트됨)
         guard bundleURL.path.hasPrefix("/Volumes/") else { return }
-        
+
         // 3. 사용자에게 이동 권유
         let alert = NSAlert()
         alert.messageText = "응용 프로그램 폴더로 이동하시겠습니까?"
@@ -24,12 +33,12 @@ enum AppRelocator {
         alert.alertStyle = .informational
         alert.addButton(withTitle: "이동 및 다시 실행")
         alert.addButton(withTitle: "나중에")
-        
+
         if alert.runModal() == .alertFirstButtonReturn {
             relocate(to: destinationURL)
         }
     }
-    
+
     private static func relocate(to destinationURL: URL) {
         let bundleURL = Bundle.main.bundleURL
         let fm = FileManager.default
@@ -43,15 +52,13 @@ enum AppRelocator {
         }
 
         do {
-            // 기존 파일이 있으면 삭제
+            // 기존 파일은 완전 삭제 대신 휴지통으로 이동 — 복사 실패 시 복구 가능
             if fm.fileExists(atPath: destinationURL.path) {
-                try fm.removeItem(at: destinationURL)
+                try fm.trashItem(at: destinationURL, resultingItemURL: nil)
             }
-            
-            // 앱 복사
+
             try fm.copyItem(at: bundleURL, to: destinationURL)
-            
-            // 새 위치에서 앱 실행
+
             let configuration = NSWorkspace.OpenConfiguration()
             NSWorkspace.shared.openApplication(at: destinationURL, configuration: configuration) { _, error in
                 if let error = error {
@@ -70,25 +77,26 @@ enum AppRelocator {
             alert.runModal()
         }
     }
-    
+
     private static func checkAndPromptForDMGCleanup() {
-        // 마운트된 볼륨 중 'DevIsland'라는 이름의 디스크 이미지가 있는지 확인
         let keys: [URLResourceKey] = [.volumeNameKey, .volumeIsRemovableKey]
         guard let volumes = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: []) else { return }
-        
+
+        // hasPrefix로 매칭 — "DevIsland 0.2.3" 처럼 버전이 붙은 볼륨명도 인식
+        let bundleName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "DevIsland"
+
         for url in volumes {
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
-                  values.volumeName == (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "DevIsland"),
+                  values.volumeName?.hasPrefix(bundleName) == true,
                   values.volumeIsRemovable == true else { continue }
-            
-            // 찾았을 경우 정리 제안
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 let alert = NSAlert()
                 alert.messageText = "설치 파일을 정리하시겠습니까?"
                 alert.informativeText = "설치가 완료되었습니다. 사용 중인 설치 파일(DMG)을 꺼내고 정리하시겠습니까?"
                 alert.addButton(withTitle: "정리")
                 alert.addButton(withTitle: "아니요")
-                
+
                 if alert.runModal() == .alertFirstButtonReturn {
                     ejectAndCleanup(volumeURL: url)
                 }
@@ -96,7 +104,7 @@ enum AppRelocator {
             break
         }
     }
-    
+
     private static func ejectAndCleanup(volumeURL: URL) {
         do {
             try NSWorkspace.shared.unmountAndEjectDevice(at: volumeURL)
