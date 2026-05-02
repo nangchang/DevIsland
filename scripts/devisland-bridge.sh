@@ -121,7 +121,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Raw Payload: $PAYLOAD" >> /tmp/DevIsland.br
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Event Detected: $EVENT" >> /tmp/DevIsland.bridge.log
 
 case "$EVENT" in
-  PermissionRequest|SessionStart|SessionEnd)
+  PermissionRequest|SessionStart|SessionEnd|Notification|Stop)
     ;;
   *)
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Passive event suppressed before app: $EVENT" >> /tmp/DevIsland.bridge.log
