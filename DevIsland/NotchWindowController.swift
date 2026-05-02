@@ -223,10 +223,16 @@ class NotchWindowController: NSWindowController {
     }
 
     private static func notchCenterX(on screen: NSScreen) -> CGFloat {
-        if let leftArea = screen.auxiliaryTopLeftArea,
-           let rightArea = screen.auxiliaryTopRightArea,
+        // macOS 15+ has private/new APIs for auxiliary areas.
+        // We check for them safely to avoid crashes on older versions.
+        let leftArea = (screen as NSObject).value(forKey: "auxiliaryTopLeftArea") as? CGRect
+        let rightArea = (screen as NSObject).value(forKey: "auxiliaryTopRightArea") as? CGRect
+
+        if let leftArea = leftArea,
+           let rightArea = rightArea,
            !leftArea.isEmpty,
            !rightArea.isEmpty {
+            print("[DevIsland] Using auxiliary areas for notch centering: \(leftArea), \(rightArea)")
             return round((leftArea.maxX + rightArea.minX) / 2)
         }
 

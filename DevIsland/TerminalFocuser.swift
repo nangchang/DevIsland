@@ -30,10 +30,22 @@ class TerminalFocuser {
 
         let script = frontmostCheckScript(appName: match.name, tty: tty, windowId: windowId, tabIndex: tabIndex)
         var error: NSDictionary?
-        let result = NSAppleScript(source: script)?.executeAndReturnError(&error)
-        let resultStr = result?.stringValue ?? "nil"
+        
+        // Execute AppleScript with a safeguard
+        guard let scriptObject = NSAppleScript(source: script) else {
+            print("[DevIsland] isSessionFrontmost: Failed to create NSAppleScript object")
+            return false
+        }
+        
+        let result = scriptObject.executeAndReturnError(&error)
+        let resultStr = result.stringValue ?? "nil"
         let passed = resultStr == "true" || resultStr.hasPrefix("true|")
-        print("[DevIsland] isSessionFrontmost: app=\(match.name) tty=\(tty ?? "nil") windowId=\(windowId ?? "nil") → \(resultStr) error=\(String(describing: error))")
+        
+        if let error = error {
+            print("[DevIsland] isSessionFrontmost: AppleScript error for \(match.name): \(error)")
+        }
+        
+        print("[DevIsland] isSessionFrontmost: app=\(match.name) tty=\(tty ?? "nil") → \(passed ? "YES" : "NO") (\(resultStr))")
         return passed
     }
 

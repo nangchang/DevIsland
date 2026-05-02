@@ -174,13 +174,16 @@ class AppState: ObservableObject {
             self?.handleMessage(message, responseHandler: responseHandler)
         }
         server.onServerFailed = {
-            let alert = NSAlert()
-            alert.messageText = "포트 사용 중"
-            alert.informativeText = "9090 포트가 이미 사용 중입니다.\n다른 DevIsland 인스턴스를 종료 후 다시 실행해주세요."
-            alert.alertStyle = .critical
-            alert.addButton(withTitle: "종료")
-            alert.runModal()
-            NSApplication.shared.terminate(nil)
+            print("[DevIsland] [ERROR] Socket server failed. Check if port 9090 is occupied.")
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = "Server Error"
+                alert.informativeText = "Could not start the 9090 port server. Please ensure no other DevIsland instances are running."
+                alert.alertStyle = .critical
+                alert.addButton(withTitle: "Exit")
+                alert.runModal()
+                NSApplication.shared.terminate(nil)
+            }
         }
         server.start()
         GlobalShortcutManager.shared.start()
@@ -231,6 +234,7 @@ class AppState: ObservableObject {
 
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                print("[DevIsland] [MSG] Parsed JSON from \(sessionId.prefix(8))")
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
                 toolName  = json["tool_name"] as? String ?? ""
                 sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
@@ -324,6 +328,7 @@ class AppState: ObservableObject {
             let sessionMessage = normalizedEvent == "sessionstart"
                 ? "Session Started"
                 : displayMsg
+            
             self.updateActiveSession(
                 sessionId: fullSessionId,
                 terminalTitle: terminalTitle,
@@ -371,66 +376,76 @@ class AppState: ObservableObject {
             receivedAt: Date()
         )
 
-        DispatchQueue.main.async {
-            if TerminalFocuser.isSessionFrontmost(appName: terminalApp, tty: terminalTTY, windowId: terminalWindowId, tabIndex: terminalTabIndex) {
-                print("[DevIsland] early bypass: session frontmost app=\(terminalApp) tty=\(terminalTTY)")
-                request.responseHandler("{\"response\": \"pass\"}")
-                if !sessionId.isEmpty {
-                    self.updateActiveSession(
-                        sessionId: sessionId,
+        // Pass through check: 터미널이 이미 활성 상태라면 'pass' 응답으로 즉시 통과
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let isFrontmost = TerminalFocuser.isSessionFrontmost(
+                appName: terminalApp,
+                tty: terminalTTY,
+                windowId: terminalWindowId,
+                tabIndex: terminalTabIndex
+            )
+            
+            DispatchQueue.main.async {
+                if isFrontmost {
+                    print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
+                    request.responseHandler("{\"response\": \"pass\"}")
+                    if !sessionId.isEmpty {
+                        self?.updateActiveSession(
+                            sessionId: sessionId,
+                            terminalTitle: terminalTitle,
+                            agentKind: agentKind,
+                            terminalApp: terminalApp,
+                            terminalTTY: terminalTTY,
+                            terminalWindowId: terminalWindowId,
+                            terminalTabIndex: terminalTabIndex,
+                            toolName: toolName,
+                            eventName: event,
+                            message: displayMsg,
+                            isPending: false,
+                            status: SessionStatus.timeoutBypassed(Date())
+                        )
+                    }
+                    return
+                }
+                
+                self?.pendingQueue.append(request)
+                
+                let newItem = PendingItem(
+                    id: request.id,
+                    toolName: request.toolName,
+                    message: request.message,
+                    sessionId: request.sessionId,
+                    terminalTitle: terminalTitle,
+                    terminalWindowId: terminalWindowId,
+                    terminalTabIndex: terminalTabIndex,
+                    receivedAt: request.receivedAt
+                )
+                self?.pendingItems.append(newItem)
+                self?.pendingCount = self?.pendingQueue.count ?? 0
+
+                if !request.sessionId.isEmpty {
+                    self?.updateActiveSession(
+                        sessionId: request.sessionId,
                         terminalTitle: terminalTitle,
                         agentKind: agentKind,
                         terminalApp: terminalApp,
                         terminalTTY: terminalTTY,
                         terminalWindowId: terminalWindowId,
                         terminalTabIndex: terminalTabIndex,
-                        toolName: toolName,
-                        eventName: event,
-                        message: displayMsg,
-                        isPending: false,
-                        status: SessionStatus.timeoutBypassed(Date())
+                        toolName: request.toolName,
+                        eventName: request.eventName,
+                        message: request.message,
+                        isPending: true
                     )
+
+                    self?.selectedSessionId = request.sessionId
                 }
-                return
-            }
-
-            self.pendingQueue.append(request)
-            
-            let newItem = PendingItem(
-                id: request.id,
-                toolName: request.toolName,
-                message: request.message,
-                sessionId: request.sessionId,
-                terminalTitle: terminalTitle,
-                terminalWindowId: terminalWindowId,
-                terminalTabIndex: terminalTabIndex,
-                receivedAt: request.receivedAt
-            )
-            self.pendingItems.append(newItem)
-            self.pendingCount = self.pendingQueue.count
-
-            if !request.sessionId.isEmpty {
-                self.updateActiveSession(
-                    sessionId: request.sessionId,
-                    terminalTitle: terminalTitle,
-                    agentKind: agentKind,
-                    terminalApp: terminalApp,
-                    terminalTTY: terminalTTY,
-                    terminalWindowId: terminalWindowId,
-                    terminalTabIndex: terminalTabIndex,
-                    toolName: request.toolName,
-                    eventName: request.eventName,
-                    message: request.message,
-                    isPending: true
-                )
-
-                self.selectedSessionId = request.sessionId
-            }
-            
-            if self.currentResponseHandler == nil {
-                self.showNextRequest()
-            } else {
-                self.syncDisplayToSelectedSession()
+                
+                if self?.currentResponseHandler == nil {
+                    self?.showNextRequest()
+                } else {
+                    self?.syncDisplayToSelectedSession()
+                }
             }
         }
     }
@@ -675,25 +690,32 @@ class AppState: ObservableObject {
         }
 
         let session = activeSessions.first { $0.id == next.sessionId }
-        if isTerminalFrontmost(for: session) {
-            currentResponseHandler = next.responseHandler
-            currentSessionId = next.sessionId
-            sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
-            return
-        }
+        
+        // Background check for focus to avoid main thread hang
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let isFrontmost = self?.isTerminalFrontmost(for: session) ?? false
+            
+            DispatchQueue.main.async {
+                if isFrontmost {
+                    print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
+                    self?.currentResponseHandler = next.responseHandler
+                    self?.currentSessionId = next.sessionId
+                    self?.sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
+                    return
+                }
 
-        print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
-        currentResponseHandler = next.responseHandler
-        currentEventName  = next.eventName
-        currentToolName   = next.toolName
-        currentMessage    = next.message
-        currentSessionId  = next.sessionId
+                print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
+                self?.currentResponseHandler = next.responseHandler
+                self?.currentEventName  = next.eventName
+                self?.currentToolName   = next.toolName
+                self?.currentMessage    = next.message
+                self?.currentSessionId  = next.sessionId
 
-        DispatchQueue.main.async {
-            self.isExpandingFromRequest = true
-            self.isNotchExpanded = true
+                self?.isExpandingFromRequest = true
+                self?.isNotchExpanded = true
+                self?.startTimeout()
+            }
         }
-        startTimeout()
     }
 
     private func isTerminalFrontmost(for session: ActiveSession?) -> Bool {
