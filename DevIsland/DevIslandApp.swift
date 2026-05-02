@@ -66,6 +66,25 @@ struct MenuBarMenu: View {
 
         Divider()
 
+        Picker("표시 위치", selection: $state.notchDisplayTarget) {
+            ForEach(NotchDisplayTarget.allCases) { target in
+                Text(target.label).tag(target)
+            }
+        }
+
+        if state.notchDisplayTarget == .specific {
+            Picker("모니터 선택", selection: $state.selectedDisplayId) {
+                ForEach(NSScreen.screens, id: \.displayId) { screen in
+                    Text(Self.displayName(for: screen)).tag(screen.displayId)
+                }
+            }
+        }
+
+        Toggle("전체 화면 앱 위에 표시", isOn: $state.showInFullScreenApps)
+        Toggle("확장 시 포커스 화면으로 이동", isOn: $state.expandOnFocusedScreen)
+
+        Divider()
+
         Button("브리지 설치...") {
             BridgeInstaller.install()
         }
@@ -87,6 +106,12 @@ struct MenuBarMenu: View {
         Button("Quit DevIsland") {
             NSApplication.shared.terminate(nil)
         }
+    }
+
+    private static func displayName(for screen: NSScreen) -> String {
+        let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 1
+        let role = screen == NSScreen.main ? "주 모니터" : "모니터 \(index)"
+        return "\(role) · \(Int(screen.frame.width))×\(Int(screen.frame.height))"
     }
 }
 

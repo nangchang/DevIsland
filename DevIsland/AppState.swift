@@ -54,12 +54,62 @@ struct ActiveSession: Identifiable, Equatable {
     var status: SessionStatus
 }
 
+enum NotchDisplayTarget: String, CaseIterable, Identifiable {
+    case automatic
+    case main
+    case mouse
+    case focused
+    case specific
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .automatic: return "자동"
+        case .main: return "주 모니터"
+        case .mouse: return "마우스가 있는 모니터"
+        case .focused: return "포커스가 있는 모니터"
+        case .specific: return "선택한 모니터"
+        }
+    }
+}
+
 // MARK: - App State
 
 class AppState: ObservableObject {
     static let shared = AppState()
 
+    private enum DefaultsKey {
+        static let notchDisplayTarget = "notchDisplayTarget"
+        static let selectedDisplayId = "selectedDisplayId"
+        static let showInFullScreenApps = "showInFullScreenApps"
+        static let expandOnFocusedScreen = "expandOnFocusedScreen"
+    }
+
     @Published var isNotchExpanded = false
+    @Published var notchDisplayTarget: NotchDisplayTarget = .automatic {
+        didSet {
+            if notchDisplayTarget == .specific {
+                ensureSelectedDisplay()
+            }
+            UserDefaults.standard.set(notchDisplayTarget.rawValue, forKey: DefaultsKey.notchDisplayTarget)
+        }
+    }
+    @Published var selectedDisplayId: UInt32 = 0 {
+        didSet {
+            UserDefaults.standard.set(Int(selectedDisplayId), forKey: DefaultsKey.selectedDisplayId)
+        }
+    }
+    @Published var showInFullScreenApps = true {
+        didSet {
+            UserDefaults.standard.set(showInFullScreenApps, forKey: DefaultsKey.showInFullScreenApps)
+        }
+    }
+    @Published var expandOnFocusedScreen = true {
+        didSet {
+            UserDefaults.standard.set(expandOnFocusedScreen, forKey: DefaultsKey.expandOnFocusedScreen)
+        }
+    }
     @Published var selectedSessionId: String?
     @Published var currentMessage: String = ""
     @Published var currentSessionId: String = ""
@@ -88,6 +138,20 @@ class AppState: ObservableObject {
     private let lifecycleSessionTimeout: Double = 15 * 60
 
     private init() {
+        let defaults = UserDefaults.standard
+        if let rawTarget = defaults.string(forKey: DefaultsKey.notchDisplayTarget),
+           let target = NotchDisplayTarget(rawValue: rawTarget) {
+            notchDisplayTarget = target
+        }
+        selectedDisplayId = UInt32(defaults.integer(forKey: DefaultsKey.selectedDisplayId))
+        if defaults.object(forKey: DefaultsKey.showInFullScreenApps) != nil {
+            showInFullScreenApps = defaults.bool(forKey: DefaultsKey.showInFullScreenApps)
+        }
+        if defaults.object(forKey: DefaultsKey.expandOnFocusedScreen) != nil {
+            expandOnFocusedScreen = defaults.bool(forKey: DefaultsKey.expandOnFocusedScreen)
+        }
+        ensureSelectedDisplay()
+
         server.onMessageReceived = { [weak self] message, responseHandler in
             self?.handleMessage(message, responseHandler: responseHandler)
         }
@@ -107,6 +171,14 @@ class AppState: ObservableObject {
         sessionPruningTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.pruneInactiveSessions()
         }
+    }
+
+    private func ensureSelectedDisplay() {
+        guard !NSScreen.screens.isEmpty,
+              !NSScreen.screens.contains(where: { $0.displayId == selectedDisplayId }) else {
+            return
+        }
+        selectedDisplayId = NSScreen.main?.displayId ?? NSScreen.screens[0].displayId
     }
 
     /// 현재 화면에 표시할 데이터를 선택된 세션 정보로 업데이트
