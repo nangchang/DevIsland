@@ -49,6 +49,8 @@ struct MenuBarMenu: View {
         }
 
         if state.isNotchExpanded {
+            Button("Focus Terminal") { state.focusTerminal() }
+            Divider()
             Button("Approve  ⌘⇧Y") { state.approve() }
                 .keyboardShortcut("y", modifiers: [.command, .shift])
             Button("Deny  ⌘⇧N") { state.deny() }
@@ -60,6 +62,12 @@ struct MenuBarMenu: View {
 
         Button("브리지 설치...") {
             BridgeInstaller.install()
+        }
+
+        if !GlobalShortcutManager.shared.hasAccessibilityPermission {
+            Button("접근성 권한 요청...") {
+                GlobalShortcutManager.shared.requestAccessibilityPermission()
+            }
         }
 
         Divider()

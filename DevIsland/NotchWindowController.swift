@@ -455,75 +455,116 @@ struct SessionRowView: View {
     
     @State private var timeAgo: String = ""
     private var tool: ToolInfo { toolInfo(for: session.lastToolName) }
+    private var statusLabel: String? {
+        switch session.status {
+        case .pending:
+            return "Pending"
+        case .timeoutBypassed:
+            return "Bypassed"
+        case .idle:
+            return nil
+        }
+    }
+    private var statusColor: Color {
+        switch session.status {
+        case .pending:
+            return .orange
+        case .timeoutBypassed:
+            return Color(red: 0.2, green: 0.8, blue: 0.9)
+        case .idle:
+            return .white.opacity(0.3)
+        }
+    }
     
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
-        Button(action: { AppState.shared.selectedSessionId = session.id }) {
-            HStack(spacing: 12) {
-                ZStack(alignment: .topTrailing) {
-                    AgentRequestBadge(
-                        kind: session.agentKind,
-                        tool: tool,
-                        isActive: session.isPending,
-                        size: 32
-                    )
+        HStack(spacing: 8) {
+            Button(action: { AppState.shared.selectedSessionId = session.id }) {
+                HStack(spacing: 12) {
+                    ZStack(alignment: .topTrailing) {
+                        AgentRequestBadge(
+                            kind: session.agentKind,
+                            tool: tool,
+                            isActive: session.isPending,
+                            size: 32
+                        )
 
-                    if session.isPending {
-                        Circle()
-                            .fill(Color.orange)
-                            .frame(width: 10, height: 10)
-                            .overlay(Circle().stroke(Color.black, lineWidth: 2))
-                            .offset(x: 4, y: -4)
+                        if session.isPending {
+                            Circle()
+                                .fill(Color.orange)
+                                .frame(width: 10, height: 10)
+                                .overlay(Circle().stroke(Color.black, lineWidth: 2))
+                                .offset(x: 4, y: -4)
+                        }
                     }
-                }
-                .frame(width: 36, height: 36)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(session.terminalTitle)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
+                    .frame(width: 36, height: 36)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(session.terminalTitle)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            Text(timeAgo)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(.white.opacity(0.3))
+                        }
                         
-                        Spacer()
-                        
-                        Text(timeAgo)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.white.opacity(0.3))
-                    }
-                    
-                    HStack(spacing: 6) {
-                        Text(String(session.id.prefix(8)))
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.4))
-                        
-                        Text("•")
-                            .font(.system(size: 8))
-                            .foregroundColor(.white.opacity(0.2))
-                        
-                        Text(session.lastEventName)
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(tool.color.opacity(0.8))
+                        HStack(spacing: 6) {
+                            Text(String(session.id.prefix(8)))
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.4))
+                            
+                            Text("•")
+                                .font(.system(size: 8))
+                                .foregroundColor(.white.opacity(0.2))
+                            
+                            Text(session.lastEventName)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(tool.color.opacity(0.8))
+                                .lineLimit(1)
+
+                            if let statusLabel = statusLabel {
+                                Text(statusLabel)
+                                    .font(.system(size: 8, weight: .black))
+                                    .foregroundColor(statusColor)
+                                    .lineLimit(1)
+                            }
+                        }
                     }
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isCurrent ? Color.white.opacity(0.1) : Color.white.opacity(0.03))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isCurrent ? tool.color.opacity(0.5) : Color.clear, lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+
+            Button(action: { AppState.shared.focusTerminal(for: session.id) }) {
+                Image(systemName: "arrow.up.forward.app.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.75))
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .help("Focus terminal")
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isCurrent ? Color.white.opacity(0.1) : Color.white.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isCurrent ? tool.color.opacity(0.5) : Color.clear, lineWidth: 1)
+        )
         .onAppear { updateTimeAgo() }
         .onReceive(timer) { _ in updateTimeAgo() }
     }
-    
+
     private func updateTimeAgo() {
         let diff = Int(Date().timeIntervalSince(session.lastActiveAt))
         if diff < 5 { timeAgo = "Just now" }
@@ -697,6 +738,21 @@ struct NotchView: View {
 
                 Spacer()
 
+                if !displayedSessionId.isEmpty {
+                    Button {
+                        state.focusTerminal(for: displayedSessionId)
+                    } label: {
+                        Image(systemName: "arrow.up.forward.app.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 30, height: 30)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Focus terminal")
+                }
+
                 // Close Button
                 Button {
                     state.dismissCurrentRequest()
@@ -768,6 +824,21 @@ struct NotchView: View {
                     .padding(.horizontal, 20)
                     
                     HStack(spacing: 12) {
+                        Button(action: { state.focusTerminal() }) {
+                            HStack {
+                                Image(systemName: "arrow.up.forward.app.fill")
+                                Text("Focus")
+                            }
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(width: 92)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.08))
+                            .foregroundColor(.white.opacity(0.82))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Focus terminal")
+
                         Button(action: { state.deny() }) {
                             HStack {
                                 Image(systemName: "xmark.circle.fill")
