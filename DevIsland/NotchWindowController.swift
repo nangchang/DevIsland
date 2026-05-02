@@ -124,8 +124,7 @@ class NotchWindowController: NSWindowController {
                     return
                 }
                 let state = AppState.shared
-                if (!state.isNotchExpanded || state.pendingCount > 0),
-                   state.expandOnFocusedScreen || state.notchDisplayTarget == .focused {
+                if !state.isNotchExpanded, state.notchDisplayTarget == .focused {
                     self?.resetPinnedPosition()
                     self?.updateWindowFrame(animate: false)
                 } else {
@@ -139,12 +138,12 @@ class NotchWindowController: NSWindowController {
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] count in
-                // 이미 확장된 상태에서 새 요청이 들어오면 점프 플래그를 세우고 포커스 화면으로 이동 시도
-                if count > 0 && AppState.shared.isNotchExpanded && AppState.shared.expandOnFocusedScreen {
-                    AppState.shared.isExpandingFromRequest = true
-                    self?.resetPinnedPosition()
-                    self?.updateWindowFrame(animate: false)
-                }
+                guard count > 0,
+                      AppState.shared.isNotchExpanded,
+                      AppState.shared.expandOnFocusedScreen,
+                      let focusedScreen = Self.frontmostApplicationScreen() else { return }
+                self?.resetPinnedPosition()
+                self?.updateWindowFrame(animate: false, targetScreenOverride: focusedScreen)
             }
             .store(in: &cancellables)
 
@@ -157,17 +156,21 @@ class NotchWindowController: NSWindowController {
         pendingSettle?.cancel()
         
         if expanded {
-            // 클릭으로 열린 경우: 큐에 적재된 요청 플래그보다 우선해 포커스 화면 이동을 막는다
             if isManualExpand {
+                // 클릭 확장: 현재 화면 그대로 유지
                 isManualExpand = false
-                AppState.shared.isExpandingFromRequest = false
+                resetPinnedPosition()
+                updateWindowFrame(animate: false)
+            } else {
+                // 요청 확장: expandOnFocusedScreen이면 포커스 화면으로
+                let focusedScreen = AppState.shared.expandOnFocusedScreen
+                    ? Self.frontmostApplicationScreen() : nil
+                resetPinnedPosition()
+                updateWindowFrame(animate: false, targetScreenOverride: focusedScreen)
             }
-            resetPinnedPosition()
-            updateWindowFrame(animate: false)
         } else {
             // 축소 시: 핀 위치를 즉시 해제해 설정된 화면으로 돌아가도록 한다.
             // 프레임 자체는 SwiftUI 애니메이션이 끝난 후 줄여 점프 방지.
-            AppState.shared.isExpandingFromRequest = false
             resetPinnedPosition()
             let work = DispatchWorkItem { [weak self] in
                 self?.updateWindowFrame(animate: false)
@@ -177,9 +180,9 @@ class NotchWindowController: NSWindowController {
         }
     }
 
-    func updateWindowFrame(animate: Bool = true, sizeOverride: NSSize? = nil) {
+    func updateWindowFrame(animate: Bool = true, sizeOverride: NSSize? = nil, targetScreenOverride: NSScreen? = nil) {
         guard let window = window else { return }
-        let screen = targetScreen(for: window)
+        let screen = targetScreenOverride ?? targetScreen(for: window)
         
         let expanded = AppState.shared.isNotchExpanded
         let size = sizeOverride ?? Self.notchSize(expanded: expanded)
@@ -256,28 +259,18 @@ class NotchWindowController: NSWindowController {
     private func targetScreen(for window: NSWindow) -> NSScreen {
         let state = AppState.shared
 
-        if (state.isExpandingFromRequest || (state.isNotchExpanded && state.pendingCount > 0)),
-           state.expandOnFocusedScreen,
-           let focusedScreen = Self.frontmostApplicationScreen() {
-            
-            if state.isExpandingFromRequest {
-                AppState.shared.isExpandingFromRequest = false
-            }
-            return focusedScreen
-        }
-
         switch state.notchDisplayTarget {
         case .main:
             return NSScreen.screens.first!
         case .mouse:
-            return Self.mouseScreen() ?? NSScreen.main ?? NSScreen.screens.first!
+            return Self.mouseScreen() ?? NSScreen.screens.first!
         case .focused:
-            return Self.frontmostApplicationScreen() ?? Self.mouseScreen() ?? NSScreen.main ?? NSScreen.screens.first!
+            return Self.frontmostApplicationScreen() ?? Self.mouseScreen() ?? NSScreen.screens.first!
         case .specific:
             if let screen = NSScreen.screens.first(where: { $0.displayId == state.selectedDisplayId }) {
                 return screen
             }
-            return NSScreen.main ?? NSScreen.screens.first!
+            return NSScreen.screens.first!
         case .automatic:
             break
         }
