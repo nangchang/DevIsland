@@ -14,6 +14,7 @@ class NotchWindowController: NSWindowController {
     private var pendingSettle: DispatchWorkItem?
     private var pinnedCenterX: CGFloat?
     private var pinnedDisplayId: UInt32?
+    private var isHiddenForFullScreen = false
 
     convenience init() {
         let panel = NSPanel(
@@ -83,6 +84,9 @@ class NotchWindowController: NSWindowController {
             .receive(on: RunLoop.main)
             .sink { [weak self] showInFullScreenApps in
                 self?.window?.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: showInFullScreenApps)
+                self?.resetPinnedPosition()
+                self?.updateWindowFrame(animate: false)
+                self?.updateFullScreenVisibility()
             }
             .store(in: &cancellables)
 
@@ -91,6 +95,7 @@ class NotchWindowController: NSWindowController {
             .sink { [weak self] _ in
                 self?.resetPinnedPosition()
                 self?.updateWindowFrame(animate: false)
+                self?.updateFullScreenVisibility()
             }
             .store(in: &cancellables)
 
@@ -113,15 +118,22 @@ class NotchWindowController: NSWindowController {
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didActivateApplicationNotification)
             .receive(on: RunLoop.main)
             .sink { [weak self] notification in
-                guard AppState.shared.expandOnFocusedScreen || AppState.shared.notchDisplayTarget == .focused else { return }
                 if let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                    app.processIdentifier == ProcessInfo.processInfo.processIdentifier {
                     return
                 }
-                self?.resetPinnedPosition()
-                self?.updateWindowFrame(animate: false)
+                if AppState.shared.expandOnFocusedScreen || AppState.shared.notchDisplayTarget == .focused {
+                    self?.resetPinnedPosition()
+                    self?.updateWindowFrame(animate: false)
+                } else {
+                    self?.updateFullScreenVisibility()
+                }
             }
             .store(in: &cancellables)
+
+        DispatchQueue.main.async { [weak self] in
+            self?.updateFullScreenVisibility()
+        }
     }
 
     private func handleExpansionChange(_ expanded: Bool) {
@@ -161,6 +173,7 @@ class NotchWindowController: NSWindowController {
         
         let newFrame = NSRect(origin: NSPoint(x: x, y: y), size: size)
         window.setFrame(newFrame, display: true, animate: animate)
+        updateFullScreenVisibility()
     }
 
     func expandFromCollapsedWindow() {
@@ -197,6 +210,22 @@ class NotchWindowController: NSWindowController {
     private func resetPinnedPosition() {
         pinnedCenterX = nil
         pinnedDisplayId = nil
+    }
+
+    private func updateFullScreenVisibility() {
+        guard let window = window else { return }
+
+        let shouldHide = !AppState.shared.showInFullScreenApps && Self.frontmostApplicationIsFullScreen()
+        if shouldHide {
+            guard !isHiddenForFullScreen else { return }
+            isHiddenForFullScreen = true
+            window.orderOut(nil)
+            return
+        }
+
+        guard isHiddenForFullScreen else { return }
+        isHiddenForFullScreen = false
+        window.orderFrontRegardless()
     }
 
     private func targetScreen(for window: NSWindow) -> NSScreen {
@@ -272,6 +301,95 @@ class NotchWindowController: NSWindowController {
 
         guard let bestDisplayId, bestDisplayId != 0 else { return nil }
         return NSScreen.screens.first { $0.displayId == bestDisplayId }
+    }
+
+    private static func frontmostApplicationIsFullScreen() -> Bool {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            return false
+        }
+
+        if let isFullScreen = accessibilityFullScreenState(for: app.processIdentifier) {
+            return isFullScreen
+        }
+
+        return frontmostApplicationScreenCoveringWindow(for: app.processIdentifier) != nil
+    }
+
+    private static func accessibilityFullScreenState(for pid: pid_t) -> Bool? {
+        guard AXIsProcessTrusted() else { return nil }
+
+        let appElement = AXUIElementCreateApplication(pid)
+        var focusedWindow: CFTypeRef?
+        let focusedResult = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXFocusedWindowAttribute as CFString,
+            &focusedWindow
+        )
+
+        if focusedResult == .success,
+           let focusedWindow,
+           CFGetTypeID(focusedWindow) == AXUIElementGetTypeID() {
+            return fullScreenState(for: focusedWindow as! AXUIElement)
+        }
+
+        var windowsValue: CFTypeRef?
+        let windowsResult = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXWindowsAttribute as CFString,
+            &windowsValue
+        )
+
+        guard windowsResult == .success,
+              let windows = windowsValue as? [AXUIElement] else {
+            return nil
+        }
+
+        for window in windows {
+            if let isFullScreen = fullScreenState(for: window), isFullScreen {
+                return true
+            }
+        }
+
+        return windows.isEmpty ? nil : false
+    }
+
+    private static func fullScreenState(for window: AXUIElement) -> Bool? {
+        var value: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &value)
+        guard result == .success else { return nil }
+
+        if let value = value as? Bool { return value }
+        if let value = value as? NSNumber { return value.boolValue }
+        return nil
+    }
+
+    private static func frontmostApplicationScreenCoveringWindow(for pid: pid_t) -> NSScreen? {
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+
+        let displayBounds = NSScreen.screens.map { screen in
+            (screen, CGDisplayBounds(screen.displayId))
+        }
+
+        for windowInfo in windows {
+            guard (windowInfo[kCGWindowOwnerPID as String] as? Int32) == pid,
+                  (windowInfo[kCGWindowLayer as String] as? Int) == 0,
+                  Self.isWindowOnScreen(windowInfo[kCGWindowIsOnscreen as String]),
+                  let boundsInfo = windowInfo[kCGWindowBounds as String] as? [String: Any],
+                  let bounds = CGRect(dictionaryRepresentation: boundsInfo as CFDictionary) else {
+                continue
+            }
+
+            if let coveringScreen = displayBounds.first(where: { _, screenBounds in
+                bounds.intersection(screenBounds).area >= screenBounds.area * 0.96
+            })?.0 {
+                return coveringScreen
+            }
+        }
+
+        return nil
     }
 
     private static func isWindowOnScreen(_ value: Any?) -> Bool {
