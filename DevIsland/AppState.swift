@@ -251,10 +251,10 @@ class AppState: ObservableObject {
 
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                print("[DevIsland] [MSG] Parsed JSON from \(sessionId.prefix(8))")
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
                 toolName  = json["tool_name"] as? String ?? ""
                 sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
+                print("[DevIsland] [MSG] Parsed JSON from \(sessionId.prefix(8))")
                 terminalTitle = json["terminal_title"] as? String ?? "Terminal"
                 terminalApp = json["terminal_app"] as? String ?? ""
                 terminalTTY = json["terminal_tty"] as? String ?? ""
