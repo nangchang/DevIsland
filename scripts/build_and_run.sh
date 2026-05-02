@@ -2,7 +2,6 @@
 set -euo pipefail
 
 APP_NAME="DevIsland"
-BUNDLE_ID="com.hoin.DevIsland"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
@@ -38,6 +37,17 @@ swiftc \
   -target "$(uname -m)-apple-macos14.0" \
   -o "$EXECUTABLE"
 
+# Extract metadata from project.yml
+VERSION=$(grep "CFBundleShortVersionString:" "$ROOT_DIR/project.yml" | sed -E 's/.*: "(.*)"/\1/' | xargs)
+BUILD=$(grep "CFBundleVersion:" "$ROOT_DIR/project.yml" | sed -E 's/.*: "(.*)"/\1/' | xargs)
+BUNDLE_ID_PREFIX=$(grep "bundleIdPrefix:" "$ROOT_DIR/project.yml" | sed -E 's/.*: (.*)/\1/' | xargs)
+BUNDLE_ID="${BUNDLE_ID_PREFIX}.${APP_NAME}"
+
+if [[ -z "$VERSION" ]]; then VERSION="1.0.0"; fi
+if [[ -z "$BUILD" ]]; then BUILD="1"; fi
+
+echo "Building $APP_NAME $VERSION ($BUILD) with ID $BUNDLE_ID..."
+
 cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -56,9 +66,9 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>$VERSION</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>$BUILD</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundleIconName</key>
