@@ -75,17 +75,17 @@ tell application "Terminal"
     repeat with aTab in tabs of aWin
       set tabIndex to tabIndex + 1
       if tty of aTab is ttyPath then
-        return (name of aWin) & "\t" & (id of aWin as text) & "\t" & (tabIndex as text)
+        return (name of aWin) & ":::" & (id of aWin as text) & ":::" & (tabIndex as text)
       end if
     end repeat
   end repeat
-  return (name of front window) & "\t" & (id of front window as text) & "\t1"
+  return (name of front window) & ":::" & (id of front window as text) & ":::1"
 end tell
 ASEOF
     2>/dev/null)
-    TERM_TITLE=$(printf '%s' "$TERM_INFO" | awk -F '\t' '{print $1}')
-    TERM_WINDOW_ID=$(printf '%s' "$TERM_INFO" | awk -F '\t' '{print $2}')
-    TERM_TAB_INDEX=$(printf '%s' "$TERM_INFO" | awk -F '\t' '{print $3}')
+    TERM_TITLE=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $1}')
+    TERM_WINDOW_ID=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $2}')
+    TERM_TAB_INDEX=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $3}')
   else
     TERM_TITLE=$(osascript -e 'tell application "Terminal" to get name of front window' 2>/dev/null)
   fi
