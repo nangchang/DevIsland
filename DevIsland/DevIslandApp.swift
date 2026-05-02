@@ -81,7 +81,7 @@ struct MenuBarMenu: View {
         }
 
         Toggle("전체 화면 앱 위에 표시", isOn: $state.showInFullScreenApps)
-        Toggle("확장 시 포커스 화면으로 이동", isOn: $state.expandOnFocusedScreen)
+        Toggle("승인 요청 시 작업 중인 화면에 표시", isOn: $state.expandOnFocusedScreen)
 
         Divider()
 
