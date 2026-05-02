@@ -24,15 +24,15 @@ jobs:
         id: bump
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # Update CFBundleShortVersionString
-          sed -i "s/CFBundleShortVersionString: .*/CFBundleShortVersionString: $VERSION/" project.yml
-          # Update CFBundleVersion to github.run_number
-          sed -i "s/CFBundleVersion: .*/CFBundleVersion: ${{ github.run_number }}/" project.yml
+          CURRENT_VERSION=$(grep "CFBundleShortVersionString:" project.yml | sed 's/.*: //')
           
-          if git diff --quiet; then
+          if [ "$CURRENT_VERSION" == "$VERSION" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Versions already up to date — no commit needed."
+            echo "Version already matches tag ($VERSION) — skipping bump to prevent loop."
           else
+            # Only update if the marketing version is different
+            sed -i "s/CFBundleShortVersionString: .*/CFBundleShortVersionString: $VERSION/" project.yml
+            sed -i "s/CFBundleVersion: .*/CFBundleVersion: ${{ github.run_number }}/" project.yml
             echo "changed=true" >> "$GITHUB_OUTPUT"
             git diff --stat
           fi
