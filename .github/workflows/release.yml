@@ -5,6 +5,12 @@ on:
     workflows: ["Version Bump"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Dry run (build DMG only, do not create release)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -26,10 +32,27 @@ jobs:
           key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/release.yml') }}
           restore-keys: ${{ runner.os }}-brew-
 
+      - name: Cache Homebrew Tools
+        id: cache-tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew/bin/xcodegen
+            /opt/homebrew/bin/create-dmg
+            /opt/homebrew/Cellar/xcodegen
+            /opt/homebrew/Cellar/create-dmg
+          key: ${{ runner.os }}-brew-tools-${{ hashFiles('.github/workflows/release.yml') }}
+
+      - name: Install dependencies
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          brew install xcodegen create-dmg
+
       - name: Build and Create DMG
         run: ./scripts/create-dmg.sh
 
       - name: Create Release
+        if: github.event.inputs.dry-run != 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: DevIsland.dmg
