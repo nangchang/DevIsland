@@ -76,7 +76,9 @@ class NotchWindowController: NSWindowController {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.resetPinnedPosition()
-                self?.updateWindowFrame(animate: false)
+                // 만약 현재 요청을 보여주는 중이라면 새로운 설정에 맞춰 화면을 이동시킨다.
+                let override = AppState.shared.isNotchExpanded ? Self.requestTargetScreen() : nil
+                self?.updateWindowFrame(animate: false, targetScreenOverride: override)
             }
             .store(in: &cancellables)
 
@@ -123,13 +125,10 @@ class NotchWindowController: NSWindowController {
                    app.processIdentifier == ProcessInfo.processInfo.processIdentifier {
                     return
                 }
-                let state = AppState.shared
-                if !state.isNotchExpanded, state.notchDisplayTarget == .focused {
-                    self?.resetPinnedPosition()
-                    self?.updateWindowFrame(animate: false)
-                } else {
-                    self?.updateFullScreenVisibility()
-                }
+                // 포커스 변경 시 화면 업데이트 (확장 상태에서도 설정을 따르도록 함)
+                self?.resetPinnedPosition()
+                self?.updateWindowFrame(animate: false)
+                self?.updateFullScreenVisibility()
             }
             .store(in: &cancellables)
 
@@ -139,12 +138,38 @@ class NotchWindowController: NSWindowController {
             .receive(on: RunLoop.main)
             .sink { [weak self] count in
                 guard count > 0, AppState.shared.isNotchExpanded else { return }
+                // 새로운 요청이 추가되었을 때, 설정된 요청 표시 위치로 이동
                 let override = Self.requestTargetScreen()
-                guard override != nil else { return }
+                print("[DevIsland] PendingCount changed (\(count)), requesting move to: \(override?.displayId.description ?? "default")")
                 self?.resetPinnedPosition()
                 self?.updateWindowFrame(animate: false, targetScreenOverride: override)
             }
             .store(in: &cancellables)
+
+        // 전역 마우스 클릭 감지: 마우스/포커스 이동 시 즉각적인 반응을 위해 사용 (접근성 권한 필요)
+        NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
+            guard let self = self else { return }
+            let state = AppState.shared
+            let isRequestShowing = state.isNotchExpanded && !state.pendingItems.isEmpty
+            
+            let isTargetFocused = isRequestShowing ? (state.requestDisplayTarget == .focused) : (state.notchDisplayTarget == .focused)
+            let isTargetMouse = isRequestShowing ? (state.requestDisplayTarget == .mouse) : (state.notchDisplayTarget == .mouse)
+            
+            // 마우스나 포커스를 따라가는 설정일 경우 클릭 시 즉시 위치 갱신
+            if isTargetFocused || isTargetMouse {
+                self.resetPinnedPosition()
+                self.updateWindowFrame(animate: false)
+            }
+        }
+        
+        // 주기적 화면 체크 (마우스/포커스 이동 감지 보완)
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self, !AppState.shared.isNotchExpanded else { return }
+            let state = AppState.shared
+            if state.notchDisplayTarget == .focused || state.notchDisplayTarget == .mouse {
+                self.updateWindowFrame(animate: false)
+            }
+        }
 
         DispatchQueue.main.async { [weak self] in
             self?.updateFullScreenVisibility()
@@ -163,8 +188,12 @@ class NotchWindowController: NSWindowController {
             } else {
                 // 요청 확장: requestDisplayTarget에 따라 화면 결정
                 let override = Self.requestTargetScreen()
+                print("[DevIsland] Request expansion detected, override screen: \(override?.displayId.description ?? "none")")
                 resetPinnedPosition()
                 updateWindowFrame(animate: false, targetScreenOverride: override)
+                
+                // 요청 상태 해제
+                AppState.shared.isExpandingFromRequest = false
             }
         } else {
             // 축소 시: 핀 위치를 즉시 해제해 설정된 화면으로 돌아가도록 한다.
@@ -189,7 +218,7 @@ class NotchWindowController: NSWindowController {
             resetPinnedPosition()
         }
 
-        let centerX = pinnedCenterX ?? (Self.notchCenterX(on: screen) + notchHorizontalOffset)
+        let centerX = pinnedCenterX ?? Self.notchCenterX(on: screen)
         pinnedCenterX = centerX
         pinnedDisplayId = screen.displayId
 
@@ -232,8 +261,17 @@ class NotchWindowController: NSWindowController {
            let rightArea = rightArea,
            !leftArea.isEmpty,
            !rightArea.isEmpty {
-            print("[DevIsland] Using auxiliary areas for notch centering: \(leftArea), \(rightArea)")
-            return round((leftArea.maxX + rightArea.minX) / 2)
+            let mid = (leftArea.maxX + rightArea.minX) / 2
+            
+            // 감지된 좌표가 화면 범위 밖이라면(로컬 좌표계라면) 화면 시작점을 더해준다.
+            if mid < screen.frame.minX || mid > screen.frame.maxX {
+                let globalX = screen.frame.minX + mid
+                print("[DevIsland] Using auxiliary areas (local->global): \(mid) -> \(globalX)")
+                return round(globalX)
+            }
+            
+            print("[DevIsland] Using auxiliary areas (global): \(mid)")
+            return round(mid)
         }
 
         return round(screen.frame.midX)
@@ -263,18 +301,26 @@ class NotchWindowController: NSWindowController {
     private func targetScreen(for window: NSWindow) -> NSScreen {
         let state = AppState.shared
 
+        // 만약 요청 표시 중(확장 상태 + 대기 아이템 존재)이라면 requestDisplayTarget 설정을 먼저 확인
+        if state.isNotchExpanded && !state.pendingItems.isEmpty {
+            if let requestScreen = Self.requestTargetScreen() {
+                return requestScreen
+            }
+        }
+
         switch state.notchDisplayTarget {
         case .main:
             return NSScreen.screens.first!
         case .mouse:
-            return Self.mouseScreen() ?? NSScreen.screens.first!
+            return Self.mouseScreen() ?? NSScreen.main ?? NSScreen.screens.first!
         case .focused:
-            return Self.frontmostApplicationScreen() ?? Self.mouseScreen() ?? NSScreen.screens.first!
+            // 키보드 포커스가 있는 화면(NSScreen.main)을 최우선으로 하되, 보조적으로 마우스 위치 참고
+            return NSScreen.main ?? Self.mouseScreen() ?? NSScreen.screens.first!
         case .specific:
             if let screen = NSScreen.screens.first(where: { $0.displayId == state.selectedDisplayId }) {
                 return screen
             }
-            return NSScreen.screens.first!
+            return NSScreen.main ?? NSScreen.screens.first!
         case .automatic:
             break
         }
@@ -294,9 +340,13 @@ class NotchWindowController: NSWindowController {
     /// .notch는 기존 notchDisplayTarget을 따르므로 nil 반환.
     private static func requestTargetScreen() -> NSScreen? {
         switch AppState.shared.requestDisplayTarget {
-        case .notch:   return nil
-        case .focused: return frontmostApplicationScreen()
-        case .mouse:   return mouseScreen()
+        case .notch:
+            return nil
+        case .focused:
+            // 키보드 포커스가 있는 화면을 우선 감지
+            return NSScreen.main ?? mouseScreen() ?? frontmostApplicationScreen()
+        case .mouse:
+            return mouseScreen() ?? NSScreen.main
         }
     }
 
@@ -311,6 +361,9 @@ class NotchWindowController: NSWindowController {
               let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
+        
+        let appName = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Unknown"
+        print("[DevIsland] Finding screen for frontmost app: \(appName) (pid: \(frontmostPID))")
 
         let frontmostWindows = windows.compactMap { windowInfo -> CGRect? in
             guard (windowInfo[kCGWindowOwnerPID as String] as? Int32) == frontmostPID,
@@ -340,8 +393,13 @@ class NotchWindowController: NSWindowController {
 
         let bestDisplayId = screenAreas.max { $0.value < $1.value }?.key
 
-        guard let bestDisplayId, bestDisplayId != 0 else { return nil }
-        return NSScreen.screens.first { $0.displayId == bestDisplayId }
+        if let bestDisplayId, bestDisplayId != 0 {
+            print("[DevIsland] Best display found: \(bestDisplayId)")
+            return NSScreen.screens.first { $0.displayId == bestDisplayId }
+        }
+        
+        print("[DevIsland] No suitable display found for frontmost app windows.")
+        return nil
     }
 
     private static func frontmostApplicationIsFullScreen() -> Bool {
