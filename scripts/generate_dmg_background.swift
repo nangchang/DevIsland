@@ -116,8 +116,12 @@ let bitmapRep2x = NSBitmapImageRep(cgImage: image)
 bitmapRep2x.size = NSSize(width: width / 2, height: height / 2) // 600x400 points
 if let data2x = bitmapRep2x.representation(using: .png, properties: [:]) {
     let url2x = dir.appendingPathComponent("\(baseName)@2x.png")
-    try data2x.write(to: url2x)
-    print("Background saved to \(url2x.path) (1200x800, 144 DPI)")
+    do {
+        try data2x.write(to: url2x)
+        print("Background saved to \(url2x.path) (1200x800, 144 DPI)")
+    } catch {
+        fatalError("Failed to write @2x image: \(error)")
+    }
 }
 
 // Save standard version (600x400)
@@ -134,6 +138,10 @@ standardImage.unlockFocus()
 if let tiffData = standardImage.tiffRepresentation,
    let bitmapRep = NSBitmapImageRep(data: tiffData),
    let data = bitmapRep.representation(using: .png, properties: [:]) {
-    try data.write(to: url)
-    print("Background saved to \(url.path) (600x400, 72 DPI)")
+    do {
+        try data.write(to: url)
+        print("Background saved to \(url.path) (600x400, 72 DPI)")
+    } catch {
+        fatalError("Failed to write standard image: \(error)")
+    }
 }
