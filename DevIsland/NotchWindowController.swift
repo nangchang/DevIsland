@@ -209,12 +209,15 @@ class NotchWindowController: NSWindowController {
                 resetPinnedPosition()
                 updateWindowFrame(animate: false, targetScreenOverride: override)
                 
-                // 요청 상태 해제
-                AppState.shared.isExpandingFromRequest = false
+                // 실제 승인 요청인 경우에만 즉시 해제 (알림은 메시지 표시를 위해 유지)
+                if AppState.shared.pendingCount > 0 {
+                    AppState.shared.isExpandingFromRequest = false
+                }
             }
         } else {
             // 축소 시: 핀 위치를 즉시 해제해 설정된 화면으로 돌아가도록 한다.
             // 프레임 자체는 SwiftUI 애니메이션이 끝난 후 줄여 점프 방지.
+            AppState.shared.isExpandingFromRequest = false
             resetPinnedPosition()
             let work = DispatchWorkItem { [weak self] in
                 self?.updateWindowFrame(animate: false)
@@ -973,8 +976,10 @@ struct NotchView: View {
     @State private var buddyPulse = false
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
-    private var hasApprovalRequest: Bool { state.pendingCount > 0 }
-    private var headerTitle: String { hasApprovalRequest ? tool.label : "Sessions" }
+    private var isActionAreaShowing: Bool {
+        state.pendingCount > 0 || (state.isNotchExpanded && state.isExpandingFromRequest && !state.currentMessage.isEmpty)
+    }
+    private var headerTitle: String { isActionAreaShowing && !state.currentToolName.isEmpty ? tool.label : "Sessions" }
     private var displayedSessionId: String {
         state.currentSessionId.isEmpty ? (state.selectedSessionId ?? "") : state.currentSessionId
     }
@@ -1109,8 +1114,8 @@ struct NotchView: View {
                             .foregroundColor(.white)
                         
                         StatusBadge(
-                            text: state.pendingCount > 0 ? "Approval Required" : "Monitoring",
-                            color: state.pendingCount > 0 ? .orange : .green.opacity(0.6)
+                            text: state.pendingCount > 0 ? "Approval Required" : (isActionAreaShowing ? "Notification" : "Monitoring"),
+                            color: state.pendingCount > 0 ? .orange : (isActionAreaShowing ? .blue.opacity(0.7) : .green.opacity(0.6))
                         )
                     }
                     
@@ -1161,7 +1166,7 @@ struct NotchView: View {
             .padding(.top, 20)
 
             // ── Main Dashboard ──────────────────────────
-            if hasApprovalRequest {
+            if isActionAreaShowing {
                 approvalContent
             } else {
                 sessionsContent
@@ -1175,7 +1180,7 @@ struct NotchView: View {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Text("ACTIVE ACTION")
+                        Text(state.hasResponseHandler ? "ACTIVE ACTION" : "NOTIFICATION")
                             .font(.system(size: 9, weight: .black))
                             .foregroundColor(.white.opacity(0.3))
                         Spacer()
@@ -1202,63 +1207,96 @@ struct NotchView: View {
                 Spacer()
                 
                 VStack(spacing: 12) {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.white.opacity(0.07))
-                            Capsule()
-                                .fill(
-                                    LinearGradient(colors: [progressColor.opacity(0.8), progressColor], startPoint: .leading, endPoint: .trailing)
-                                )
-                                .frame(width: geo.size.width * state.timeoutProgress)
+                    if state.hasResponseHandler {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.07))
+                                Capsule()
+                                    .fill(
+                                        LinearGradient(colors: [progressColor.opacity(0.8), progressColor], startPoint: .leading, endPoint: .trailing)
+                                    )
+                                    .frame(width: geo.size.width * state.timeoutProgress)
+                            }
                         }
+                        .frame(height: 4)
+                        .padding(.horizontal, 20)
                     }
-                    .frame(height: 4)
-                    .padding(.horizontal, 20)
                     
                     HStack(spacing: 12) {
-                        Button(action: { state.focusTerminal() }) {
-                            HStack {
-                                Image(systemName: "arrow.up.forward.app.fill")
-                                Text("Focus")
+                        if state.hasResponseHandler {
+                            Button(action: { state.focusTerminal() }) {
+                                HStack {
+                                    Image(systemName: "arrow.up.forward.app.fill")
+                                    Text("Focus")
+                                }
+                                .font(.system(size: 13, weight: .bold))
+                                .frame(width: 92)
+                                .padding(.vertical, 12)
+                                .background(Color.white.opacity(0.08))
+                                .foregroundColor(.white.opacity(0.82))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
-                            .font(.system(size: 13, weight: .bold))
-                            .frame(width: 92)
-                            .padding(.vertical, 12)
-                            .background(Color.white.opacity(0.08))
-                            .foregroundColor(.white.opacity(0.82))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Focus terminal")
+                            .buttonStyle(.plain)
+                            .help("Focus terminal")
 
-                        Button(action: { state.deny() }) {
-                            HStack {
-                                Image(systemName: "xmark.circle.fill")
-                                Text("Deny Request")
+                            Button(action: { state.deny() }) {
+                                HStack {
+                                    Image(systemName: "xmark.circle.fill")
+                                    Text("Deny Request")
+                                }
+                                .font(.system(size: 13, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.red.opacity(0.15))
+                                .foregroundColor(.red)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
-                            .font(.system(size: 13, weight: .bold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.red.opacity(0.15))
-                            .foregroundColor(.red)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                        .buttonStyle(.plain)
+                            .buttonStyle(.plain)
 
-                        Button(action: { state.approve() }) {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                Text("Approve")
+                            Button(action: { state.approve() }) {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                    Text("Approve")
+                                }
+                                .font(.system(size: 13, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(tool.color.opacity(0.15))
+                                .foregroundColor(tool.color)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
-                            .font(.system(size: 13, weight: .bold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(tool.color.opacity(0.15))
-                            .foregroundColor(tool.color)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .buttonStyle(.plain)
+                        } else {
+                            Button(action: { state.focusTerminal() }) {
+                                HStack {
+                                    Image(systemName: "arrow.up.forward.app.fill")
+                                    Text("Focus Terminal")
+                                }
+                                .font(.system(size: 13, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.white.opacity(0.08))
+                                .foregroundColor(.white.opacity(0.82))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Focus terminal")
+
+                            Button(action: { state.isNotchExpanded = false }) {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                    Text("Dismiss")
+                                }
+                                .font(.system(size: 13, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.blue.opacity(0.15))
+                                .foregroundColor(.blue)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 16)
                 }

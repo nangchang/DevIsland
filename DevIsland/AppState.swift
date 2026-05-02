@@ -103,7 +103,7 @@ class AppState: ObservableObject {
     }
 
     @Published var isNotchExpanded = false
-    var isExpandingFromRequest = false
+    @Published var isExpandingFromRequest = false
     @Published var notchDisplayTarget: NotchDisplayTarget = .automatic {
         didSet {
             if notchDisplayTarget == .specific {
@@ -149,6 +149,7 @@ class AppState: ObservableObject {
     private var server = HookSocketServer()
     private var pendingQueue: [PendingRequest] = []
     private var currentResponseHandler: ((String) -> Void)?
+    var hasResponseHandler: Bool { currentResponseHandler != nil }
     private var timeoutTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let timeoutDuration: Double = 120
@@ -202,9 +203,11 @@ class AppState: ObservableObject {
         selectedDisplayId = NSScreen.main?.displayId ?? NSScreen.screens[0].displayId
     }
 
-    /// 현재 표시 중인 요청의 터미널이 포커스되었는지 확인하고, 그렇다면 자동으로 'pass' 처리
+    /// 현재 표시 중인 요청의 터미널이 포커스되었는지 확인하고, 그렇다면 자동으로 'pass' 또는 'dismiss' 처리
     func passIfTerminalFocused() {
-        guard currentResponseHandler != nil else { return }
+        // 승인 대기 중이거나 정보성 알림이 표시 중일 때만 동작
+        guard currentResponseHandler != nil || (isNotchExpanded && isExpandingFromRequest) else { return }
+        
         let session = activeSessions.first { $0.id == currentSessionId }
         
         // 백그라운드에서 포커스 여부 확인 (UI 지연 방지)
@@ -212,8 +215,14 @@ class AppState: ObservableObject {
             let isFrontmost = self?.isTerminalFrontmost(for: session) ?? false
             if isFrontmost {
                 DispatchQueue.main.async {
-                    print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
-                    self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
+                    if self?.currentResponseHandler != nil {
+                        print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
+                        self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
+                    } else {
+                        print("[DevIsland] [AUTO] User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "")")
+                        self?.isNotchExpanded = false
+                        self?.isExpandingFromRequest = false
+                    }
                 }
             }
         }
@@ -284,8 +293,8 @@ class AppState: ObservableObject {
         }
 
         let normalizedEvent = normalizedHookEventName(event)
-        let stopEvents = ["stop", "subagentstop", "exit", "shutdown", "sessionend"]
-        let notificationEvents = ["sessionstart", "notification", "pretooluse", "posttooluse", "precompact"]
+        let stopEvents = ["exit", "shutdown", "sessionend"]
+        let notificationEvents = ["sessionstart", "notification", "pretooluse", "posttooluse", "precompact", "stop", "subagentstop"]
         let isStop = stopEvents.contains(normalizedEvent)
         let isNotification = notificationEvents.contains(normalizedEvent)
 
@@ -342,9 +351,9 @@ class AppState: ObservableObject {
             }
             let fullSessionId = sessionId
             let hasPendingForSession = self.pendingQueue.contains { $0.sessionId == fullSessionId }
-            let sessionMessage = normalizedEvent == "sessionstart"
+            let sessionMessage = (normalizedEvent == "sessionstart")
                 ? "Session Started"
-                : displayMsg
+                : (normalizedEvent == "stop" && displayMsg.isEmpty) ? "Task Completed" : displayMsg
             
             self.updateActiveSession(
                 sessionId: fullSessionId,
@@ -365,6 +374,33 @@ class AppState: ObservableObject {
             DispatchQueue.main.async {
                 if normalizedEvent == "sessionstart" {
                     self.selectedSessionId = fullSessionId
+                }
+                
+                // 알림 확장 로직 (질문이나 작업 완료 시)
+                let isInformational = (normalizedEvent == "stop") || 
+                                     (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
+                                     (displayMsg.contains("?") && normalizedEvent == "notification")
+                
+                if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
+                    // 터미널이 포커스되어 있지 않을 때만 확장
+                    let session = self.activeSessions.first { $0.id == fullSessionId }
+                    let isFrontmost = self.isTerminalFrontmost(for: session)
+                    
+                    if !isFrontmost {
+                        self.currentToolName = toolName
+                        self.currentEventName = event
+                        self.currentMessage = sessionMessage
+                        self.currentSessionId = fullSessionId
+                        self.isNotchExpanded = true
+                        self.isExpandingFromRequest = true
+                        
+                        // 10초 후 자동 축소 (사용자 조작 없을 시)
+                        Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
+                            if self?.currentResponseHandler == nil && self?.isNotchExpanded == true {
+                                self?.isNotchExpanded = false
+                            }
+                        }
+                    }
                 }
             }
 
@@ -845,6 +881,7 @@ class AppState: ObservableObject {
             sendDecision(approved: false, reason: "Dismissed")
         } else {
             isNotchExpanded = false
+            isExpandingFromRequest = false
         }
     }
 
