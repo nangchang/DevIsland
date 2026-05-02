@@ -125,9 +125,12 @@ class NotchWindowController: NSWindowController {
                    app.processIdentifier == ProcessInfo.processInfo.processIdentifier {
                     return
                 }
-                // 포커스 변경 시 화면 업데이트 (확장 상태에서도 설정을 따르도록 함)
-                self?.resetPinnedPosition()
-                self?.updateWindowFrame(animate: false)
+                // 확장 상태가 아닐 때만 포커스를 따라감 (확장 중에는 사용자 조작 보호를 위해 고정)
+                let state = AppState.shared
+                if !state.isNotchExpanded {
+                    self?.resetPinnedPosition()
+                    self?.updateWindowFrame(animate: false)
+                }
                 self?.updateFullScreenVisibility()
             }
             .store(in: &cancellables)
@@ -155,8 +158,8 @@ class NotchWindowController: NSWindowController {
             let isTargetFocused = isRequestShowing ? (state.requestDisplayTarget == .focused) : (state.notchDisplayTarget == .focused)
             let isTargetMouse = isRequestShowing ? (state.requestDisplayTarget == .mouse) : (state.notchDisplayTarget == .mouse)
             
-            // 마우스나 포커스를 따라가는 설정일 경우 클릭 시 즉시 위치 갱신
-            if isTargetFocused || isTargetMouse {
+            // 확장 상태가 아닐 때만 클릭 시 즉시 위치 갱신
+            if !state.isNotchExpanded && (isTargetFocused || isTargetMouse) {
                 self.resetPinnedPosition()
                 self.updateWindowFrame(animate: false)
             }
