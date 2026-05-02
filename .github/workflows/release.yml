@@ -49,7 +49,7 @@ jobs:
           hdiutil create -volname "DevIsland" -srcfolder build/Export -ov -format UDZO DevIsland.dmg
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: DevIsland.dmg
           tag_name: ${{ github.event.workflow_run.head_branch || github.ref_name }}
@@ -57,5 +57,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
