@@ -66,7 +66,7 @@ struct MenuBarMenu: View {
 
         Divider()
 
-        Picker("표시 위치", selection: $state.notchDisplayTarget) {
+        Picker("노치 표시 위치", selection: $state.notchDisplayTarget) {
             ForEach(NotchDisplayTarget.allCases) { target in
                 Text(target.label).tag(target)
             }
