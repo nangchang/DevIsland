@@ -15,6 +15,7 @@ class NotchWindowController: NSWindowController {
     private var pinnedCenterX: CGFloat?
     private var pinnedDisplayId: UInt32?
     private var isHiddenForFullScreen = false
+    private var isManualExpand = false
 
     convenience init() {
         let panel = NSPanel(
@@ -142,7 +143,11 @@ class NotchWindowController: NSWindowController {
         pendingSettle?.cancel()
         
         if expanded {
-            // 확장 시: 먼저 윈도우 프레임을 키워 '캔버스'를 확보 (딜레이 없음)
+            // 클릭으로 열린 경우: 큐에 적재된 요청 플래그보다 우선해 포커스 화면 이동을 막는다
+            if isManualExpand {
+                isManualExpand = false
+                AppState.shared.isExpandingFromRequest = false
+            }
             resetPinnedPosition()
             updateWindowFrame(animate: false)
         } else {
@@ -183,8 +188,9 @@ class NotchWindowController: NSWindowController {
 
     func expandFromCollapsedWindow() {
         guard !AppState.shared.isNotchExpanded else { return }
-        
+
         // 프레임과 SwiftUI 상태를 같은 런루프에서 바꿔 중간 위치가 보이지 않게 한다.
+        isManualExpand = true
         updateWindowFrame(animate: false, sizeOverride: expandedNotchSize)
         AppState.shared.isNotchExpanded = true
     }
