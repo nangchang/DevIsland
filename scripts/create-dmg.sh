@@ -72,7 +72,7 @@ rm -f "$DMG_PATH"
 # Resources/DMG/dmg_background.png 를 배경으로 사용
 create-dmg \
   --volname "$APP_NAME" \
-  --background "Resources/DMG/dmg_background.png" \
+  --background "$ROOT_DIR/Resources/DMG/dmg_background.png" \
   --window-pos 200 120 \
   --window-size 600 400 \
   --icon-size 120 \
