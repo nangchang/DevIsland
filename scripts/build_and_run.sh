@@ -92,7 +92,8 @@ PLIST
 chmod +x "$EXECUTABLE"
 
 echo "Ad-hoc signing..."
-codesign -s - --force --deep "$APP_BUNDLE"
+xattr -cr "$APP_BUNDLE"
+codesign -s - --force --deep --arch arm64 "$APP_BUNDLE"
 
 /usr/bin/open -n "$APP_BUNDLE"
 
