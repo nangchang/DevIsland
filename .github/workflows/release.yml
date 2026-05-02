@@ -41,6 +41,8 @@ jobs:
 
       - name: Create DMG
         run: |
+          cp scripts/install-bridge.sh build/Export/
+          cp scripts/install-launch-agent.sh build/Export/
           ln -s /Applications build/Export/Applications
           hdiutil create -volname "DevIsland" -srcfolder build/Export -ov -format UDZO DevIsland.dmg
 

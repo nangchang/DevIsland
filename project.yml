@@ -12,6 +12,7 @@ targets:
     resources:
       - scripts/devisland-bridge.sh
       - scripts/install-bridge.sh
+      - scripts/install-launch-agent.sh
     info:
       path: DevIsland/Info.plist
       properties:
