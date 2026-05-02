@@ -8,6 +8,96 @@ class TerminalFocuser {
         ("com.apple.Terminal",      "Terminal"),
     ]
 
+    static func isBundleIdForApp(_ bundleId: String?, appName: String?) -> Bool {
+        guard let bundleId else { return false }
+        let targetName = normalizedAppName(appName)
+        let match = targetName.flatMap { name in candidates.first { $0.name == name } }
+            ?? candidates.first(where: { !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty })
+        return match?.bundleId == bundleId
+    }
+
+    static func isSessionFrontmost(
+        appName: String?,
+        tty: String?,
+        windowId: String?,
+        tabIndex: String?
+    ) -> Bool {
+        let targetName = normalizedAppName(appName)
+        let match = targetName.flatMap { name in
+            candidates.first { $0.name == name }
+        } ?? candidates.first(where: {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
+        })
+        print("[DevIsland] isSessionFrontmost: appName=\(appName ?? "nil") → targetName=\(targetName ?? "nil") → match=\(match?.name ?? "none")")
+        guard let match else { return false }
+
+        let frontBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let isActive = frontBundleId == match.bundleId
+        print("[DevIsland] isSessionFrontmost: \(match.name) frontmost=\(frontBundleId ?? "nil") expected=\(match.bundleId) isActive=\(isActive)")
+        guard isActive else { return false }
+
+        let script = frontmostCheckScript(appName: match.name, tty: tty, windowId: windowId, tabIndex: tabIndex)
+        var error: NSDictionary?
+        let result = NSAppleScript(source: script)?.executeAndReturnError(&error)
+        let resultStr = result?.stringValue ?? "nil"
+        let passed = resultStr == "true" || resultStr.hasPrefix("true|")
+        let logLine = "[DevIsland] isSessionFrontmost: app=\(match.name) tty=\(tty ?? "nil") windowId=\(windowId ?? "nil") → \(resultStr) error=\(String(describing: error))\n"
+        print(logLine)
+        if let data = logLine.data(using: .utf8) {
+            let url = URL(fileURLWithPath: "/tmp/DevIsland.bypass.log")
+            if let fh = try? FileHandle(forWritingTo: url) {
+                fh.seekToEndOfFile()
+                fh.write(data)
+                fh.closeFile()
+            } else {
+                try? data.write(to: url)
+            }
+        }
+        return passed
+    }
+
+    private static func frontmostCheckScript(appName: String, tty: String?, windowId: String?, tabIndex: String?) -> String {
+        let ttyLiteral = appleScriptLiteral(tty ?? "")
+        let ttyNameLiteral = appleScriptLiteral((tty ?? "").split(separator: "/").last.map(String.init) ?? "")
+
+        switch appName {
+        case "iTerm":
+            return """
+            tell application "iTerm"
+              try
+                set ttyPath to \(ttyLiteral)
+                set ttyName to \(ttyNameLiteral)
+                set sess to current session of current window
+                if (ttyPath is not "" and (tty of sess is ttyPath or tty of sess is ttyName)) then return "true"
+              end try
+              return "false"
+            end tell
+            """
+        case "Terminal":
+            return """
+            tell application "Terminal"
+              set ttyPath to \(ttyLiteral)
+              set ttyName to \(ttyNameLiteral)
+              try
+                set fw to front window
+                set fwId to (id of fw as text)
+                set selTab to selected tab of fw
+                set tabTTY to tty of selTab
+                set diag to "|fwId=" & fwId & " tabTTY=" & tabTTY
+                if ttyPath is not "" then
+                  if tabTTY is ttyPath or tabTTY is ttyName then return "true" & diag
+                end if
+                return "false" & diag
+              on error e
+                return "false|err:" & e
+              end try
+            end tell
+            """
+        default:
+            return "return \"true\""
+        }
+    }
+
     static func focusTerminal(
         appName: String? = nil,
         title: String? = nil,
