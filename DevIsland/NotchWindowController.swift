@@ -130,6 +130,9 @@ class NotchWindowController: NSWindowController {
                 if !state.isNotchExpanded {
                     self?.resetPinnedPosition()
                     self?.updateWindowFrame(animate: false)
+                } else {
+                    // 확장 중 포커스가 바뀌었다면 터미널로 돌아갔는지 확인하여 자동 pass 처리
+                    state.passIfTerminalFocused()
                 }
                 self?.updateFullScreenVisibility()
             }
@@ -162,6 +165,9 @@ class NotchWindowController: NSWindowController {
             if !state.isNotchExpanded && (isTargetFocused || isTargetMouse) {
                 self.resetPinnedPosition()
                 self.updateWindowFrame(animate: false)
+            } else if state.isNotchExpanded {
+                // 확장 중 클릭 시 터미널 포커스 여부 확인하여 자동 pass 처리
+                state.passIfTerminalFocused()
             }
         }
         

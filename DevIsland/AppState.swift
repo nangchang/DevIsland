@@ -202,6 +202,23 @@ class AppState: ObservableObject {
         selectedDisplayId = NSScreen.main?.displayId ?? NSScreen.screens[0].displayId
     }
 
+    /// 현재 표시 중인 요청의 터미널이 포커스되었는지 확인하고, 그렇다면 자동으로 'pass' 처리
+    func passIfTerminalFocused() {
+        guard currentResponseHandler != nil else { return }
+        let session = activeSessions.first { $0.id == currentSessionId }
+        
+        // 백그라운드에서 포커스 여부 확인 (UI 지연 방지)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let isFrontmost = self?.isTerminalFrontmost(for: session) ?? false
+            if isFrontmost {
+                DispatchQueue.main.async {
+                    print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
+                    self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
+                }
+            }
+        }
+    }
+
     /// 현재 화면에 표시할 데이터를 선택된 세션 정보로 업데이트
     func syncDisplayToSelectedSession() {
         guard currentResponseHandler == nil else { return }
