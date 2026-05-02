@@ -28,6 +28,11 @@ if ! command -v xcodegen &>/dev/null; then
   brew install xcodegen
 fi
 
+if ! command -v create-dmg &>/dev/null; then
+  echo "create-dmg가 없습니다. Homebrew로 설치합니다..."
+  brew install create-dmg
+fi
+
 echo "Xcode 프로젝트 생성 중..."
 xcodegen generate
 
@@ -61,17 +66,22 @@ cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$RESOURCES_DIR/"
 cp "$ROOT_DIR/scripts/install-bridge.sh" "$RESOURCES_DIR/"
 cp "$ROOT_DIR/scripts/install-launch-agent.sh" "$RESOURCES_DIR/"
 
-echo "DMG 생성 중..."
+echo "DMG 생성 중 (create-dmg 사용)..."
 rm -f "$DMG_PATH"
-ln -sf /Applications "$EXPORT_DIR/Applications"
-hdiutil create \
-  -volname "$APP_NAME" \
-  -srcfolder "$EXPORT_DIR" \
-  -ov \
-  -format UDZO \
-  "$DMG_PATH"
 
-rm -f "$EXPORT_DIR/Applications"
+# Resources/DMG/dmg_background.png 를 배경으로 사용
+create-dmg \
+  --volname "$APP_NAME" \
+  --background "Resources/DMG/dmg_background.png" \
+  --window-pos 200 120 \
+  --window-size 600 400 \
+  --icon-size 120 \
+  --icon "$APP_NAME.app" 150 200 \
+  --hide-extension "$APP_NAME.app" \
+  --app-drop-link 450 200 \
+  --no-internet-enable \
+  "$DMG_PATH" \
+  "$EXPORT_DIR/"
 
 echo ""
 echo "완료: $DMG_PATH"
