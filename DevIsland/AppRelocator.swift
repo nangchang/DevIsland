@@ -4,7 +4,7 @@ import Foundation
 enum AppRelocator {
     static func checkAndPrompt() {
         let bundleURL = Bundle.main.bundleURL
-        let applicationsURL = FileManager.default.urls(for: .applicationDirectory, in: .localDomainMask).first!
+        guard let applicationsURL = FileManager.default.urls(for: .applicationDirectory, in: .localDomainMask).first else { return }
         let destinationURL = applicationsURL.appendingPathComponent(bundleURL.lastPathComponent)
         
         // 1. 이미 /Applications 폴더에서 실행 중인지 확인
@@ -33,7 +33,15 @@ enum AppRelocator {
     private static func relocate(to destinationURL: URL) {
         let bundleURL = Bundle.main.bundleURL
         let fm = FileManager.default
-        
+
+        guard fm.isWritableFile(atPath: destinationURL.deletingLastPathComponent().path) else {
+            let alert = NSAlert()
+            alert.messageText = "이동 실패"
+            alert.informativeText = "응용 프로그램 폴더에 쓰기 권한이 없습니다. Finder에서 직접 이동해주세요."
+            alert.runModal()
+            return
+        }
+
         do {
             // 기존 파일이 있으면 삭제
             if fm.fileExists(atPath: destinationURL.path) {
@@ -48,9 +56,10 @@ enum AppRelocator {
             NSWorkspace.shared.openApplication(at: destinationURL, configuration: configuration) { _, error in
                 if let error = error {
                     print("새 위치에서 앱 실행 실패: \(error)")
+                    return
                 }
-                // 현재 앱 종료
-                DispatchQueue.main.async {
+                // 새 인스턴스가 실행될 시간을 확보한 후 종료
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     NSApplication.shared.terminate(nil)
                 }
             }
@@ -69,7 +78,7 @@ enum AppRelocator {
         
         for url in volumes {
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
-                  values.volumeName == "DevIsland",
+                  values.volumeName == (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "DevIsland"),
                   values.volumeIsRemovable == true else { continue }
             
             // 찾았을 경우 정리 제안
@@ -89,7 +98,13 @@ enum AppRelocator {
     }
     
     private static func ejectAndCleanup(volumeURL: URL) {
-        // 볼륨 꺼내기
-        try? NSWorkspace.shared.unmountAndEjectDevice(at: volumeURL)
+        do {
+            try NSWorkspace.shared.unmountAndEjectDevice(at: volumeURL)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "꺼내기 실패"
+            alert.informativeText = "설치 파일을 꺼내는 중 오류가 발생했습니다. Finder에서 직접 꺼내주세요.\n\(error.localizedDescription)"
+            alert.runModal()
+        }
     }
 }
