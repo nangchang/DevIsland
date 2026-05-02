@@ -23,9 +23,16 @@ enum AppRelocator {
             return
         }
 
-        // 2. DMG 내부에서 실행 중인지 확인 (보통 /Volumes 아래에 마운트됨)
-        // 단, /Volumes/data/ 처럼 개발용 볼륨에서 실행 중인 경우는 제외
-        guard bundleURL.path.hasPrefix("/Volumes/"), !bundleURL.path.hasPrefix("/Volumes/data/") else { return }
+        // 2. DMG 내부에서 실행 중인지 확인
+        // 보통 DMG는 읽기 전용(ReadOnly) 볼륨으로 마운트됩니다.
+        // 개발 중인 폴더는 쓰기가 가능하므로, 볼륨의 쓰기 권한을 확인하여 이식성을 높입니다.
+        guard bundleURL.path.hasPrefix("/Volumes/") else { return }
+        
+        let keys: [URLResourceKey] = [.volumeIsReadOnlyKey]
+        if let values = try? bundleURL.resourceValues(forKeys: Set(keys)),
+           values.volumeIsReadOnly == false {
+            return // 쓰기 가능한 볼륨(개발 폴더 등)이라면 이동 제안 안 함
+        }
 
         // 3. 사용자에게 이동 권유
         let alert = NSAlert()
