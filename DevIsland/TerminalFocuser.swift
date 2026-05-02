@@ -41,18 +41,7 @@ class TerminalFocuser {
         let result = NSAppleScript(source: script)?.executeAndReturnError(&error)
         let resultStr = result?.stringValue ?? "nil"
         let passed = resultStr == "true" || resultStr.hasPrefix("true|")
-        let logLine = "[DevIsland] isSessionFrontmost: app=\(match.name) tty=\(tty ?? "nil") windowId=\(windowId ?? "nil") → \(resultStr) error=\(String(describing: error))\n"
-        print(logLine)
-        if let data = logLine.data(using: .utf8) {
-            let url = URL(fileURLWithPath: "/tmp/DevIsland.bypass.log")
-            if let fh = try? FileHandle(forWritingTo: url) {
-                fh.seekToEndOfFile()
-                fh.write(data)
-                fh.closeFile()
-            } else {
-                try? data.write(to: url)
-            }
-        }
+        print("[DevIsland] isSessionFrontmost: app=\(match.name) tty=\(tty ?? "nil") windowId=\(windowId ?? "nil") → \(resultStr) error=\(String(describing: error))")
         return passed
     }
 
@@ -94,7 +83,7 @@ class TerminalFocuser {
             end tell
             """
         default:
-            return "return \"true\""
+            return "return \"false\""
         }
     }
 
