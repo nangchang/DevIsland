@@ -252,7 +252,7 @@ class NotchWindowController: NSWindowController {
 
         switch state.notchDisplayTarget {
         case .main:
-            return NSScreen.main ?? NSScreen.screens.first!
+            return NSScreen.screens.first!
         case .mouse:
             return Self.mouseScreen() ?? NSScreen.main ?? NSScreen.screens.first!
         case .focused:
@@ -274,7 +274,7 @@ class NotchWindowController: NSWindowController {
             return mouseScreen
         }
 
-        return NSScreen.main ?? NSScreen.screens.first!
+        return NSScreen.screens.first!
     }
 
     private static func mouseScreen() -> NSScreen? {
