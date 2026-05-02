@@ -22,6 +22,16 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$RESOURCES_DIR/"
 cp "$ROOT_DIR/scripts/install-bridge.sh" "$RESOURCES_DIR/"
 
+# Compile assets
+echo "Compiling assets..."
+xcrun actool "$ROOT_DIR/DevIsland/Assets.xcassets" \
+  --compile "$RESOURCES_DIR" \
+  --platform macosx \
+  --minimum-deployment-target 14.0 \
+  --app-icon AppIcon \
+  --output-partial-info-plist "$DIST_DIR/Assets-Partial.plist"
+
+# Compile Swift sources
 swiftc \
   DevIsland/*.swift \
   -target "$(uname -m)-apple-macos14.0" \
@@ -48,6 +58,10 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
   <string>1.0</string>
   <key>CFBundleVersion</key>
   <string>1</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+  <key>CFBundleIconName</key>
+  <string>AppIcon</string>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
   <key>LSUIElement</key>

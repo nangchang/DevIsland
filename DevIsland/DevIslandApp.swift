@@ -10,7 +10,7 @@ struct DevIslandApp: App {
             MenuBarMenu()
         } label: {
             HStack(spacing: 3) {
-                Image(systemName: state.pendingCount > 0 ? "bell.badge.fill" : "bell.fill")
+                Image("StatusBarIcon")
                 if state.pendingCount > 0 {
                     Text("\(state.pendingCount)")
                         .font(.system(size: 10, weight: .bold))

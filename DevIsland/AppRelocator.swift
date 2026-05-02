@@ -24,7 +24,8 @@ enum AppRelocator {
         }
 
         // 2. DMG 내부에서 실행 중인지 확인 (보통 /Volumes 아래에 마운트됨)
-        guard bundleURL.path.hasPrefix("/Volumes/") else { return }
+        // 단, /Volumes/data/ 처럼 개발용 볼륨에서 실행 중인 경우는 제외
+        guard bundleURL.path.hasPrefix("/Volumes/"), !bundleURL.path.hasPrefix("/Volumes/data/") else { return }
 
         // 3. 사용자에게 이동 권유
         let alert = NSAlert()
