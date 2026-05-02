@@ -15,8 +15,8 @@ XCODE_PATH="$(xcode-select -p 2>/dev/null || true)"
 if [[ "$XCODE_PATH" != */Xcode*.app/* ]]; then
   XCODE_APP="$(mdfind 'kMDItemCFBundleIdentifier == "com.apple.dt.Xcode"' 2>/dev/null | head -1)"
   if [[ -z "$XCODE_APP" ]]; then
-    echo "오류: Xcode.app이 설치되어 있지 않습니다."
-    echo "App Store에서 Xcode를 설치한 후 다시 실행하세요."
+    echo "오류: Xcode.app이 설치되어 있지 않습니다." >&2
+    echo "App Store에서 Xcode를 설치한 후 다시 실행하세요." >&2
     exit 1
   fi
   echo "Xcode 개발자 디렉토리로 전환합니다: $XCODE_APP"
@@ -24,12 +24,12 @@ if [[ "$XCODE_PATH" != */Xcode*.app/* ]]; then
 fi
 
 if ! command -v xcodegen &>/dev/null; then
-  echo "XcodeGen이 없습니다. Homebrew로 설치합니다..."
-  brew install xcodegen
+  echo "오류: xcodegen이 설치되어 있지 않습니다. 'brew install xcodegen'로 설치해주세요." >&2
+  exit 1
 fi
 
 if ! command -v create-dmg &>/dev/null; then
-  echo "오류: create-dmg가 설치되어 있지 않습니다. 'brew install create-dmg'로 설치해주세요."
+  echo "오류: create-dmg가 설치되어 있지 않습니다. 'brew install create-dmg'로 설치해주세요." >&2
   exit 1
 fi
 
