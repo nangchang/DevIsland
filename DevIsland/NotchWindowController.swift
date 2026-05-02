@@ -565,37 +565,6 @@ struct SessionRowView: View {
         .onReceive(timer) { _ in updateTimeAgo() }
     }
 
-    private var sessionIcon: some View {
-        ZStack {
-            Circle()
-                .fill(tool.color.opacity(0.15))
-                .frame(width: 32, height: 32)
-            
-            Image(systemName: tool.icon)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(tool.color)
-            
-            if session.isPending {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 10, height: 10)
-                    .overlay(Circle().stroke(Color.black, lineWidth: 2))
-                    .offset(x: 12, y: 12)
-            } else if case .timeoutBypassed = session.status {
-                ZStack {
-                    Circle()
-                        .fill(Color(red: 0.2, green: 0.8, blue: 0.9))
-                        .frame(width: 10, height: 10)
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: 5, weight: .black))
-                        .foregroundColor(.black.opacity(0.65))
-                }
-                .overlay(Circle().stroke(Color.black, lineWidth: 2))
-                .offset(x: 12, y: 12)
-            }
-        }
-    }
-    
     private func updateTimeAgo() {
         let diff = Int(Date().timeIntervalSince(session.lastActiveAt))
         if diff < 5 { timeAgo = "Just now" }
