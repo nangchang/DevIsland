@@ -199,13 +199,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var notchWindowController: NotchWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 응용 프로그램 폴더 이동 및 설치 파일 정리 체크
-        AppRelocator.checkAndPrompt()
-        
         let myPID = ProcessInfo.processInfo.processIdentifier
         let others = NSWorkspace.shared.runningApplications
             .filter { $0.localizedName == "DevIsland" && $0.processIdentifier != myPID }
         others.forEach { $0.terminate() }
+
+        // 다른 인스턴스 종료 요청 후 이동 체크 — 복사 대상 번들이 사용 중일 경우를 방지
+        AppRelocator.checkAndPrompt()
 
         let delay: TimeInterval = others.isEmpty ? 0 : 0.3
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
