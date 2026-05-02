@@ -66,10 +66,6 @@ cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$RESOURCES_DIR/"
 cp "$ROOT_DIR/scripts/install-bridge.sh" "$RESOURCES_DIR/"
 cp "$ROOT_DIR/scripts/install-launch-agent.sh" "$RESOURCES_DIR/"
 
-echo "DMG 배경 이미지 생성 중..."
-mkdir -p "$ROOT_DIR/Resources/DMG"
-swift "$ROOT_DIR/scripts/generate_dmg_background.swift" "$ROOT_DIR/Resources/DMG/dmg_background.png"
-
 echo "DMG 생성 중 (create-dmg 사용)..."
 rm -f "$DMG_PATH"
 
