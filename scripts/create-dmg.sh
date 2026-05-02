@@ -29,8 +29,8 @@ if ! command -v xcodegen &>/dev/null; then
 fi
 
 if ! command -v create-dmg &>/dev/null; then
-  echo "create-dmg가 없습니다. Homebrew로 설치합니다..."
-  brew install create-dmg
+  echo "오류: create-dmg가 설치되어 있지 않습니다. 'brew install create-dmg'로 설치해주세요."
+  exit 1
 fi
 
 echo "Xcode 프로젝트 생성 중..."

@@ -19,6 +19,13 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
 
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew/downloads
+          key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/release.yml') }}
+          restore-keys: ${{ runner.os }}-brew-
+
       - name: Build and Create DMG
         run: ./scripts/create-dmg.sh
 
