@@ -38,10 +38,10 @@ swiftc \
   -o "$EXECUTABLE"
 
 # Extract metadata from project.yml (robustly handle missing keys or missing quotes)
-VERSION=$(grep "CFBundleShortVersionString:" "$ROOT_DIR/project.yml" | sed -E 's/.*: ?"?(.*)"?/\1/' | xargs 2>/dev/null || echo "")
-BUILD=$(grep "CFBundleVersion:" "$ROOT_DIR/project.yml" | sed -E 's/.*: ?"?(.*)"?/\1/' | xargs 2>/dev/null || echo "")
-BUNDLE_ID_PREFIX=$(grep "bundleIdPrefix:" "$ROOT_DIR/project.yml" | sed -E 's/.*: ?"?(.*)"?/\1/' | xargs 2>/dev/null || echo "com.hoin")
-BUNDLE_ID="${BUNDLE_ID_PREFIX}.${APP_NAME}"
+VERSION=$(grep "CFBundleShortVersionString:" "$ROOT_DIR/project.yml" | head -n 1 | sed -E 's/.*: +"([^"]+)".*/\1/' | sed -E 's/.*: +([^ ]+).*/\1/' | head -n 1)
+BUILD=$(grep "CFBundleVersion:" "$ROOT_DIR/project.yml" | head -n 1 | sed -E 's/.*: +"([^"]+)".*/\1/' | sed -E 's/.*: +([^ ]+).*/\1/' | head -n 1)
+BUNDLE_ID_PREFIX=$(grep "bundleIdPrefix:" "$ROOT_DIR/project.yml" | head -n 1 | sed -E 's/.*: +"?([^"]+)"?/\1/' | head -n 1)
+BUNDLE_ID="${BUNDLE_ID_PREFIX:-com.hoin}.${APP_NAME}"
 
 if [[ -z "$VERSION" ]]; then VERSION="1.0.0"; fi
 if [[ -z "$BUILD" ]]; then BUILD="1"; fi

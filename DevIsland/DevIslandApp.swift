@@ -66,6 +66,29 @@ struct MenuBarMenu: View {
 
         Divider()
 
+        Picker("노치 표시 위치", selection: $state.notchDisplayTarget) {
+            ForEach(NotchDisplayTarget.allCases) { target in
+                Text(target.label).tag(target)
+            }
+        }
+
+        if state.notchDisplayTarget == .specific {
+            Picker("모니터 선택", selection: $state.selectedDisplayId) {
+                ForEach(NSScreen.screens, id: \.displayId) { screen in
+                    Text(Self.displayName(for: screen)).tag(screen.displayId)
+                }
+            }
+        }
+
+        Toggle("전체 화면 앱 위에 표시", isOn: $state.showInFullScreenApps)
+        Picker("요청 표시 위치", selection: $state.requestDisplayTarget) {
+            ForEach(RequestDisplayTarget.allCases) { target in
+                Text(target.label).tag(target)
+            }
+        }
+
+        Divider()
+
         Button("브리지 설치...") {
             BridgeInstaller.install()
         }
@@ -87,6 +110,12 @@ struct MenuBarMenu: View {
         Button("Quit DevIsland") {
             NSApplication.shared.terminate(nil)
         }
+    }
+
+    private static func displayName(for screen: NSScreen) -> String {
+        let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 1
+        let role = screen == NSScreen.main ? "주 모니터" : "모니터 \(index)"
+        return "\(role) · \(Int(screen.frame.width))×\(Int(screen.frame.height))"
     }
 }
 
@@ -202,7 +231,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let myPID = ProcessInfo.processInfo.processIdentifier
         let others = NSWorkspace.shared.runningApplications
             .filter { $0.localizedName == "DevIsland" && $0.processIdentifier != myPID }
-        others.forEach { $0.terminate() }
+        if !others.isEmpty {
+            print("[DevIsland] Found \(others.count) other instances. Terminating them.")
+            others.forEach { 
+                print("[DevIsland] Terminating other instance: pid=\($0.processIdentifier)")
+                $0.terminate() 
+            }
+        }
 
         // 다른 인스턴스 종료 요청 후 이동 체크 — 복사 대상 번들이 사용 중일 경우를 방지
         AppRelocator.checkAndPrompt()
