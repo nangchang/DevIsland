@@ -151,6 +151,7 @@ class AppState: ObservableObject {
     private var currentResponseHandler: ((String) -> Void)?
     var hasResponseHandler: Bool { currentResponseHandler != nil }
     private var timeoutTimer: Timer?
+    private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let timeoutDuration: Double = 120
     private let lifecycleSessionTimeout: Double = 15 * 60
@@ -395,9 +396,11 @@ class AppState: ObservableObject {
                         self.isExpandingFromRequest = true
                         
                         // 10초 후 자동 축소 (사용자 조작 없을 시)
-                        Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
+                        self.notificationTimer?.invalidate()
+                        self.notificationTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
                             if self?.currentResponseHandler == nil && self?.isNotchExpanded == true {
                                 self?.isNotchExpanded = false
+                                self?.isExpandingFromRequest = false
                             }
                         }
                     }
@@ -882,6 +885,7 @@ class AppState: ObservableObject {
         } else {
             isNotchExpanded = false
             isExpandingFromRequest = false
+            notificationTimer?.invalidate()
         }
     }
 
