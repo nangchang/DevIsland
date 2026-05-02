@@ -1,9 +1,10 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ["Version Bump"]
+    types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,9 +12,12 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -48,6 +52,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: DevIsland.dmg
+          tag_name: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+          name: ${{ github.event.workflow_run.head_branch || github.ref_name }}
           draft: false
           prerelease: false
           generate_release_notes: true

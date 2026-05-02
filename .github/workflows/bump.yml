@@ -1,0 +1,50 @@
+name: Version Bump
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  bump:
+    name: Bump version files to match tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Bump project.yml
+        id: bump
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Update CFBundleShortVersionString
+          sed -i "s/CFBundleShortVersionString: .*/CFBundleShortVersionString: $VERSION/" project.yml
+          # Update CFBundleVersion to github.run_number
+          sed -i "s/CFBundleVersion: .*/CFBundleVersion: ${{ github.run_number }}/" project.yml
+          
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Versions already up to date — no commit needed."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat
+          fi
+
+      - name: Commit, push, and retag at bump commit
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add project.yml
+          git commit -m "chore: bump version to ${GITHUB_REF_NAME#v} (build ${{ github.run_number }})"
+          git push origin HEAD:${{ github.event.repository.default_branch }}
+          
+          # Move the tag to the new commit
+          git tag -f "$GITHUB_REF_NAME"
+          git push origin -f "refs/tags/$GITHUB_REF_NAME"
