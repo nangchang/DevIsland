@@ -8,11 +8,14 @@ targets:
     type: application
     platform: macOS
     deploymentTarget: "14.0"
-    sources: [DevIsland]
-    resources:
-      - scripts/devisland-bridge.sh
-      - scripts/install-bridge.sh
-      - scripts/install-launch-agent.sh
+    sources:
+      - path: DevIsland
+      - path: scripts/devisland-bridge.sh
+        group: Resources
+      - path: scripts/install-bridge.sh
+        group: Resources
+      - path: scripts/install-launch-agent.sh
+        group: Resources
     info:
       path: DevIsland/Info.plist
       properties:
