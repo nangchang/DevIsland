@@ -1,11 +1,11 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ["Version Bump"]
-    types: [completed]
   workflow_dispatch:
     inputs:
+      tag_name:
+        description: 'Tag name to release (e.g. v1.0.0)'
+        required: true
       dry-run:
         description: 'Dry run (build DMG only, do not create release)'
         required: false
@@ -18,12 +18,11 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          ref: ${{ inputs.tag_name }}
 
       - name: Cache Homebrew downloads
         uses: actions/cache@v4
@@ -56,8 +55,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: DevIsland.dmg
-          tag_name: ${{ github.event.workflow_run.head_branch || github.ref_name }}
-          name: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+          tag_name: ${{ inputs.tag_name }}
+          name: ${{ inputs.tag_name }}
           draft: false
           prerelease: false
           generate_release_notes: true

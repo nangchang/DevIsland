@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
 
     steps:
       - name: Checkout
@@ -49,3 +50,11 @@ jobs:
           # Move the tag to the new commit
           git tag -f "$GITHUB_REF_NAME"
           git push origin -f "refs/tags/$GITHUB_REF_NAME"
+
+      - name: Trigger Release Workflow
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          echo "Triggering Release workflow for tag $GITHUB_REF_NAME..."
+          gh workflow run release.yml --ref "$GITHUB_REF_NAME" -f tag_name="$GITHUB_REF_NAME"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
