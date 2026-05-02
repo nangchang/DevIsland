@@ -61,6 +61,9 @@ rm -rf "$EXPORT_DIR"
 mkdir -p "$EXPORT_DIR"
 cp -R "$ARCHIVE_PATH/Products/Applications/$APP_NAME.app" "$EXPORT_DIR/"
 
+echo "Cleaning extended attributes..."
+xattr -cr "$EXPORT_DIR/$APP_NAME.app"
+
 # resources/scripts는 project.yml에 이미 resource로 등록되어 있어 xcodebuild가 처리함
 # 중복 복사 제거
 
