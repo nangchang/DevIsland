@@ -19,34 +19,8 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate Xcode Project
-        run: xcodegen generate
-
-      - name: Build App
-        run: |
-          xcodebuild archive \
-            -project DevIsland.xcodeproj \
-            -scheme DevIsland \
-            -configuration Release \
-            -archivePath build/DevIsland.xcarchive \
-            -destination "platform=macOS" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            SKIP_INSTALL=NO
-
-      - name: Export App
-        run: |
-          mkdir -p build/Export
-          cp -R build/DevIsland.xcarchive/Products/Applications/DevIsland.app build/Export/
-
-      - name: Create DMG
-        run: |
-          ln -s /Applications build/Export/Applications
-          hdiutil create -volname "DevIsland" -srcfolder build/Export -ov -format UDZO DevIsland.dmg
+      - name: Build and Create DMG
+        run: ./scripts/create-dmg.sh
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
