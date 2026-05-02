@@ -28,3 +28,5 @@ targets:
         NSHighResolutionCapable: true
         NSAppleEventsUsageDescription: "Approve/Deny 후 터미널 앱을 포커스하기 위해 사용합니다."
         NSAccessibilityUsageDescription: "글로벌 단축키(⌘⇧Y/N) 사용을 위해 접근성 권한이 필요합니다."
+    settings:
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
