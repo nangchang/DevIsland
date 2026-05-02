@@ -282,6 +282,28 @@ class AppState: ObservableObject {
         )
 
         DispatchQueue.main.async {
+            if TerminalFocuser.isSessionFrontmost(appName: terminalApp, tty: terminalTTY, windowId: terminalWindowId, tabIndex: terminalTabIndex) {
+                print("[DevIsland] early bypass: session frontmost app=\(terminalApp) tty=\(terminalTTY)")
+                request.responseHandler("{\"response\": \"pass\"}")
+                if !sessionId.isEmpty {
+                    self.updateActiveSession(
+                        sessionId: sessionId,
+                        terminalTitle: terminalTitle,
+                        agentKind: agentKind,
+                        terminalApp: terminalApp,
+                        terminalTTY: terminalTTY,
+                        terminalWindowId: terminalWindowId,
+                        terminalTabIndex: terminalTabIndex,
+                        toolName: toolName,
+                        eventName: event,
+                        message: displayMsg,
+                        isPending: false,
+                        status: SessionStatus.timeoutBypassed(Date())
+                    )
+                }
+                return
+            }
+
             self.pendingQueue.append(request)
             
             let newItem = PendingItem(
@@ -562,6 +584,14 @@ class AppState: ObservableObject {
             return
         }
 
+        let session = activeSessions.first { $0.id == next.sessionId }
+        if isTerminalFrontmost(for: session) {
+            currentResponseHandler = next.responseHandler
+            currentSessionId = next.sessionId
+            sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
+            return
+        }
+
         print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
         currentResponseHandler = next.responseHandler
         currentEventName  = next.eventName
@@ -573,6 +603,15 @@ class AppState: ObservableObject {
             self.isNotchExpanded = true
         }
         startTimeout()
+    }
+
+    private func isTerminalFrontmost(for session: ActiveSession?) -> Bool {
+        TerminalFocuser.isSessionFrontmost(
+            appName: session?.terminalApp,
+            tty: session?.terminalTTY,
+            windowId: session?.terminalWindowId,
+            tabIndex: session?.terminalTabIndex
+        )
     }
 
     private func discardInvalidPendingRequests() {
@@ -604,16 +643,16 @@ class AppState: ObservableObject {
             if elapsed >= self.timeoutDuration {
                 timer.invalidate()
                 if self.currentResponseHandler != nil {
-                    self.sendDecision(approved: true, reason: "Timeout", status: .timeoutBypassed(Date()))
+                    self.sendDecision(approved: false, reason: "Timeout", status: .timeoutBypassed(Date()), passToTerminal: true)
                 }
             }
         }
     }
 
-    private func sendDecision(approved: Bool, reason: String? = nil, status: SessionStatus? = nil) {
-        let payload = approved
-            ? "{\"response\": \"approved\"}"
-            : "{\"response\": \"denied\"}"
+    private func sendDecision(approved: Bool, reason: String? = nil, status: SessionStatus? = nil, passToTerminal: Bool = false) {
+        let payload = passToTerminal
+            ? "{\"response\": \"pass\"}"
+            : approved ? "{\"response\": \"approved\"}" : "{\"response\": \"denied\"}"
         print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
         currentResponseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
@@ -655,8 +694,7 @@ class AppState: ObservableObject {
             self.showNextRequest()
             if status?.isTimeoutBypassed == true, self.pendingQueue.isEmpty, let completedSessionId {
                 self.selectedSessionId = completedSessionId
-                self.isNotchExpanded = true
-                self.syncDisplayToSelectedSession()
+                self.isNotchExpanded = false
             }
         }
     }
