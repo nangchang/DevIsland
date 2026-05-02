@@ -688,6 +688,7 @@ class AppState: ObservableObject {
                     } else {
                         self.activeSessions[index].isPending = false
                         self.activeSessions[index].status = status ?? .idle
+                        self.activeSessions[index].lastActiveAt = Date()
                     }
                 }
             }
