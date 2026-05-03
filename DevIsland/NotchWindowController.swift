@@ -644,7 +644,6 @@ private struct PixelCell {
 
 struct CLIBuddyView: View {
     let isActive: Bool
-    let compact: Bool
     let kind: BuddyKind
 
     @State private var isFlipped = false
@@ -1104,7 +1103,7 @@ struct AgentRequestBadge: View {
                         .stroke(kind.accentColor.opacity(0.28), lineWidth: 1)
                 )
 
-            CLIBuddyView(isActive: isActive, compact: size < 40, kind: kind)
+            CLIBuddyView(isActive: isActive, kind: kind)
                 .frame(width: mascotSize, height: mascotSize)
                 .offset(x: -size * 0.04, y: size * 0.03)
 
@@ -1375,7 +1374,6 @@ struct NotchView: View {
             HStack {
                 CLIBuddyView(
                     isActive: buddyPulse,
-                    compact: true,
                     kind: leftMascot
                 )
                 .frame(width: 24, height: 24)
@@ -1385,7 +1383,6 @@ struct NotchView: View {
 
                 CLIBuddyView(
                     isActive: buddyPulse, 
-                    compact: true, 
                     kind: rightMascot
                 )
                 .frame(width: 24, height: 24)
