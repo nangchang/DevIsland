@@ -589,13 +589,13 @@ enum BuddyKind: CaseIterable {
     case codex
     case claudeCode
 
-    init(from terminalTitle: String) {
-        let lower = terminalTitle.lowercased()
+    init(from text: String) {
+        let lower = text.lowercased()
         if lower.contains("claude") {
             self = .claudeCode
         } else if lower.contains("gemini") {
             self = .gemini
-        } else if lower.contains("codex") || lower.contains("openai") {
+        } else if lower.contains("codex") || lower.contains("openai") || lower.contains("gpt") {
             self = .codex
         } else {
             self = .claudeCode
@@ -662,12 +662,15 @@ struct CLIBuddyView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
-        .accessibilityLabel(kind == .codex ? "Codex Buddy" : "Claude Code Buddy")
+        .accessibilityLabel("\(kind.accessibilityName) Buddy")
         .onReceive(timer) { _ in
             if isActive {
                 isFlipped.toggle()
+                // Cycle through animation frames 0, 1, 2
+                frameIndex = (frameIndex + 1) % 3
             } else {
                 isFlipped = false
+                frameIndex = 1 // Idle frame
             }
         }
     }
@@ -856,9 +859,7 @@ struct CLIBuddyView: View {
         let rim = (kind == .gemini || kind == .codex)
             ? Color(red: 0.24, green: 0.27, blue: 0.34)
             : Color(red: 0.32, green: 0.24, blue: 0.20)
-        let title = (kind == .gemini || kind == .codex)
-            ? rim
-            : rim
+        let title = rim
         let text = kind == .codex
             ? Color.white.opacity(0.45)
             : Color.white.opacity(0.42)

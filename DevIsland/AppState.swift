@@ -631,17 +631,9 @@ class AppState: ObservableObject {
             "app", "application", "cli", "model", "model_name"
         ]
         let candidates = candidateKeys.compactMap { json[$0] as? String } + [terminalTitle]
-        let joined = candidates.joined(separator: " ").lowercased()
+        let joined = candidates.joined(separator: " ")
 
-        if joined.contains("claude") {
-            return .claudeCode
-        } else if joined.contains("gemini") {
-            return .gemini
-        } else if joined.contains("codex") || joined.contains("openai") {
-            return .codex
-        }
-        
-        return BuddyKind(from: terminalTitle)
+        return BuddyKind(from: joined)
     }
 
     private func updateActiveSession(
