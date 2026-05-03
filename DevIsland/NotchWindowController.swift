@@ -595,8 +595,10 @@ enum BuddyKind: CaseIterable {
             self = .claudeCode
         } else if lower.contains("gemini") {
             self = .gemini
-        } else {
+        } else if lower.contains("codex") || lower.contains("openai") {
             self = .codex
+        } else {
+            self = .claudeCode
         }
     }
 
@@ -680,16 +682,16 @@ struct CLIBuddyView: View {
 
     private func mascotSprite(size: CGFloat) -> some View {
         ZStack {
-            if kind == .claudeCode {
+            switch kind {
+            case .claudeCode:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .claudeCode))
                 pixelGrid(size: size, cells: claudeBodyCells(frame: frameIndex))
                     .scaleEffect(x: isFlipped ? 1 : -1)
-            } else if kind == .gemini {
+            case .gemini:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .gemini))
                 pixelGrid(size: size, cells: geminiBodyCells(frame: frameIndex))
                     .scaleEffect(x: isFlipped ? 1 : -1)
-            } else {
-                // Codex
+            case .codex:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .codex))
                 pixelGrid(size: size, cells: codexBodyCells(frame: frameIndex))
                     .scaleEffect(x: isFlipped ? 1 : -1)

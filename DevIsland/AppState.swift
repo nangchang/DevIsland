@@ -251,7 +251,7 @@ class AppState: ObservableObject {
         var toolName  = ""
         var sessionId = ""
         var terminalTitle = "Terminal"
-        var agentKind = BuddyKind.gemini
+        var agentKind = BuddyKind.claudeCode
         var terminalApp = ""
         var terminalTTY = ""
         var terminalWindowId = ""
@@ -627,27 +627,20 @@ class AppState: ObservableObject {
 
     private static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
         let candidateKeys = [
-            "agent",
-            "agent_name",
-            "agentName",
-            "source",
-            "client",
-            "app",
-            "application",
-            "cli"
+            "agent", "agent_name", "agentName", "source", "client",
+            "app", "application", "cli", "model", "model_name"
         ]
         let candidates = candidateKeys.compactMap { json[$0] as? String } + [terminalTitle]
         let joined = candidates.joined(separator: " ").lowercased()
 
         if joined.contains("claude") {
             return .claudeCode
-        }
-        if joined.contains("gemini") {
+        } else if joined.contains("gemini") {
             return .gemini
-        }
-        if joined.contains("codex") || joined.contains("openai") {
+        } else if joined.contains("codex") || joined.contains("openai") {
             return .codex
         }
+        
         return BuddyKind(from: terminalTitle)
     }
 
