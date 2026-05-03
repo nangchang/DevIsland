@@ -643,13 +643,12 @@ private struct PixelCell {
 }
 
 struct CLIBuddyView: View {
-    let accent: Color
     let isActive: Bool
     let compact: Bool
     let kind: BuddyKind
 
     @State private var isFlipped = false
-    private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    private static let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { geo in
@@ -658,7 +657,7 @@ struct CLIBuddyView: View {
 
             ZStack {
                 Capsule()
-                    .fill(accent.opacity(0.22))
+                    .fill(kind.accentColor.opacity(0.22))
                     .frame(width: size * 0.64, height: size * 0.12)
                     .blur(radius: size * 0.02)
                     .offset(y: size * 0.38)
@@ -669,7 +668,7 @@ struct CLIBuddyView: View {
             .frame(width: geo.size.width, height: geo.size.height)
         }
         .accessibilityLabel("\(kind.accessibilityName) Buddy")
-        .onReceive(timer) { _ in
+        .onReceive(Self.timer) { _ in
             if isActive {
                 isFlipped.toggle()
             } else {
@@ -1015,7 +1014,7 @@ PixelCell(64, 80, 8, 4, c0),
         let rim = (kind == .gemini || kind == .codex)
             ? Color(red: 0.24, green: 0.27, blue: 0.34)
             : Color(red: 0.32, green: 0.24, blue: 0.20)
-        let text = kind == .codex
+        let text = (kind == .gemini || kind == .codex)
             ? Color.white.opacity(0.45)
             : Color.white.opacity(0.42)
 
@@ -1105,7 +1104,7 @@ struct AgentRequestBadge: View {
                         .stroke(kind.accentColor.opacity(0.28), lineWidth: 1)
                 )
 
-            CLIBuddyView(accent: kind.accentColor, isActive: isActive, compact: size < 40, kind: kind)
+            CLIBuddyView(isActive: isActive, compact: size < 40, kind: kind)
                 .frame(width: mascotSize, height: mascotSize)
                 .offset(x: -size * 0.04, y: size * 0.03)
 
@@ -1375,7 +1374,6 @@ struct NotchView: View {
 
             HStack {
                 CLIBuddyView(
-                    accent: leftMascot.accentColor,
                     isActive: buddyPulse,
                     compact: true,
                     kind: leftMascot
@@ -1386,7 +1384,6 @@ struct NotchView: View {
                 Spacer(minLength: 0)
 
                 CLIBuddyView(
-                    accent: rightMascot.accentColor, 
                     isActive: buddyPulse, 
                     compact: true, 
                     kind: rightMascot
