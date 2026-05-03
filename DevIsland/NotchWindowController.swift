@@ -636,6 +636,10 @@ struct CLIBuddyView: View {
     let compact: Bool
     let kind: BuddyKind
 
+    @State private var frameIndex = 2
+    @State private var isFlipped = false
+    private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+
     var body: some View {
         GeometryReader { geo in
             let size = min(geo.size.width, geo.size.height)
@@ -654,6 +658,13 @@ struct CLIBuddyView: View {
             .frame(width: geo.size.width, height: geo.size.height)
         }
         .accessibilityLabel(kind == .codex ? "Codex Buddy" : "Claude Code Buddy")
+        .onReceive(timer) { _ in
+            if isActive {
+                isFlipped.toggle()
+            } else {
+                isFlipped = false
+            }
+        }
     }
 
     private func pixelBody(size: CGFloat) -> some View {
@@ -665,7 +676,15 @@ struct CLIBuddyView: View {
     }
 
     private func mascotSprite(size: CGFloat) -> some View {
-        pixelGrid(size: size, cells: kind == .codex ? codexCells : claudeCells)
+        ZStack {
+            if kind == .claudeCode {
+                pixelGrid(size: size, cells: terminalBaseCells(kind: .claudeCode))
+                pixelGrid(size: size, cells: claudeBodyCells(frame: frameIndex))
+                    .scaleEffect(x: isFlipped ? 1 : -1)
+            } else {
+                pixelGrid(size: size, cells: codexCells)
+            }
+        }
     }
 
     private var codexCells: [PixelCell] {
@@ -688,32 +707,59 @@ struct CLIBuddyView: View {
         ]
     }
 
-    private var claudeCells: [PixelCell] {
+    private func claudeBodyCells(frame: Int) -> [PixelCell] {
         let fur = Color(red: 0.82, green: 0.42, blue: 0.30)
         let dark = Color(red: 0.47, green: 0.22, blue: 0.16)
         let ink = Color(red: 0.09, green: 0.04, blue: 0.03)
 
-        return terminalBaseCells(kind: .claudeCode) + [
-            PixelCell(3, 1, 2, 2, fur),
-            PixelCell(11, 1, 2, 2, fur),
-            PixelCell(3, 3, 3, 1, fur),
-            PixelCell(10, 3, 3, 1, fur),
-            PixelCell(4, 4, 8, 1, fur),
-            PixelCell(2, 5, 12, 1, fur),
-            PixelCell(1, 6, 14, 4, fur),
-            PixelCell(2, 10, 12, 2, fur),
-            PixelCell(4, 12, 8, 1, dark),
-            PixelCell(0, 8, 3, 2, fur),
-            PixelCell(13, 8, 3, 2, fur),
-            PixelCell(0, 10, 2, 1, fur),
-            PixelCell(14, 10, 2, 1, fur),
-            PixelCell(5, 7, 1, 1, ink),
-            PixelCell(10, 7, 1, 1, ink),
-            PixelCell(4, 11, 2, 1, dark),
-            PixelCell(10, 11, 2, 1, dark),
-            PixelCell(3, 13, 3, 1, dark),
-            PixelCell(10, 13, 3, 1, dark)
+        var cells: [PixelCell] = []
+
+        // Body (Common) - Shifted Y up by 2 to make room for base
+        cells += [
+            // Ears (Triangular)
+            PixelCell(4, 0, 1, 3, fur), PixelCell(5, 1, 1, 2, fur), PixelCell(6, 2, 1, 1, fur), // L (Moved outward)
+            PixelCell(12, 0, 1, 3, fur), PixelCell(11, 1, 1, 2, fur), PixelCell(10, 2, 1, 1, fur), // R (Moved outward)
+            PixelCell(3, 3, 10, 1, fur), // Head bridge
+            
+            // Face/Body (Wider and Shorter)
+            PixelCell(3, 4, 10, 6, fur),
+            
+            // Eyes (Moved right for perspective and enlarged)
+            PixelCell(6, 4, 1, 2, ink), PixelCell(11, 4, 1, 2, ink),
+            
+            // Whiskers (Shifted up slightly)
+            PixelCell(2, 5, 1, 1, fur),                               // L
+            PixelCell(13, 5, 2, 1, fur), PixelCell(13, 7, 1, 1, fur), // R
+            
+            // Legs (Shorter, shifted up)
+            PixelCell(3, 10, 1, 2, fur), PixelCell(6, 10, 1, 2, fur),
+            PixelCell(9, 10, 1, 2, fur), PixelCell(12, 10, 1, 2, fur)
         ]
+
+        // Animated Tail
+        switch frame {
+        case 0: // Right
+            cells += [
+                PixelCell(13, 7, 2, 1, fur), 
+                PixelCell(15, 6, 1, 1, fur),
+                PixelCell(15, 4, 1, 2, fur),
+                PixelCell(14, 3, 1, 1, fur),
+                PixelCell(13, 3, 1, 1, fur)
+            ]
+        case 2: // Left (Side with short whiskers)
+            cells += [
+                PixelCell(1, 7, 2, 1, fur),
+                PixelCell(0, 6, 1, 1, fur),
+                PixelCell(0, 4, 1, 2, fur),
+                PixelCell(1, 3, 1, 1, fur)
+            ]
+        default: // Up
+            cells += [
+                PixelCell(7, 0, 1, 4, fur), PixelCell(7, 0, 1, 1, dark)
+            ]
+        }
+
+        return cells
     }
 
     private func terminalBaseCells(kind: BuddyKind) -> [PixelCell] {
@@ -731,13 +777,13 @@ struct CLIBuddyView: View {
             : Color.white.opacity(0.42)
 
         return [
-            PixelCell(1, 13, 14, 1, rim),
-            PixelCell(1, 14, 14, 2, shell),
-            PixelCell(1, 14, 14, 1, title),
-            PixelCell(3, 14, 1, 1, Color.red.opacity(0.82)),
-            PixelCell(5, 14, 1, 1, Color.yellow.opacity(0.82)),
-            PixelCell(7, 14, 1, 1, Color.green.opacity(0.82)),
-            PixelCell(9, 15, 4, 1, text.opacity(0.36))
+            PixelCell(1, 12, 14, 1, rim),
+            PixelCell(1, 13, 14, 2, shell),
+            PixelCell(1, 13, 14, 1, title),
+            PixelCell(3, 13, 1, 1, Color.red.opacity(0.82)),
+            PixelCell(5, 13, 1, 1, Color.yellow.opacity(0.82)),
+            PixelCell(7, 13, 1, 1, Color.green.opacity(0.82)),
+            PixelCell(9, 14, 4, 1, text.opacity(0.36))
         ]
     }
 
@@ -803,7 +849,7 @@ struct AgentRequestBadge: View {
     let isActive: Bool
     var size: CGFloat = 48
 
-    private var mascotSize: CGFloat { size * 0.72 }
+    private var mascotSize: CGFloat { size * 0.88 }
     private var requestBadgeSize: CGFloat { size * 0.38 }
 
     var body: some View {
@@ -1080,14 +1126,14 @@ struct NotchView: View {
                     compact: true,
                     kind: .claudeCode
                 )
-                .frame(width: 18, height: 18)
-                .offset(x: -4, y: 4)
+                .frame(width: 24, height: 24)
+                .offset(x: -6, y: 4)
 
                 Spacer(minLength: 0)
 
                 CLIBuddyView(accent: BuddyKind.codex.accentColor, isActive: buddyPulse, compact: true, kind: .codex)
-                    .frame(width: 18, height: 18)
-                    .offset(x: 4, y: 4)
+                    .frame(width: 24, height: 24)
+                    .offset(x: 6, y: 4)
             }
         }
         .padding(.horizontal, 12)
