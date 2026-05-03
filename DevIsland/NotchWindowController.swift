@@ -641,7 +641,6 @@ struct CLIBuddyView: View {
     let compact: Bool
     let kind: BuddyKind
 
-    @State private var frameIndex = 2
     @State private var isFlipped = false
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
@@ -666,11 +665,8 @@ struct CLIBuddyView: View {
         .onReceive(timer) { _ in
             if isActive {
                 isFlipped.toggle()
-                // Cycle through animation frames 0, 1, 2
-                frameIndex = (frameIndex + 1) % 3
             } else {
                 isFlipped = false
-                frameIndex = 1 // Idle frame
             }
         }
     }
@@ -688,21 +684,21 @@ struct CLIBuddyView: View {
             switch kind {
             case .claudeCode:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .claudeCode))
-                pixelGrid(size: size, cells: claudeBodyCells(frame: frameIndex))
+                pixelGrid(size: size, cells: claudeBodyCells())
                     .scaleEffect(x: isFlipped ? 1 : -1)
             case .gemini:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .gemini))
-                pixelGrid(size: size, cells: geminiBodyCells(frame: frameIndex))
+                pixelGrid(size: size, cells: geminiBodyCells())
                     .scaleEffect(x: isFlipped ? 1 : -1)
             case .codex:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .codex))
-                pixelGrid(size: size, cells: codexBodyCells(frame: frameIndex))
+                pixelGrid(size: size, cells: codexBodyCells())
                     .scaleEffect(x: isFlipped ? 1 : -1)
             }
         }
     }
 
-    private func codexBodyCells(frame: Int) -> [PixelCell] {
+    private func codexBodyCells() -> [PixelCell] {
         let fur = Color(red: 0.20, green: 0.40, blue: 0.84)
         let ink = Color.white.opacity(0.95)
 
@@ -711,37 +707,37 @@ struct CLIBuddyView: View {
         // Head (Original Cloud shape)
         cells += [
             // Ears
-            PixelCell(3, 1, 1, 3, fur), PixelCell(4, 2, 1, 2, fur), PixelCell(5, 3, 1, 1, fur), // L
-            PixelCell(11, 1, 1, 3, fur), PixelCell(10, 2, 1, 2, fur), PixelCell(9, 3, 1, 1, fur), // R (Moved inward)
+            PixelCell(24, 8, 8, 24, fur), PixelCell(32, 16, 8, 16, fur), PixelCell(40, 24, 8, 8, fur), // L
+            PixelCell(88, 8, 8, 24, fur), PixelCell(80, 16, 8, 16, fur), PixelCell(72, 24, 8, 8, fur), // R (Moved inward)
             
             // Main Face
-            PixelCell(3, 4, 10, 8, fur), // Square center
-            PixelCell(2, 5, 1, 6, fur), PixelCell(13, 5, 1, 6, fur), // Side vertical
-            PixelCell(1, 6, 1, 4, fur), PixelCell(14, 6, 1, 4, fur), // Far side vertical
+            PixelCell(24, 32, 80, 64, fur), // Square center
+            PixelCell(16, 40, 8, 48, fur), PixelCell(104, 40, 8, 48, fur), // Side vertical
+            PixelCell(8, 48, 8, 32, fur), PixelCell(112, 48, 8, 32, fur), // Far side vertical
             
             // Prompt Eye ( > )
-            PixelCell(5, 6, 1, 1, ink),
-            PixelCell(6, 7, 1, 1, ink),
-            PixelCell(5, 8, 1, 1, ink),
+            PixelCell(40, 48, 8, 8, ink),
+            PixelCell(48, 56, 8, 8, ink),
+            PixelCell(40, 64, 8, 8, ink),
             
             // Shortened Cursor Eye ( _ )
-            PixelCell(9, 8, 3, 1, ink),
+            PixelCell(72, 64, 24, 8, ink),
             
             // Whiskers (Fixed perspective: L shorter, R longer)
-            PixelCell(1, 7, 1, 1, fur),                               // L (1px)
-            PixelCell(14, 7, 2, 1, fur), PixelCell(14, 9, 2, 1, fur) // R (2px)
+            PixelCell(8, 56, 8, 8, fur),                               // L (1px)
+            PixelCell(112, 56, 16, 8, fur), PixelCell(112, 72, 16, 8, fur) // R (2px)
         ]
         
         // Simple tail for codex
         cells += [
-            PixelCell(13, 10, 2, 1, fur),
-            PixelCell(14, 9, 1, 1, fur)
+            PixelCell(104, 80, 16, 8, fur),
+            PixelCell(112, 72, 8, 8, fur)
         ]
 
         return cells
     }
 
-    private func geminiBodyCells(frame: Int) -> [PixelCell] {
+    private func geminiBodyCells() -> [PixelCell] {
         let red = Color(red: 0.94, green: 0.33, blue: 0.23)
         let orange = Color(red: 0.96, green: 0.54, blue: 0.15)
         let yellow = Color(red: 0.98, green: 0.81, blue: 0.12)
@@ -756,50 +752,50 @@ struct CLIBuddyView: View {
         // Sharper Star Body (4-pointed star look)
         // Top Point & Connections
         cells += [
-            PixelCell(7, 2, 2, 1, red),
-            PixelCell(5, 3, 5, 1, orange),
-            PixelCell(4, 4, 7, 1, orange) // Fills gap between ears and body
+            PixelCell(56, 16, 16, 8, red),
+            PixelCell(40, 24, 40, 8, orange),
+            PixelCell(32, 32, 56, 8, orange) // Fills gap between ears and body
         ]
         // Ears
         cells += [
-            PixelCell(4, 0, 1, 4, orange), PixelCell(5, 1, 1, 2, pink), // L
-            PixelCell(10, 0, 1, 4, purple), PixelCell(9, 1, 1, 2, pink) // R
+            PixelCell(32, 0, 8, 32, orange), PixelCell(40, 8, 8, 16, pink), // L
+            PixelCell(80, 0, 8, 32, purple), PixelCell(72, 8, 8, 16, pink) // R
         ]
         // Side Points (The "Horizontal" span)
         cells += [
-            PixelCell(3, 5, 9, 1, orange), // Expanded row above eyes
-            PixelCell(2, 6, 11, 1, yellow),
-            PixelCell(2, 7, 12, 1, yellow), // Sharp horizontal tip (x=0 and x=15)
-            PixelCell(0, 8, 16, 1, green),  // Slightly narrower row
-            PixelCell(2, 9, 12, 1, green),
-            PixelCell(4, 10, 8, 1, blue)
+            PixelCell(24, 40, 72, 8, orange), // Expanded row above eyes
+            PixelCell(16, 48, 88, 8, yellow),
+            PixelCell(16, 56, 96, 8, yellow), // Sharp horizontal tip (x=0 and x=15)
+            PixelCell(0, 64, 128, 8, green),  // Slightly narrower row
+            PixelCell(16, 72, 96, 8, green),
+            PixelCell(32, 80, 64, 8, blue)
         ]
         // Bottom Point
         cells += [
-            PixelCell(5, 11, 6, 1, blue),
-            PixelCell(6, 12, 4, 1, purple),
-            PixelCell(7, 13, 2, 1, purple),
-            PixelCell(8, 14, 1, 1, purple),
+            PixelCell(40, 88, 48, 8, blue),
+            PixelCell(48, 96, 32, 8, purple),
+            PixelCell(56, 104, 16, 8, purple),
+            PixelCell(64, 112, 8, 8, purple),
         ]
         
         // Face (Enlarged eyes and "w" mouth from original image)
         cells += [
-            PixelCell(3, 6, 1, 2, ink), PixelCell(10, 6, 1, 2, ink), // Symmetric eyes (moved left)
+            PixelCell(24, 48, 8, 16, ink), PixelCell(80, 48, 8, 16, ink), // Symmetric eyes (moved left)
             
             // "w" shaped mouth (Cat smile, moved up)
-            PixelCell(5, 8, 1, 1, ink), 
-            PixelCell(6, 9, 1, 1, ink), 
-            PixelCell(7, 8, 1, 1, ink), 
-            PixelCell(8, 9, 1, 1, ink),
-            PixelCell(9, 8, 1, 1, ink)
+            PixelCell(40, 64, 8, 8, ink), 
+            PixelCell(48, 72, 8, 8, ink), 
+            PixelCell(56, 64, 8, 8, ink), 
+            PixelCell(64, 72, 8, 8, ink),
+            PixelCell(72, 64, 8, 8, ink)
         ]
 
         return cells
     }
 
-    private func claudeBodyCells(frame: Int) -> [PixelCell] {
+    private func claudeBodyCells() -> [PixelCell] {
         let fur = Color(red: 0.82, green: 0.42, blue: 0.30)
-        let dark = Color(red: 0.47, green: 0.22, blue: 0.16)
+
         let ink = Color(red: 0.09, green: 0.04, blue: 0.03)
 
         var cells: [PixelCell] = []
@@ -807,47 +803,32 @@ struct CLIBuddyView: View {
         // Body (Common) - Shifted Y up by 2 to make room for base
         cells += [
             // Ears (Triangular)
-            PixelCell(4, 0, 1, 3, fur), PixelCell(5, 1, 1, 2, fur), PixelCell(6, 2, 1, 1, fur), // L (Moved outward)
-            PixelCell(12, 0, 1, 3, fur), PixelCell(11, 1, 1, 2, fur), PixelCell(10, 2, 1, 1, fur), // R (Moved outward)
-            PixelCell(3, 3, 10, 1, fur), // Head bridge
+            PixelCell(32, 0, 8, 24, fur), PixelCell(40, 8, 8, 16, fur), PixelCell(48, 16, 8, 8, fur), // L (Moved outward)
+            PixelCell(96, 0, 8, 24, fur), PixelCell(88, 8, 8, 16, fur), PixelCell(80, 16, 8, 8, fur), // R (Moved outward)
+            PixelCell(24, 24, 80, 8, fur), // Head bridge
             
             // Face/Body (Wider and Shorter)
-            PixelCell(3, 4, 10, 6, fur),
+            PixelCell(24, 32, 80, 48, fur),
             
             // Eyes (Moved right for perspective and enlarged)
-            PixelCell(6, 4, 1, 2, ink), PixelCell(11, 4, 1, 2, ink),
+            PixelCell(48, 32, 8, 16, ink), PixelCell(88, 32, 8, 16, ink),
             
             // Whiskers (Shifted up slightly)
-            PixelCell(2, 5, 1, 1, fur),                               // L
-            PixelCell(13, 5, 2, 1, fur), PixelCell(13, 7, 1, 1, fur), // R
+            PixelCell(16, 40, 8, 8, fur),                               // L
+            PixelCell(104, 40, 16, 8, fur), PixelCell(104, 56, 8, 8, fur), // R
             
             // Legs (Shorter, shifted up)
-            PixelCell(3, 10, 1, 2, fur), PixelCell(6, 10, 1, 2, fur),
-            PixelCell(9, 10, 1, 2, fur), PixelCell(12, 10, 1, 2, fur)
+            PixelCell(24, 80, 8, 16, fur), PixelCell(48, 80, 8, 16, fur),
+            PixelCell(72, 80, 8, 16, fur), PixelCell(96, 80, 8, 16, fur)
         ]
 
-        // Animated Tail
-        switch frame {
-        case 0: // Right
-            cells += [
-                PixelCell(13, 7, 2, 1, fur), 
-                PixelCell(15, 6, 1, 1, fur),
-                PixelCell(15, 4, 1, 2, fur),
-                PixelCell(14, 3, 1, 1, fur),
-                PixelCell(13, 3, 1, 1, fur)
-            ]
-        case 2: // Left (Side with short whiskers)
-            cells += [
-                PixelCell(1, 7, 2, 1, fur),
-                PixelCell(0, 6, 1, 1, fur),
-                PixelCell(0, 4, 1, 2, fur),
-                PixelCell(1, 3, 1, 1, fur)
-            ]
-        default: // Up
-            cells += [
-                PixelCell(7, 0, 1, 4, fur), PixelCell(7, 0, 1, 1, dark)
-            ]
-        }
+        // Static Tail (will flip left/right automatically due to scaleEffect)
+        cells += [
+            PixelCell(8, 56, 16, 8, fur),
+            PixelCell(0, 48, 8, 8, fur),
+            PixelCell(0, 32, 8, 16, fur),
+            PixelCell(8, 24, 8, 8, fur)
+        ]
 
         return cells
     }
@@ -865,18 +846,18 @@ struct CLIBuddyView: View {
             : Color.white.opacity(0.42)
 
         return [
-            PixelCell(1, 12, 14, 1, rim),
-            PixelCell(1, 13, 14, 2, shell),
-            PixelCell(1, 13, 14, 1, title),
-            PixelCell(3, 13, 1, 1, Color.red.opacity(0.82)),
-            PixelCell(5, 13, 1, 1, Color.yellow.opacity(0.82)),
-            PixelCell(7, 13, 1, 1, Color.green.opacity(0.82)),
-            PixelCell(9, 14, 4, 1, text.opacity(0.36))
+            PixelCell(8, 96, 112, 8, rim),
+            PixelCell(8, 104, 112, 16, shell),
+            PixelCell(8, 104, 112, 8, title),
+            PixelCell(24, 104, 8, 8, Color.red.opacity(0.82)),
+            PixelCell(40, 104, 8, 8, Color.yellow.opacity(0.82)),
+            PixelCell(56, 104, 8, 8, Color.green.opacity(0.82)),
+            PixelCell(72, 112, 32, 8, text.opacity(0.36))
         ]
     }
 
     private func pixelGrid(size: CGFloat, cells: [PixelCell]) -> some View {
-        let unit = size / 16
+        let unit = size / 128
 
         return ZStack(alignment: .topLeading) {
             ForEach(cells.indices, id: \.self) { index in
