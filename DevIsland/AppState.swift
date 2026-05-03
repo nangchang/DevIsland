@@ -251,7 +251,7 @@ class AppState: ObservableObject {
         var toolName  = ""
         var sessionId = ""
         var terminalTitle = "Terminal"
-        var agentKind = BuddyKind.codex
+        var agentKind = BuddyKind.gemini
         var terminalApp = ""
         var terminalTTY = ""
         var terminalWindowId = ""
@@ -641,6 +641,9 @@ class AppState: ObservableObject {
 
         if joined.contains("claude") {
             return .claudeCode
+        }
+        if joined.contains("gemini") {
+            return .gemini
         }
         if joined.contains("codex") || joined.contains("openai") {
             return .codex

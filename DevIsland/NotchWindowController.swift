@@ -584,7 +584,8 @@ func toolInfo(for name: String) -> ToolInfo {
 
 // MARK: - Buddy Mascot
 
-enum BuddyKind {
+enum BuddyKind: CaseIterable {
+    case gemini
     case codex
     case claudeCode
 
@@ -592,6 +593,8 @@ enum BuddyKind {
         let lower = terminalTitle.lowercased()
         if lower.contains("claude") {
             self = .claudeCode
+        } else if lower.contains("gemini") {
+            self = .gemini
         } else {
             self = .codex
         }
@@ -599,17 +602,17 @@ enum BuddyKind {
 
     var accentColor: Color {
         switch self {
-        case .codex:     return Color(red: 0.34, green: 0.38, blue: 1.0)
+        case .gemini:     return Color(red: 0.34, green: 0.38, blue: 1.0)
+        case .codex:      return Color(red: 0.2, green: 0.6, blue: 0.9)
         case .claudeCode: return Color(red: 0.82, green: 0.42, blue: 0.30)
         }
     }
 
     var accessibilityName: String {
         switch self {
-        case .codex:
-            return "Codex"
-        case .claudeCode:
-            return "Claude Code"
+        case .gemini:     return "Gemini"
+        case .codex:      return "Codex"
+        case .claudeCode: return "Claude Code"
         }
     }
 }
@@ -681,7 +684,12 @@ struct CLIBuddyView: View {
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .claudeCode))
                 pixelGrid(size: size, cells: claudeBodyCells(frame: frameIndex))
                     .scaleEffect(x: isFlipped ? 1 : -1)
+            } else if kind == .gemini {
+                pixelGrid(size: size, cells: terminalBaseCells(kind: .gemini))
+                pixelGrid(size: size, cells: geminiBodyCells(frame: frameIndex))
+                    .scaleEffect(x: isFlipped ? 1 : -1)
             } else {
+                // Codex
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .codex))
                 pixelGrid(size: size, cells: codexBodyCells(frame: frameIndex))
                     .scaleEffect(x: isFlipped ? 1 : -1)
@@ -723,6 +731,62 @@ struct CLIBuddyView: View {
         cells += [
             PixelCell(13, 10, 2, 1, fur),
             PixelCell(14, 9, 1, 1, fur)
+        ]
+
+        return cells
+    }
+
+    private func geminiBodyCells(frame: Int) -> [PixelCell] {
+        let red = Color(red: 0.94, green: 0.33, blue: 0.23)
+        let orange = Color(red: 0.96, green: 0.54, blue: 0.15)
+        let yellow = Color(red: 0.98, green: 0.81, blue: 0.12)
+        let green = Color(red: 0.22, green: 0.64, blue: 0.44)
+        let blue = Color(red: 0.15, green: 0.54, blue: 0.94)
+        let purple = Color(red: 0.58, green: 0.33, blue: 0.82)
+        let pink = Color(red: 0.96, green: 0.65, blue: 0.72)
+        let ink = Color(red: 0.12, green: 0.10, blue: 0.14)
+
+        var cells: [PixelCell] = []
+
+        // Sharper Star Body (4-pointed star look)
+        // Top Point & Connections
+        cells += [
+            PixelCell(7, 2, 2, 1, red),
+            PixelCell(5, 3, 5, 1, orange),
+            PixelCell(4, 4, 7, 1, orange) // Fills gap between ears and body
+        ]
+        // Ears
+        cells += [
+            PixelCell(4, 0, 1, 4, orange), PixelCell(5, 1, 1, 2, pink), // L
+            PixelCell(10, 0, 1, 4, purple), PixelCell(9, 1, 1, 2, pink) // R
+        ]
+        // Side Points (The "Horizontal" span)
+        cells += [
+            PixelCell(3, 5, 9, 1, orange), // Expanded row above eyes
+            PixelCell(2, 6, 11, 1, yellow),
+            PixelCell(2, 7, 12, 1, yellow), // Sharp horizontal tip (x=0 and x=15)
+            PixelCell(0, 8, 16, 1, green),  // Slightly narrower row
+            PixelCell(2, 9, 12, 1, green),
+            PixelCell(4, 10, 8, 1, blue)
+        ]
+        // Bottom Point
+        cells += [
+            PixelCell(5, 11, 6, 1, blue),
+            PixelCell(6, 12, 4, 1, purple),
+            PixelCell(7, 13, 2, 1, purple),
+            PixelCell(8, 14, 1, 1, purple),
+        ]
+        
+        // Face (Enlarged eyes and "w" mouth from original image)
+        cells += [
+            PixelCell(3, 6, 1, 2, ink), PixelCell(10, 6, 1, 2, ink), // Symmetric eyes (moved left)
+            
+            // "w" shaped mouth (Cat smile, moved up)
+            PixelCell(5, 8, 1, 1, ink), 
+            PixelCell(6, 9, 1, 1, ink), 
+            PixelCell(7, 8, 1, 1, ink), 
+            PixelCell(8, 9, 1, 1, ink),
+            PixelCell(9, 8, 1, 1, ink)
         ]
 
         return cells
@@ -784,13 +848,13 @@ struct CLIBuddyView: View {
     }
 
     private func terminalBaseCells(kind: BuddyKind) -> [PixelCell] {
-        let shell = kind == .codex
+        let shell = (kind == .gemini || kind == .codex)
             ? Color(red: 0.08, green: 0.09, blue: 0.12)
             : Color(red: 0.09, green: 0.08, blue: 0.07)
-        let rim = kind == .codex
+        let rim = (kind == .gemini || kind == .codex)
             ? Color(red: 0.24, green: 0.27, blue: 0.34)
             : Color(red: 0.32, green: 0.24, blue: 0.20)
-        let title = kind == .codex
+        let title = (kind == .gemini || kind == .codex)
             ? rim
             : rim
         let text = kind == .codex
@@ -1041,6 +1105,8 @@ struct SessionRowView: View {
 struct NotchView: View {
     @ObservedObject var state = AppState.shared
     @State private var buddyPulse = false
+    @State private var leftMascot: BuddyKind = .claudeCode
+    @State private var rightMascot: BuddyKind = .gemini
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
@@ -1128,6 +1194,15 @@ struct NotchView: View {
             withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
                 buddyPulse = true
             }
+            
+            // Randomly select 2 mascots
+            if let randomLeft = BuddyKind.allCases.randomElement() {
+                leftMascot = randomLeft
+            }
+            if let randomRight = BuddyKind.allCases.randomElement() {
+                rightMascot = randomRight
+            }
+            
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
         }
     }
@@ -1142,19 +1217,24 @@ struct NotchView: View {
 
             HStack {
                 CLIBuddyView(
-                    accent: BuddyKind.claudeCode.accentColor,
+                    accent: leftMascot.accentColor,
                     isActive: buddyPulse,
                     compact: true,
-                    kind: .claudeCode
+                    kind: leftMascot
                 )
                 .frame(width: 24, height: 24)
                 .offset(x: -6, y: 4)
 
                 Spacer(minLength: 0)
 
-                CLIBuddyView(accent: BuddyKind.codex.accentColor, isActive: buddyPulse, compact: true, kind: .codex)
-                    .frame(width: 24, height: 24)
-                    .offset(x: 6, y: 4)
+                CLIBuddyView(
+                    accent: rightMascot.accentColor, 
+                    isActive: buddyPulse, 
+                    compact: true, 
+                    kind: rightMascot
+                )
+                .frame(width: 24, height: 24)
+                .offset(x: 6, y: 4)
             }
         }
         .padding(.horizontal, 12)
