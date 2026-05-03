@@ -588,6 +588,11 @@ enum BuddyKind: CaseIterable {
     case gemini
     case codex
     case claudeCode
+    case island
+
+    static var allCases: [BuddyKind] {
+        return [.gemini, .codex, .claudeCode]
+    }
 
     init(from text: String) {
         let lower = text.lowercased()
@@ -598,7 +603,7 @@ enum BuddyKind: CaseIterable {
         } else if lower.contains("codex") || lower.contains("openai") || lower.contains("gpt") {
             self = .codex
         } else {
-            self = .claudeCode
+            self = .island
         }
     }
 
@@ -607,6 +612,7 @@ enum BuddyKind: CaseIterable {
         case .gemini:     return Color(red: 0.34, green: 0.38, blue: 1.0)
         case .codex:      return Color(red: 0.2, green: 0.6, blue: 0.9)
         case .claudeCode: return Color(red: 0.82, green: 0.42, blue: 0.30)
+        case .island:     return Color(red: 0.20, green: 0.60, blue: 0.90)
         }
     }
 
@@ -615,6 +621,7 @@ enum BuddyKind: CaseIterable {
         case .gemini:     return "Gemini"
         case .codex:      return "Codex"
         case .claudeCode: return "Claude Code"
+        case .island:     return "DevIsland"
         }
     }
 }
@@ -694,6 +701,8 @@ struct CLIBuddyView: View {
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .codex))
                 pixelGrid(size: size, cells: codexBodyCells())
                     .scaleEffect(x: isFlipped ? 1 : -1)
+            case .island:
+                pixelGrid(size: size, cells: islandBodyCells())
             }
         }
     }
@@ -830,6 +839,172 @@ struct CLIBuddyView: View {
             PixelCell(8, 24, 8, 8, fur)
         ]
 
+        return cells
+    }
+
+    private func islandBodyCells() -> [PixelCell] {
+        let c0 = Color(red: 0.18, green: 0.33, blue: 0.33)
+        let c1 = Color(red: 0.68, green: 0.79, blue: 0.47)
+        let c2 = Color(red: 0.39, green: 0.58, blue: 0.27)
+        let c3 = Color(red: 0.42, green: 0.34, blue: 0.27)
+        let c4 = Color(red: 0.20, green: 0.60, blue: 0.90) // Water
+        let c5 = Color(red: 0.88, green: 0.78, blue: 0.52) // Sand
+
+        var cells: [PixelCell] = []
+        cells.append(contentsOf: [
+PixelCell(68, 16, 8, 4, c0),
+            PixelCell(68, 20, 8, 4, c1),
+            PixelCell(80, 20, 8, 4, c0),
+            PixelCell(64, 24, 4, 4, c0),
+            PixelCell(68, 24, 8, 4, c2),
+            PixelCell(76, 24, 4, 4, c0),
+            PixelCell(80, 24, 8, 4, c1),
+            PixelCell(88, 24, 4, 4, c0),
+            PixelCell(60, 28, 4, 4, c0),
+            PixelCell(64, 28, 4, 4, c2),
+            PixelCell(68, 28, 4, 4, c0),
+            PixelCell(72, 28, 4, 4, c3),
+            PixelCell(76, 28, 8, 4, c2),
+            PixelCell(84, 28, 4, 4, c0),
+            PixelCell(88, 28, 4, 4, c2),
+            PixelCell(92, 28, 4, 4, c0),
+            PixelCell(68, 32, 8, 4, c2),
+            PixelCell(76, 32, 4, 4, c3),
+            PixelCell(80, 32, 4, 4, c2),
+            PixelCell(84, 32, 4, 4, c1),
+            PixelCell(88, 32, 4, 4, c0),
+            PixelCell(64, 36, 4, 4, c0),
+            PixelCell(68, 36, 4, 4, c2),
+            PixelCell(72, 36, 4, 4, c0),
+            PixelCell(76, 36, 8, 4, c3),
+            PixelCell(84, 36, 8, 4, c0),
+            PixelCell(44, 40, 8, 4, c4),
+            PixelCell(52, 40, 16, 4, c0),
+            PixelCell(68, 40, 4, 4, c2),
+            PixelCell(76, 40, 4, 4, c0),
+            PixelCell(80, 40, 8, 4, c3),
+            PixelCell(28, 44, 8, 4, c4),
+            PixelCell(36, 44, 8, 4, c5),
+            PixelCell(44, 44, 4, 4, c0),
+            PixelCell(48, 44, 28, 4, c2),
+            PixelCell(76, 44, 12, 4, c3),
+            PixelCell(88, 44, 4, 4, c4),
+            PixelCell(24, 48, 8, 4, c4),
+            PixelCell(32, 48, 12, 4, c5),
+            PixelCell(44, 48, 32, 4, c2),
+            PixelCell(76, 48, 12, 4, c3),
+            PixelCell(88, 48, 4, 4, c2),
+            PixelCell(92, 48, 4, 4, c0),
+            PixelCell(24, 52, 8, 4, c4),
+            PixelCell(32, 52, 16, 4, c5),
+            PixelCell(48, 52, 4, 4, c0),
+            PixelCell(52, 52, 20, 4, c2),
+            PixelCell(72, 52, 4, 4, c0),
+            PixelCell(76, 52, 12, 4, c3),
+            PixelCell(88, 52, 4, 4, c0)
+        ])
+        cells.append(contentsOf: [
+PixelCell(92, 52, 4, 4, c2),
+            PixelCell(96, 52, 4, 4, c0),
+            PixelCell(28, 56, 8, 4, c4),
+            PixelCell(36, 56, 16, 4, c5),
+            PixelCell(52, 56, 4, 4, c0),
+            PixelCell(56, 56, 24, 4, c2),
+            PixelCell(80, 56, 4, 4, c3),
+            PixelCell(84, 56, 12, 4, c2),
+            PixelCell(96, 56, 4, 4, c0),
+            PixelCell(100, 56, 4, 4, c4),
+            PixelCell(32, 60, 4, 4, c4),
+            PixelCell(36, 60, 20, 4, c5),
+            PixelCell(56, 60, 44, 4, c2),
+            PixelCell(100, 60, 4, 4, c4),
+            PixelCell(28, 64, 8, 4, c4),
+            PixelCell(36, 64, 20, 4, c5),
+            PixelCell(56, 64, 8, 4, c2),
+            PixelCell(64, 64, 4, 4, c5),
+            PixelCell(68, 64, 32, 4, c2),
+            PixelCell(100, 64, 4, 4, c4),
+            PixelCell(24, 68, 4, 4, c4),
+            PixelCell(28, 68, 20, 4, c5),
+            PixelCell(48, 68, 4, 4, c0),
+            PixelCell(52, 68, 12, 4, c2),
+            PixelCell(64, 68, 4, 4, c5),
+            PixelCell(68, 68, 28, 4, c2),
+            PixelCell(96, 68, 4, 4, c3),
+            PixelCell(100, 68, 8, 4, c4),
+            PixelCell(20, 72, 8, 4, c4),
+            PixelCell(28, 72, 20, 4, c5),
+            PixelCell(48, 72, 24, 4, c2),
+            PixelCell(72, 72, 8, 4, c5),
+            PixelCell(80, 72, 12, 4, c2),
+            PixelCell(92, 72, 4, 4, c0),
+            PixelCell(96, 72, 4, 4, c3),
+            PixelCell(100, 72, 8, 4, c4),
+            PixelCell(20, 76, 4, 4, c4),
+            PixelCell(24, 76, 28, 4, c5),
+            PixelCell(52, 76, 4, 4, c0),
+            PixelCell(56, 76, 32, 4, c2),
+            PixelCell(88, 76, 4, 4, c0),
+            PixelCell(92, 76, 4, 4, c3),
+            PixelCell(96, 76, 4, 4, c5),
+            PixelCell(100, 76, 4, 4, c4),
+            PixelCell(20, 80, 4, 4, c4),
+            PixelCell(24, 80, 4, 4, c5),
+            PixelCell(28, 80, 4, 4, c3),
+            PixelCell(32, 80, 24, 4, c5),
+            PixelCell(56, 80, 4, 4, c0),
+            PixelCell(60, 80, 4, 4, c2)
+        ])
+        cells.append(contentsOf: [
+PixelCell(64, 80, 8, 4, c0),
+            PixelCell(72, 80, 8, 4, c2),
+            PixelCell(80, 80, 8, 4, c0),
+            PixelCell(88, 80, 4, 4, c3),
+            PixelCell(92, 80, 4, 4, c5),
+            PixelCell(96, 80, 8, 4, c4),
+            PixelCell(20, 84, 8, 4, c4),
+            PixelCell(28, 84, 4, 4, c5),
+            PixelCell(32, 84, 4, 4, c3),
+            PixelCell(36, 84, 32, 4, c5),
+            PixelCell(68, 84, 4, 4, c3),
+            PixelCell(72, 84, 8, 4, c0),
+            PixelCell(80, 84, 8, 4, c3),
+            PixelCell(88, 84, 4, 4, c5),
+            PixelCell(92, 84, 8, 4, c4),
+            PixelCell(24, 88, 8, 4, c4),
+            PixelCell(32, 88, 8, 4, c5),
+            PixelCell(40, 88, 8, 4, c3),
+            PixelCell(48, 88, 4, 4, c5),
+            PixelCell(52, 88, 4, 4, c3),
+            PixelCell(56, 88, 8, 4, c5),
+            PixelCell(64, 88, 4, 4, c3),
+            PixelCell(68, 88, 4, 4, c5),
+            PixelCell(72, 88, 12, 4, c3),
+            PixelCell(84, 88, 4, 4, c5),
+            PixelCell(88, 88, 12, 4, c4),
+            PixelCell(32, 92, 12, 4, c4),
+            PixelCell(44, 92, 4, 4, c0),
+            PixelCell(48, 92, 4, 4, c5),
+            PixelCell(52, 92, 16, 4, c3),
+            PixelCell(68, 92, 4, 4, c5),
+            PixelCell(72, 92, 20, 4, c4),
+            PixelCell(36, 96, 4, 4, c4),
+            PixelCell(40, 96, 4, 4, c0),
+            PixelCell(44, 96, 4, 4, c3),
+            PixelCell(48, 96, 4, 4, c4),
+            PixelCell(52, 96, 4, 4, c0),
+            PixelCell(56, 96, 12, 4, c3),
+            PixelCell(68, 96, 16, 4, c4),
+            PixelCell(36, 100, 8, 4, c4),
+            PixelCell(44, 100, 4, 4, c3),
+            PixelCell(48, 100, 4, 4, c4),
+            PixelCell(52, 100, 4, 4, c0),
+            PixelCell(56, 100, 8, 4, c4),
+            PixelCell(64, 100, 4, 4, c0),
+            PixelCell(68, 100, 12, 4, c4),
+            PixelCell(40, 104, 12, 4, c4),
+            PixelCell(60, 104, 12, 4, c4)
+        ])
         return cells
     }
 
