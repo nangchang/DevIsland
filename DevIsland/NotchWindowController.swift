@@ -584,32 +584,44 @@ func toolInfo(for name: String) -> ToolInfo {
 
 // MARK: - Buddy Mascot
 
-enum BuddyKind {
+enum BuddyKind: CaseIterable {
+    case gemini
     case codex
     case claudeCode
+    case island
 
-    init(from terminalTitle: String) {
-        let lower = terminalTitle.lowercased()
+    static var allCases: [BuddyKind] {
+        return [.gemini, .codex, .claudeCode]
+    }
+
+    init(from text: String) {
+        let lower = text.lowercased()
         if lower.contains("claude") {
             self = .claudeCode
-        } else {
+        } else if lower.contains("gemini") {
+            self = .gemini
+        } else if lower.contains("codex") || lower.contains("openai") || lower.contains("gpt") {
             self = .codex
+        } else {
+            self = .island
         }
     }
 
     var accentColor: Color {
         switch self {
-        case .codex:     return Color(red: 0.34, green: 0.38, blue: 1.0)
+        case .gemini:     return Color(red: 0.34, green: 0.38, blue: 1.0)
+        case .codex:      return Color(red: 0.2, green: 0.6, blue: 0.9)
         case .claudeCode: return Color(red: 0.82, green: 0.42, blue: 0.30)
+        case .island:     return Color(red: 0.20, green: 0.60, blue: 0.90)
         }
     }
 
     var accessibilityName: String {
         switch self {
-        case .codex:
-            return "Codex"
-        case .claudeCode:
-            return "Claude Code"
+        case .gemini:     return "Gemini"
+        case .codex:      return "Codex"
+        case .claudeCode: return "Claude Code"
+        case .island:     return "DevIsland"
         }
     }
 }
@@ -636,6 +648,9 @@ struct CLIBuddyView: View {
     let compact: Bool
     let kind: BuddyKind
 
+    @State private var isFlipped = false
+    private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+
     var body: some View {
         GeometryReader { geo in
             let size = min(geo.size.width, geo.size.height)
@@ -653,7 +668,14 @@ struct CLIBuddyView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
-        .accessibilityLabel(kind == .codex ? "Codex Buddy" : "Claude Code Buddy")
+        .accessibilityLabel("\(kind.accessibilityName) Buddy")
+        .onReceive(timer) { _ in
+            if isActive {
+                isFlipped.toggle()
+            } else {
+                isFlipped = false
+            }
+        }
     }
 
     private func pixelBody(size: CGFloat) -> some View {
@@ -665,84 +687,351 @@ struct CLIBuddyView: View {
     }
 
     private func mascotSprite(size: CGFloat) -> some View {
-        pixelGrid(size: size, cells: kind == .codex ? codexCells : claudeCells)
+        ZStack {
+            switch kind {
+            case .claudeCode:
+                pixelGrid(size: size, cells: terminalBaseCells(kind: .claudeCode))
+                pixelGrid(size: size, cells: claudeBodyCells())
+                    .scaleEffect(x: isFlipped ? 1 : -1)
+            case .gemini:
+                pixelGrid(size: size, cells: terminalBaseCells(kind: .gemini))
+                pixelGrid(size: size, cells: geminiBodyCells())
+                    .scaleEffect(x: isFlipped ? 1 : -1)
+            case .codex:
+                pixelGrid(size: size, cells: terminalBaseCells(kind: .codex))
+                pixelGrid(size: size, cells: codexBodyCells())
+                    .scaleEffect(x: isFlipped ? 1 : -1)
+            case .island:
+                pixelGrid(size: size, cells: islandBodyCells())
+            }
+        }
     }
 
-    private var codexCells: [PixelCell] {
-        let fur = Color(red: 0.34, green: 0.38, blue: 1.0)
-        let shade = Color(red: 0.15, green: 0.22, blue: 0.88)
-        let ink = Color.white.opacity(0.94)
+    private func codexBodyCells() -> [PixelCell] {
+        let fur = Color(red: 0.20, green: 0.40, blue: 0.84)
+        let ink = Color.white.opacity(0.95)
 
-        return terminalBaseCells(kind: .codex) + [
-            PixelCell(2, 1, 2, 3, fur),
-            PixelCell(12, 1, 2, 3, fur),
-            PixelCell(3, 3, 10, 1, fur),
-            PixelCell(1, 4, 14, 1, fur),
-            PixelCell(0, 5, 16, 6, fur),
-            PixelCell(1, 11, 14, 1, shade),
-            PixelCell(3, 12, 10, 1, shade),
-            PixelCell(5, 6, 1, 1, ink),
-            PixelCell(6, 7, 1, 1, ink),
-            PixelCell(5, 8, 1, 1, ink),
-            PixelCell(9, 9, 4, 1, ink)
+        var cells: [PixelCell] = []
+
+        // Head (Original Cloud shape)
+        cells += [
+            // Ears
+            PixelCell(24, 8, 8, 24, fur), PixelCell(32, 16, 8, 16, fur), PixelCell(40, 24, 8, 8, fur), // L
+            PixelCell(88, 8, 8, 24, fur), PixelCell(80, 16, 8, 16, fur), PixelCell(72, 24, 8, 8, fur), // R (Moved inward)
+            
+            // Main Face
+            PixelCell(24, 32, 80, 64, fur), // Square center
+            PixelCell(16, 40, 8, 48, fur), PixelCell(104, 40, 8, 48, fur), // Side vertical
+            PixelCell(8, 48, 8, 32, fur), PixelCell(112, 48, 8, 32, fur), // Far side vertical
+            
+            // Prompt Eye ( > )
+            PixelCell(40, 48, 8, 8, ink),
+            PixelCell(48, 56, 8, 8, ink),
+            PixelCell(40, 64, 8, 8, ink),
+            
+            // Shortened Cursor Eye ( _ )
+            PixelCell(72, 64, 24, 8, ink),
+            
+            // Whiskers (Fixed perspective: L shorter, R longer)
+            PixelCell(8, 56, 8, 8, fur),                               // L (1px)
+            PixelCell(112, 56, 16, 8, fur), PixelCell(112, 72, 16, 8, fur) // R (2px)
         ]
+        
+        // Simple tail for codex
+        cells += [
+            PixelCell(104, 80, 16, 8, fur),
+            PixelCell(112, 72, 8, 8, fur)
+        ]
+
+        return cells
     }
 
-    private var claudeCells: [PixelCell] {
+    private func geminiBodyCells() -> [PixelCell] {
+        let red = Color(red: 0.94, green: 0.33, blue: 0.23)
+        let orange = Color(red: 0.96, green: 0.54, blue: 0.15)
+        let yellow = Color(red: 0.98, green: 0.81, blue: 0.12)
+        let green = Color(red: 0.22, green: 0.64, blue: 0.44)
+        let blue = Color(red: 0.15, green: 0.54, blue: 0.94)
+        let purple = Color(red: 0.58, green: 0.33, blue: 0.82)
+        let pink = Color(red: 0.96, green: 0.65, blue: 0.72)
+        let ink = Color(red: 0.12, green: 0.10, blue: 0.14)
+
+        var cells: [PixelCell] = []
+
+        // Sharper Star Body (4-pointed star look)
+        // Top Point & Connections
+        cells += [
+            PixelCell(56, 16, 16, 8, red),
+            PixelCell(40, 24, 40, 8, orange),
+            PixelCell(32, 32, 56, 8, orange) // Fills gap between ears and body
+        ]
+        // Ears
+        cells += [
+            PixelCell(32, 0, 8, 32, orange), PixelCell(40, 8, 8, 16, pink), // L
+            PixelCell(80, 0, 8, 32, purple), PixelCell(72, 8, 8, 16, pink) // R
+        ]
+        // Side Points (The "Horizontal" span)
+        cells += [
+            PixelCell(24, 40, 72, 8, orange), // Expanded row above eyes
+            PixelCell(16, 48, 88, 8, yellow),
+            PixelCell(16, 56, 96, 8, yellow), // Sharp horizontal tip (x=0 and x=15)
+            PixelCell(0, 64, 128, 8, green),  // Slightly narrower row
+            PixelCell(16, 72, 96, 8, green),
+            PixelCell(32, 80, 64, 8, blue)
+        ]
+        // Bottom Point
+        cells += [
+            PixelCell(40, 88, 48, 8, blue),
+            PixelCell(48, 96, 32, 8, purple),
+            PixelCell(56, 104, 16, 8, purple),
+            PixelCell(64, 112, 8, 8, purple),
+        ]
+        
+        // Face (Enlarged eyes and "w" mouth from original image)
+        cells += [
+            PixelCell(24, 48, 8, 16, ink), PixelCell(80, 48, 8, 16, ink), // Symmetric eyes (moved left)
+            
+            // "w" shaped mouth (Cat smile, moved up)
+            PixelCell(40, 64, 8, 8, ink), 
+            PixelCell(48, 72, 8, 8, ink), 
+            PixelCell(56, 64, 8, 8, ink), 
+            PixelCell(64, 72, 8, 8, ink),
+            PixelCell(72, 64, 8, 8, ink)
+        ]
+
+        return cells
+    }
+
+    private func claudeBodyCells() -> [PixelCell] {
         let fur = Color(red: 0.82, green: 0.42, blue: 0.30)
-        let dark = Color(red: 0.47, green: 0.22, blue: 0.16)
+
         let ink = Color(red: 0.09, green: 0.04, blue: 0.03)
 
-        return terminalBaseCells(kind: .claudeCode) + [
-            PixelCell(3, 1, 2, 2, fur),
-            PixelCell(11, 1, 2, 2, fur),
-            PixelCell(3, 3, 3, 1, fur),
-            PixelCell(10, 3, 3, 1, fur),
-            PixelCell(4, 4, 8, 1, fur),
-            PixelCell(2, 5, 12, 1, fur),
-            PixelCell(1, 6, 14, 4, fur),
-            PixelCell(2, 10, 12, 2, fur),
-            PixelCell(4, 12, 8, 1, dark),
-            PixelCell(0, 8, 3, 2, fur),
-            PixelCell(13, 8, 3, 2, fur),
-            PixelCell(0, 10, 2, 1, fur),
-            PixelCell(14, 10, 2, 1, fur),
-            PixelCell(5, 7, 1, 1, ink),
-            PixelCell(10, 7, 1, 1, ink),
-            PixelCell(4, 11, 2, 1, dark),
-            PixelCell(10, 11, 2, 1, dark),
-            PixelCell(3, 13, 3, 1, dark),
-            PixelCell(10, 13, 3, 1, dark)
+        var cells: [PixelCell] = []
+
+        // Body (Common) - Shifted Y up by 2 to make room for base
+        cells += [
+            // Ears (Triangular)
+            PixelCell(32, 0, 8, 24, fur), PixelCell(40, 8, 8, 16, fur), PixelCell(48, 16, 8, 8, fur), // L (Moved outward)
+            PixelCell(96, 0, 8, 24, fur), PixelCell(88, 8, 8, 16, fur), PixelCell(80, 16, 8, 8, fur), // R (Moved outward)
+            PixelCell(24, 24, 80, 8, fur), // Head bridge
+            
+            // Face/Body (Wider and Shorter)
+            PixelCell(24, 32, 80, 48, fur),
+            
+            // Eyes (Moved right for perspective and enlarged)
+            PixelCell(48, 32, 8, 16, ink), PixelCell(88, 32, 8, 16, ink),
+            
+            // Whiskers (Shifted up slightly)
+            PixelCell(16, 40, 8, 8, fur),                               // L
+            PixelCell(104, 40, 16, 8, fur), PixelCell(104, 56, 8, 8, fur), // R
+            
+            // Legs (Shorter, shifted up)
+            PixelCell(24, 80, 8, 16, fur), PixelCell(48, 80, 8, 16, fur),
+            PixelCell(72, 80, 8, 16, fur), PixelCell(96, 80, 8, 16, fur)
         ]
+
+        // Static Tail (will flip left/right automatically due to scaleEffect)
+        cells += [
+            PixelCell(8, 56, 16, 8, fur),
+            PixelCell(0, 48, 8, 8, fur),
+            PixelCell(0, 32, 8, 16, fur),
+            PixelCell(8, 24, 8, 8, fur)
+        ]
+
+        return cells
+    }
+
+    private func islandBodyCells() -> [PixelCell] {
+        let c0 = Color(red: 0.18, green: 0.33, blue: 0.33)
+        let c1 = Color(red: 0.68, green: 0.79, blue: 0.47)
+        let c2 = Color(red: 0.39, green: 0.58, blue: 0.27)
+        let c3 = Color(red: 0.42, green: 0.34, blue: 0.27)
+        let c4 = Color(red: 0.20, green: 0.60, blue: 0.90) // Water
+        let c5 = Color(red: 0.88, green: 0.78, blue: 0.52) // Sand
+
+        var cells: [PixelCell] = []
+        cells.append(contentsOf: [
+PixelCell(68, 16, 8, 4, c0),
+            PixelCell(68, 20, 8, 4, c1),
+            PixelCell(80, 20, 8, 4, c0),
+            PixelCell(64, 24, 4, 4, c0),
+            PixelCell(68, 24, 8, 4, c2),
+            PixelCell(76, 24, 4, 4, c0),
+            PixelCell(80, 24, 8, 4, c1),
+            PixelCell(88, 24, 4, 4, c0),
+            PixelCell(60, 28, 4, 4, c0),
+            PixelCell(64, 28, 4, 4, c2),
+            PixelCell(68, 28, 4, 4, c0),
+            PixelCell(72, 28, 4, 4, c3),
+            PixelCell(76, 28, 8, 4, c2),
+            PixelCell(84, 28, 4, 4, c0),
+            PixelCell(88, 28, 4, 4, c2),
+            PixelCell(92, 28, 4, 4, c0),
+            PixelCell(68, 32, 8, 4, c2),
+            PixelCell(76, 32, 4, 4, c3),
+            PixelCell(80, 32, 4, 4, c2),
+            PixelCell(84, 32, 4, 4, c1),
+            PixelCell(88, 32, 4, 4, c0),
+            PixelCell(64, 36, 4, 4, c0),
+            PixelCell(68, 36, 4, 4, c2),
+            PixelCell(72, 36, 4, 4, c0),
+            PixelCell(76, 36, 8, 4, c3),
+            PixelCell(84, 36, 8, 4, c0),
+            PixelCell(44, 40, 8, 4, c4),
+            PixelCell(52, 40, 16, 4, c0),
+            PixelCell(68, 40, 4, 4, c2),
+            PixelCell(76, 40, 4, 4, c0),
+            PixelCell(80, 40, 8, 4, c3),
+            PixelCell(28, 44, 8, 4, c4),
+            PixelCell(36, 44, 8, 4, c5),
+            PixelCell(44, 44, 4, 4, c0),
+            PixelCell(48, 44, 28, 4, c2),
+            PixelCell(76, 44, 12, 4, c3),
+            PixelCell(88, 44, 4, 4, c4),
+            PixelCell(24, 48, 8, 4, c4),
+            PixelCell(32, 48, 12, 4, c5),
+            PixelCell(44, 48, 32, 4, c2),
+            PixelCell(76, 48, 12, 4, c3),
+            PixelCell(88, 48, 4, 4, c2),
+            PixelCell(92, 48, 4, 4, c0),
+            PixelCell(24, 52, 8, 4, c4),
+            PixelCell(32, 52, 16, 4, c5),
+            PixelCell(48, 52, 4, 4, c0),
+            PixelCell(52, 52, 20, 4, c2),
+            PixelCell(72, 52, 4, 4, c0),
+            PixelCell(76, 52, 12, 4, c3),
+            PixelCell(88, 52, 4, 4, c0)
+        ])
+        cells.append(contentsOf: [
+PixelCell(92, 52, 4, 4, c2),
+            PixelCell(96, 52, 4, 4, c0),
+            PixelCell(28, 56, 8, 4, c4),
+            PixelCell(36, 56, 16, 4, c5),
+            PixelCell(52, 56, 4, 4, c0),
+            PixelCell(56, 56, 24, 4, c2),
+            PixelCell(80, 56, 4, 4, c3),
+            PixelCell(84, 56, 12, 4, c2),
+            PixelCell(96, 56, 4, 4, c0),
+            PixelCell(100, 56, 4, 4, c4),
+            PixelCell(32, 60, 4, 4, c4),
+            PixelCell(36, 60, 20, 4, c5),
+            PixelCell(56, 60, 44, 4, c2),
+            PixelCell(100, 60, 4, 4, c4),
+            PixelCell(28, 64, 8, 4, c4),
+            PixelCell(36, 64, 20, 4, c5),
+            PixelCell(56, 64, 8, 4, c2),
+            PixelCell(64, 64, 4, 4, c5),
+            PixelCell(68, 64, 32, 4, c2),
+            PixelCell(100, 64, 4, 4, c4),
+            PixelCell(24, 68, 4, 4, c4),
+            PixelCell(28, 68, 20, 4, c5),
+            PixelCell(48, 68, 4, 4, c0),
+            PixelCell(52, 68, 12, 4, c2),
+            PixelCell(64, 68, 4, 4, c5),
+            PixelCell(68, 68, 28, 4, c2),
+            PixelCell(96, 68, 4, 4, c3),
+            PixelCell(100, 68, 8, 4, c4),
+            PixelCell(20, 72, 8, 4, c4),
+            PixelCell(28, 72, 20, 4, c5),
+            PixelCell(48, 72, 24, 4, c2),
+            PixelCell(72, 72, 8, 4, c5),
+            PixelCell(80, 72, 12, 4, c2),
+            PixelCell(92, 72, 4, 4, c0),
+            PixelCell(96, 72, 4, 4, c3),
+            PixelCell(100, 72, 8, 4, c4),
+            PixelCell(20, 76, 4, 4, c4),
+            PixelCell(24, 76, 28, 4, c5),
+            PixelCell(52, 76, 4, 4, c0),
+            PixelCell(56, 76, 32, 4, c2),
+            PixelCell(88, 76, 4, 4, c0),
+            PixelCell(92, 76, 4, 4, c3),
+            PixelCell(96, 76, 4, 4, c5),
+            PixelCell(100, 76, 4, 4, c4),
+            PixelCell(20, 80, 4, 4, c4),
+            PixelCell(24, 80, 4, 4, c5),
+            PixelCell(28, 80, 4, 4, c3),
+            PixelCell(32, 80, 24, 4, c5),
+            PixelCell(56, 80, 4, 4, c0),
+            PixelCell(60, 80, 4, 4, c2)
+        ])
+        cells.append(contentsOf: [
+PixelCell(64, 80, 8, 4, c0),
+            PixelCell(72, 80, 8, 4, c2),
+            PixelCell(80, 80, 8, 4, c0),
+            PixelCell(88, 80, 4, 4, c3),
+            PixelCell(92, 80, 4, 4, c5),
+            PixelCell(96, 80, 8, 4, c4),
+            PixelCell(20, 84, 8, 4, c4),
+            PixelCell(28, 84, 4, 4, c5),
+            PixelCell(32, 84, 4, 4, c3),
+            PixelCell(36, 84, 32, 4, c5),
+            PixelCell(68, 84, 4, 4, c3),
+            PixelCell(72, 84, 8, 4, c0),
+            PixelCell(80, 84, 8, 4, c3),
+            PixelCell(88, 84, 4, 4, c5),
+            PixelCell(92, 84, 8, 4, c4),
+            PixelCell(24, 88, 8, 4, c4),
+            PixelCell(32, 88, 8, 4, c5),
+            PixelCell(40, 88, 8, 4, c3),
+            PixelCell(48, 88, 4, 4, c5),
+            PixelCell(52, 88, 4, 4, c3),
+            PixelCell(56, 88, 8, 4, c5),
+            PixelCell(64, 88, 4, 4, c3),
+            PixelCell(68, 88, 4, 4, c5),
+            PixelCell(72, 88, 12, 4, c3),
+            PixelCell(84, 88, 4, 4, c5),
+            PixelCell(88, 88, 12, 4, c4),
+            PixelCell(32, 92, 12, 4, c4),
+            PixelCell(44, 92, 4, 4, c0),
+            PixelCell(48, 92, 4, 4, c5),
+            PixelCell(52, 92, 16, 4, c3),
+            PixelCell(68, 92, 4, 4, c5),
+            PixelCell(72, 92, 20, 4, c4),
+            PixelCell(36, 96, 4, 4, c4),
+            PixelCell(40, 96, 4, 4, c0),
+            PixelCell(44, 96, 4, 4, c3),
+            PixelCell(48, 96, 4, 4, c4),
+            PixelCell(52, 96, 4, 4, c0),
+            PixelCell(56, 96, 12, 4, c3),
+            PixelCell(68, 96, 16, 4, c4),
+            PixelCell(36, 100, 8, 4, c4),
+            PixelCell(44, 100, 4, 4, c3),
+            PixelCell(48, 100, 4, 4, c4),
+            PixelCell(52, 100, 4, 4, c0),
+            PixelCell(56, 100, 8, 4, c4),
+            PixelCell(64, 100, 4, 4, c0),
+            PixelCell(68, 100, 12, 4, c4),
+            PixelCell(40, 104, 12, 4, c4),
+            PixelCell(60, 104, 12, 4, c4)
+        ])
+        return cells
     }
 
     private func terminalBaseCells(kind: BuddyKind) -> [PixelCell] {
-        let shell = kind == .codex
+        let shell = (kind == .gemini || kind == .codex)
             ? Color(red: 0.08, green: 0.09, blue: 0.12)
             : Color(red: 0.09, green: 0.08, blue: 0.07)
-        let rim = kind == .codex
+        let rim = (kind == .gemini || kind == .codex)
             ? Color(red: 0.24, green: 0.27, blue: 0.34)
             : Color(red: 0.32, green: 0.24, blue: 0.20)
-        let title = kind == .codex
-            ? rim
-            : rim
         let text = kind == .codex
             ? Color.white.opacity(0.45)
             : Color.white.opacity(0.42)
 
         return [
-            PixelCell(1, 13, 14, 1, rim),
-            PixelCell(1, 14, 14, 2, shell),
-            PixelCell(1, 14, 14, 1, title),
-            PixelCell(3, 14, 1, 1, Color.red.opacity(0.82)),
-            PixelCell(5, 14, 1, 1, Color.yellow.opacity(0.82)),
-            PixelCell(7, 14, 1, 1, Color.green.opacity(0.82)),
-            PixelCell(9, 15, 4, 1, text.opacity(0.36))
+            PixelCell(8, 96, 112, 8, rim),
+            PixelCell(8, 104, 112, 16, shell),
+            PixelCell(8, 104, 112, 8, rim),
+            PixelCell(24, 104, 8, 8, Color.red.opacity(0.82)),
+            PixelCell(40, 104, 8, 8, Color.yellow.opacity(0.82)),
+            PixelCell(56, 104, 8, 8, Color.green.opacity(0.82)),
+            PixelCell(72, 112, 32, 8, text.opacity(0.36))
         ]
     }
 
     private func pixelGrid(size: CGFloat, cells: [PixelCell]) -> some View {
-        let unit = size / 16
+        let unit = size / 128
 
         return ZStack(alignment: .topLeading) {
             ForEach(cells.indices, id: \.self) { index in
@@ -803,7 +1092,7 @@ struct AgentRequestBadge: View {
     let isActive: Bool
     var size: CGFloat = 48
 
-    private var mascotSize: CGFloat { size * 0.72 }
+    private var mascotSize: CGFloat { size * 0.88 }
     private var requestBadgeSize: CGFloat { size * 0.38 }
 
     var body: some View {
@@ -974,6 +1263,8 @@ struct SessionRowView: View {
 struct NotchView: View {
     @ObservedObject var state = AppState.shared
     @State private var buddyPulse = false
+    @State private var leftMascot: BuddyKind = .claudeCode
+    @State private var rightMascot: BuddyKind = .gemini
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
@@ -1061,6 +1352,15 @@ struct NotchView: View {
             withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
                 buddyPulse = true
             }
+            
+            // Randomly select 2 mascots
+            if let randomLeft = BuddyKind.allCases.randomElement() {
+                leftMascot = randomLeft
+            }
+            if let randomRight = BuddyKind.allCases.randomElement() {
+                rightMascot = randomRight
+            }
+            
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
         }
     }
@@ -1075,19 +1375,24 @@ struct NotchView: View {
 
             HStack {
                 CLIBuddyView(
-                    accent: BuddyKind.claudeCode.accentColor,
+                    accent: leftMascot.accentColor,
                     isActive: buddyPulse,
                     compact: true,
-                    kind: .claudeCode
+                    kind: leftMascot
                 )
-                .frame(width: 18, height: 18)
-                .offset(x: -4, y: 4)
+                .frame(width: 24, height: 24)
+                .offset(x: -6, y: 4)
 
                 Spacer(minLength: 0)
 
-                CLIBuddyView(accent: BuddyKind.codex.accentColor, isActive: buddyPulse, compact: true, kind: .codex)
-                    .frame(width: 18, height: 18)
-                    .offset(x: 4, y: 4)
+                CLIBuddyView(
+                    accent: rightMascot.accentColor, 
+                    isActive: buddyPulse, 
+                    compact: true, 
+                    kind: rightMascot
+                )
+                .frame(width: 24, height: 24)
+                .offset(x: 6, y: 4)
             }
         }
         .padding(.horizontal, 12)
