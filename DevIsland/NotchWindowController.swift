@@ -1015,7 +1015,6 @@ PixelCell(64, 80, 8, 4, c0),
         let rim = (kind == .gemini || kind == .codex)
             ? Color(red: 0.24, green: 0.27, blue: 0.34)
             : Color(red: 0.32, green: 0.24, blue: 0.20)
-        let title = rim
         let text = kind == .codex
             ? Color.white.opacity(0.45)
             : Color.white.opacity(0.42)
@@ -1023,7 +1022,7 @@ PixelCell(64, 80, 8, 4, c0),
         return [
             PixelCell(8, 96, 112, 8, rim),
             PixelCell(8, 104, 112, 16, shell),
-            PixelCell(8, 104, 112, 8, title),
+            PixelCell(8, 104, 112, 8, rim),
             PixelCell(24, 104, 8, 8, Color.red.opacity(0.82)),
             PixelCell(40, 104, 8, 8, Color.yellow.opacity(0.82)),
             PixelCell(56, 104, 8, 8, Color.green.opacity(0.82)),
