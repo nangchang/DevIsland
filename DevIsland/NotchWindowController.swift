@@ -682,29 +682,50 @@ struct CLIBuddyView: View {
                 pixelGrid(size: size, cells: claudeBodyCells(frame: frameIndex))
                     .scaleEffect(x: isFlipped ? 1 : -1)
             } else {
-                pixelGrid(size: size, cells: codexCells)
+                pixelGrid(size: size, cells: terminalBaseCells(kind: .codex))
+                pixelGrid(size: size, cells: codexBodyCells(frame: frameIndex))
+                    .scaleEffect(x: isFlipped ? 1 : -1)
             }
         }
     }
 
-    private var codexCells: [PixelCell] {
-        let fur = Color(red: 0.34, green: 0.38, blue: 1.0)
-        let shade = Color(red: 0.15, green: 0.22, blue: 0.88)
-        let ink = Color.white.opacity(0.94)
+    private func codexBodyCells(frame: Int) -> [PixelCell] {
+        let fur = Color(red: 0.20, green: 0.40, blue: 0.84)
+        let ink = Color.white.opacity(0.95)
 
-        return terminalBaseCells(kind: .codex) + [
-            PixelCell(2, 1, 2, 3, fur),
-            PixelCell(12, 1, 2, 3, fur),
-            PixelCell(3, 3, 10, 1, fur),
-            PixelCell(1, 4, 14, 1, fur),
-            PixelCell(0, 5, 16, 6, fur),
-            PixelCell(1, 11, 14, 1, shade),
-            PixelCell(3, 12, 10, 1, shade),
+        var cells: [PixelCell] = []
+
+        // Head (Original Cloud shape)
+        cells += [
+            // Ears
+            PixelCell(3, 1, 1, 3, fur), PixelCell(4, 2, 1, 2, fur), PixelCell(5, 3, 1, 1, fur), // L
+            PixelCell(11, 1, 1, 3, fur), PixelCell(10, 2, 1, 2, fur), PixelCell(9, 3, 1, 1, fur), // R (Moved inward)
+            
+            // Main Face
+            PixelCell(3, 4, 10, 8, fur), // Square center
+            PixelCell(2, 5, 1, 6, fur), PixelCell(13, 5, 1, 6, fur), // Side vertical
+            PixelCell(1, 6, 1, 4, fur), PixelCell(14, 6, 1, 4, fur), // Far side vertical
+            
+            // Prompt Eye ( > )
             PixelCell(5, 6, 1, 1, ink),
             PixelCell(6, 7, 1, 1, ink),
             PixelCell(5, 8, 1, 1, ink),
-            PixelCell(9, 9, 4, 1, ink)
+            
+            // Shortened Cursor Eye ( _ )
+            PixelCell(9, 8, 3, 1, ink),
+            
+            // Whiskers (Fixed perspective: L shorter, R longer)
+            PixelCell(1, 7, 1, 1, fur),                               // L (1px)
+            PixelCell(14, 7, 2, 1, fur), PixelCell(14, 9, 2, 1, fur) // R (2px)
         ]
+        
+        // Simple tail for codex
+        cells += [
+            PixelCell(13, 10, 2, 1, fur),
+            PixelCell(14, 9, 1, 1, fur)
+        ]
+
+        return cells
     }
 
     private func claudeBodyCells(frame: Int) -> [PixelCell] {
