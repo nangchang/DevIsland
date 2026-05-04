@@ -294,10 +294,16 @@ class AppState: ObservableObject {
         }
 
         let normalizedEvent = normalizedHookEventName(event)
-        let stopEvents = ["exit", "shutdown", "sessionend"]
-        let notificationEvents = ["sessionstart", "notification", "pretooluse", "posttooluse", "precompact", "stop", "subagentstop"]
+        let stopEvents = ["exit", "shutdown", "sessionend", "onsessionend", "session_end", "on_session_end", "stop"]
+        let notificationEvents = [
+            "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
+            "onsessionstart", "session_start", "on_session_start", "startup", "init", "onnotification"
+        ]
+        // approval: Claude의 PermissionRequest + Codex의 PreToolUse + Gemini의 BeforeTool
+        let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
         let isStop = stopEvents.contains(normalizedEvent)
         let isNotification = notificationEvents.contains(normalizedEvent)
+        let isApproval = approvalEvents.contains(normalizedEvent)
 
         if isStop {
             guard !sessionId.isEmpty else {
@@ -352,7 +358,8 @@ class AppState: ObservableObject {
             }
             let fullSessionId = sessionId
             let hasPendingForSession = self.pendingQueue.contains { $0.sessionId == fullSessionId }
-            let sessionMessage = (normalizedEvent == "sessionstart")
+            let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "onsessionstart" || normalizedEvent == "session_start" || normalizedEvent == "startup" || normalizedEvent == "init")
+            let sessionMessage = isStartEvent
                 ? "Session Started"
                 : (normalizedEvent == "stop" && displayMsg.isEmpty) ? "Task Completed" : displayMsg
             
@@ -368,19 +375,19 @@ class AppState: ObservableObject {
                 eventName: event,
                 message: sessionMessage,
                 isPending: hasPendingForSession,
-                preserveMessage: normalizedEvent == "pretooluse" || sessionMessage.isEmpty,
-                isLifecycleTracked: normalizedEvent == "sessionstart"
+                preserveMessage: (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse") || sessionMessage.isEmpty,
+                isLifecycleTracked: isStartEvent || agentKind != .claudeCode // Codex/Gemini는 기본적으로 추적 유지
             )
 
             DispatchQueue.main.async {
-                if normalizedEvent == "sessionstart" {
+                if isStartEvent || (self.selectedSessionId == nil) {
                     self.selectedSessionId = fullSessionId
                 }
                 
                 // 알림 확장 로직 (질문이나 작업 완료 시)
-                let isInformational = (normalizedEvent == "stop") || 
+                let isInformational = (normalizedEvent == "stop" || isStartEvent) || 
                                      (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
-                                     (displayMsg.contains("?") && normalizedEvent == "notification")
+                                     (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode))
                 
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
                     // 터미널이 포커스되어 있지 않을 때만 확장
@@ -395,9 +402,9 @@ class AppState: ObservableObject {
                         self.isNotchExpanded = true
                         self.isExpandingFromRequest = true
                         
-                        // 10초 후 자동 축소 (사용자 조작 없을 시)
+                        // 알림 유지 시간 확보 (최소 5초)
                         self.notificationTimer?.invalidate()
-                        self.notificationTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
+                        self.notificationTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
                             if self?.currentResponseHandler == nil && self?.isNotchExpanded == true {
                                 self?.isNotchExpanded = false
                                 self?.isExpandingFromRequest = false
@@ -411,7 +418,7 @@ class AppState: ObservableObject {
             return
         }
 
-        guard normalizedEvent == "permissionrequest" else {
+        guard isApproval else {
             print("[DevIsland] ignoring non-approval event: \(event)")
             responseHandler("{\"response\": \"approved\"}")
             return
@@ -521,6 +528,7 @@ class AppState: ObservableObject {
         if let input = toolInput {
             let lowerToolName = toolName.lowercased()
             switch lowerToolName {
+            // Claude Code
             case "bash":
                 return joinedMessageLines([
                     input["description"] as? String,
@@ -546,6 +554,49 @@ class AppState: ObservableObject {
                     input["url"] as? String,
                     input["prompt"] as? String
                 ])
+            
+            // Gemini CLI
+            case "run_shell_command":
+                return joinedMessageLines([
+                    input["description"] as? String,
+                    input["command"] as? String
+                ])
+            case "write_file":
+                return joinedMessageLines([
+                    input["file_path"] as? String,
+                    input["content"] as? String
+                ])
+            case "read_file":
+                return joinedMessageLines([
+                    input["file_path"] as? String,
+                    "lines: \(input["start_line"] ?? 1) - \(input["end_line"] ?? "")"
+                ])
+            case "replace":
+                return joinedMessageLines([
+                    input["file_path"] as? String,
+                    input["instruction"] as? String,
+                    prefixedBlock("old", input["old_string"] as? String),
+                    prefixedBlock("new", input["new_string"] as? String)
+                ])
+            case "grep_search":
+                return joinedMessageLines([
+                    "pattern: \(input["pattern"] ?? "")",
+                    "include: \(input["include_pattern"] ?? "")"
+                ])
+            case "glob":
+                return "pattern: \(input["pattern"] ?? "")"
+            case "web_fetch":
+                return "prompt: \(input["prompt"] ?? "")"
+                
+            // Codex CLI
+            case "shell":
+                return input["command"] as? String ?? ""
+            case "apply_patch":
+                return joinedMessageLines([
+                    input["path"] as? String,
+                    input["patch"] as? String
+                ])
+                
             default:
                 return input.keys.sorted().map { key in
                     "\(key): \(input[key] ?? "")"
@@ -626,6 +677,25 @@ class AppState: ObservableObject {
     }
 
     private static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
+        // 1. cli_source 필드가 명시적으로 있으면 최우선 적용
+        if let explicitSource = json["cli_source"] as? String, !explicitSource.isEmpty {
+            switch explicitSource {
+            case "gemini": return .gemini
+            case "codex":  return .codex
+            case "claude": return .claudeCode
+            default: break
+            }
+        }
+
+        // 2. hook_event_name 또는 event로 CLI 종류를 추측
+        let event = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? ""
+        switch event {
+        case "BeforeTool", "onToolCall":   return .gemini
+        case "PreToolUse":                 return .codex
+        default: break
+        }
+        
+        // 3. 필드 구조나 타이틀로 추측 (폴백)
         let candidateKeys = [
             "agent", "agent_name", "agentName", "source", "client",
             "app", "application", "cli", "model", "model_name"
@@ -781,7 +851,8 @@ class AppState: ObservableObject {
     }
 
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
-        normalizedHookEventName(request.eventName) == "permissionrequest"
+        let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
+        return approvalEvents.contains(normalizedHookEventName(request.eventName))
             && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 
