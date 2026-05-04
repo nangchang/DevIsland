@@ -100,6 +100,7 @@ class AppState: ObservableObject {
         static let selectedDisplayId = "selectedDisplayId"
         static let showInFullScreenApps = "showInFullScreenApps"
         static let requestDisplayTarget = "requestDisplayTarget"
+        static let globalAutoApproveTypes = "globalAutoApproveTypes"
     }
 
     @Published var isNotchExpanded = false
@@ -143,6 +144,13 @@ class AppState: ObservableObject {
             }
         }
     }
+    
+    @Published var globalAutoApproveTypes: Set<String> = [] {
+        didSet {
+            UserDefaults.standard.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
+        }
+    }
+    @Published var sessionAutoApproveTypes: [String: Set<String>] = [:]
 
     private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
 
@@ -169,6 +177,9 @@ class AppState: ObservableObject {
         if let rawTarget = defaults.string(forKey: DefaultsKey.requestDisplayTarget),
            let target = RequestDisplayTarget(rawValue: rawTarget) {
             requestDisplayTarget = target
+        }
+        if let savedAutoApprove = defaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String] {
+            globalAutoApproveTypes = Set(savedAutoApprove)
         }
         ensureSelectedDisplay()
 
@@ -438,6 +449,36 @@ class AppState: ObservableObject {
             responseHandler: responseHandler,
             receivedAt: Date()
         )
+
+        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName)
+        let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
+
+        if isAutoApprovedGlobal || isAutoApprovedSession {
+            print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8))")
+            request.responseHandler("{\"response\": \"approved\"}")
+            
+            DispatchQueue.main.async { [weak self] in
+                if !sessionId.isEmpty {
+                    self?.updateActiveSession(
+                        sessionId: sessionId,
+                        terminalTitle: terminalTitle,
+                        agentKind: agentKind,
+                        terminalApp: terminalApp,
+                        terminalTTY: terminalTTY,
+                        terminalWindowId: terminalWindowId,
+                        terminalTabIndex: terminalTabIndex,
+                        toolName: toolName,
+                        eventName: event,
+                        message: "Auto-approved: \(toolName)",
+                        isPending: false,
+                        preserveMessage: true,
+                        isLifecycleTracked: true,
+                        status: .timeoutBypassed(Date())
+                    )
+                }
+            }
+            return
+        }
 
         // Pass through check: 터미널이 이미 활성 상태라면 'pass' 응답으로 즉시 통과
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -928,7 +969,20 @@ class AppState: ObservableObject {
         }
     }
 
-    func approve() {
+    func approve(globalAlways: Bool = false, sessionAlways: Bool = false) {
+        let tool = currentToolName
+        let sId = currentSessionId
+        
+        if globalAlways && !tool.isEmpty {
+            globalAutoApproveTypes.insert(tool)
+        }
+        if sessionAlways && !tool.isEmpty && !sId.isEmpty {
+            if sessionAutoApproveTypes[sId] == nil {
+                sessionAutoApproveTypes[sId] = []
+            }
+            sessionAutoApproveTypes[sId]?.insert(tool)
+        }
+
         print("[DevIsland] approve() called, handler=\(currentResponseHandler != nil ? "SET" : "NIL")")
         sendDecision(approved: true)
     }
@@ -936,6 +990,51 @@ class AppState: ObservableObject {
     func deny() {
         print("[DevIsland] deny() called")
         sendDecision(approved: false)
+    }
+
+    func promptToAddGlobalAutoApprove() {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "글로벌 자동 승인 툴 추가"
+            alert.informativeText = "모든 세션에서 자동 승인할 툴 이름(예: read_file)을 입력하세요."
+            alert.addButton(withTitle: "추가")
+            alert.addButton(withTitle: "취소")
+            
+            let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
+            alert.accessoryView = input
+            NSApp.activate(ignoringOtherApps: true)
+            
+            if alert.runModal() == .alertFirstButtonReturn {
+                let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !toolName.isEmpty {
+                    self.globalAutoApproveTypes.insert(toolName)
+                }
+            }
+        }
+    }
+
+    func promptToAddSessionAutoApprove(for sessionId: String) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "세션 자동 승인 툴 추가"
+            alert.informativeText = "현재 세션(\(sessionId.prefix(8)))에서 자동 승인할 툴 이름을 입력하세요."
+            alert.addButton(withTitle: "추가")
+            alert.addButton(withTitle: "취소")
+            
+            let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
+            alert.accessoryView = input
+            NSApp.activate(ignoringOtherApps: true)
+            
+            if alert.runModal() == .alertFirstButtonReturn {
+                let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !toolName.isEmpty {
+                    if self.sessionAutoApproveTypes[sessionId] == nil {
+                        self.sessionAutoApproveTypes[sessionId] = []
+                    }
+                    self.sessionAutoApproveTypes[sessionId]?.insert(toolName)
+                }
+            }
+        }
     }
 
     func dismissCurrentRequest() {
