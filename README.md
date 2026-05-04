@@ -28,70 +28,44 @@ xcodegen generate
 open DevIsland.xcodeproj
 ```
 
-### 2. Claude Code 연동 (브릿지 설치)
+### 2. CLI 에이전트 연동 (브릿지 설치)
 
-터미널에서 Claude Code의 이벤트를 DevIsland 앱으로 전달하기 위한 브릿지 스크립트를 설치해야 합니다.
+터미널에서 실행되는 AI 에이전트의 이벤트를 DevIsland 앱으로 전달하기 위한 브릿지 스크립트를 설치해야 합니다. Claude Code, Gemini CLI, Codex CLI를 모두 지원합니다.
 
 #### 자동 설치
 
 ```bash
-# 프로젝트 루트에서 실행
-bash scripts/install-bridge.sh
+# 모든 지원되는 CLI에 대해 설치
+bash scripts/install-bridge.sh --all
+
+# 특정 CLI만 선택해서 설치
+bash scripts/install-bridge.sh --claude
+bash scripts/install-bridge.sh --gemini
+bash scripts/install-bridge.sh --codex
 ```
 
 #### 수동 설치
 
 스크립트를 실행하기 어려운 경우 아래 단계를 직접 수행하세요.
 
-**1) 브릿지 스크립트를 hooks 폴더에 복사 (또는 심볼릭 링크)**
+**1) 브릿지 스크립트 준비**
 
 ```bash
 mkdir -p ~/.claude/hooks
-# 심볼릭 링크 (저장소를 유지하는 경우 권장)
+# 심볼릭 링크 생성
 ln -sf /path/to/DevIsland/scripts/devisland-bridge.sh ~/.claude/hooks/devisland-bridge.sh
-# 또는 단순 복사
-cp /path/to/DevIsland/scripts/devisland-bridge.sh ~/.claude/hooks/
 chmod +x ~/.claude/hooks/devisland-bridge.sh
 ```
 
-**2) `~/.claude/settings.json`에 훅 등록**
+**2) CLI별 설정**
 
-`~/.claude/settings.json` 파일을 열어 아래 내용을 추가합니다.  
-파일이 없으면 새로 만드세요.
+- **Claude Code**: `~/.claude/settings.json`에 `PermissionRequest`, `SessionStart`, `SessionEnd` 훅을 등록합니다.
+- **Gemini CLI**: `~/.gemini/settings.json`의 `hooks` 배열에 `BeforeTool`, `SessionStart`, `SessionEnd` 이벤트를 추가합니다.
+- **Codex CLI**: `~/.codex/hooks.json`의 `PreToolUse` 항목에 등록하고, `~/.codex/config.toml`에서 `codex_hooks = true`를 활성화합니다.
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh" }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh", "timeout": 86400 }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/devisland-bridge.sh" }
-        ]
-      }
-    ]
-  }
-}
-```
+상세한 설정 예시는 `scripts/install-bridge.sh` 파일 내의 Python 로직을 참조하세요.
 
-> `~/.claude/hooks/devisland-bridge.sh` 경로는 실제 파일 위치에 맞게 조정하세요.  
-> 기존 `settings.json`에 이미 `hooks` 키가 있다면 위 항목들을 병합하세요.
-> DevIsland는 중복 알림을 줄이기 위해 `PreToolUse`, `PostToolUse`, `Notification`, `Stop` 훅을 등록하지 않습니다. 권한 승인은 `PermissionRequest`에서만 처리하고, 세션 목록은 `SessionStart`/`SessionEnd`로 관리합니다.
-
-설치가 완료되면 Claude Code 실행 시 자동으로 DevIsland와 연결됩니다.
+설치가 완료되면 각 CLI 실행 시 자동으로 DevIsland와 연결됩니다.
 
 ### 3. 로그인 시 자동 시작 (선택)
 

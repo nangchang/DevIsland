@@ -35,17 +35,163 @@ For environments without Xcode (e.g. CI, Codex), use the shell build script:
 
 This compiles all `DevIsland/*.swift` sources with `swiftc`, assembles an app bundle under `dist/DevIsland.app`, and launches it. Pass `--verify` to assert the process started. This path is also wired as the `.codex/environments/environment.toml` Run action.
 
-## Architecture
+## Multi-CLI Support
+
+DevIsland supports multiple AI agent CLIs through the same bridge architecture.
+
+### Supported CLIs — Quick Reference
+
+| CLI Agent | Config File | Approval Event | Lifecycle Events | Docs |
+|---|---|---|---|---|
+| **Claude Code** | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `Notification`, `Stop`, … | [hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks) |
+| **Codex CLI** | `~/.codex/hooks.json` + `config.toml` | `PreToolUse` | `SessionStart`, `SessionEnd`, `PostToolUse`, `Stop` | [openai.com/codex](https://openai.com/codex) |
+| **Gemini CLI** | `~/.gemini/settings.json` | `BeforeTool` | `SessionStart`, `SessionEnd`, `AfterTool`, `BeforeAgent`, … | [geminicli.com/hooks](https://geminicli.com/hooks) |
+
+---
+
+### Claude Code Hook Spec
+
+**Config file:** `~/.claude/settings.json` (or `.claude/settings.json` per-project)  
+**Full spec:** https://docs.anthropic.com/en/docs/claude-code/hooks
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "/path/to/devisland-bridge.sh --source claude", "timeout": 86400 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "/path/to/devisland-bridge.sh --source claude" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+DevIsland uses `PermissionRequest` as the primary approval hook. Response format:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionRequest",
+    "decision": { "behavior": "allow" }
+  }
+}
+```
+
+Exit codes: `0` = success, `2` = hard block (stderr shown to user), other = warning.
+
+---
+
+### Codex CLI Hook Spec
+
+**Config files:** `~/.codex/hooks.json` + `~/.codex/config.toml`  
+**Full spec:** https://openai.com/codex (Hooks section)
+
+Requires feature flag in `config.toml`:
+```toml
+[features]
+codex_hooks = true
+```
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "/path/to/devisland-bridge.sh --source codex" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "/path/to/devisland-bridge.sh --source codex" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+DevIsland uses `PreToolUse` as the primary approval hook. Response format:
+
+```json
+{ "decision": "block", "reason": "Blocked by DevIsland" }
+```
+
+`decision`: `"approve"` | `"block"`. Omit or return `{}` to allow.
+
+---
+
+### Gemini CLI Hook Spec
+
+**Config file:** `~/.gemini/settings.json` (user-level) or `.gemini/settings.json` (project-level)  
+**Full spec:** https://geminicli.com/hooks
+
+```json
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "name": "devisland", "type": "command", "command": "/path/to/devisland-bridge.sh --source gemini", "timeout": 86400000 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "/path/to/devisland-bridge.sh --source gemini" }] }
+    ],
+    "SessionEnd": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "/path/to/devisland-bridge.sh --source gemini" }] }
+    ]
+  }
+}
+```
+
+> **Note:** Gemini's `timeout` is in **milliseconds** (unlike Claude/Codex which use seconds).
+
+DevIsland uses `BeforeTool` as the primary approval hook. Response format:
+
+```json
+{ "decision": "deny", "reason": "Blocked by DevIsland" }
+```
+
+`decision`: `"allow"` | `"deny"`. Return `{}` or omit to allow.  
+Exit code `2` = hard block (stderr used as rejection reason).
+
+---
+
+### Bridge Arguments
+The bridge script supports an explicit `--source` flag to identify the originating CLI:
+- `devisland-bridge.sh --source claude`
+- `devisland-bridge.sh --source codex`
+- `devisland-bridge.sh --source gemini`
+
+If omitted, the bridge auto-detects from `hook_event_name` (`PermissionRequest` → claude, `PreToolUse` → codex, `BeforeTool` → gemini).
 
 ### Communication Flow
 
 ```
-Claude Code (hook event)
+CLI Agent (hook event)
   → devisland-bridge.sh  (stdin → JSON → TCP:9090, waits up to 300s)
     → HookSocketServer   (NWListener, port 9090)
       → AppState.handleMessage()
         → UI decision (approve / deny / timeout)
-          → TCP response → bridge → Claude Code hook output
+          → TCP response → bridge → CLI-specific JSON response → CLI Agent
 ```
 
 ### Key Files
@@ -58,7 +204,9 @@ Claude Code (hook event)
 | `NotchWindowController.swift` | `NSPanel` positioned at the top-center of the main screen; hosts all SwiftUI views including `NotchView`, `SessionRowView`, `CodexBuddyView`, and `toolInfo()` |
 | `GlobalShortcutManager.swift` | Global `NSEvent` monitor for ⌘⇧Y / ⌘⇧N (requires Accessibility permission) |
 | `TerminalFocuser.swift` | `NSAppleScript` activation of the first detected terminal app after a decision |
-| `scripts/devisland-bridge.sh` | Bash hook handler; appends `terminal_title` to payload, forwards to app, converts response to hook output format |
+| `scripts/devisland-bridge.sh` | Bash hook handler; appends `terminal_title` to payload, forwards to app, converts response to per-CLI JSON format |
+| `scripts/install-bridge.sh` | Registers hooks in Claude / Codex / Gemini config files |
+| `scripts/test-hook.sh` | Manual test CLI; simulates hook events for all three CLIs |
 
 ### AppState Session Model
 
@@ -70,9 +218,9 @@ Claude Code (hook event)
 
 Events are classified into three buckets:
 
-1. **Stop events** (`stop`, `exit`, `shutdown`, `sessionend`) — remove the session from `activeSessions`, respond `approved` immediately.
-2. **Notification events** (`sessionstart`, `session_start`, `posttooluse`, `post_tool_use`, `notification`, etc.) — update session state, respond `approved` immediately (no user action needed).
-3. **Everything else** — treated as a permission request; added to `pendingQueue` and shown in the UI for user decision.
+1. **Stop events** (`stop`, `exit`, `shutdown`, `sessionend`, …) — remove the session from `activeSessions`, respond `approved` immediately.
+2. **Notification events** (`sessionstart`, `notification`, `posttooluse`, `precompact`, `subagentstop`, …) — update session state, respond `approved` immediately (no user action needed).
+3. **Approval events** (`permissionrequest`, `pretooluse`, `beforetool`, …) — added to `pendingQueue` and shown in the UI for user decision.
 
 ### Window Mechanics
 
@@ -90,3 +238,4 @@ On collapse, the frame shrinks after a 0.45 s delay (matching the SwiftUI spring
 `project.yml` is the XcodeGen spec. Changing any build setting, adding a new source file to the target, or modifying entitlements should be done here, not in a hand-edited `.xcodeproj`. Re-run `xcodegen generate` after any edit.
 
 The app is an `LSUIElement` (no Dock icon). It needs two privacy permissions already declared in `project.yml`: Apple Events (for `TerminalFocuser`) and Accessibility (for `GlobalShortcutManager`).
+
