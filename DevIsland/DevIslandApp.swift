@@ -256,7 +256,7 @@ enum BridgeInstaller {
     static func install() {
         guard let bridgeURL = bridgeScriptURL() else { return }
         let home = URL(fileURLWithPath: NSHomeDirectory())
-        let hooksDir = home.appendingPathComponent(".claude/hooks")
+        let hooksDir = home.appendingPathComponent(".local/share/devisland")
         let destURL  = hooksDir.appendingPathComponent("devisland-bridge.sh")
         let settingsURL = home.appendingPathComponent(".claude/settings.json")
 
@@ -275,7 +275,7 @@ enum BridgeInstaller {
     static func installCodex() {
         guard let bridgeURL = bridgeScriptURL() else { return }
         let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let hooksDir = home.appendingPathComponent(".claude/hooks")
+        let hooksDir = home.appendingPathComponent(".local/share/devisland")
         let destURL  = hooksDir.appendingPathComponent("devisland-bridge.sh")
         let codexHooksURL  = home.appendingPathComponent(".codex/hooks.json")
         let codexConfigURL = home.appendingPathComponent(".codex/config.toml")
@@ -296,7 +296,7 @@ enum BridgeInstaller {
     static func installGemini() {
         guard let bridgeURL = bridgeScriptURL() else { return }
         let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let hooksDir = home.appendingPathComponent(".claude/hooks")
+        let hooksDir = home.appendingPathComponent(".local/share/devisland")
         let destURL  = hooksDir.appendingPathComponent("devisland-bridge.sh")
         let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
 

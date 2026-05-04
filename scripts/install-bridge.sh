@@ -44,9 +44,9 @@ fi
 echo "DevIsland 브리지 스크립트 설치 중..."
 
 # -------------------------------------------------------------------
-# 브리지 스크립트를 ~/.claude/hooks/ 에 배치 (공유)
+# 브리지 스크립트를 ~/.local/share/devisland/ 에 배치 (공유)
 # -------------------------------------------------------------------
-HOOKS_DIR="$HOME/.claude/hooks"
+HOOKS_DIR="$HOME/.local/share/devisland"
 BRIDGE_DEST="$HOOKS_DIR/devisland-bridge.sh"
 
 mkdir -p "$HOOKS_DIR"
