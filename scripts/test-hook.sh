@@ -89,15 +89,19 @@ send_event() {
                 echo "✅ ALLOWED"
             elif printf "%s" "$response" | grep -q '"decision":[[:space:]]*"deny"'; then
                 echo "❌ DENIED"
+            elif [ -z "$response" ] || printf "%s" "$response" | grep -qE '^\{\}?$|^\s*$'; then
+                echo "⏭️  PASS (To Terminal)"
             else
                 echo "ℹ️  CONTINUE"
             fi
             ;;
         codex)
-            if printf "%s" "$response" | grep -q '"decision":[[:space:]]*"block"'; then
-                echo "❌ BLOCKED"
-            elif [ -z "$response" ] || printf "%s" "$response" | grep -qE '^\{\}?$|^\s*$'; then
+            if printf "%s" "$response" | grep -q '"permissionDecision":[[:space:]]*"allow"'; then
                 echo "✅ ALLOWED"
+            elif printf "%s" "$response" | grep -q '"permissionDecision":[[:space:]]*"deny"'; then
+                echo "❌ DENIED"
+            elif [ -z "$response" ] || printf "%s" "$response" | grep -qE '^\{\}?$|^\s*$'; then
+                echo "⏭️  PASS (To Terminal)"
             else
                 echo "ℹ️  CONTINUE"
             fi
@@ -108,6 +112,8 @@ send_event() {
                 echo "✅ APPROVED"
             elif printf "%s" "$response" | grep -q '"behavior":[[:space:]]*"deny"'; then
                 echo "❌ DENIED"
+            elif [ -z "$response" ] || printf "%s" "$response" | grep -qE '^\{\}?$|^\s*$'; then
+                echo "⏭️  PASS (To Terminal)"
             else
                 echo "ℹ️  CONTINUE (Passive Event)"
             fi
@@ -209,7 +215,9 @@ interactive_codex() {
         echo "2) 위험한 shell 명령 (rm -rf /)"
         echo "3) apply_patch (파일 수정)"
         echo "4) 커스텀 질문 (Notification)"
-        echo "5) 세션 종료 (SessionEnd)"
+        echo "5) 툴 완료 (PostToolUse)"
+        echo "6) 작업 완료 알림 (Stop)"
+        echo "7) 세션 종료 (SessionEnd)"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 종료"
         read -p "선택: " choice
@@ -225,9 +233,13 @@ interactive_codex() {
                 send_event "$(make_codex_event apply_patch "$input")" codex ;;
             4)
                 read -p "질문 메시지: " msg
-                send_event "$(make_json event Notification session_id "$SESSION_ID" message "$msg")" codex ;;
+                send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "$msg")" codex ;;
             5)
-                send_event "$(make_json event SessionEnd session_id "$SESSION_ID")" codex
+                send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID")" codex ;;
+            6)
+                send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "작업이 완료되었습니다.")" codex ;;
+            7)
+                send_event "$(make_json hook_event_name SessionEnd session_id "$SESSION_ID")" codex
                 break ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
