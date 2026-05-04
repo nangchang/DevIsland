@@ -29,9 +29,11 @@ enum SessionStatus: Equatable {
     case idle
     case pending
     case timeoutBypassed(Date)
+    case autoApproved(Date)
 
     var isTimeoutBypassed: Bool {
         if case .timeoutBypassed = self { return true }
+        if case .autoApproved = self { return true }
         return false
     }
 }
@@ -100,7 +102,10 @@ class AppState: ObservableObject {
         static let selectedDisplayId = "selectedDisplayId"
         static let showInFullScreenApps = "showInFullScreenApps"
         static let requestDisplayTarget = "requestDisplayTarget"
+        static let globalAutoApproveTypes = "globalAutoApproveTypes"
     }
+
+    static let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
@@ -143,6 +148,13 @@ class AppState: ObservableObject {
             }
         }
     }
+    
+    @Published var globalAutoApproveTypes: Set<String> = [] {
+        didSet {
+            UserDefaults.standard.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
+        }
+    }
+    @Published var sessionAutoApproveTypes: [String: Set<String>] = [:]
 
     private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
 
@@ -169,6 +181,9 @@ class AppState: ObservableObject {
         if let rawTarget = defaults.string(forKey: DefaultsKey.requestDisplayTarget),
            let target = RequestDisplayTarget(rawValue: rawTarget) {
             requestDisplayTarget = target
+        }
+        if let savedAutoApprove = defaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String] {
+            globalAutoApproveTypes = Set(savedAutoApprove)
         }
         ensureSelectedDisplay()
 
@@ -294,10 +309,16 @@ class AppState: ObservableObject {
         }
 
         let normalizedEvent = normalizedHookEventName(event)
-        let stopEvents = ["exit", "shutdown", "sessionend"]
-        let notificationEvents = ["sessionstart", "notification", "pretooluse", "posttooluse", "precompact", "stop", "subagentstop"]
+        let stopEvents = ["exit", "shutdown", "sessionend", "onsessionend", "session_end", "on_session_end"]
+        let notificationEvents = [
+            "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
+            "onsessionstart", "session_start", "on_session_start", "startup", "init", "onnotification",
+            "afteragent", "aftermodel", "afterturn", "stop"
+        ]
+        // approval: Claude의 PermissionRequest + Codex의 PreToolUse + Gemini의 BeforeTool
         let isStop = stopEvents.contains(normalizedEvent)
         let isNotification = notificationEvents.contains(normalizedEvent)
+        let isApproval = AppState.approvalEvents.contains(normalizedEvent)
 
         if isStop {
             guard !sessionId.isEmpty else {
@@ -313,6 +334,7 @@ class AppState: ObservableObject {
                 self.pendingItems.removeAll { $0.sessionId == fullSessionId }
                 self.pendingCount = self.pendingQueue.count
                 self.activeSessions.removeAll { $0.id == fullSessionId }
+                self.sessionAutoApproveTypes.removeValue(forKey: fullSessionId)
 
                 if self.currentSessionId == fullSessionId {
                     self.currentResponseHandler = nil
@@ -352,9 +374,25 @@ class AppState: ObservableObject {
             }
             let fullSessionId = sessionId
             let hasPendingForSession = self.pendingQueue.contains { $0.sessionId == fullSessionId }
-            let sessionMessage = (normalizedEvent == "sessionstart")
-                ? "Session Started"
-                : (normalizedEvent == "stop" && displayMsg.isEmpty) ? "Task Completed" : displayMsg
+            let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "onsessionstart" || normalizedEvent == "session_start" || normalizedEvent == "startup" || normalizedEvent == "init")
+            
+            // [UX] 에이전트 작업 완료 대기 상태(Idle Prompt) 판별 로직
+            // - Claude Code: notification 훅에 idle_prompt 또는 input_required 타입으로 전달됨
+            // - Gemini CLI: afteragent, aftermodel 등 턴 종료 시 발생하는 훅을 대기 상태로 간주
+            // - Codex CLI: posttooluse를 쓰면 툴 연속 자동 실행 시 스팸 알림이 생기므로 제외함. 대신 stop 이벤트를 통해 완료됨을 알림
+            let isIdlePrompt = (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
+                               (normalizedEvent == "afteragent" || normalizedEvent == "aftermodel" || normalizedEvent == "afterturn")
+            
+            let sessionMessage: String
+            if isStartEvent {
+                sessionMessage = "Session Started"
+            } else if isIdlePrompt && displayMsg.isEmpty {
+                sessionMessage = "Waiting for next prompt..."
+            } else if (normalizedEvent == "stop" && displayMsg.isEmpty) {
+                sessionMessage = "Task Completed"
+            } else {
+                sessionMessage = displayMsg
+            }
             
             self.updateActiveSession(
                 sessionId: fullSessionId,
@@ -368,19 +406,18 @@ class AppState: ObservableObject {
                 eventName: event,
                 message: sessionMessage,
                 isPending: hasPendingForSession,
-                preserveMessage: normalizedEvent == "pretooluse" || sessionMessage.isEmpty,
-                isLifecycleTracked: normalizedEvent == "sessionstart"
+                preserveMessage: (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse") || sessionMessage.isEmpty,
+                isLifecycleTracked: isStartEvent || agentKind != .claudeCode // Codex/Gemini는 기본적으로 추적 유지
             )
 
             DispatchQueue.main.async {
-                if normalizedEvent == "sessionstart" {
+                if isStartEvent || (self.selectedSessionId == nil) {
                     self.selectedSessionId = fullSessionId
                 }
                 
                 // 알림 확장 로직 (질문이나 작업 완료 시)
-                let isInformational = (normalizedEvent == "stop") || 
-                                     (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
-                                     (displayMsg.contains("?") && normalizedEvent == "notification")
+                let isInformational = (normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
+                                     (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode))
                 
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
                     // 터미널이 포커스되어 있지 않을 때만 확장
@@ -395,9 +432,9 @@ class AppState: ObservableObject {
                         self.isNotchExpanded = true
                         self.isExpandingFromRequest = true
                         
-                        // 10초 후 자동 축소 (사용자 조작 없을 시)
+                        // 알림 유지 시간 확보 (최소 5초)
                         self.notificationTimer?.invalidate()
-                        self.notificationTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
+                        self.notificationTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
                             if self?.currentResponseHandler == nil && self?.isNotchExpanded == true {
                                 self?.isNotchExpanded = false
                                 self?.isExpandingFromRequest = false
@@ -411,7 +448,7 @@ class AppState: ObservableObject {
             return
         }
 
-        guard normalizedEvent == "permissionrequest" else {
+        guard isApproval else {
             print("[DevIsland] ignoring non-approval event: \(event)")
             responseHandler("{\"response\": \"approved\"}")
             return
@@ -431,6 +468,36 @@ class AppState: ObservableObject {
             responseHandler: responseHandler,
             receivedAt: Date()
         )
+
+        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName)
+        let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
+
+        if isAutoApprovedGlobal || isAutoApprovedSession {
+            print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8))")
+            request.responseHandler("{\"response\": \"approved\"}")
+            
+            DispatchQueue.main.async { [weak self] in
+                if !sessionId.isEmpty {
+                    self?.updateActiveSession(
+                        sessionId: sessionId,
+                        terminalTitle: terminalTitle,
+                        agentKind: agentKind,
+                        terminalApp: terminalApp,
+                        terminalTTY: terminalTTY,
+                        terminalWindowId: terminalWindowId,
+                        terminalTabIndex: terminalTabIndex,
+                        toolName: toolName,
+                        eventName: event,
+                        message: "Auto-approved: \(toolName)",
+                        isPending: false,
+                        preserveMessage: true,
+                        isLifecycleTracked: true,
+                        status: .autoApproved(Date())
+                    )
+                }
+            }
+            return
+        }
 
         // Pass through check: 터미널이 이미 활성 상태라면 'pass' 응답으로 즉시 통과
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -521,6 +588,7 @@ class AppState: ObservableObject {
         if let input = toolInput {
             let lowerToolName = toolName.lowercased()
             switch lowerToolName {
+            // Claude Code
             case "bash":
                 return joinedMessageLines([
                     input["description"] as? String,
@@ -546,6 +614,49 @@ class AppState: ObservableObject {
                     input["url"] as? String,
                     input["prompt"] as? String
                 ])
+            
+            // Gemini CLI
+            case "run_shell_command":
+                return joinedMessageLines([
+                    input["description"] as? String,
+                    input["command"] as? String
+                ])
+            case "write_file":
+                return joinedMessageLines([
+                    input["file_path"] as? String,
+                    input["content"] as? String
+                ])
+            case "read_file":
+                return joinedMessageLines([
+                    input["file_path"] as? String,
+                    "lines: \(input["start_line"] ?? 1) - \(input["end_line"] ?? "")"
+                ])
+            case "replace":
+                return joinedMessageLines([
+                    input["file_path"] as? String,
+                    input["instruction"] as? String,
+                    prefixedBlock("old", input["old_string"] as? String),
+                    prefixedBlock("new", input["new_string"] as? String)
+                ])
+            case "grep_search":
+                return joinedMessageLines([
+                    "pattern: \(input["pattern"] ?? "")",
+                    "include: \(input["include_pattern"] ?? "")"
+                ])
+            case "glob":
+                return "pattern: \(input["pattern"] ?? "")"
+            case "web_fetch":
+                return "prompt: \(input["prompt"] ?? "")"
+                
+            // Codex CLI
+            case "shell":
+                return input["command"] as? String ?? ""
+            case "apply_patch":
+                return joinedMessageLines([
+                    input["path"] as? String,
+                    input["patch"] as? String
+                ])
+                
             default:
                 return input.keys.sorted().map { key in
                     "\(key): \(input[key] ?? "")"
@@ -626,6 +737,25 @@ class AppState: ObservableObject {
     }
 
     private static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
+        // 1. cli_source 필드가 명시적으로 있으면 최우선 적용
+        if let explicitSource = json["cli_source"] as? String, !explicitSource.isEmpty {
+            switch explicitSource {
+            case "gemini": return .gemini
+            case "codex":  return .codex
+            case "claude": return .claudeCode
+            default: break
+            }
+        }
+
+        // 2. hook_event_name 또는 event로 CLI 종류를 추측
+        let event = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? ""
+        switch event {
+        case "BeforeTool", "onToolCall":   return .gemini
+        case "PreToolUse":                 return .codex
+        default: break
+        }
+        
+        // 3. 필드 구조나 타이틀로 추측 (폴백)
         let candidateKeys = [
             "agent", "agent_name", "agentName", "source", "client",
             "app", "application", "cli", "model", "model_name"
@@ -709,10 +839,18 @@ class AppState: ObservableObject {
         let threshold: TimeInterval = self.timeoutDuration
         
         DispatchQueue.main.async {
-            self.activeSessions.removeAll { session in
+            let sessionsToPrune = self.activeSessions.filter { session in
                 let inactiveFor = now.timeIntervalSince(session.lastActiveAt)
                 let maxInactiveDuration = session.isLifecycleTracked ? self.lifecycleSessionTimeout : threshold
                 return !session.isPending && inactiveFor > maxInactiveDuration
+            }
+            
+            for session in sessionsToPrune {
+                self.sessionAutoApproveTypes.removeValue(forKey: session.id)
+            }
+            
+            self.activeSessions.removeAll { session in
+                sessionsToPrune.contains(where: { $0.id == session.id })
             }
         }
     }
@@ -781,7 +919,7 @@ class AppState: ObservableObject {
     }
 
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
-        normalizedHookEventName(request.eventName) == "permissionrequest"
+        return AppState.approvalEvents.contains(normalizedHookEventName(request.eventName))
             && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 
@@ -857,7 +995,20 @@ class AppState: ObservableObject {
         }
     }
 
-    func approve() {
+    func approve(globalAlways: Bool = false, sessionAlways: Bool = false) {
+        let tool = currentToolName
+        let sId = currentSessionId
+        
+        if globalAlways && !tool.isEmpty {
+            globalAutoApproveTypes.insert(tool)
+        }
+        if sessionAlways && !tool.isEmpty && !sId.isEmpty {
+            if sessionAutoApproveTypes[sId] == nil {
+                sessionAutoApproveTypes[sId] = []
+            }
+            sessionAutoApproveTypes[sId]?.insert(tool)
+        }
+
         print("[DevIsland] approve() called, handler=\(currentResponseHandler != nil ? "SET" : "NIL")")
         sendDecision(approved: true)
     }
@@ -865,6 +1016,51 @@ class AppState: ObservableObject {
     func deny() {
         print("[DevIsland] deny() called")
         sendDecision(approved: false)
+    }
+
+    func promptToAddGlobalAutoApprove() {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "글로벌 자동 승인 툴 추가"
+            alert.informativeText = "모든 세션에서 자동 승인할 툴 이름(예: read_file)을 입력하세요."
+            alert.addButton(withTitle: "추가")
+            alert.addButton(withTitle: "취소")
+            
+            let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
+            alert.accessoryView = input
+            NSApp.activate(ignoringOtherApps: true)
+            
+            if alert.runModal() == .alertFirstButtonReturn {
+                let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !toolName.isEmpty {
+                    self.globalAutoApproveTypes.insert(toolName)
+                }
+            }
+        }
+    }
+
+    func promptToAddSessionAutoApprove(for sessionId: String) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "세션 자동 승인 툴 추가"
+            alert.informativeText = "현재 세션(\(sessionId.prefix(8)))에서 자동 승인할 툴 이름을 입력하세요."
+            alert.addButton(withTitle: "추가")
+            alert.addButton(withTitle: "취소")
+            
+            let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
+            alert.accessoryView = input
+            NSApp.activate(ignoringOtherApps: true)
+            
+            if alert.runModal() == .alertFirstButtonReturn {
+                let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !toolName.isEmpty {
+                    if self.sessionAutoApproveTypes[sessionId] == nil {
+                        self.sessionAutoApproveTypes[sessionId] = []
+                    }
+                    self.sessionAutoApproveTypes[sessionId]?.insert(toolName)
+                }
+            }
+        }
     }
 
     func dismissCurrentRequest() {
