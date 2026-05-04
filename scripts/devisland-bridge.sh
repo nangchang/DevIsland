@@ -208,7 +208,10 @@ cli_source = os.environ.get("CLI_SOURCE", "claude")
 message = "DevIsland에서 거절되었습니다."
 
 if result == "pass":
-    print("{}")
+    if cli_source == "claude":
+        print('{"continue": true, "suppressOutput": true}')
+    else:
+        print("{}")
     import sys
     sys.exit(0)
 
