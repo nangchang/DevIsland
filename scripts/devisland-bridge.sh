@@ -206,8 +206,13 @@ event = os.environ.get("EVENT", "")
 result = os.environ.get("RESULT", "denied")
 cli_source = os.environ.get("CLI_SOURCE", "claude")
 message = "DevIsland에서 거절되었습니다."
-allow = result in ("approved", "pass")
 
+if result == "pass":
+    print("{}")
+    import sys
+    sys.exit(0)
+
+allow = (result == "approved")
 if cli_source == "gemini":
     # Gemini CLI: { "decision": "allow" | "deny", "reason": "..." }
     output = {"decision": "allow" if allow else "deny"}
