@@ -209,7 +209,7 @@ message = "DevIsland에서 거절되었습니다."
 
 if result == "pass":
     if cli_source == "claude":
-        print('{"continue": true, "suppressOutput": true}')
+        print("{\"continue\": true, \"suppressOutput\": true}")
     else:
         print("{}")
     import sys
