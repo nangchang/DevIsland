@@ -242,7 +242,7 @@ interactive_gemini() {
     echo "✨ Gemini CLI 훅 테스트"
     echo "Session ID: $SESSION_ID"
     echo "----------------------------"
-    send_event "$(make_gemini_event onSessionStart)" gemini
+    send_event "$(make_gemini_event SessionStart)" gemini
 
     while true; do
         echo "무엇을 테스트하시겠습니까?"
@@ -251,28 +251,28 @@ interactive_gemini() {
         echo "3) write_file (test.txt)"
         echo "4) read_file (README.md)"
         echo "5) 커스텀 질문 (Notification)"
-        echo "6) 세션 종료 (onSessionEnd)"
+        echo "6) 세션 종료 (SessionEnd)"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 종료"
         read -p "선택: " choice
         case "$choice" in
             1)
                 input=$(make_json command "ls -la")
-                send_event "$(make_gemini_event onToolCall run_shell_command "$input")" gemini ;;
+                send_event "$(make_gemini_event BeforeTool run_shell_command "$input")" gemini ;;
             2)
                 input=$(make_json command "rm -rf /")
-                send_event "$(make_gemini_event onToolCall run_shell_command "$input")" gemini ;;
+                send_event "$(make_gemini_event BeforeTool run_shell_command "$input")" gemini ;;
             3)
                 input=$(make_json path "test.txt" content "Hello from Gemini!")
-                send_event "$(make_gemini_event onToolCall write_file "$input")" gemini ;;
+                send_event "$(make_gemini_event BeforeTool write_file "$input")" gemini ;;
             4)
                 input=$(make_json path "README.md")
-                send_event "$(make_gemini_event onToolCall read_file "$input")" gemini ;;
+                send_event "$(make_gemini_event BeforeTool read_file "$input")" gemini ;;
             5)
                 read -p "질문 메시지: " msg
-                send_event "$(make_json event onToolCall session_id "$SESSION_ID" message "$msg")" gemini ;;
+                send_event "$(make_json event BeforeTool session_id "$SESSION_ID" message "$msg")" gemini ;;
             6)
-                send_event "$(make_gemini_event onSessionEnd)" gemini
+                send_event "$(make_gemini_event SessionEnd)" gemini
                 break ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi

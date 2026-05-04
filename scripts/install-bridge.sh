@@ -247,20 +247,25 @@ for event in ["BeforeTool", "SessionStart", "SessionEnd"]:
     if not isinstance(event_configs, list):
         event_configs = []
     
-    found = False
     for config in event_configs:
         if config.get("matcher") == "*":
             sub_hooks = config.get("hooks", [])
             sub_hooks = [h for h in sub_hooks if bridge_path not in h.get("command", "")]
-            sub_hooks.append({"type": "command", "command": bridge_command})
+            hook_entry = {"type": "command", "command": bridge_command}
+            if event == "BeforeTool":
+                hook_entry["timeout"] = 86400000
+            sub_hooks.append(hook_entry)
             config["hooks"] = sub_hooks
             found = True
             break
     
     if not found:
+        hook_entry = {"type": "command", "command": bridge_command}
+        if event == "BeforeTool":
+            hook_entry["timeout"] = 86400000
         event_configs.append({
             "matcher": "*",
-            "hooks": [{"type": "command", "command": bridge_command}]
+            "hooks": [hook_entry]
         })
     
     hooks[event] = event_configs

@@ -503,7 +503,11 @@ enum BridgeInstaller {
                 if (config["matcher"] as? String) == "*" {
                     var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
                     subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgePath) }
-                    subHooks.append(["type": "command", "command": bridgeCommand])
+                    var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
+                    if event == "BeforeTool" {
+                        hookEntry["timeout"] = 86400000
+                    }
+                    subHooks.append(hookEntry)
                     config["hooks"] = subHooks
                     eventConfigs[i] = config
                     found = true
@@ -512,9 +516,13 @@ enum BridgeInstaller {
             }
             
             if !found {
+                var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
+                if event == "BeforeTool" {
+                    hookEntry["timeout"] = 86400000
+                }
                 eventConfigs.append([
                     "matcher": "*",
-                    "hooks": [["type": "command", "command": bridgeCommand]]
+                    "hooks": [hookEntry]
                 ])
             }
             hooks[event] = eventConfigs
