@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum ToolRiskLevel: String, Comparable {
+enum ToolRiskLevel: String, Comparable, CaseIterable {
     case safe = "Safe"
     case low = "Low Risk"
     case medium = "Medium Risk"
@@ -38,8 +38,9 @@ enum ToolRiskLevel: String, Comparable {
     }
 
     static func < (lhs: ToolRiskLevel, rhs: ToolRiskLevel) -> Bool {
-        let order: [ToolRiskLevel: Int] = [.safe: 0, .low: 1, .medium: 2, .high: 3, .critical: 4]
-        return order[lhs]! < order[rhs]!
+        let all = ToolRiskLevel.allCases
+        guard let idxL = all.firstIndex(of: lhs), let idxR = all.firstIndex(of: rhs) else { return false }
+        return idxL < idxR
     }
 }
 
@@ -83,7 +84,7 @@ struct ToolKnowledge {
         }
         
         // Fallback heuristics
-        if lower.contains("shell") || lower.contains("bash") || lower.contains("exec") || lower.contains("run") {
+        if lower.contains("shell") || lower.contains("bash") || lower.contains("exec") || lower.hasPrefix("run_") || lower == "run" {
             return .critical
         }
         if lower.contains("write") || lower.contains("edit") || lower.contains("replace") || lower.contains("delete") {

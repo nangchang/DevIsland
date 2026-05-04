@@ -1144,6 +1144,8 @@ struct SessionRowView: View {
             return "Pending"
         case .timeoutBypassed:
             return "Bypassed"
+        case .autoApproved:
+            return "Auto-Approved"
         case .idle:
             return nil
         }
@@ -1154,6 +1156,8 @@ struct SessionRowView: View {
             return .orange
         case .timeoutBypassed:
             return Color(red: 0.2, green: 0.8, blue: 0.9)
+        case .autoApproved:
+            return Color(red: 0.2, green: 0.9, blue: 0.5)
         case .idle:
             return .white.opacity(0.3)
         }

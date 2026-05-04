@@ -151,7 +151,7 @@ if os.path.exists(path):
 data.setdefault('hooks', {})
 
 # 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-events = ["SessionStart", "SessionEnd", "PreToolUse", "PermissionRequest", "PostToolUse", "Stop"]
+events = ["SessionStart", "SessionEnd", "PreToolUse", "PostToolUse", "Stop"]
 for event in events:
     event_configs = data['hooks'].get(event, [])
     if not isinstance(event_configs, list):
@@ -205,7 +205,16 @@ for line in lines:
         new_lines.append(line)
 
 # features 확인 및 활성화
-if not any('codex_hooks' in l for l in new_lines):
+# features 확인 및 활성화
+found_flag = False
+for i, line in enumerate(new_lines):
+    if 'codex_hooks' in line:
+        if 'false' in line:
+            new_lines[i] = line.replace('false', 'true')
+        found_flag = True
+        break
+
+if not found_flag:
     if new_lines and not new_lines[-1].endswith('\n'):
         new_lines.append('\n')
     new_lines.append('\n[features]\ncodex_hooks = true\n')

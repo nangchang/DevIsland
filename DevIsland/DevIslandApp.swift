@@ -409,7 +409,7 @@ enum BridgeInstaller {
         var hooks = (data["hooks"] as? [String: Any]) ?? [:]
         
         // 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-        let events = ["SessionStart", "SessionEnd", "PreToolUse", "PermissionRequest", "PostToolUse", "Stop"]
+        let events = ["SessionStart", "SessionEnd", "PreToolUse", "PostToolUse", "Stop"]
         for event in events {
             var eventConfigs = (hooks[event] as? [[String: Any]]) ?? []
             
@@ -469,7 +469,11 @@ enum BridgeInstaller {
             }
         }
 
-        if !newLines.contains(where: { $0.contains("codex_hooks") }) {
+        if let index = newLines.firstIndex(where: { $0.contains("codex_hooks") }) {
+            if newLines[index].contains("false") {
+                newLines[index] = newLines[index].replacingOccurrences(of: "false", with: "true")
+            }
+        } else {
             newLines.append("\n[features]\ncodex_hooks = true\n")
         }
 

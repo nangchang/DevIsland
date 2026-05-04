@@ -29,9 +29,11 @@ enum SessionStatus: Equatable {
     case idle
     case pending
     case timeoutBypassed(Date)
+    case autoApproved(Date)
 
     var isTimeoutBypassed: Bool {
         if case .timeoutBypassed = self { return true }
+        if case .autoApproved = self { return true }
         return false
     }
 }
@@ -102,6 +104,8 @@ class AppState: ObservableObject {
         static let requestDisplayTarget = "requestDisplayTarget"
         static let globalAutoApproveTypes = "globalAutoApproveTypes"
     }
+
+    static let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
@@ -312,10 +316,9 @@ class AppState: ObservableObject {
             "afteragent", "aftermodel", "afterturn", "stop"
         ]
         // approval: Claude의 PermissionRequest + Codex의 PreToolUse + Gemini의 BeforeTool
-        let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
         let isStop = stopEvents.contains(normalizedEvent)
         let isNotification = notificationEvents.contains(normalizedEvent)
-        let isApproval = approvalEvents.contains(normalizedEvent)
+        let isApproval = AppState.approvalEvents.contains(normalizedEvent)
 
         if isStop {
             guard !sessionId.isEmpty else {
@@ -331,6 +334,7 @@ class AppState: ObservableObject {
                 self.pendingItems.removeAll { $0.sessionId == fullSessionId }
                 self.pendingCount = self.pendingQueue.count
                 self.activeSessions.removeAll { $0.id == fullSessionId }
+                self.sessionAutoApproveTypes.removeValue(forKey: fullSessionId)
 
                 if self.currentSessionId == fullSessionId {
                     self.currentResponseHandler = nil
@@ -488,7 +492,7 @@ class AppState: ObservableObject {
                         isPending: false,
                         preserveMessage: true,
                         isLifecycleTracked: true,
-                        status: .timeoutBypassed(Date())
+                        status: .autoApproved(Date())
                     )
                 }
             }
@@ -835,10 +839,18 @@ class AppState: ObservableObject {
         let threshold: TimeInterval = self.timeoutDuration
         
         DispatchQueue.main.async {
-            self.activeSessions.removeAll { session in
+            let sessionsToPrune = self.activeSessions.filter { session in
                 let inactiveFor = now.timeIntervalSince(session.lastActiveAt)
                 let maxInactiveDuration = session.isLifecycleTracked ? self.lifecycleSessionTimeout : threshold
                 return !session.isPending && inactiveFor > maxInactiveDuration
+            }
+            
+            for session in sessionsToPrune {
+                self.sessionAutoApproveTypes.removeValue(forKey: session.id)
+            }
+            
+            self.activeSessions.removeAll { session in
+                sessionsToPrune.contains(where: { $0.id == session.id })
             }
         }
     }
@@ -907,8 +919,7 @@ class AppState: ObservableObject {
     }
 
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
-        let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
-        return approvalEvents.contains(normalizedHookEventName(request.eventName))
+        return AppState.approvalEvents.contains(normalizedHookEventName(request.eventName))
             && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 

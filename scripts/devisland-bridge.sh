@@ -157,10 +157,10 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Event Detected: $EVENT (Source: $CLI_SOURCE
 
 case "$EVENT" in
   # Claude / Codex / Gemini 공통 라이프사이클 및 승인 요청
-  PermissionRequest|SessionStart|SessionEnd|Notification|Stop|PreToolUse|BeforeTool|onToolCall|onSessionStart|onSessionEnd|session_start|session_end)
+  PermissionRequest|SessionStart|SessionEnd|Notification|Stop|PreToolUse|PostToolUse|BeforeTool|onToolCall|onSessionStart|onSessionEnd|session_start|session_end|AfterAgent|AfterModel|AfterTurn)
     ;;
   # Gemini 기타 상세 이벤트 (관찰용으로 앱에 전달 가능하나 현재는 즉시 통과)
-  AfterTool|BeforeAgent|AfterAgent|BeforeModel|AfterModel|BeforeToolSelection|PreCompress)
+  AfterTool|BeforeAgent|BeforeModel|BeforeToolSelection|PreCompress)
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Gemini lifecycle event passthrough: $EVENT" >> /tmp/DevIsland.bridge.log
     printf '{}\n'
     exit 0
