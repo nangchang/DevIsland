@@ -89,6 +89,115 @@ struct MenuBarMenu: View {
 
         Divider()
 
+        Menu("자동 승인(Global) 툴 관리") {
+            Button("직접 텍스트로 추가하기...") {
+                state.promptToAddGlobalAutoApprove()
+            }
+            Menu("목록에서 추가하기") {
+                ForEach([ToolRiskLevel.safe, .low, .medium, .high, .critical], id: \.self) { risk in
+                    let tools = ToolKnowledge.predefined.filter { $0.risk == risk }
+                    if !tools.isEmpty {
+                        Menu("\(risk.emoji) \(risk.rawValue)") {
+                            Button("이 위험도의 모든 툴 추가") {
+                                for t in tools { state.globalAutoApproveTypes.insert(t.id) }
+                            }
+                            Divider()
+                            ForEach(tools) { tool in
+                                Button("\(tool.name) (\(tool.id)) \(risk.emoji)") {
+                                    state.globalAutoApproveTypes.insert(tool.id)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Divider()
+            Menu("등록된 툴 관리 (\(state.globalAutoApproveTypes.count)개)") {
+                if state.globalAutoApproveTypes.isEmpty {
+                    Text("설정된 자동 승인 툴이 없습니다.").disabled(true)
+                } else {
+                    Button(role: .destructive) {
+                        state.globalAutoApproveTypes.removeAll()
+                    } label: {
+                        Label("모두 지우기", systemImage: "trash.fill")
+                    }
+                    Divider()
+                    ForEach(Array(state.globalAutoApproveTypes.sorted()), id: \.self) { tool in
+                        let risk = ToolKnowledge.risk(for: tool)
+                        Button(role: .destructive) {
+                            state.globalAutoApproveTypes.remove(tool)
+                        } label: {
+                            Label("\(tool) \(risk.emoji)", systemImage: "minus.circle")
+                        }
+                    }
+                }
+            }
+        }
+
+        Menu("자동 승인(Session) 툴 관리") {
+            if state.activeSessions.isEmpty {
+                Text("활성화된 세션이 없습니다.").disabled(true)
+            } else {
+                ForEach(state.activeSessions) { session in
+                    let tools = state.sessionAutoApproveTypes[session.id] ?? []
+                    Menu("Session \(session.id.prefix(8)) (\(tools.count)개)") {
+                        Button("직접 텍스트로 추가하기...") {
+                            state.promptToAddSessionAutoApprove(for: session.id)
+                        }
+                        Menu("목록에서 추가하기") {
+                            ForEach([ToolRiskLevel.safe, .low, .medium, .high, .critical], id: \.self) { risk in
+                                let pTools = ToolKnowledge.predefined.filter { $0.risk == risk }
+                                if !pTools.isEmpty {
+                                    Menu("\(risk.emoji) \(risk.rawValue)") {
+                                        Button("이 위험도의 모든 툴 추가") {
+                                            for t in pTools {
+                                                if state.sessionAutoApproveTypes[session.id] == nil {
+                                                    state.sessionAutoApproveTypes[session.id] = []
+                                                }
+                                                state.sessionAutoApproveTypes[session.id]?.insert(t.id)
+                                            }
+                                        }
+                                        Divider()
+                                        ForEach(pTools) { tool in
+                                            Button("\(tool.name) (\(tool.id)) \(risk.emoji)") {
+                                                if state.sessionAutoApproveTypes[session.id] == nil {
+                                                    state.sessionAutoApproveTypes[session.id] = []
+                                                }
+                                                state.sessionAutoApproveTypes[session.id]?.insert(tool.id)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Divider()
+                        Menu("등록된 툴 관리 (\(tools.count)개)") {
+                            if tools.isEmpty {
+                                Text("설정된 툴 없음").disabled(true)
+                            } else {
+                                Button(role: .destructive) {
+                                    state.sessionAutoApproveTypes[session.id]?.removeAll()
+                                } label: {
+                                    Label("모두 지우기", systemImage: "trash.fill")
+                                }
+                                Divider()
+                                ForEach(Array(tools.sorted()), id: \.self) { tool in
+                                    let risk = ToolKnowledge.risk(for: tool)
+                                    Button(role: .destructive) {
+                                        state.sessionAutoApproveTypes[session.id]?.remove(tool)
+                                    } label: {
+                                        Label("\(tool) \(risk.emoji)", systemImage: "minus.circle")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Divider()
+
         Menu("브리지 설치") {
             Button("전부 설치 (Claude · Codex · Gemini)") {
                 BridgeInstaller.installAll()
