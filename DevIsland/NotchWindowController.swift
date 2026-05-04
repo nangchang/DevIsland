@@ -1545,8 +1545,7 @@ struct NotchView: View {
                                     Text("Focus")
                                 }
                                 .font(.system(size: 13, weight: .bold))
-                                .frame(width: 92)
-                                .padding(.vertical, 12)
+                                .frame(width: 92, height: 38)
                                 .background(Color.white.opacity(0.08))
                                 .foregroundColor(.white.opacity(0.82))
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -1560,42 +1559,53 @@ struct NotchView: View {
                                     Text("Deny Request")
                                 }
                                 .font(.system(size: 13, weight: .bold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity, minHeight: 38)
                                 .background(Color.red.opacity(0.15))
                                 .foregroundColor(.red)
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
                             .buttonStyle(.plain)
 
-                            HStack(spacing: 0) {
+                            HStack(spacing: 1) {
                                 Button(action: { state.approve() }) {
                                     HStack {
                                         Image(systemName: "checkmark.circle.fill")
                                         Text("Approve")
                                     }
                                     .font(.system(size: 13, weight: .bold))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                                     .background(tool.color.opacity(0.15))
                                     .foregroundColor(tool.color)
+                                    .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
 
-                                Menu {
-                                    Button("Auto-Approve for this Session") { state.approve(globalAlways: false, sessionAlways: true) }
-                                    Button("Always Auto-Approve (Global)") { state.approve(globalAlways: true, sessionAlways: false) }
-                                } label: {
+                                // [UI/UX] macOS 기본 Menu 스타일 버그 우회용 ZStack 트릭
+                                // macOS의 borderlessButton Menu는 커스텀 배경색(.background)을 무시하거나 클리핑하는 버그가 있습니다.
+                                // 이를 해결하기 위해 배경색과 아이콘을 먼저 렌더링하고, 실제 기능하는 Menu를 그 위에 겹쳐(오버레이) 구현합니다.
+                                ZStack {
+                                    tool.color.opacity(0.2)
                                     Image(systemName: "chevron.down")
                                         .font(.system(size: 13, weight: .bold))
-                                        .frame(width: 24, height: 16)
+                                        .foregroundColor(tool.color)
+                                        
+                                    Menu {
+                                        Button("Auto-Approve for this Session") { state.approve(globalAlways: false, sessionAlways: true) }
+                                        Button("Always Auto-Approve (Global)") { state.approve(globalAlways: true, sessionAlways: false) }
+                                    } label: {
+                                        // Text("")를 사용하면 크기가 0x0이 되어 클릭 히트 박스가 생성되지 않습니다.
+                                        // 눈에 보이지 않지만 프레임을 꽉 채우는 투명한 도형으로 빈 껍데기를 만들어 클릭 이벤트를 낚아챕니다.
+                                        Color.black.opacity(0.001)
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .menuStyle(.borderlessButton)
+                                    .menuIndicator(.hidden)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
-                                .menuStyle(.borderlessButton)
-                                .menuIndicator(.hidden)
-                                .frame(width: 32)
-                                .background(tool.color.opacity(0.2))
-                                .foregroundColor(tool.color)
+                                .frame(width: 32, height: 38)
                             }
+                            .frame(height: 38)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                         } else {
                             Button(action: { state.focusTerminal() }) {
@@ -1604,8 +1614,7 @@ struct NotchView: View {
                                     Text("Focus Terminal")
                                 }
                                 .font(.system(size: 13, weight: .bold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity, minHeight: 38)
                                 .background(Color.white.opacity(0.08))
                                 .foregroundColor(.white.opacity(0.82))
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -1619,8 +1628,7 @@ struct NotchView: View {
                                     Text("Dismiss")
                                 }
                                 .font(.system(size: 13, weight: .bold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity, minHeight: 38)
                                 .background(Color.blue.opacity(0.15))
                                 .foregroundColor(.blue)
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
