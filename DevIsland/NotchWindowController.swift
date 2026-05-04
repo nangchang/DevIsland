@@ -1482,6 +1482,21 @@ struct NotchView: View {
                         Text(state.hasResponseHandler ? "ACTIVE ACTION" : "NOTIFICATION")
                             .font(.system(size: 9, weight: .black))
                             .foregroundColor(.white.opacity(0.3))
+                        
+                        if !state.currentToolName.isEmpty {
+                            let risk = ToolKnowledge.risk(for: state.currentToolName)
+                            HStack(spacing: 4) {
+                                Image(systemName: risk.icon)
+                                Text(risk.rawValue.uppercased())
+                            }
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(risk.color.opacity(0.2))
+                            .foregroundColor(risk.color)
+                            .clipShape(Capsule())
+                        }
+                        
                         Spacer()
                         Text(state.currentEventName)
                             .font(.system(size: 9, weight: .bold))
@@ -1553,19 +1568,35 @@ struct NotchView: View {
                             }
                             .buttonStyle(.plain)
 
-                            Button(action: { state.approve() }) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                    Text("Approve")
+                            HStack(spacing: 0) {
+                                Button(action: { state.approve() }) {
+                                    HStack {
+                                        Image(systemName: "checkmark.circle.fill")
+                                        Text("Approve")
+                                    }
+                                    .font(.system(size: 13, weight: .bold))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(tool.color.opacity(0.15))
+                                    .foregroundColor(tool.color)
                                 }
-                                .font(.system(size: 13, weight: .bold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(tool.color.opacity(0.15))
+                                .buttonStyle(.plain)
+
+                                Menu {
+                                    Button("Auto-Approve for this Session") { state.approve(globalAlways: false, sessionAlways: true) }
+                                    Button("Always Auto-Approve (Global)") { state.approve(globalAlways: true, sessionAlways: false) }
+                                } label: {
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .frame(width: 24, height: 16)
+                                }
+                                .menuStyle(.borderlessButton)
+                                .menuIndicator(.hidden)
+                                .frame(width: 32)
+                                .background(tool.color.opacity(0.2))
                                 .foregroundColor(tool.color)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
-                            .buttonStyle(.plain)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
                         } else {
                             Button(action: { state.focusTerminal() }) {
                                 HStack {
