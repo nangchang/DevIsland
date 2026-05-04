@@ -494,7 +494,7 @@ enum BridgeInstaller {
         // Gemini CLI: hooks는 { "EventName": [ { "matcher": "*", "hooks": [...] } ] } 형태
         var hooks = (data["hooks"] as? [String: Any]) ?? [:]
 
-        for event in ["BeforeTool", "SessionStart", "SessionEnd"] {
+        for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent"] {
             var eventConfigs = (hooks[event] as? [[String: Any]]) ?? []
             
             var found = false

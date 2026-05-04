@@ -242,11 +242,12 @@ hooks = data.get('hooks', {})
 if not isinstance(hooks, dict):
     hooks = {}
 
-for event in ["BeforeTool", "SessionStart", "SessionEnd"]:
+for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent"]:
     event_configs = hooks.get(event, [])
     if not isinstance(event_configs, list):
         event_configs = []
     
+    found = False
     for config in event_configs:
         if config.get("matcher") == "*":
             sub_hooks = config.get("hooks", [])

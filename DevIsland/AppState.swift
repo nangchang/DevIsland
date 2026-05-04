@@ -305,10 +305,11 @@ class AppState: ObservableObject {
         }
 
         let normalizedEvent = normalizedHookEventName(event)
-        let stopEvents = ["exit", "shutdown", "sessionend", "onsessionend", "session_end", "on_session_end", "stop"]
+        let stopEvents = ["exit", "shutdown", "sessionend", "onsessionend", "session_end", "on_session_end"]
         let notificationEvents = [
             "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
-            "onsessionstart", "session_start", "on_session_start", "startup", "init", "onnotification"
+            "onsessionstart", "session_start", "on_session_start", "startup", "init", "onnotification",
+            "afteragent", "aftermodel", "afterturn", "stop"
         ]
         // approval: Claude의 PermissionRequest + Codex의 PreToolUse + Gemini의 BeforeTool
         let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
@@ -370,9 +371,24 @@ class AppState: ObservableObject {
             let fullSessionId = sessionId
             let hasPendingForSession = self.pendingQueue.contains { $0.sessionId == fullSessionId }
             let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "onsessionstart" || normalizedEvent == "session_start" || normalizedEvent == "startup" || normalizedEvent == "init")
-            let sessionMessage = isStartEvent
-                ? "Session Started"
-                : (normalizedEvent == "stop" && displayMsg.isEmpty) ? "Task Completed" : displayMsg
+            
+            // [UX] 에이전트 작업 완료 대기 상태(Idle Prompt) 판별 로직
+            // - Claude Code: notification 훅에 idle_prompt 또는 input_required 타입으로 전달됨
+            // - Gemini CLI: afteragent, aftermodel 등 턴 종료 시 발생하는 훅을 대기 상태로 간주
+            // - Codex CLI: posttooluse를 쓰면 툴 연속 자동 실행 시 스팸 알림이 생기므로 제외함. 대신 stop 이벤트를 통해 완료됨을 알림
+            let isIdlePrompt = (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
+                               (normalizedEvent == "afteragent" || normalizedEvent == "aftermodel" || normalizedEvent == "afterturn")
+            
+            let sessionMessage: String
+            if isStartEvent {
+                sessionMessage = "Session Started"
+            } else if isIdlePrompt && displayMsg.isEmpty {
+                sessionMessage = "Waiting for next prompt..."
+            } else if (normalizedEvent == "stop" && displayMsg.isEmpty) {
+                sessionMessage = "Task Completed"
+            } else {
+                sessionMessage = displayMsg
+            }
             
             self.updateActiveSession(
                 sessionId: fullSessionId,
@@ -396,8 +412,7 @@ class AppState: ObservableObject {
                 }
                 
                 // 알림 확장 로직 (질문이나 작업 완료 시)
-                let isInformational = (normalizedEvent == "stop" || isStartEvent) || 
-                                     (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
+                let isInformational = (normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
                                      (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode))
                 
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {

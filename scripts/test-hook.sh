@@ -251,7 +251,8 @@ interactive_gemini() {
         echo "3) write_file (test.txt)"
         echo "4) read_file (README.md)"
         echo "5) 커스텀 질문 (Notification)"
-        echo "6) 세션 종료 (SessionEnd)"
+        echo "6) 작업 완료 알림 (AfterAgent)"
+        echo "7) 세션 종료 (SessionEnd)"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 종료"
         read -p "선택: " choice
@@ -272,6 +273,8 @@ interactive_gemini() {
                 read -p "질문 메시지: " msg
                 send_event "$(make_json event BeforeTool session_id "$SESSION_ID" message "$msg")" gemini ;;
             6)
+                send_event "$(make_gemini_event AfterAgent)" gemini ;;
+            7)
                 send_event "$(make_gemini_event SessionEnd)" gemini
                 break ;;
             d|D)
