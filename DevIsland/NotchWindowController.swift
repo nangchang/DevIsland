@@ -1221,6 +1221,13 @@ struct SessionRowView: View {
                                     .foregroundColor(statusColor)
                                     .lineLimit(1)
                             }
+
+                            if session.isAutoEditActive {
+                                Text("Auto-Edit")
+                                    .font(.system(size: 8, weight: .black))
+                                    .foregroundColor(Color(red: 1.0, green: 0.7, blue: 0.2))
+                                    .lineLimit(1)
+                            }
                         }
                     }
                 }
