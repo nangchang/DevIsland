@@ -486,14 +486,22 @@ class AppState: ObservableObject {
             receivedAt: Date()
         )
 
-        // UI 업데이트나 내부 상태 관리를 위한 무해한 툴들은 브릿지가 아닌 앱 단계에서 우회 처리합니다.
-        // 브릿지에서 걸러버리면 앱이 에이전트의 현재 상태(Auto-Edit 모드 등)를 추적할 수 없기 때문입니다.
+        // [디자인 결정] 툴 필터링 및 자동 승인 전략
+        // -------------------------------------------------------------------
+        // 1. 완전 무시 (Bypass): 시스템에 영향이 없는 순수 내부 상태/UI 업데이트 툴들.
+        //    - 브릿지가 아닌 앱 단계에서 처리하는 이유: 앱이 에이전트의 현재 진행 상태를 계속 추적하여 
+        //      UI를 동기화하고 세션 상태(예: Auto-Edit 모드 여부)를 관리해야 하기 때문입니다.
         let bypassTools: Set<String> = ["update_topic", "activate_skill"]
         
-        // 터미널에서 사용자가 직접 상호작용해야 하거나, 제미나이 고유 보안 정책으로 터미널 프롬프트가 강제되는 상황
-        // (앱에서는 승인하되, "터미널을 확인하라"는 알림을 띄워 이중 승인을 방지합니다.)
+        // 2. 터미널 유도 알림 (Interactive): 사용자가 터미널에서 직접 키보드 입력을 해야 하는 툴들.
+        //    - 목적: "DevIsland에서 승인 클릭" + "터미널에서 Y/Enter 입력" 이라는 '이중 승인'의 번거로움을 해결합니다.
+        //    - 동작: 앱에서는 즉시 승인(approved)을 보내어 터미널에 프롬프트가 즉시 뜨게 하되, 
+        //           노치 UI를 펼쳐 사용자에게 터미널로 돌아가야 함을 알립니다.
+        //    - 대상: 직접 입력(ask_user), 계획 승인(exit_plan_mode), 자체 보안 정책상 터미널 확인이 강제되는 툴(run_shell_command),
+        //           그리고 계획 단계에서 발생하는 임시 파일 작업들(.gemini/tmp/).
         let isInteractive = ["ask_user", "exit_plan_mode", "run_shell_command"].contains(toolName) || isPlanAction
         
+        // 자동 승인 여부 판단 (전역 설정 + 세션별 툴 등록 + 현재가 자동 편집 모드인지 + Safe 등급 툴 자동 승인 옵션)
         let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName) || isInteractive
         let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
         
@@ -502,13 +510,14 @@ class AppState: ObservableObject {
             isAutoEditActive = session.isAutoEditActive
         }
 
+        // 사용자가 메뉴에서 설정한 "Safe 등급 툴 자동 승인" 옵션 적용
         let isSafeAutoApprove = autoApproveSafeTools && (ToolKnowledge.risk(for: toolName) == .safe)
 
         if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
             print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
             request.responseHandler("{\"response\": \"approved\"}")
             
-            // 터미널 입력이 필요한 툴인 경우 노치 알림(Notification) 표시
+            // 터미널 입력이 필요한 Interactive 툴인 경우 노치를 펼쳐 사용자에게 알림(Notification) 표시
             if isInteractive {
                 DispatchQueue.main.async { [weak self] in
                     self?.isNotchExpanded = true
@@ -518,7 +527,8 @@ class AppState: ObservableObject {
                 }
             }
             
-            // exit_plan_mode가 호출되면 터미널 승인 대기 시작, 이후 편집 작업을 위한 Auto-Edit 모드 활성화 준비
+            // [상태 추적] exit_plan_mode가 호출되면, 사용자가 터미널에서 계획을 승인할 것으로 간주하고 
+            // 이후의 편집 작업들을 자동화하기 위해 Auto-Edit 모드 활성화를 준비합니다.
             if toolName == "exit_plan_mode" {
                 DispatchQueue.main.async { [weak self] in
                     if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
@@ -540,6 +550,7 @@ class AppState: ObservableObject {
                         terminalTabIndex: terminalTabIndex,
                         toolName: toolName,
                         eventName: event,
+                        // Interactive 툴인 경우 사용자에게 다음 행동 가이드를 제공
                         message: isInteractive ? "터미널 확인 대기 중..." : "Auto-approved: \(toolName)",
                         isPending: false,
                         preserveMessage: true,
@@ -551,7 +562,8 @@ class AppState: ObservableObject {
             return
         }
         
-        // enter_plan_mode가 호출되면 Auto-Edit 모드 해제 (명시적인 새로운 계획 수립 시작)
+        // [상태 추적] enter_plan_mode가 호출되면 다시 신중한 계획 수립 단계로 돌아간 것이므로
+        // 실행 단계의 자동 승인(Auto-Edit) 모드를 해제하여 다시 모든 작업을 사용자에게 확인받습니다.
         if toolName == "enter_plan_mode" {
             DispatchQueue.main.async { [weak self] in
                 if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
