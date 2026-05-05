@@ -248,6 +248,7 @@ struct MenuBarMenu: View {
 enum BridgeInstaller {
     private static let sharedBridgePath = "Library/Application Support/DevIsland"
     private static let bridgeFileName = "devisland-bridge.sh"
+    private static let bridgeHelperFileName = "devisland_bridge.py"
 
     // MARK: Public entry points
 
@@ -261,13 +262,14 @@ enum BridgeInstaller {
     /// Claude Code (~/.claude/settings.json)
     static func install() {
         guard let bridgeURL = bridgeScriptURL() else { return }
+        guard let helperURL = bridgeHelperURL() else { return }
         let home = URL(fileURLWithPath: NSHomeDirectory())
         let bridgeDir = home.appendingPathComponent(sharedBridgePath)
         let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
         let settingsURL = home.appendingPathComponent(".claude/settings.json")
 
         do {
-            try prepare(bridgeURL: bridgeURL, destURL: destURL, hooksDir: bridgeDir)
+            try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
             try patchClaudeSettings(at: settingsURL, bridgePath: destURL.path)
             showAlert(title: "Claude Code 설치 완료",
                       message: "브리지가 설치되었습니다.\nClaude Code 세션을 재시작해주세요.",
@@ -280,6 +282,7 @@ enum BridgeInstaller {
     /// Codex CLI (~/.codex/hooks.json + config.toml)
     static func installCodex() {
         guard let bridgeURL = bridgeScriptURL() else { return }
+        guard let helperURL = bridgeHelperURL() else { return }
         let home    = URL(fileURLWithPath: NSHomeDirectory())
         let bridgeDir = home.appendingPathComponent(sharedBridgePath)
         let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
@@ -287,7 +290,7 @@ enum BridgeInstaller {
         let codexConfigURL = home.appendingPathComponent(".codex/config.toml")
 
         do {
-            try prepare(bridgeURL: bridgeURL, destURL: destURL, hooksDir: bridgeDir)
+            try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
             try patchCodexHooks(at: codexHooksURL, bridgePath: destURL.path)
             ensureCodexFeatureFlag(at: codexConfigURL)
             showAlert(title: "Codex CLI 설치 완료",
@@ -301,13 +304,14 @@ enum BridgeInstaller {
     /// Gemini CLI (~/.gemini/settings.json)
     static func installGemini() {
         guard let bridgeURL = bridgeScriptURL() else { return }
+        guard let helperURL = bridgeHelperURL() else { return }
         let home    = URL(fileURLWithPath: NSHomeDirectory())
         let bridgeDir = home.appendingPathComponent(sharedBridgePath)
         let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
         let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
 
         do {
-            try prepare(bridgeURL: bridgeURL, destURL: destURL, hooksDir: bridgeDir)
+            try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
             try patchGeminiSettings(at: geminiSettingsURL, bridgePath: destURL.path)
             showAlert(title: "Gemini CLI 설치 완료",
                       message: "브리지가 설치되었습니다.\nGemini CLI 세션을 재시작해주세요.",
@@ -327,13 +331,25 @@ enum BridgeInstaller {
         return url
     }
 
-    /// 브리지 스크립트를 bridgeDir에 복사하고 실행 권한을 부여한다 (이미 복사된 경우 덮어씀).
-    private static func prepare(bridgeURL: URL, destURL: URL, hooksDir bridgeDir: URL) throws {
+    private static func bridgeHelperURL() -> URL? {
+        guard let url = Bundle.main.url(forResource: "devisland_bridge", withExtension: "py") else {
+            showAlert(title: "설치 실패", message: "앱 번들에서 브리지 helper를 찾을 수 없습니다.", isError: true)
+            return nil
+        }
+        return url
+    }
+
+    /// 브리지 스크립트와 Python helper를 bridgeDir에 복사하고 실행 권한을 부여한다.
+    private static func prepare(bridgeURL: URL, helperURL: URL, destURL: URL, hooksDir bridgeDir: URL) throws {
         let fm = FileManager.default
+        let helperDestURL = bridgeDir.appendingPathComponent(bridgeHelperFileName)
         try fm.createDirectory(at: bridgeDir, withIntermediateDirectories: true)
         if fm.fileExists(atPath: destURL.path) { try fm.removeItem(at: destURL) }
+        if fm.fileExists(atPath: helperDestURL.path) { try fm.removeItem(at: helperDestURL) }
         try fm.copyItem(at: bridgeURL, to: destURL)
+        try fm.copyItem(at: helperURL, to: helperDestURL)
         try fm.setAttributes([.posixPermissions: 0o755 as NSNumber], ofItemAtPath: destURL.path)
+        try fm.setAttributes([.posixPermissions: 0o755 as NSNumber], ofItemAtPath: helperDestURL.path)
     }
 
     // MARK: Claude Code settings patch

@@ -19,6 +19,7 @@ fi
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$RESOURCES_DIR/"
+cp "$ROOT_DIR/scripts/devisland_bridge.py" "$RESOURCES_DIR/"
 cp "$ROOT_DIR/scripts/install-bridge.sh" "$RESOURCES_DIR/"
 
 # Compile assets

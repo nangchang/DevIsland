@@ -13,6 +13,9 @@ targets:
       - path: scripts/devisland-bridge.sh
         group: Resources
         type: resource
+      - path: scripts/devisland_bridge.py
+        group: Resources
+        type: resource
       - path: scripts/install-bridge.sh
         group: Resources
         type: resource

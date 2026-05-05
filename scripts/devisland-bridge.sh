@@ -119,179 +119,21 @@ if [ -z "$TERM_TITLE" ] || [ "$TERM_TITLE" = "Terminal" ]; then
   fi
 fi
 
-# 페이로드에 터미널 정보 및 소스 정보 추가
-PAYLOAD=$(printf "%s" "$PAYLOAD" | TERM_TITLE="$TERM_TITLE" TERM_APP="$TERM_APP" TERM_TTY="$CURRENT_TTY" TERM_WINDOW_ID="$TERM_WINDOW_ID" TERM_TAB_INDEX="$TERM_TAB_INDEX" CLI_SOURCE_ARG="$CLI_SOURCE_ARG" python3 -c \
-  'import os,sys,json; d=json.load(sys.stdin); d["terminal_title"]=os.environ.get("TERM_TITLE", "Terminal"); d["terminal_app"]=os.environ.get("TERM_APP", ""); d["terminal_tty"]=os.environ.get("TERM_TTY", ""); d["terminal_window_id"]=os.environ.get("TERM_WINDOW_ID", ""); d["terminal_tab_index"]=os.environ.get("TERM_TAB_INDEX", ""); d["cli_source"]=os.environ.get("CLI_SOURCE_ARG", ""); print(json.dumps(d))')
+# 페이로드 처리, TCP 송수신, CLI별 응답 변환은 Python helper가 담당한다.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY_BRIDGE="$SCRIPT_DIR/devisland_bridge.py"
 
-# 이벤트 종류 및 툴 이름 추출 (PermissionRequest / PreToolUse / BeforeTool / Stop / ...)
-EVENT=$(printf "%s" "$PAYLOAD" | python3 -c \
-  "import sys,json; d=json.load(sys.stdin); print(d.get('hook_event_name', d.get('event', 'PermissionRequest')))" \
-  2>/dev/null || echo "PermissionRequest")
-
-TOOL_NAME=$(printf "%s" "$PAYLOAD" | python3 -c \
-  "import sys,json; d=json.load(sys.stdin); print(d.get('tool_name', ''))" \
-  2>/dev/null || echo "")
-
-# CLI 종류 감지 (인자 우선, 그 후 필드 구조 기준)
-if [ -n "$CLI_SOURCE_ARG" ]; then
-  CLI_SOURCE="$CLI_SOURCE_ARG"
-else
-  case "$EVENT" in
-    PreToolUse)                                               CLI_SOURCE="codex"  ;;
-    onToolCall|BeforeTool|AfterTool|BeforeAgent|AfterAgent|\
-  BeforeModel|AfterModel|BeforeToolSelection|PreCompress)    CLI_SOURCE="gemini" ;;
-    onSessionStart|onSessionEnd|SessionStart|SessionEnd|Notification|Stop|session_start|session_end)
-      # 페이로드 구조로 추가 판별
-      CLI_SOURCE=$(printf "%s" "$PAYLOAD" | python3 -c '
-  import sys, json
-  d = json.load(sys.stdin)
-  if "hook_event_name" in d: print("claude")
-  elif "decision" in d or "reason" in d or "onToolCall" in str(d): print("gemini")
-  elif "event" in d and not "hook_event_name" in d: print("gemini") 
-  else: print("claude")
-  ' 2>/dev/null || echo "claude")
-      ;;
-    *)           CLI_SOURCE="claude" ;;
-  esac
+if [ ! -f "$PY_BRIDGE" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Python bridge helper missing: $PY_BRIDGE" >> /tmp/DevIsland.bridge.log
+  exit 0
 fi
 
-# 디버그 로그 기록
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Raw Payload: $PAYLOAD" >> /tmp/DevIsland.bridge.log
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Event Detected: $EVENT (Source: $CLI_SOURCE)" >> /tmp/DevIsland.bridge.log
-
-case "$EVENT" in
-  # Claude / Codex / Gemini 공통 라이프사이클 및 승인 요청
-  PermissionRequest|SessionStart|SessionEnd|Notification|Stop|PreToolUse|PostToolUse|BeforeTool|onToolCall|onSessionStart|onSessionEnd|session_start|session_end|AfterAgent|AfterModel|AfterTurn)
-    ;;
-  # Gemini 기타 상세 이벤트 (관찰용으로 앱에 전달 가능하나 현재는 즉시 통과)
-  AfterTool|BeforeAgent|BeforeModel|BeforeToolSelection|PreCompress)
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Gemini lifecycle event passthrough: $EVENT" >> /tmp/DevIsland.bridge.log
-    printf '{}\n'
-    exit 0
-    ;;
-  *)
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Passive event suppressed before app: $EVENT" >> /tmp/DevIsland.bridge.log
-    printf '%s\n' '{"continue":true,"suppressOutput":true}'
-    exit 0
-    ;;
-esac
-
-# 앱으로 전달 후 응답 대기 (최대 300초)
-RAW=$(printf "%s" "$PAYLOAD" | python3 -c '
-import socket
-import sys
-
-payload = sys.stdin.buffer.read()
-with socket.create_connection(("127.0.0.1", 9090), timeout=5) as sock:
-    sock.settimeout(300)
-    sock.sendall(payload)
-    sock.shutdown(socket.SHUT_WR)
-
-    chunks = []
-    while True:
-        chunk = sock.recv(65536)
-        if not chunk:
-            break
-        chunks.append(chunk)
-
-sys.stdout.buffer.write(b"".join(chunks))
-' 2>/dev/null || true)
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Raw Response: $RAW" >> /tmp/DevIsland.bridge.log
-RESULT=$(printf "%s" "$RAW" | python3 -c \
-  "import sys,json; print(json.load(sys.stdin).get('response','denied'))" \
-  2>/dev/null || echo "denied")
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Result: $RESULT" >> /tmp/DevIsland.bridge.log
-
-DATE_STR=$(date '+%Y-%m-%d %H:%M:%S') EVENT="$EVENT" RESULT="$RESULT" CLI_SOURCE="$CLI_SOURCE" TOOL_NAME="$TOOL_NAME" PAYLOAD="$PAYLOAD" python3 -c '
-import json
-import os
-
-event = os.environ.get("EVENT", "")
-result = os.environ.get("RESULT", "denied")
-cli_source = os.environ.get("CLI_SOURCE", "claude")
-tool_name = os.environ.get("TOOL_NAME", "")
-payload_str = os.environ.get("PAYLOAD", "{}")
-date_str = os.environ.get("DATE_STR", "")
-message = "DevIsland에서 거절되었습니다."
-
-try:
-    payload = json.loads(payload_str)
-    file_path = payload.get("tool_input", {}).get("file_path", "")
-    is_plan_action = ".gemini/tmp/" in file_path
-except:
-    is_plan_action = False
-
-if result == "pass":
-    if cli_source == "claude":
-        # Claude Code: pass는 앱이 개입하지 않고 터미널에 제어권을 넘긴다는 의미입니다.
-        output = {"continue": True, "suppressOutput": True}
-    else:
-        # Gemini/Codex: 터미널이 포커스된 상태 등에서는 DevIsland가 개입하지 않도록 빈 객체를 반환합니다.
-        # 이를 통해 CLI 고유의 네이티브 프롬프트(질문 창)가 정상적으로 표시되도록 보장합니다.
-        output = {}
-    final_output = json.dumps(output, ensure_ascii=False)
-    with open("/tmp/DevIsland.bridge.log", "a") as f:
-        f.write(f"[{date_str}] Final Output: {final_output}\n")
-    print(final_output)
-    import sys
-    sys.exit(0)
-
-allow = (result == "approved")
-if cli_source == "gemini":
-    # Gemini CLI 공식 응답 규격: { "decision": "allow" | "deny", "reason": "...", "tool_input": { ... } }
-    # -------------------------------------------------------------------
-    # [Gemini CLI 소스코드 분석 결과 (packages/core/src/scheduler/scheduler.ts)]
-    # -------------------------------------------------------------------
-    # 1. 훅(BeforeTool) 응답만으로는 터미널의 프롬프트(Y/n)를 강제로 끌 수 없습니다.
-    # 2. 훅이 allow를 보내더라도, CLI 내부의 PolicyEngine이 ASK_USER를 결정하면 
-    #    결국 터미널에서 사용자 승인을 받아야 합니다.
-    # 3. 특히 쉘 명령어(run_shell_command)는 보안을 위해 무조건 PolicyEngine이 우선권을 가집니다.
-    # 4. 결론: 터미널 프롬프트를 완전히 없애려면 CLI를 --auto-approve 또는 --yolo 모드로 실행해야 하며,
-    #    이 경우 DevIsland가 에뮬레이션 모드를 통해 UI 승인 통제권을 가져와야 합니다.
-    output = {"decision": "allow" if allow else "deny"}
-    if not allow:
-        output["reason"] = message
-elif cli_source == "codex":
-    # Codex CLI: official response format
-    # PreToolUse: { "hookSpecificOutput": { "permissionDecision": "allow" | "deny", "permissionDecisionReason": "..." } }
-    # PermissionRequest: { "hookSpecificOutput": { "decision": { "behavior": "allow" | "deny", "message": "..." } } }
-    if event == "PreToolUse":
-        output = {
-            "hookSpecificOutput": {
-                "permissionDecision": "allow" if allow else "deny",
-                "permissionDecisionReason": message if not allow else ""
-            }
-        }
-    elif event == "PermissionRequest":
-        output = {
-            "hookSpecificOutput": {
-                "decision": {
-                    "behavior": "allow" if allow else "deny",
-                    "message": message if not allow else ""
-                }
-            }
-        }
-    else:
-        output = {"continue": True}
-elif event == "PermissionRequest" and result in ("approved", "denied"):
-    # Claude Code
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "PermissionRequest",
-            "decision": {
-                "behavior": "allow" if result == "approved" else "deny",
-            },
-        }
-    }
-    if result != "approved":
-        output["hookSpecificOutput"]["decision"]["message"] = message
-else:
-    output = {"continue": True, "suppressOutput": True}
-
-final_output = json.dumps(output, ensure_ascii=False)
-with open("/tmp/DevIsland.bridge.log", "a") as f:
-    f.write(f"[{date_str}] Final Output: {final_output}\n")
-print(final_output)
-'
+printf "%s" "$PAYLOAD" \
+  | TERM_TITLE="$TERM_TITLE" \
+    TERM_APP="$TERM_APP" \
+    TERM_TTY="$CURRENT_TTY" \
+    TERM_WINDOW_ID="$TERM_WINDOW_ID" \
+    TERM_TAB_INDEX="$TERM_TAB_INDEX" \
+    python3 "$PY_BRIDGE" --source "$CLI_SOURCE_ARG"
 
 exit 0
