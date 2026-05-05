@@ -44,18 +44,22 @@ fi
 echo "DevIsland 브리지 스크립트 설치 중..."
 
 # -------------------------------------------------------------------
-# 구 경로 정리 (~/.claude/hooks → ~/.local/share/devisland 로 이전)
+# 구 경로 정리 (~/.claude/hooks, ~/.local/share/devisland 로 이전)
 # -------------------------------------------------------------------
-OLD_BRIDGE="$HOME/.claude/hooks/devisland-bridge.sh"
-if [ -f "$OLD_BRIDGE" ] || [ -L "$OLD_BRIDGE" ]; then
-    rm -f "$OLD_BRIDGE"
-    echo "✓ 구 경로 브리지 파일 제거: $OLD_BRIDGE"
-fi
+for OLD_BRIDGE in \
+    "$HOME/.claude/hooks/devisland-bridge.sh" \
+    "$HOME/.local/share/devisland/devisland-bridge.sh"
+do
+    if [ -f "$OLD_BRIDGE" ] || [ -L "$OLD_BRIDGE" ]; then
+        rm -f "$OLD_BRIDGE"
+        echo "✓ 구 경로 브리지 파일 제거: $OLD_BRIDGE"
+    fi
+done
 
 # -------------------------------------------------------------------
-# 브리지 스크립트를 ~/.local/share/devisland/ 에 배치 (공유)
+# 브리지 스크립트를 ~/Library/Application Support/DevIsland/ 에 배치
 # -------------------------------------------------------------------
-HOOKS_DIR="$HOME/.local/share/devisland"
+HOOKS_DIR="$HOME/Library/Application Support/DevIsland"
 BRIDGE_DEST="$HOOKS_DIR/devisland-bridge.sh"
 
 mkdir -p "$HOOKS_DIR"

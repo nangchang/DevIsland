@@ -243,7 +243,7 @@ struct MenuBarMenu: View {
 // MARK: - Bridge Installer
 
 enum BridgeInstaller {
-    private static let sharedBridgePath = ".local/share/devisland"
+    private static let sharedBridgePath = "Library/Application Support/DevIsland"
     private static let bridgeFileName = "devisland-bridge.sh"
 
     // MARK: Public entry points
