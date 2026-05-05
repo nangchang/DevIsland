@@ -131,9 +131,9 @@ def send_to_app(payload: dict[str, Any]) -> str:
 
 def response_result(raw: str) -> str:
     try:
-        return str(json.loads(raw).get("response", "denied"))
+        return str(json.loads(raw).get("response", "pass"))
     except Exception:
-        return "denied"
+        return "pass"
 
 
 def final_output(
@@ -215,14 +215,14 @@ def main() -> int:
         print('{"continue":true,"suppressOutput":true}')
         return 0
 
-    raw = ""
     try:
         raw = send_to_app(payload)
-    except Exception:
-        pass
+        log(f"Raw Response: {raw}")
+        result = response_result(raw)
+    except Exception as error:
+        log(f"Bridge transport error: {error}")
+        result = "pass"
 
-    log(f"Raw Response: {raw}")
-    result = response_result(raw)
     log(f"Result: {result}")
 
     output = final_output(
