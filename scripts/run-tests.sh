@@ -19,7 +19,7 @@ xcodegen generate
 
 # 2. Run tests with xcodebuild
 # - Use a temporary derived data path to avoid locking files used by Xcode or the live app.
-# - Pass XCODE_RUNNING_UNIT_TESTS=1 to AppState to disable socket server and hotkeys.
+# - The XcodeGen test scheme passes XCODE_RUNNING_UNIT_TESTS=1 to disable socket server and hotkeys.
 # - Use -quiet to keep output clean, only showing results/errors.
 
 echo "⏳ Building and testing..."
@@ -29,7 +29,6 @@ xcodebuild test \
     -scheme DevIsland \
     -destination 'platform=macOS' \
     -derivedDataPath "$TEMP_DERIVED_DATA" \
-    XCODE_RUNNING_UNIT_TESTS=1 \
     -quiet
 
 echo "✅ All tests passed!"
