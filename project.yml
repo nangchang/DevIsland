@@ -33,3 +33,23 @@ targets:
         NSAccessibilityUsageDescription: "글로벌 단축키(⌘⇧Y/N) 사용을 위해 접근성 권한이 필요합니다."
     settings:
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  DevIslandTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: DevIslandTests
+    dependencies:
+      - target: DevIsland
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+schemes:
+  DevIsland:
+    build:
+      targets:
+        DevIsland: all
+    test:
+      targets:
+        - name: DevIslandTests
+      environmentVariables:
+        XCODE_RUNNING_UNIT_TESTS: "1"

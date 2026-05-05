@@ -96,7 +96,7 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 // MARK: - App State
 
 class AppState: ObservableObject {
-    static let shared = AppState()
+    static let shared = AppState(startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1")
 
     private enum DefaultsKey {
         static let notchDisplayTarget = "notchDisplayTarget"
@@ -109,6 +109,10 @@ class AppState: ObservableObject {
     }
 
     static let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
+    typealias FrontmostCheck = (_ appName: String?, _ tty: String?, _ windowId: String?, _ tabIndex: String?) -> Bool
+
+    private let userDefaults: UserDefaults
+    private let frontmostCheck: FrontmostCheck
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
@@ -117,22 +121,22 @@ class AppState: ObservableObject {
             if notchDisplayTarget == .specific {
                 ensureSelectedDisplay()
             }
-            UserDefaults.standard.set(notchDisplayTarget.rawValue, forKey: DefaultsKey.notchDisplayTarget)
+            userDefaults.set(notchDisplayTarget.rawValue, forKey: DefaultsKey.notchDisplayTarget)
         }
     }
     @Published var selectedDisplayId: UInt32 = 0 {
         didSet {
-            UserDefaults.standard.set(Int(selectedDisplayId), forKey: DefaultsKey.selectedDisplayId)
+            userDefaults.set(Int(selectedDisplayId), forKey: DefaultsKey.selectedDisplayId)
         }
     }
     @Published var showInFullScreenApps = true {
         didSet {
-            UserDefaults.standard.set(showInFullScreenApps, forKey: DefaultsKey.showInFullScreenApps)
+            userDefaults.set(showInFullScreenApps, forKey: DefaultsKey.showInFullScreenApps)
         }
     }
     @Published var requestDisplayTarget: RequestDisplayTarget = .focused {
         didSet {
-            UserDefaults.standard.set(requestDisplayTarget.rawValue, forKey: DefaultsKey.requestDisplayTarget)
+            userDefaults.set(requestDisplayTarget.rawValue, forKey: DefaultsKey.requestDisplayTarget)
         }
     }
     @Published var selectedSessionId: String?
@@ -154,19 +158,19 @@ class AppState: ObservableObject {
     
     @Published var autoApproveSafeTools = false {
         didSet {
-            UserDefaults.standard.set(autoApproveSafeTools, forKey: DefaultsKey.autoApproveSafeTools)
+            userDefaults.set(autoApproveSafeTools, forKey: DefaultsKey.autoApproveSafeTools)
         }
     }
     
     @Published var emulateGeminiInteractiveMode = false {
         didSet {
-            UserDefaults.standard.set(emulateGeminiInteractiveMode, forKey: DefaultsKey.emulateGeminiInteractiveMode)
+            userDefaults.set(emulateGeminiInteractiveMode, forKey: DefaultsKey.emulateGeminiInteractiveMode)
         }
     }
     
     @Published var globalAutoApproveTypes: Set<String> = [] {
         didSet {
-            UserDefaults.standard.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
+            userDefaults.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
         }
     }
     @Published var sessionAutoApproveTypes: [String: Set<String>] = [:]
@@ -178,58 +182,68 @@ class AppState: ObservableObject {
     private var pendingQueue: [PendingRequest] = []
     private var currentResponseHandler: ((String) -> Void)?
     var hasResponseHandler: Bool { currentResponseHandler != nil }
+    private var isShowingRequest = false
+    private var showingRequestId: UUID?
     private var timeoutTimer: Timer?
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let timeoutDuration: Double = 120
     private let lifecycleSessionTimeout: Double = 15 * 60
 
-    private init() {
-        let defaults = UserDefaults.standard
-        if let rawTarget = defaults.string(forKey: "displayTarget"), // Migration check
+    init(
+        startServer: Bool = true,
+        userDefaults: UserDefaults = .standard,
+        frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost
+    ) {
+        self.userDefaults = userDefaults
+        self.frontmostCheck = frontmostCheck
+        
+        if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
            let target = NotchDisplayTarget(rawValue: rawTarget) {
             notchDisplayTarget = target
-        } else if let rawTarget = defaults.string(forKey: DefaultsKey.notchDisplayTarget),
+        } else if let rawTarget = userDefaults.string(forKey: DefaultsKey.notchDisplayTarget),
                   let target = NotchDisplayTarget(rawValue: rawTarget) {
             notchDisplayTarget = target
         }
         
-        selectedDisplayId = UInt32(defaults.integer(forKey: DefaultsKey.selectedDisplayId))
-        if defaults.object(forKey: DefaultsKey.showInFullScreenApps) != nil {
-            showInFullScreenApps = defaults.bool(forKey: DefaultsKey.showInFullScreenApps)
+        selectedDisplayId = UInt32(userDefaults.integer(forKey: DefaultsKey.selectedDisplayId))
+        if userDefaults.object(forKey: DefaultsKey.showInFullScreenApps) != nil {
+            showInFullScreenApps = userDefaults.bool(forKey: DefaultsKey.showInFullScreenApps)
         }
-        if let rawTarget = defaults.string(forKey: DefaultsKey.requestDisplayTarget),
+        if let rawTarget = userDefaults.string(forKey: DefaultsKey.requestDisplayTarget),
            let target = RequestDisplayTarget(rawValue: rawTarget) {
             requestDisplayTarget = target
         }
-        if let savedAutoApprove = defaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String] {
+        if let savedAutoApprove = userDefaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String] {
             globalAutoApproveTypes = Set(savedAutoApprove)
         }
-        autoApproveSafeTools = defaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
-        emulateGeminiInteractiveMode = defaults.bool(forKey: DefaultsKey.emulateGeminiInteractiveMode)
+        autoApproveSafeTools = userDefaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
+        emulateGeminiInteractiveMode = userDefaults.bool(forKey: DefaultsKey.emulateGeminiInteractiveMode)
         ensureSelectedDisplay()
 
-        server.onMessageReceived = { [weak self] message, responseHandler in
-            self?.handleMessage(message, responseHandler: responseHandler)
-        }
-        server.onServerFailed = {
-            print("[DevIsland] [ERROR] Socket server failed. Check if port 9090 is occupied.")
-            DispatchQueue.main.async {
-                let alert = NSAlert()
-                alert.messageText = "Server Error"
-                alert.informativeText = "Could not start the 9090 port server. Please ensure no other DevIsland instances are running."
-                alert.alertStyle = .critical
-                alert.addButton(withTitle: "Exit")
-                alert.runModal()
-                NSApplication.shared.terminate(nil)
+        if startServer {
+            server.onMessageReceived = { [weak self] message, responseHandler in
+                self?.handleMessage(message, responseHandler: responseHandler)
             }
-        }
-        server.start()
-        GlobalShortcutManager.shared.start()
-        
-        // Prune inactive sessions every 10 seconds
-        sessionPruningTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            self?.pruneInactiveSessions()
+            server.onServerFailed = {
+                print("[DevIsland] [ERROR] Socket server failed. Check if port 9090 is occupied.")
+                DispatchQueue.main.async {
+                    let alert = NSAlert()
+                    alert.messageText = "Server Error"
+                    alert.informativeText = "Could not start the 9090 port server. Please ensure no other DevIsland instances are running."
+                    alert.alertStyle = .critical
+                    alert.addButton(withTitle: "Exit")
+                    alert.runModal()
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+            server.start()
+            GlobalShortcutManager.shared.start()
+            
+            // Prune inactive sessions every 10 seconds
+            sessionPruningTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+                self?.pruneInactiveSessions()
+            }
         }
     }
 
@@ -281,7 +295,7 @@ class AppState: ObservableObject {
         }
     }
 
-    private func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
+    func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
         guard let data = message.data(using: .utf8) else { return }
 
         var event     = "Unknown"
@@ -360,17 +374,18 @@ class AppState: ObservableObject {
             }
             let fullSessionId = sessionId
             DispatchQueue.main.async {
-                self.pendingQueue
-                    .filter { $0.sessionId == fullSessionId }
-                    .forEach { $0.responseHandler("{\"response\": \"denied\"}") }
+                let removedRequests = self.pendingQueue.filter { $0.sessionId == fullSessionId }
+                removedRequests.forEach { $0.responseHandler("{\"response\": \"denied\"}") }
                 self.pendingQueue.removeAll { $0.sessionId == fullSessionId }
                 self.pendingItems.removeAll { $0.sessionId == fullSessionId }
                 self.pendingCount = self.pendingQueue.count
                 self.activeSessions.removeAll { $0.id == fullSessionId }
                 self.sessionAutoApproveTypes.removeValue(forKey: fullSessionId)
 
-                if self.currentSessionId == fullSessionId {
+                if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                     self.currentResponseHandler = nil
+                    self.isShowingRequest = false
+                    self.showingRequestId = nil
                     self.timeoutTimer?.invalidate()
                     self.timeoutProgress = 1.0
                     self.currentSessionId = ""
@@ -616,19 +631,21 @@ class AppState: ObservableObject {
 
         // Pass through check: 터미널이 이미 활성 상태라면 'pass' 응답으로 즉시 통과
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let isFrontmost = TerminalFocuser.isSessionFrontmost(
-                appName: terminalApp,
-                tty: terminalTTY,
-                windowId: terminalWindowId,
-                tabIndex: terminalTabIndex
+            guard let self = self else { return }
+            let isFrontmost = self.frontmostCheck(
+                terminalApp,
+                terminalTTY,
+                terminalWindowId,
+                terminalTabIndex
             )
-            
+
             DispatchQueue.main.async {
+
                 if isFrontmost {
                     print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
                     request.responseHandler("{\"response\": \"pass\"}")
                     if !sessionId.isEmpty {
-                        self?.updateActiveSession(
+                        self.updateActiveSession(
                             sessionId: sessionId,
                             terminalTitle: terminalTitle,
                             agentKind: agentKind,
@@ -646,7 +663,7 @@ class AppState: ObservableObject {
                     return
                 }
                 
-                self?.pendingQueue.append(request)
+                self.pendingQueue.append(request)
                 
                 let newItem = PendingItem(
                     id: request.id,
@@ -658,11 +675,11 @@ class AppState: ObservableObject {
                     terminalTabIndex: terminalTabIndex,
                     receivedAt: request.receivedAt
                 )
-                self?.pendingItems.append(newItem)
-                self?.pendingCount = self?.pendingQueue.count ?? 0
+                self.pendingItems.append(newItem)
+                self.pendingCount = self.pendingQueue.count
 
                 if !request.sessionId.isEmpty {
-                    self?.updateActiveSession(
+                    self.updateActiveSession(
                         sessionId: request.sessionId,
                         terminalTitle: terminalTitle,
                         agentKind: agentKind,
@@ -673,22 +690,23 @@ class AppState: ObservableObject {
                         toolName: request.toolName,
                         eventName: request.eventName,
                         message: request.message,
-                        isPending: true
+                        isPending: true,
+                        isLifecycleTracked: agentKind != .claudeCode
                     )
 
-                    self?.selectedSessionId = request.sessionId
+                    self.selectedSessionId = request.sessionId
                 }
                 
-                if self?.currentResponseHandler == nil {
-                    self?.showNextRequest()
+                if self.currentResponseHandler == nil {
+                    self.showNextRequest()
                 } else {
-                    self?.syncDisplayToSelectedSession()
+                    self.syncDisplayToSelectedSession()
                 }
             }
         }
     }
 
-    private func normalizedHookEventName(_ event: String) -> String {
+    func normalizedHookEventName(_ event: String) -> String {
         event
             .lowercased()
             .replacingOccurrences(of: "_", with: "")
@@ -851,7 +869,7 @@ class AppState: ObservableObject {
         }.joined(separator: "\n\n")
     }
 
-    private static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
+    static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
         // 1. cli_source 필드가 명시적으로 있으면 최우선 적용
         if let explicitSource = json["cli_source"] as? String, !explicitSource.isEmpty {
             switch explicitSource {
@@ -976,6 +994,8 @@ class AppState: ObservableObject {
 
         guard let next = pendingQueue.first else {
             currentResponseHandler = nil
+            isShowingRequest = false
+            showingRequestId = nil
             timeoutTimer?.invalidate()
             timeoutProgress = 1.0
             currentEventName = ""
@@ -987,41 +1007,46 @@ class AppState: ObservableObject {
             return
         }
 
+        if isShowingRequest { return }
+        isShowingRequest = true
+        showingRequestId = next.id
+
         let session = activeSessions.first { $0.id == next.sessionId }
         
         // Background check for focus to avoid main thread hang
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let isFrontmost = self?.isTerminalFrontmost(for: session) ?? false
+            guard let self = self else { return }
+            let isFrontmost = self.isTerminalFrontmost(for: session)
             
             DispatchQueue.main.async {
                 if isFrontmost {
                     print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
-                    self?.currentResponseHandler = next.responseHandler
-                    self?.currentSessionId = next.sessionId
-                    self?.sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
+                    self.currentResponseHandler = next.responseHandler
+                    self.currentSessionId = next.sessionId
+                    self.sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
                     return
                 }
 
                 print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
-                self?.currentResponseHandler = next.responseHandler
-                self?.currentEventName  = next.eventName
-                self?.currentToolName   = next.toolName
-                self?.currentMessage    = next.message
-                self?.currentSessionId  = next.sessionId
+                self.currentResponseHandler = next.responseHandler
+                self.currentEventName  = next.eventName
+                self.currentToolName   = next.toolName
+                self.currentMessage    = next.message
+                self.currentSessionId  = next.sessionId
 
-                self?.isExpandingFromRequest = true
-                self?.isNotchExpanded = true
-                self?.startTimeout()
+                self.isExpandingFromRequest = true
+                self.isNotchExpanded = true
+                self.startTimeout()
             }
         }
     }
 
     private func isTerminalFrontmost(for session: ActiveSession?) -> Bool {
-        TerminalFocuser.isSessionFrontmost(
-            appName: session?.terminalApp,
-            tty: session?.terminalTTY,
-            windowId: session?.terminalWindowId,
-            tabIndex: session?.terminalTabIndex
+        self.frontmostCheck(
+            session?.terminalApp,
+            session?.terminalTTY,
+            session?.terminalWindowId,
+            session?.terminalTabIndex
         )
     }
 
@@ -1068,6 +1093,8 @@ class AppState: ObservableObject {
         currentResponseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
         currentResponseHandler = nil
+        isShowingRequest = false
+        showingRequestId = nil
         timeoutTimer?.invalidate()
 
         DispatchQueue.main.async {

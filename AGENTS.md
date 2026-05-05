@@ -19,9 +19,18 @@ xcodegen generate
 
 # Open in Xcode
 open DevIsland.xcodeproj
+
+# Run unit tests (RECOMMENDED: Isolated Mode)
+# This will not interfere with a running DevIsland instance.
+./scripts/run-tests.sh
+
+# Run unit tests via standard CLI
+xcodebuild test -project DevIsland.xcodeproj -scheme DevIsland -destination 'platform=macOS'
 ```
 
-Build target: **macOS 14.0+**, Xcode 15+. There are no tests in the project.
+Build target: **macOS 14.0+**, Xcode 15+. 
+
+**Mandatory Requirement:** AI agents working on this codebase MUST run the existing unit tests and ensure they pass before committing any changes. Use `./scripts/run-tests.sh` to test safely while the app is running.
 
 **Release builds** are produced by CI (`.github/workflows/release.yml`) on version tags. The workflow runs `xcodebuild archive` unsigned and packages a DMG via `hdiutil`.
 
@@ -30,10 +39,14 @@ Build target: **macOS 14.0+**, Xcode 15+. There are no tests in the project.
 For environments without Xcode (e.g. CI, Codex), use the shell build script:
 
 ```bash
+# Full rebuild and launch (stops current process)
 ./scripts/build_and_run.sh
+
+# Build only (isolated, does not stop current process)
+./scripts/build_and_run.sh --no-kill --no-run
 ```
 
-This compiles all `DevIsland/*.swift` sources with `swiftc`, assembles an app bundle under `dist/DevIsland.app`, and launches it. Pass `--verify` to assert the process started. This path is also wired as the `.codex/environments/environment.toml` Run action.
+This compiles all `DevIsland/*.swift` sources with `swiftc`, assembles an app bundle under `dist/DevIsland.app`, and launches it. Pass `--verify` to assert the process started. Use `--no-kill --no-run` to verify compilation without interrupting your live environment.
 
 ## Multi-CLI Support
 
@@ -268,10 +281,11 @@ On collapse, the frame shrinks after a 0.45 s delay (matching the SwiftUI spring
 
 To maintain a clean and maintainable history, all AI agents must follow these commit rules:
 
-1. **Atomic Commits**: Divide work into meaningful, logical units. Each commit should represent a single task or fix.
-2. **Explain the "Why"**: Commit messages must not just describe *what* changed, but *why* the change was made (the rationale or the problem it solves).
-3. **No Mixed Changes**: Do not mix unrelated refactorings, style changes, or multiple features into a single commit. Keep commits surgical and focused.
-4. **Descriptive Tags**: Use conventional commit-style prefixes (e.g., `feat:`, `fix:`, `docs:`, `refactor:`) to categorize changes.
+1. **Feature Branches**: Never commit directly to the `main` branch. Always create a descriptive branch (e.g., `feature/xyz` or `fix/abc`) for your changes.
+2. **Atomic Commits**: Divide work into meaningful, logical units. Each commit should represent a single task or fix.
+3. **Explain the "Why"**: Commit messages must not just describe *what* changed, but *why* the change was made (the rationale or the problem it solves).
+4. **No Mixed Changes**: Do not mix unrelated refactorings, style changes, or multiple features into a single commit. Keep commits surgical and focused.
+5. **Descriptive Tags**: Use conventional commit-style prefixes (e.g., `feat:`, `fix:`, `docs:`, `refactor:`) to categorize changes.
 
 ## project.yml
 
