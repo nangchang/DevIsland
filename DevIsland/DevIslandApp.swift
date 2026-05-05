@@ -243,6 +243,9 @@ struct MenuBarMenu: View {
 // MARK: - Bridge Installer
 
 enum BridgeInstaller {
+    private static let sharedBridgePath = "Library/Application Support/DevIsland"
+    private static let bridgeFileName = "devisland-bridge.sh"
+
     // MARK: Public entry points
 
     /// Claude Code, Codex CLI, Gemini CLI 모두 설치
@@ -256,12 +259,12 @@ enum BridgeInstaller {
     static func install() {
         guard let bridgeURL = bridgeScriptURL() else { return }
         let home = URL(fileURLWithPath: NSHomeDirectory())
-        let hooksDir = home.appendingPathComponent(".claude/hooks")
-        let destURL  = hooksDir.appendingPathComponent("devisland-bridge.sh")
+        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
+        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
         let settingsURL = home.appendingPathComponent(".claude/settings.json")
 
         do {
-            try prepare(bridgeURL: bridgeURL, destURL: destURL, hooksDir: hooksDir)
+            try prepare(bridgeURL: bridgeURL, destURL: destURL, hooksDir: bridgeDir)
             try patchClaudeSettings(at: settingsURL, bridgePath: destURL.path)
             showAlert(title: "Claude Code 설치 완료",
                       message: "브리지가 설치되었습니다.\nClaude Code 세션을 재시작해주세요.",
@@ -275,13 +278,13 @@ enum BridgeInstaller {
     static func installCodex() {
         guard let bridgeURL = bridgeScriptURL() else { return }
         let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let hooksDir = home.appendingPathComponent(".claude/hooks")
-        let destURL  = hooksDir.appendingPathComponent("devisland-bridge.sh")
+        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
+        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
         let codexHooksURL  = home.appendingPathComponent(".codex/hooks.json")
         let codexConfigURL = home.appendingPathComponent(".codex/config.toml")
 
         do {
-            try prepare(bridgeURL: bridgeURL, destURL: destURL, hooksDir: hooksDir)
+            try prepare(bridgeURL: bridgeURL, destURL: destURL, hooksDir: bridgeDir)
             try patchCodexHooks(at: codexHooksURL, bridgePath: destURL.path)
             ensureCodexFeatureFlag(at: codexConfigURL)
             showAlert(title: "Codex CLI 설치 완료",
@@ -296,12 +299,12 @@ enum BridgeInstaller {
     static func installGemini() {
         guard let bridgeURL = bridgeScriptURL() else { return }
         let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let hooksDir = home.appendingPathComponent(".claude/hooks")
-        let destURL  = hooksDir.appendingPathComponent("devisland-bridge.sh")
+        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
+        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
         let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
 
         do {
-            try prepare(bridgeURL: bridgeURL, destURL: destURL, hooksDir: hooksDir)
+            try prepare(bridgeURL: bridgeURL, destURL: destURL, hooksDir: bridgeDir)
             try patchGeminiSettings(at: geminiSettingsURL, bridgePath: destURL.path)
             showAlert(title: "Gemini CLI 설치 완료",
                       message: "브리지가 설치되었습니다.\nGemini CLI 세션을 재시작해주세요.",
@@ -321,10 +324,10 @@ enum BridgeInstaller {
         return url
     }
 
-    /// 브리지 스크립트를 hooksDir에 복사하고 실행 권한을 부여한다 (이미 복사된 경우 덮어씀).
-    private static func prepare(bridgeURL: URL, destURL: URL, hooksDir: URL) throws {
+    /// 브리지 스크립트를 bridgeDir에 복사하고 실행 권한을 부여한다 (이미 복사된 경우 덮어씀).
+    private static func prepare(bridgeURL: URL, destURL: URL, hooksDir bridgeDir: URL) throws {
         let fm = FileManager.default
-        try fm.createDirectory(at: hooksDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: bridgeDir, withIntermediateDirectories: true)
         if fm.fileExists(atPath: destURL.path) { try fm.removeItem(at: destURL) }
         try fm.copyItem(at: bridgeURL, to: destURL)
         try fm.setAttributes([.posixPermissions: 0o755 as NSNumber], ofItemAtPath: destURL.path)
@@ -369,7 +372,7 @@ enum BridgeInstaller {
         func removingBridgeHooks(from list: [[String: Any]]) -> [[String: Any]] {
             list.compactMap { entry in
                 let subHooks = (entry["hooks"] as? [[String: Any]] ?? [])
-                    .filter { !($0["command"] as? String ?? "").contains(bridgePath) }
+                    .filter { !($0["command"] as? String ?? "").contains(bridgeFileName) }
                 guard !subHooks.isEmpty else { return nil }
                 var updatedEntry = entry
                 updatedEntry["hooks"] = subHooks
@@ -418,7 +421,7 @@ enum BridgeInstaller {
                 var config = eventConfigs[i]
                 if (config["matcher"] as? String) == "*" {
                     var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
-                    subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgePath) }
+                    subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgeFileName) }
                     subHooks.append(["type": "command", "command": bridgeCommand])
                     config["hooks"] = subHooks
                     eventConfigs[i] = config
@@ -506,7 +509,7 @@ enum BridgeInstaller {
                 var config = eventConfigs[i]
                 if (config["matcher"] as? String) == "*" {
                     var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
-                    subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgePath) }
+                    subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgeFileName) }
                     var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
                     if event == "BeforeTool" {
                         hookEntry["timeout"] = 86400000

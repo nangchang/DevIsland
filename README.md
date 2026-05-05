@@ -51,10 +51,10 @@ bash scripts/install-bridge.sh --codex
 **1) 브릿지 스크립트 준비**
 
 ```bash
-mkdir -p ~/.claude/hooks
+mkdir -p ~/Library/Application\ Support/DevIsland
 # 심볼릭 링크 생성
-ln -sf /path/to/DevIsland/scripts/devisland-bridge.sh ~/.claude/hooks/devisland-bridge.sh
-chmod +x ~/.claude/hooks/devisland-bridge.sh
+ln -sf /path/to/DevIsland/scripts/devisland-bridge.sh ~/Library/Application\ Support/DevIsland/devisland-bridge.sh
+chmod +x ~/Library/Application\ Support/DevIsland/devisland-bridge.sh
 ```
 
 **2) CLI별 설정**

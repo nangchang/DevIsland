@@ -44,9 +44,22 @@ fi
 echo "DevIsland 브리지 스크립트 설치 중..."
 
 # -------------------------------------------------------------------
-# 브리지 스크립트를 ~/.claude/hooks/ 에 배치 (공유)
+# 구 경로 정리 (~/.claude/hooks, ~/.local/share/devisland 로 이전)
 # -------------------------------------------------------------------
-HOOKS_DIR="$HOME/.claude/hooks"
+for OLD_BRIDGE in \
+    "$HOME/.claude/hooks/devisland-bridge.sh" \
+    "$HOME/.local/share/devisland/devisland-bridge.sh"
+do
+    if [ -f "$OLD_BRIDGE" ] || [ -L "$OLD_BRIDGE" ]; then
+        rm -f "$OLD_BRIDGE"
+        echo "✓ 구 경로 브리지 파일 제거: $OLD_BRIDGE"
+    fi
+done
+
+# -------------------------------------------------------------------
+# 브리지 스크립트를 ~/Library/Application Support/DevIsland/ 에 배치
+# -------------------------------------------------------------------
+HOOKS_DIR="$HOME/Library/Application Support/DevIsland"
 BRIDGE_DEST="$HOOKS_DIR/devisland-bridge.sh"
 
 mkdir -p "$HOOKS_DIR"
@@ -92,7 +105,7 @@ lifecycle_config = {"hooks": [{"type": "command", "command": bridge_command}]}
 def remove_bridge_hooks(entries):
     cleaned = []
     for entry in entries:
-        sub_hooks = [h for h in entry.get("hooks", []) if bridge_path not in h.get("command", "")]
+        sub_hooks = [h for h in entry.get("hooks", []) if "devisland-bridge.sh" not in h.get("command", "")]
         if sub_hooks:
             updated = dict(entry)
             updated["hooks"] = sub_hooks
@@ -161,7 +174,7 @@ for event in events:
     for config in event_configs:
         if config.get("matcher") == "*":
             sub_hooks = config.get("hooks", [])
-            sub_hooks = [h for h in sub_hooks if bridge_path not in h.get("command", "")]
+            sub_hooks = [h for h in sub_hooks if "devisland-bridge.sh" not in h.get("command", "")]
             sub_hooks.append({"type": "command", "command": bridge_command})
             config["hooks"] = sub_hooks
             found = True
@@ -260,7 +273,7 @@ for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent"]:
     for config in event_configs:
         if config.get("matcher") == "*":
             sub_hooks = config.get("hooks", [])
-            sub_hooks = [h for h in sub_hooks if bridge_path not in h.get("command", "")]
+            sub_hooks = [h for h in sub_hooks if "devisland-bridge.sh" not in h.get("command", "")]
             hook_entry = {"type": "command", "command": bridge_command}
             if event == "BeforeTool":
                 hook_entry["timeout"] = 86400000
