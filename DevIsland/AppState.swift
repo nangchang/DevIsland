@@ -96,7 +96,7 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 // MARK: - App State
 
 class AppState: ObservableObject {
-    static let shared = AppState(startServer: NSClassFromString("XCTestCase") == nil)
+    static let shared = AppState(startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1")
 
     private enum DefaultsKey {
         static let notchDisplayTarget = "notchDisplayTarget"
@@ -181,6 +181,7 @@ class AppState: ObservableObject {
     private var pendingQueue: [PendingRequest] = []
     private var currentResponseHandler: ((String) -> Void)?
     var hasResponseHandler: Bool { currentResponseHandler != nil }
+    private var isShowingRequest = false
     private var timeoutTimer: Timer?
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
@@ -990,6 +991,7 @@ class AppState: ObservableObject {
 
         guard let next = pendingQueue.first else {
             currentResponseHandler = nil
+            isShowingRequest = false
             timeoutTimer?.invalidate()
             timeoutProgress = 1.0
             currentEventName = ""
@@ -1001,6 +1003,9 @@ class AppState: ObservableObject {
             return
         }
 
+        if isShowingRequest { return }
+        isShowingRequest = true
+
         let session = activeSessions.first { $0.id == next.sessionId }
         
         // Background check for focus to avoid main thread hang
@@ -1008,24 +1013,26 @@ class AppState: ObservableObject {
             let isFrontmost = self?.isTerminalFrontmost(for: session) ?? false
             
             DispatchQueue.main.async {
+                guard let self = self else { return }
+                
                 if isFrontmost {
                     print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
-                    self?.currentResponseHandler = next.responseHandler
-                    self?.currentSessionId = next.sessionId
-                    self?.sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
+                    self.currentResponseHandler = next.responseHandler
+                    self.currentSessionId = next.sessionId
+                    self.sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
                     return
                 }
 
                 print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
-                self?.currentResponseHandler = next.responseHandler
-                self?.currentEventName  = next.eventName
-                self?.currentToolName   = next.toolName
-                self?.currentMessage    = next.message
-                self?.currentSessionId  = next.sessionId
+                self.currentResponseHandler = next.responseHandler
+                self.currentEventName  = next.eventName
+                self.currentToolName   = next.toolName
+                self.currentMessage    = next.message
+                self.currentSessionId  = next.sessionId
 
-                self?.isExpandingFromRequest = true
-                self?.isNotchExpanded = true
-                self?.startTimeout()
+                self.isExpandingFromRequest = true
+                self.isNotchExpanded = true
+                self.startTimeout()
             }
         }
     }
@@ -1082,6 +1089,7 @@ class AppState: ObservableObject {
         currentResponseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
         currentResponseHandler = nil
+        isShowingRequest = false
         timeoutTimer?.invalidate()
 
         DispatchQueue.main.async {

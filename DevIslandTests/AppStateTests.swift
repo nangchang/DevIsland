@@ -232,6 +232,9 @@ final class AppStateTests: XCTestCase {
     }
     
     func testMultipleSessions() {
+        var callCount1 = 0
+        var callCount2 = 0
+        
         let msg1 = """
         {
             "hook_event_name": "permissionrequest",
@@ -247,19 +250,31 @@ final class AppStateTests: XCTestCase {
         }
         """
         
-        appState.handleMessage(msg1) { _ in }
-        appState.handleMessage(msg2) { _ in }
+        appState.handleMessage(msg1) { _ in callCount1 += 1 }
+        appState.handleMessage(msg2) { _ in callCount2 += 1 }
         
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+        // Wait for main thread async blocks in handleMessage (including frontmost check background block)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))
         
         XCTAssertEqual(appState.pendingCount, 2)
         XCTAssertEqual(appState.activeSessions.count, 2)
         XCTAssertEqual(appState.currentSessionId, "session-1")
+        XCTAssertEqual(callCount1, 0, "Response handler 1 should not be called yet")
         
+        // Approve first
         appState.approve()
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
         
+        XCTAssertEqual(callCount1, 1, "Response handler 1 should be called exactly once")
         XCTAssertEqual(appState.pendingCount, 1)
         XCTAssertEqual(appState.currentSessionId, "session-2")
+        XCTAssertEqual(callCount2, 0, "Response handler 2 should not be called yet")
+
+        // Approve second
+        appState.approve()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+        
+        XCTAssertEqual(callCount2, 1, "Response handler 2 should be called exactly once")
+        XCTAssertEqual(appState.pendingCount, 0)
     }
 }
