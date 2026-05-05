@@ -283,9 +283,9 @@ elif event == "PermissionRequest" and result in ("approved", "denied"):
 else:
     output = {"continue": True, "suppressOutput": True}
 
-final_output=$(json.dumps(output, ensure_ascii=False))
+final_output = json.dumps(output, ensure_ascii=False)
 with open("/tmp/DevIsland.bridge.log", "a") as f:
-    f.write(f"[{{os.environ.get('DATE_STR', '')}}] Final Output: {{final_output}}\n")
+    f.write(f"[{date_str}] Final Output: {final_output}\n")
 print(final_output)
 '
 
