@@ -165,6 +165,7 @@ class AppState: ObservableObject {
     @Published var sessionAutoApproveTypes: [String: Set<String>] = [:]
 
     private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
+    private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
 
     private var server = HookSocketServer()
     private var pendingQueue: [PendingRequest] = []
@@ -489,10 +490,9 @@ class AppState: ObservableObject {
         // [디자인 결정] 툴 필터링 및 자동 승인 전략
         // -------------------------------------------------------------------
         // 1. 완전 무시 (Bypass): 시스템에 영향이 없는 순수 내부 상태/UI 업데이트 툴들.
-        //    - 브릿지가 아닌 앱 단계에서 처리하는 이유: 앱이 에이전트의 현재 진행 상태를 계속 추적하여 
+        //    - 브릿지가 아닌 앱 단계에서 처리하는 이유: 앱이 에이전트의 현재 진행 상태를 계속 추적하여
         //      UI를 동기화하고 세션 상태(예: Auto-Edit 모드 여부)를 관리해야 하기 때문입니다.
-        let bypassTools: Set<String> = ["update_topic", "activate_skill"]
-        
+
         // 2. 터미널 유도 알림 (Interactive): 사용자가 터미널에서 직접 키보드 입력을 해야 하는 툴들.
         //    - 목적: "DevIsland에서 승인 클릭" + "터미널에서 Y/Enter 입력" 이라는 '이중 승인'의 번거로움을 해결합니다.
         //    - 동작: 앱에서는 즉시 승인(approved)을 보내어 터미널에 프롬프트가 즉시 뜨게 하되, 
@@ -502,7 +502,7 @@ class AppState: ObservableObject {
         let isInteractive = ["ask_user", "exit_plan_mode", "run_shell_command"].contains(toolName) || isPlanAction
         
         // 자동 승인 여부 판단 (전역 설정 + 세션별 툴 등록 + 현재가 자동 편집 모드인지 + Safe 등급 툴 자동 승인 옵션)
-        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName) || isInteractive
+        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || Self.bypassTools.contains(toolName) || isInteractive
         let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
         
         var isAutoEditActive = false
