@@ -257,7 +257,16 @@ Users can toggle **"Auto-approve Safe tools"** in the menu bar. When enabled, an
 
 On collapse, the frame shrinks after a 0.45 s delay (matching the SwiftUI spring animation) to avoid a jump.
 
-### project.yml
+## 📝 Commit Guidelines
+
+To maintain a clean and maintainable history, all AI agents must follow these commit rules:
+
+1. **Atomic Commits**: Divide work into meaningful, logical units. Each commit should represent a single task or fix.
+2. **Explain the "Why"**: Commit messages must not just describe *what* changed, but *why* the change was made (the rationale or the problem it solves).
+3. **No Mixed Changes**: Do not mix unrelated refactorings, style changes, or multiple features into a single commit. Keep commits surgical and focused.
+4. **Descriptive Tags**: Use conventional commit-style prefixes (e.g., `feat:`, `fix:`, `docs:`, `refactor:`) to categorize changes.
+
+## project.yml
 
 `project.yml` is the XcodeGen spec. Changing any build setting, adding a new source file to the target, or modifying entitlements should be done here, not in a hand-edited `.xcodeproj`. Re-run `xcodegen generate` after any edit.
 
