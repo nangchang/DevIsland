@@ -109,9 +109,10 @@ class AppState: ObservableObject {
     }
 
     static let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
+    typealias FrontmostCheck = (_ appName: String?, _ tty: String?, _ windowId: String?, _ tabIndex: String?) -> Bool
 
     private let userDefaults: UserDefaults
-    private let frontmostCheck: (String?, String?, String?, String?) -> Bool
+    private let frontmostCheck: FrontmostCheck
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
@@ -182,6 +183,7 @@ class AppState: ObservableObject {
     private var currentResponseHandler: ((String) -> Void)?
     var hasResponseHandler: Bool { currentResponseHandler != nil }
     private var isShowingRequest = false
+    private var showingRequestId: UUID?
     private var timeoutTimer: Timer?
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
@@ -191,7 +193,7 @@ class AppState: ObservableObject {
     init(
         startServer: Bool = true,
         userDefaults: UserDefaults = .standard,
-        frontmostCheck: @escaping (String?, String?, String?, String?) -> Bool = TerminalFocuser.isSessionFrontmost
+        frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost
     ) {
         self.userDefaults = userDefaults
         self.frontmostCheck = frontmostCheck
@@ -372,17 +374,18 @@ class AppState: ObservableObject {
             }
             let fullSessionId = sessionId
             DispatchQueue.main.async {
-                self.pendingQueue
-                    .filter { $0.sessionId == fullSessionId }
-                    .forEach { $0.responseHandler("{\"response\": \"denied\"}") }
+                let removedRequests = self.pendingQueue.filter { $0.sessionId == fullSessionId }
+                removedRequests.forEach { $0.responseHandler("{\"response\": \"denied\"}") }
                 self.pendingQueue.removeAll { $0.sessionId == fullSessionId }
                 self.pendingItems.removeAll { $0.sessionId == fullSessionId }
                 self.pendingCount = self.pendingQueue.count
                 self.activeSessions.removeAll { $0.id == fullSessionId }
                 self.sessionAutoApproveTypes.removeValue(forKey: fullSessionId)
 
-                if self.currentSessionId == fullSessionId {
+                if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                     self.currentResponseHandler = nil
+                    self.isShowingRequest = false
+                    self.showingRequestId = nil
                     self.timeoutTimer?.invalidate()
                     self.timeoutProgress = 1.0
                     self.currentSessionId = ""
@@ -992,6 +995,7 @@ class AppState: ObservableObject {
         guard let next = pendingQueue.first else {
             currentResponseHandler = nil
             isShowingRequest = false
+            showingRequestId = nil
             timeoutTimer?.invalidate()
             timeoutProgress = 1.0
             currentEventName = ""
@@ -1005,16 +1009,16 @@ class AppState: ObservableObject {
 
         if isShowingRequest { return }
         isShowingRequest = true
+        showingRequestId = next.id
 
         let session = activeSessions.first { $0.id == next.sessionId }
         
         // Background check for focus to avoid main thread hang
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let isFrontmost = self?.isTerminalFrontmost(for: session) ?? false
+            guard let self = self else { return }
+            let isFrontmost = self.isTerminalFrontmost(for: session)
             
             DispatchQueue.main.async {
-                guard let self = self else { return }
-                
                 if isFrontmost {
                     print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
                     self.currentResponseHandler = next.responseHandler
@@ -1090,6 +1094,7 @@ class AppState: ObservableObject {
         print("[DevIsland] sendDecision: response payload sent")
         currentResponseHandler = nil
         isShowingRequest = false
+        showingRequestId = nil
         timeoutTimer?.invalidate()
 
         DispatchQueue.main.async {

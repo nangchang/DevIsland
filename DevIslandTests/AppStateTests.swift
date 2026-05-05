@@ -138,7 +138,7 @@ final class AppStateTests: XCTestCase {
     }
     
     func testGeminiAutoEditMode() {
-        let sessionId = "gemini-s" // Use 8 chars or less to match AppState truncation
+        let sessionId = "gemini-session"
         
         // 1. Initial tool call (Should be pending)
         let msg1 = """
@@ -151,6 +151,7 @@ final class AppStateTests: XCTestCase {
         appState.handleMessage(msg1) { _ in }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
         XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertEqual(appState.currentSessionId, sessionId)
         appState.approve()
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
 
@@ -275,6 +276,58 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
         
         XCTAssertEqual(callCount2, 1, "Response handler 2 should be called exactly once")
+        XCTAssertEqual(appState.pendingCount, 0)
+    }
+
+    func testStopEventClearsShowingRequestLock() {
+        var deniedResponse: String?
+        var secondCallCount = 0
+        let stopExpectation = XCTestExpectation(description: "Stop event responds")
+
+        let firstApproval = """
+        {
+            "hook_event_name": "permissionrequest",
+            "session_id": "session-stop",
+            "tool_name": "tool-stop"
+        }
+        """
+        let secondApproval = """
+        {
+            "hook_event_name": "permissionrequest",
+            "session_id": "session-next",
+            "tool_name": "tool-next"
+        }
+        """
+        let stopEvent = """
+        {
+            "hook_event_name": "sessionend",
+            "session_id": "session-stop"
+        }
+        """
+
+        appState.handleMessage(firstApproval) { response in deniedResponse = response }
+        appState.handleMessage(secondApproval) { _ in secondCallCount += 1 }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))
+
+        XCTAssertEqual(appState.currentSessionId, "session-stop")
+
+        appState.handleMessage(stopEvent) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            stopExpectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+
+        wait(for: [stopExpectation], timeout: 1.0)
+        XCTAssertEqual(self.parseResponse(deniedResponse ?? "")?["response"] as? String, "denied")
+        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertEqual(appState.currentSessionId, "session-next")
+        XCTAssertEqual(secondCallCount, 0)
+
+        appState.approve()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+
+        XCTAssertEqual(secondCallCount, 1)
         XCTAssertEqual(appState.pendingCount, 0)
     }
 }
