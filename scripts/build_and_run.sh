@@ -11,9 +11,18 @@ EXECUTABLE="$MACOS_DIR/$APP_NAME"
 
 cd "$ROOT_DIR"
 
-if pgrep -x "$APP_NAME" >/dev/null 2>&1; then
-  pkill -x "$APP_NAME" || true
-  sleep 0.3
+NO_KILL=false
+NO_RUN=false
+for arg in "$@"; do
+  if [[ "$arg" == "--no-kill" ]]; then NO_KILL=true; fi
+  if [[ "$arg" == "--no-run" ]]; then NO_RUN=true; fi
+done
+
+if [[ "$NO_KILL" == "false" ]]; then
+  if pgrep -x "$APP_NAME" >/dev/null 2>&1; then
+    pkill -x "$APP_NAME" || true
+    sleep 0.3
+  fi
 fi
 
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
@@ -96,10 +105,13 @@ echo "Ad-hoc signing..."
 xattr -cr "$APP_BUNDLE"
 codesign -s - --force --deep --arch arm64 "$APP_BUNDLE"
 
-/usr/bin/open -n "$APP_BUNDLE"
-
-if [[ "${1:-}" == "--verify" ]]; then
-  sleep 1
-  pgrep -x "$APP_NAME" >/dev/null
-  echo "$APP_NAME launched"
+if [[ "$NO_RUN" == "false" ]]; then
+  /usr/bin/open -n "$APP_BUNDLE"
+  if [[ "${1:-}" == "--verify" ]]; then
+    sleep 1
+    pgrep -x "$APP_NAME" >/dev/null
+    echo "$APP_NAME launched"
+  fi
+else
+  echo "Build complete. App not launched due to --no-run."
 fi
