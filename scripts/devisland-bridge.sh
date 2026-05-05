@@ -123,10 +123,14 @@ fi
 PAYLOAD=$(printf "%s" "$PAYLOAD" | TERM_TITLE="$TERM_TITLE" TERM_APP="$TERM_APP" TERM_TTY="$CURRENT_TTY" TERM_WINDOW_ID="$TERM_WINDOW_ID" TERM_TAB_INDEX="$TERM_TAB_INDEX" CLI_SOURCE_ARG="$CLI_SOURCE_ARG" python3 -c \
   'import os,sys,json; d=json.load(sys.stdin); d["terminal_title"]=os.environ.get("TERM_TITLE", "Terminal"); d["terminal_app"]=os.environ.get("TERM_APP", ""); d["terminal_tty"]=os.environ.get("TERM_TTY", ""); d["terminal_window_id"]=os.environ.get("TERM_WINDOW_ID", ""); d["terminal_tab_index"]=os.environ.get("TERM_TAB_INDEX", ""); d["cli_source"]=os.environ.get("CLI_SOURCE_ARG", ""); print(json.dumps(d))')
 
-# 이벤트 종류 추출 (PermissionRequest / PreToolUse / BeforeTool / Stop / ...)
+# 이벤트 종류 및 툴 이름 추출 (PermissionRequest / PreToolUse / BeforeTool / Stop / ...)
 EVENT=$(printf "%s" "$PAYLOAD" | python3 -c \
   "import sys,json; d=json.load(sys.stdin); print(d.get('hook_event_name', d.get('event', 'PermissionRequest')))" \
   2>/dev/null || echo "PermissionRequest")
+
+TOOL_NAME=$(printf "%s" "$PAYLOAD" | python3 -c \
+  "import sys,json; d=json.load(sys.stdin); print(d.get('tool_name', ''))" \
+  2>/dev/null || echo "")
 
 # CLI 종류 감지 (인자 우선, 그 후 필드 구조 기준)
 if [ -n "$CLI_SOURCE_ARG" ]; then
@@ -198,21 +202,21 @@ RESULT=$(printf "%s" "$RAW" | python3 -c \
   2>/dev/null || echo "denied")
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Result: $RESULT" >> /tmp/DevIsland.bridge.log
 
-EVENT="$EVENT" RESULT="$RESULT" CLI_SOURCE="$CLI_SOURCE" python3 -c '
+EVENT="$EVENT" RESULT="$RESULT" CLI_SOURCE="$CLI_SOURCE" TOOL_NAME="$TOOL_NAME" python3 -c '
 import json
 import os
 
 event = os.environ.get("EVENT", "")
 result = os.environ.get("RESULT", "denied")
 cli_source = os.environ.get("CLI_SOURCE", "claude")
+tool_name = os.environ.get("TOOL_NAME", "")
 message = "DevIsland에서 거절되었습니다."
 
 if result == "pass":
     if cli_source == "claude":
         print("{\"continue\": true, \"suppressOutput\": true}")
-    elif cli_source == "gemini":
-        print("{\"decision\": \"allow\", \"skip_prompt\": true}")
     else:
+        # gemini 포함 다른 CLI는 터미널에 제어권을 넘깁니다.
         print("{}")
     import sys
     sys.exit(0)
@@ -222,7 +226,9 @@ if cli_source == "gemini":
     # Gemini CLI: { "decision": "allow" | "deny", "reason": "...", "skip_prompt": true }
     output = {"decision": "allow" if allow else "deny"}
     if allow:
-        output["skip_prompt"] = True
+        # ask_user, exit_plan_mode는 터미널 프롬프트가 보여야 하므로 skip_prompt를 생략합니다.
+        if tool_name not in ["ask_user", "exit_plan_mode"]:
+            output["skip_prompt"] = True
     if not allow:
         output["reason"] = message
 elif cli_source == "codex":
