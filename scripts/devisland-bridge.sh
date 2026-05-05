@@ -202,7 +202,7 @@ RESULT=$(printf "%s" "$RAW" | python3 -c \
   2>/dev/null || echo "denied")
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Result: $RESULT" >> /tmp/DevIsland.bridge.log
 
-EVENT="$EVENT" RESULT="$RESULT" CLI_SOURCE="$CLI_SOURCE" TOOL_NAME="$TOOL_NAME" python3 -c '
+EVENT="$EVENT" RESULT="$RESULT" CLI_SOURCE="$CLI_SOURCE" TOOL_NAME="$TOOL_NAME" PAYLOAD="$PAYLOAD" python3 -c '
 import json
 import os
 
@@ -210,7 +210,15 @@ event = os.environ.get("EVENT", "")
 result = os.environ.get("RESULT", "denied")
 cli_source = os.environ.get("CLI_SOURCE", "claude")
 tool_name = os.environ.get("TOOL_NAME", "")
+payload_str = os.environ.get("PAYLOAD", "{}")
 message = "DevIsland에서 거절되었습니다."
+
+try:
+    payload = json.loads(payload_str)
+    file_path = payload.get("tool_input", {}).get("file_path", "")
+    is_plan_action = ".gemini/tmp/" in file_path
+except:
+    is_plan_action = False
 
 if result == "pass":
     if cli_source == "claude":
@@ -226,8 +234,9 @@ if cli_source == "gemini":
     # Gemini CLI: { "decision": "allow" | "deny", "reason": "...", "skip_prompt": true }
     output = {"decision": "allow" if allow else "deny"}
     if allow:
-        # ask_user, exit_plan_mode는 터미널 프롬프트가 보여야 하므로 skip_prompt를 생략합니다.
-        if tool_name not in ["ask_user", "exit_plan_mode"]:
+        # 터미널 프롬프트가 강제되거나 상호작용이 필요한 툴들은 skip_prompt를 생략합니다.
+        interactive_tools = ["ask_user", "exit_plan_mode", "run_shell_command"]
+        if tool_name not in interactive_tools and not is_plan_action:
             output["skip_prompt"] = True
     if not allow:
         output["reason"] = message

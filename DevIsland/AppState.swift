@@ -274,6 +274,7 @@ class AppState: ObservableObject {
         var terminalTabIndex = ""
         var displayMsg = ""
         var notificationType = ""
+        var isPlanAction = false
 
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -294,6 +295,13 @@ class AppState: ObservableObject {
                 }
                 agentKind = Self.agentKind(from: json, terminalTitle: terminalTitle)
                 let toolInput = json["tool_input"] as? [String: Any]
+                
+                // 제미나이의 계획(Plan) 작성인지 일반 코드 수정인지 구분하여 UI에 표시
+                let filePath = toolInput?["file_path"] as? String ?? ""
+                isPlanAction = filePath.contains(".gemini/tmp/")
+                if isPlanAction && (toolName == "write_file" || toolName == "replace") {
+                    toolName += " (Plan)"
+                }
                 
                 print("Parsed Hook: event=\(event), session=\(sessionId), title=\(terminalTitle)")
 
@@ -474,11 +482,11 @@ class AppState: ObservableObject {
         // 브릿지에서 걸러버리면 앱이 에이전트의 현재 상태(Auto-Edit 모드 등)를 추적할 수 없기 때문입니다.
         let bypassTools: Set<String> = ["update_topic", "activate_skill"]
         
-        // 터미널에서 사용자가 직접 상호작용해야 하는 툴은 이중 승인(앱+터미널)을 피하기 위해
-        // 앱에서는 승인하되, "터미널을 확인하라"는 알림을 띄워줍니다.
-        let interactiveTools: Set<String> = ["ask_user", "exit_plan_mode"]
+        // 터미널에서 사용자가 직접 상호작용해야 하거나, 제미나이 고유 보안 정책으로 터미널 프롬프트가 강제되는 상황
+        // (앱에서는 승인하되, "터미널을 확인하라"는 알림을 띄워 이중 승인을 방지합니다.)
+        let isInteractive = ["ask_user", "exit_plan_mode", "run_shell_command"].contains(toolName) || isPlanAction
         
-        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName) || interactiveTools.contains(toolName)
+        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName) || isInteractive
         let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
         
         var isAutoEditActive = false
@@ -491,7 +499,7 @@ class AppState: ObservableObject {
             request.responseHandler("{\"response\": \"approved\"}")
             
             // 터미널 입력이 필요한 툴인 경우 노치 알림(Notification) 표시
-            if interactiveTools.contains(toolName) {
+            if isInteractive {
                 DispatchQueue.main.async { [weak self] in
                     self?.isNotchExpanded = true
                     self?.isExpandingFromRequest = true
@@ -522,7 +530,7 @@ class AppState: ObservableObject {
                         terminalTabIndex: terminalTabIndex,
                         toolName: toolName,
                         eventName: event,
-                        message: interactiveTools.contains(toolName) ? "터미널 확인 대기 중..." : "Auto-approved: \(toolName)",
+                        message: isInteractive ? "터미널 확인 대기 중..." : "Auto-approved: \(toolName)",
                         isPending: false,
                         preserveMessage: true,
                         isLifecycleTracked: true,
