@@ -20,13 +20,17 @@ xcodegen generate
 # Open in Xcode
 open DevIsland.xcodeproj
 
-# Run unit tests via CLI
+# Run unit tests (RECOMMENDED: Isolated Mode)
+# This will not interfere with a running DevIsland instance.
+./scripts/run-tests.sh
+
+# Run unit tests via standard CLI
 xcodebuild test -project DevIsland.xcodeproj -scheme DevIsland -destination 'platform=macOS'
 ```
 
 Build target: **macOS 14.0+**, Xcode 15+. 
 
-**Mandatory Requirement:** AI agents working on this codebase MUST run the existing unit tests and ensure they pass before committing any changes. If new logic is added, corresponding unit tests should be implemented or updated.
+**Mandatory Requirement:** AI agents working on this codebase MUST run the existing unit tests and ensure they pass before committing any changes. Use `./scripts/run-tests.sh` to test safely while the app is running.
 
 **Release builds** are produced by CI (`.github/workflows/release.yml`) on version tags. The workflow runs `xcodebuild archive` unsigned and packages a DMG via `hdiutil`.
 
@@ -35,10 +39,14 @@ Build target: **macOS 14.0+**, Xcode 15+.
 For environments without Xcode (e.g. CI, Codex), use the shell build script:
 
 ```bash
+# Full rebuild and launch (stops current process)
 ./scripts/build_and_run.sh
+
+# Build only (isolated, does not stop current process)
+./scripts/build_and_run.sh --no-kill --no-run
 ```
 
-This compiles all `DevIsland/*.swift` sources with `swiftc`, assembles an app bundle under `dist/DevIsland.app`, and launches it. Pass `--verify` to assert the process started. This path is also wired as the `.codex/environments/environment.toml` Run action.
+This compiles all `DevIsland/*.swift` sources with `swiftc`, assembles an app bundle under `dist/DevIsland.app`, and launches it. Pass `--verify` to assert the process started. Use `--no-kill --no-run` to verify compilation without interrupting your live environment.
 
 ## Multi-CLI Support
 

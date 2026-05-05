@@ -30,12 +30,30 @@ xcodegen generate
 # Xcode에서 열기
 open DevIsland.xcodeproj
 
-# 유닛 테스트 실행 (CLI)
+# 유닛 테스트 실행 (권장: 격리된 환경에서 실행)
+# 현재 실행 중인 앱에 영향을 주지 않고 백그라운드에서 테스트를 수행합니다.
+bash scripts/run-tests.sh
+
+# 유닛 테스트 실행 (Xcode CLI 표준 방식)
 xcodebuild test -project DevIsland.xcodeproj -scheme DevIsland -destination 'platform=macOS'
 ```
 
 ### 2. 유닛 테스트
-프로젝트의 안정성을 위해 주요 로직(에이전트 판별, 메시지 처리, 자동 승인 등)에 대한 유닛 테스트가 포함되어 있습니다. 새로운 기능을 추가하거나 버그를 수정한 후에는 반드시 테스트를 실행하여 기존 기능에 영향이 없는지 확인해야 합니다.
+프로젝트의 안정성을 위해 주요 로직(에이전트 판별, 메시지 처리, 자동 승인 등)에 대한 유닛 테스트가 포함되어 있습니다. `scripts/run-tests.sh`를 사용하면 현재 앱을 종료하지 않고도 안전하게 테스트를 수행할 수 있습니다. 새로운 기능을 추가하거나 버그를 수정한 후에는 반드시 테스트를 통과해야 합니다.
+
+### 3. CLI 빌드 및 비간섭 모드
+Xcode 없이 터미널에서 빠르게 빌드하거나, 현재 실행 중인 앱 인스턴스를 유지하면서 빌드 성공 여부를 확인하고 싶을 때 다음 스크립트를 사용합니다.
+
+```bash
+# 기본 빌드 및 실행 (기존 앱 종료 후 실행)
+bash scripts/build_and_run.sh
+
+# 비간섭 빌드 (기존 앱을 종료하지 않고 빌드만 수행)
+bash scripts/build_and_run.sh --no-kill --no-run
+```
+
+- `--no-kill`: 빌드 전 현재 실행 중인 DevIsland 프로세스를 종료하지 않습니다.
+- `--no-run`: 빌드 완료 후 앱을 새로 실행하지 않습니다.
 
 ### 2. CLI 에이전트 연동 (브릿지 설치)
 
