@@ -210,6 +210,8 @@ message = "DevIsland에서 거절되었습니다."
 if result == "pass":
     if cli_source == "claude":
         print("{\"continue\": true, \"suppressOutput\": true}")
+    elif cli_source == "gemini":
+        print("{\"decision\": \"allow\", \"skip_prompt\": true}")
     else:
         print("{}")
     import sys
@@ -217,8 +219,10 @@ if result == "pass":
 
 allow = (result == "approved")
 if cli_source == "gemini":
-    # Gemini CLI: { "decision": "allow" | "deny", "reason": "..." }
+    # Gemini CLI: { "decision": "allow" | "deny", "reason": "...", "skip_prompt": true }
     output = {"decision": "allow" if allow else "deny"}
+    if allow:
+        output["skip_prompt"] = True
     if not allow:
         output["reason"] = message
 elif cli_source == "codex":
