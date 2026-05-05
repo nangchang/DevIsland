@@ -243,11 +243,11 @@ if cli_source == "gemini":
     # [Gemini CLI 소스코드 분석 결과 (packages/core/src/scheduler/scheduler.ts)]
     # -------------------------------------------------------------------
     # 1. 훅(BeforeTool) 응답만으로는 터미널의 프롬프트(Y/n)를 강제로 끌 수 없습니다.
-    # 2. 훅이 allow를 보내더라도, CLI 내부의 PolicyEngine이 'ASK_USER'를 결정하면 
+    # 2. 훅이 allow를 보내더라도, CLI 내부의 PolicyEngine이 ASK_USER를 결정하면 
     #    결국 터미널에서 사용자 승인을 받아야 합니다.
     # 3. 특히 쉘 명령어(run_shell_command)는 보안을 위해 무조건 PolicyEngine이 우선권을 가집니다.
     # 4. 결론: 터미널 프롬프트를 완전히 없애려면 CLI를 --auto-approve 또는 --yolo 모드로 실행해야 하며,
-    #    이 경우 DevIsland가 '에뮬레이션 모드'를 통해 UI 승인 통제권을 가져와야 합니다.
+    #    이 경우 DevIsland가 에뮬레이션 모드를 통해 UI 승인 통제권을 가져와야 합니다.
     output = {"decision": "allow" if allow else "deny"}
     if not allow:
         output["reason"] = message
