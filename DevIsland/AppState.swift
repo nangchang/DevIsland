@@ -53,6 +53,7 @@ struct ActiveSession: Identifiable, Equatable {
     var lastActiveAt: Date
     var isPending: Bool
     var isLifecycleTracked: Bool
+    var isAutoEditActive: Bool
     var status: SessionStatus
 }
 
@@ -469,13 +470,30 @@ class AppState: ObservableObject {
             receivedAt: Date()
         )
 
+        // UI 업데이트나 내부 상태 관리를 위한 무해한 툴들은 브릿지가 아닌 앱 단계에서 우회 처리합니다.
+        // 브릿지에서 걸러버리면 앱이 에이전트의 현재 상태(Auto-Edit 모드 등)를 추적할 수 없기 때문입니다.
         let bypassTools: Set<String> = ["update_topic", "ask_user", "exit_plan_mode", "activate_skill"]
         let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName)
         let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
+        
+        var isAutoEditActive = false
+        if let session = activeSessions.first(where: { $0.id == sessionId }) {
+            isAutoEditActive = session.isAutoEditActive
+        }
 
-        if isAutoApprovedGlobal || isAutoApprovedSession {
-            print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8))")
+        if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive {
+            print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive))")
             request.responseHandler("{\"response\": \"approved\"}")
+            
+            // exit_plan_mode가 승인되면 Auto-Edit 모드 활성화 (계획 승인 이후의 편집 작업을 자동화)
+            if toolName == "exit_plan_mode" {
+                DispatchQueue.main.async { [weak self] in
+                    if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                        self?.activeSessions[index].isAutoEditActive = true
+                        print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Auto-Edit mode")
+                    }
+                }
+            }
             
             DispatchQueue.main.async { [weak self] in
                 if !sessionId.isEmpty {
@@ -498,6 +516,16 @@ class AppState: ObservableObject {
                 }
             }
             return
+        }
+        
+        // enter_plan_mode가 호출되면 Auto-Edit 모드 해제 (명시적인 새로운 계획 수립 시작)
+        if toolName == "enter_plan_mode" {
+            DispatchQueue.main.async { [weak self] in
+                if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                    self?.activeSessions[index].isAutoEditActive = false
+                    print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
+                }
+            }
         }
 
         // Pass through check: 터미널이 이미 활성 상태라면 'pass' 응답으로 즉시 통과
@@ -829,6 +857,7 @@ class AppState: ObservableObject {
                 lastActiveAt: Date(),
                 isPending: isPending,
                 isLifecycleTracked: isLifecycleTracked,
+                isAutoEditActive: false,
                 status: status ?? (isPending ? .pending : .idle)
             )
             activeSessions.insert(session, at: 0)
@@ -1011,6 +1040,15 @@ class AppState: ObservableObject {
         }
 
         print("[DevIsland] approve() called, handler=\(currentResponseHandler != nil ? "SET" : "NIL")")
+        
+        // exit_plan_mode를 수동으로 승인했을 때도 Auto-Edit 모드 활성화
+        if tool == "exit_plan_mode" {
+            if let index = activeSessions.firstIndex(where: { $0.id == sId }) {
+                activeSessions[index].isAutoEditActive = true
+                print("[DevIsland] [MODE] Session \(sId.prefix(8)) switched to Auto-Edit mode via manual approval")
+            }
+        }
+        
         sendDecision(approved: true)
     }
 
