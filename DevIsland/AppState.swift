@@ -472,8 +472,13 @@ class AppState: ObservableObject {
 
         // UI 업데이트나 내부 상태 관리를 위한 무해한 툴들은 브릿지가 아닌 앱 단계에서 우회 처리합니다.
         // 브릿지에서 걸러버리면 앱이 에이전트의 현재 상태(Auto-Edit 모드 등)를 추적할 수 없기 때문입니다.
-        let bypassTools: Set<String> = ["update_topic", "ask_user", "exit_plan_mode", "activate_skill"]
-        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName)
+        let bypassTools: Set<String> = ["update_topic", "activate_skill"]
+        
+        // 터미널에서 사용자가 직접 상호작용해야 하는 툴은 이중 승인(앱+터미널)을 피하기 위해
+        // 앱에서는 승인하되, "터미널을 확인하라"는 알림을 띄워줍니다.
+        let interactiveTools: Set<String> = ["ask_user", "exit_plan_mode"]
+        
+        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName) || interactiveTools.contains(toolName)
         let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
         
         var isAutoEditActive = false
@@ -485,7 +490,17 @@ class AppState: ObservableObject {
             print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive))")
             request.responseHandler("{\"response\": \"approved\"}")
             
-            // exit_plan_mode가 승인되면 Auto-Edit 모드 활성화 (계획 승인 이후의 편집 작업을 자동화)
+            // 터미널 입력이 필요한 툴인 경우 노치 알림(Notification) 표시
+            if interactiveTools.contains(toolName) {
+                DispatchQueue.main.async { [weak self] in
+                    self?.isNotchExpanded = true
+                    self?.isExpandingFromRequest = true
+                    self?.currentSessionId = sessionId
+                    self?.currentMessage = "터미널 창을 확인해 주세요 (\(toolName))"
+                }
+            }
+            
+            // exit_plan_mode가 호출되면 터미널 승인 대기 시작, 이후 편집 작업을 위한 Auto-Edit 모드 활성화 준비
             if toolName == "exit_plan_mode" {
                 DispatchQueue.main.async { [weak self] in
                     if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
@@ -507,7 +522,7 @@ class AppState: ObservableObject {
                         terminalTabIndex: terminalTabIndex,
                         toolName: toolName,
                         eventName: event,
-                        message: "Auto-approved: \(toolName)",
+                        message: interactiveTools.contains(toolName) ? "터미널 확인 대기 중..." : "Auto-approved: \(toolName)",
                         isPending: false,
                         preserveMessage: true,
                         isLifecycleTracked: true,
