@@ -101,7 +101,7 @@ lifecycle_config = {"hooks": [{"type": "command", "command": bridge_command}]}
 def remove_bridge_hooks(entries):
     cleaned = []
     for entry in entries:
-        sub_hooks = [h for h in entry.get("hooks", []) if bridge_path not in h.get("command", "")]
+        sub_hooks = [h for h in entry.get("hooks", []) if "devisland-bridge.sh" not in h.get("command", "")]
         if sub_hooks:
             updated = dict(entry)
             updated["hooks"] = sub_hooks
@@ -170,7 +170,7 @@ for event in events:
     for config in event_configs:
         if config.get("matcher") == "*":
             sub_hooks = config.get("hooks", [])
-            sub_hooks = [h for h in sub_hooks if bridge_path not in h.get("command", "")]
+            sub_hooks = [h for h in sub_hooks if "devisland-bridge.sh" not in h.get("command", "")]
             sub_hooks.append({"type": "command", "command": bridge_command})
             config["hooks"] = sub_hooks
             found = True
@@ -269,7 +269,7 @@ for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent"]:
     for config in event_configs:
         if config.get("matcher") == "*":
             sub_hooks = config.get("hooks", [])
-            sub_hooks = [h for h in sub_hooks if bridge_path not in h.get("command", "")]
+            sub_hooks = [h for h in sub_hooks if "devisland-bridge.sh" not in h.get("command", "")]
             hook_entry = {"type": "command", "command": bridge_command}
             if event == "BeforeTool":
                 hook_entry["timeout"] = 86400000
