@@ -57,7 +57,9 @@ mkdir -p ~/Library/Application\ Support/DevIsland
 
 # 심볼릭 링크 생성 (DevIsland 소스 경로 기준)
 ln -sf /path/to/DevIsland/scripts/devisland-bridge.sh ~/Library/Application\ Support/DevIsland/devisland-bridge.sh
+ln -sf /path/to/DevIsland/scripts/devisland_bridge.py ~/Library/Application\ Support/DevIsland/devisland_bridge.py
 chmod +x ~/Library/Application\ Support/DevIsland/devisland-bridge.sh
+chmod +x ~/Library/Application\ Support/DevIsland/devisland_bridge.py
 ```
 
 **2) CLI별 설정**

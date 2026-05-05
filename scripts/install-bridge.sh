@@ -7,15 +7,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 브리지 스크립트 위치 확인
 # -------------------------------------------------------------------
 BRIDGE_SRC="$SCRIPT_DIR/devisland-bridge.sh"
+PY_BRIDGE_SRC="$SCRIPT_DIR/devisland_bridge.py"
 if [ ! -f "$BRIDGE_SRC" ]; then
     BUNDLE_SRC="/Applications/DevIsland.app/Contents/Resources/devisland-bridge.sh"
     if [ -f "$BUNDLE_SRC" ]; then
         BRIDGE_SRC="$BUNDLE_SRC"
+        PY_BRIDGE_SRC="/Applications/DevIsland.app/Contents/Resources/devisland_bridge.py"
     else
         echo "오류: devisland-bridge.sh 를 찾을 수 없습니다."
         echo "DevIsland.app 이 /Applications 에 설치되어 있는지 확인해주세요."
         exit 1
     fi
+fi
+if [ ! -f "$PY_BRIDGE_SRC" ]; then
+    echo "오류: devisland_bridge.py 를 찾을 수 없습니다."
+    echo "DevIsland.app 이 /Applications 에 설치되어 있는지 확인해주세요."
+    exit 1
 fi
 
 # -------------------------------------------------------------------
@@ -61,17 +68,22 @@ done
 # -------------------------------------------------------------------
 HOOKS_DIR="$HOME/Library/Application Support/DevIsland"
 BRIDGE_DEST="$HOOKS_DIR/devisland-bridge.sh"
+PY_BRIDGE_DEST="$HOOKS_DIR/devisland_bridge.py"
 
 mkdir -p "$HOOKS_DIR"
 rm -f "$BRIDGE_DEST"
+rm -f "$PY_BRIDGE_DEST"
 if [[ "$SCRIPT_DIR" == *.app/Contents/Resources* ]]; then
     cp "$BRIDGE_SRC" "$BRIDGE_DEST"
+    cp "$PY_BRIDGE_SRC" "$PY_BRIDGE_DEST"
     echo "✓ 브리지 스크립트 복사 완료: $BRIDGE_DEST"
 else
     ln -sf "$BRIDGE_SRC" "$BRIDGE_DEST"
+    ln -sf "$PY_BRIDGE_SRC" "$PY_BRIDGE_DEST"
     echo "✓ 브리지 스크립트 링크 생성: $BRIDGE_DEST"
 fi
 chmod +x "$BRIDGE_DEST"
+chmod +x "$PY_BRIDGE_DEST"
 
 # -------------------------------------------------------------------
 # Claude Code 설치

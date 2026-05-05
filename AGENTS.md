@@ -204,7 +204,8 @@ CLI Agent (hook event)
 | `NotchWindowController.swift` | `NSPanel` positioned at the top-center of the main screen; hosts all SwiftUI views including `NotchView`, `SessionRowView`, `CodexBuddyView`, and `toolInfo()` |
 | `GlobalShortcutManager.swift` | Global `NSEvent` monitor for ⌘⇧Y / ⌘⇧N (requires Accessibility permission) |
 | `TerminalFocuser.swift` | `NSAppleScript` activation of the first detected terminal app after a decision |
-| `scripts/devisland-bridge.sh` | Bash hook handler; appends `terminal_title` to payload, forwards to app, converts response to per-CLI JSON format |
+| `scripts/devisland-bridge.sh` | Bash hook entrypoint; collects terminal metadata and delegates payload handling to the Python bridge helper |
+| `scripts/devisland_bridge.py` | JSON payload enrichment, TCP forwarding, and per-CLI hook response formatting |
 | `scripts/install-bridge.sh` | Registers hooks in Claude / Codex / Gemini config files |
 | `scripts/test-hook.sh` | Manual test CLI; simulates hook events for all three CLIs |
 
@@ -271,4 +272,3 @@ To maintain a clean and maintainable history, all AI agents must follow these co
 `project.yml` is the XcodeGen spec. Changing any build setting, adding a new source file to the target, or modifying entitlements should be done here, not in a hand-edited `.xcodeproj`. Re-run `xcodegen generate` after any edit.
 
 The app is an `LSUIElement` (no Dock icon). It needs two privacy permissions already declared in `project.yml`: Apple Events (for `TerminalFocuser`) and Accessibility (for `GlobalShortcutManager`).
-
