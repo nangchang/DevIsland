@@ -469,7 +469,8 @@ class AppState: ObservableObject {
             receivedAt: Date()
         )
 
-        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName)
+        let bypassTools: Set<String> = ["update_topic", "ask_user", "exit_plan_mode", "activate_skill"]
+        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName)
         let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
 
         if isAutoApprovedGlobal || isAutoApprovedSession {
