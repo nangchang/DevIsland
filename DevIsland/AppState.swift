@@ -284,6 +284,7 @@ class AppState: ObservableObject {
         var displayMsg = ""
         var notificationType = ""
         var isPlanAction = false
+        var displayToolName = ""
 
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -308,10 +309,11 @@ class AppState: ObservableObject {
                 // 제미나이의 계획(Plan) 작성인지 일반 코드 수정인지 구분하여 UI에 표시
                 let filePath = toolInput?["file_path"] as? String ?? ""
                 isPlanAction = filePath.contains(".gemini/tmp/")
-                if isPlanAction && (toolName == "write_file" || toolName == "replace") {
-                    toolName += " (Plan)"
-                }
-                
+                // UI 표시 전용 이름 — 로직 체크(auto-approve, ToolKnowledge 등)에는 toolName 원본 사용
+                displayToolName = isPlanAction && (toolName == "write_file" || toolName == "replace")
+                    ? toolName + " (Plan)"
+                    : toolName
+
                 print("Parsed Hook: event=\(event), session=\(sessionId), title=\(terminalTitle)")
 
                 displayMsg = displayMessage(
@@ -326,6 +328,7 @@ class AppState: ObservableObject {
             displayMsg = message
         }
 
+        if displayToolName.isEmpty { displayToolName = toolName }
         let normalizedEvent = normalizedHookEventName(event)
         let stopEvents = ["exit", "shutdown", "sessionend", "onsessionend", "session_end", "on_session_end"]
         let notificationEvents = [
@@ -420,7 +423,7 @@ class AppState: ObservableObject {
                 terminalTTY: terminalTTY,
                 terminalWindowId: terminalWindowId,
                 terminalTabIndex: terminalTabIndex,
-                toolName: toolName,
+                toolName: displayToolName,
                 eventName: event,
                 message: sessionMessage,
                 isPending: hasPendingForSession,
@@ -443,7 +446,7 @@ class AppState: ObservableObject {
                     let isFrontmost = self.isTerminalFrontmost(for: session)
                     
                     if !isFrontmost {
-                        self.currentToolName = toolName
+                        self.currentToolName = displayToolName
                         self.currentEventName = event
                         self.currentMessage = sessionMessage
                         self.currentSessionId = fullSessionId
@@ -481,7 +484,7 @@ class AppState: ObservableObject {
         let request = PendingRequest(
             sessionId: sessionId,
             eventName: event,
-            toolName: toolName,
+            toolName: displayToolName,
             message: displayMsg,
             responseHandler: responseHandler,
             receivedAt: Date()
@@ -523,7 +526,7 @@ class AppState: ObservableObject {
                     self?.isNotchExpanded = true
                     self?.isExpandingFromRequest = true
                     self?.currentSessionId = sessionId
-                    self?.currentMessage = "터미널 창을 확인해 주세요 (\(toolName))"
+                    self?.currentMessage = "터미널 창을 확인해 주세요 (\(displayToolName))"
                 }
             }
             
@@ -558,10 +561,10 @@ class AppState: ObservableObject {
                         terminalTTY: terminalTTY,
                         terminalWindowId: terminalWindowId,
                         terminalTabIndex: terminalTabIndex,
-                        toolName: toolName,
+                        toolName: displayToolName,
                         eventName: event,
                         // Interactive 툴인 경우 사용자에게 다음 행동 가이드를 제공
-                        message: isInteractive ? "터미널 확인 대기 중..." : "Auto-approved: \(toolName)",
+                        message: isInteractive ? "터미널 확인 대기 중..." : "Auto-approved: \(displayToolName)",
                         isPending: false,
                         preserveMessage: true,
                         isLifecycleTracked: true,
@@ -605,7 +608,7 @@ class AppState: ObservableObject {
                             terminalTTY: terminalTTY,
                             terminalWindowId: terminalWindowId,
                             terminalTabIndex: terminalTabIndex,
-                            toolName: toolName,
+                            toolName: displayToolName,
                             eventName: event,
                             message: displayMsg,
                             isPending: false,
