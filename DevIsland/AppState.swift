@@ -105,6 +105,7 @@ class AppState: ObservableObject {
         static let requestDisplayTarget = "requestDisplayTarget"
         static let globalAutoApproveTypes = "globalAutoApproveTypes"
         static let autoApproveSafeTools = "autoApproveSafeTools"
+        static let emulateGeminiInteractiveMode = "emulateGeminiInteractiveMode"
     }
 
     static let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
@@ -157,6 +158,12 @@ class AppState: ObservableObject {
         }
     }
     
+    @Published var emulateGeminiInteractiveMode = false {
+        didSet {
+            UserDefaults.standard.set(emulateGeminiInteractiveMode, forKey: DefaultsKey.emulateGeminiInteractiveMode)
+        }
+    }
+    
     @Published var globalAutoApproveTypes: Set<String> = [] {
         didSet {
             UserDefaults.standard.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
@@ -179,10 +186,14 @@ class AppState: ObservableObject {
 
     private init() {
         let defaults = UserDefaults.standard
-        if let rawTarget = defaults.string(forKey: DefaultsKey.notchDisplayTarget),
+        if let rawTarget = defaults.string(forKey: "displayTarget"), // Migration check
            let target = NotchDisplayTarget(rawValue: rawTarget) {
             notchDisplayTarget = target
+        } else if let rawTarget = defaults.string(forKey: DefaultsKey.notchDisplayTarget),
+                  let target = NotchDisplayTarget(rawValue: rawTarget) {
+            notchDisplayTarget = target
         }
+        
         selectedDisplayId = UInt32(defaults.integer(forKey: DefaultsKey.selectedDisplayId))
         if defaults.object(forKey: DefaultsKey.showInFullScreenApps) != nil {
             showInFullScreenApps = defaults.bool(forKey: DefaultsKey.showInFullScreenApps)
@@ -195,6 +206,7 @@ class AppState: ObservableObject {
             globalAutoApproveTypes = Set(savedAutoApprove)
         }
         autoApproveSafeTools = defaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
+        emulateGeminiInteractiveMode = defaults.bool(forKey: DefaultsKey.emulateGeminiInteractiveMode)
         ensureSelectedDisplay()
 
         server.onMessageReceived = { [weak self] message, responseHandler in
@@ -495,6 +507,7 @@ class AppState: ObservableObject {
         // 1. 완전 무시 (Bypass): 시스템에 영향이 없는 순수 내부 상태/UI 업데이트 툴들.
         //    - 브릿지가 아닌 앱 단계에서 처리하는 이유: 앱이 에이전트의 현재 진행 상태를 계속 추적하여
         //      UI를 동기화하고 세션 상태(예: Auto-Edit 모드 여부)를 관리해야 하기 때문입니다.
+        let bypassTools: Set<String> = ["update_topic", "activate_skill"]
 
         // 2. 터미널 유도 알림 (Interactive): 사용자가 터미널에서 직접 키보드 입력을 해야 하는 툴들.
         //    - 목적: "DevIsland에서 승인 클릭" + "터미널에서 Y/Enter 입력" 이라는 '이중 승인'의 번거로움을 해결합니다.
@@ -505,7 +518,7 @@ class AppState: ObservableObject {
         let isInteractive = ["ask_user", "exit_plan_mode", "run_shell_command"].contains(toolName) || isPlanAction
         
         // 자동 승인 여부 판단 (전역 설정 + 세션별 툴 등록 + 현재가 자동 편집 모드인지 + Safe 등급 툴 자동 승인 옵션)
-        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || Self.bypassTools.contains(toolName) || isInteractive
+        var isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName) || isInteractive
         let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
         
         var isAutoEditActive = false
@@ -515,6 +528,21 @@ class AppState: ObservableObject {
 
         // 사용자가 메뉴에서 설정한 "Safe 등급 툴 자동 승인" 옵션 적용
         let isSafeAutoApprove = autoApproveSafeTools && (ToolKnowledge.risk(for: toolName) == .safe)
+
+        // [핵심] 제미나이 일반 모드 에뮬레이션 로직
+        // 제미나이 CLI가 --auto-approve나 --yolo로 실행되어 터미널 프롬프트가 뜨지 않는 상황일 때,
+        // DevIsland가 'Interactive 모드'처럼 위험한 툴을 선별해서 승인 창을 띄웁니다.
+        if emulateGeminiInteractiveMode && agentKind == .gemini {
+            // 사용자가 명시적으로 추가한 글로벌/세션 자동 승인 툴은 에뮬레이션 모드라도 존중하여 패스시킵니다.
+            let isExplicitlyApproved = globalAutoApproveTypes.contains(toolName) || isAutoApprovedSession
+            
+            // 위험한 툴이면서 사용자가 명시적으로 승인하지 않은 경우에만 자동 통과를 막고 승인을 강제합니다.
+            if ToolKnowledge.risk(for: toolName) != .safe && !isExplicitlyApproved {
+                isAutoApprovedGlobal = false
+                isAutoEditActive = false
+                print("[DevIsland] [EMULATION] Gemini interactive emulation forced for tool: \(toolName)")
+            }
+        }
 
         if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
             print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")

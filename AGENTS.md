@@ -222,6 +222,30 @@ Events are classified into three buckets:
 2. **Notification events** (`sessionstart`, `notification`, `posttooluse`, `precompact`, `subagentstop`, …) — update session state, respond `approved` immediately (no user action needed).
 3. **Approval events** (`permissionrequest`, `pretooluse`, `beforetool`, …) — added to `pendingQueue` and shown in the UI for user decision.
 
+### Gemini-Specific UX Optimizations
+
+DevIsland includes advanced logic to handle the unique security and workflow characteristics of the Gemini CLI.
+
+#### 1. Auto-Edit Mode Tracking
+DevIsland tracks the transition between **Plan mode** (where Gemini proposes changes) and **Auto-Edit mode** (where Gemini executes approved changes).
+- **Trigger**: When the user approves a plan in the terminal (`exit_plan_mode`), DevIsland switches the session to `isAutoEditActive = true`.
+- **Behavior**: While in Auto-Edit mode, all subsequent tool calls (like `write_file`, `replace`) are automatically approved by DevIsland to allow uninterrupted execution of the approved plan.
+- **Reset**: When the agent returns to planning (`enter_plan_mode`), the session reverts to manual approval mode.
+
+#### 2. Interactive Notifications (Double-Prompt Prevention)
+Some tools require user input in the terminal regardless of DevIsland's approval (e.g., `ask_user`, `run_shell_command`, or any tool acting on `.gemini/tmp/` files during planning).
+- **Strategy**: Instead of showing a blocking "Approve/Deny" prompt (which would force the user to click in DevIsland AND then type in the terminal), DevIsland **auto-approves** these tools immediately.
+- **User Awareness**: It simultaneously expands the Notch UI with a notification message: *"Check terminal for input (\(tool_name))"*.
+- **UI Tagging**: Tools acting on `.gemini/tmp/` files are suffixed with `(Plan)` in the UI (e.g., `write_file (Plan)`) to clearly distinguish them from actual codebase edits.
+
+#### 3. Gemini Interactive Emulation
+Since the Gemini CLI's `BeforeTool` hook cannot override the CLI's internal security policy (PolicyEngine), DevIsland provides an **Emulation Mode**.
+- **Usage**: Run Gemini CLI with `--auto-approve` or `--yolo` (to disable terminal prompts) and enable **"Gemini Interactive Emulation"** in the DevIsland menu.
+- **Behavior**: DevIsland takes over the role of the terminal prompt. It will block and ask for approval for any tool classified as high-risk by `ToolKnowledge`, while letting safe tools pass. This moves the control interface from the terminal to the DevIsland GUI.
+
+#### 4. Safe Tool Auto-Approval
+Users can toggle **"Auto-approve Safe tools"** in the menu bar. When enabled, any tool classified as `Safe` by heuristics (e.g., `read_file`, `grep_search`, `list_dir`) is automatically approved without user interaction, ensuring that purely observational agent activities do not interrupt the developer.
+
 ### Window Mechanics
 
 `NotchWindowController` creates a borderless, non-activating `NSPanel` at `.mainMenu + 1` level with `collectionBehavior: [.canJoinAllSpaces, .stationary]`. It toggles between two fixed sizes:
@@ -233,7 +257,16 @@ Events are classified into three buckets:
 
 On collapse, the frame shrinks after a 0.45 s delay (matching the SwiftUI spring animation) to avoid a jump.
 
-### project.yml
+## 📝 Commit Guidelines
+
+To maintain a clean and maintainable history, all AI agents must follow these commit rules:
+
+1. **Atomic Commits**: Divide work into meaningful, logical units. Each commit should represent a single task or fix.
+2. **Explain the "Why"**: Commit messages must not just describe *what* changed, but *why* the change was made (the rationale or the problem it solves).
+3. **No Mixed Changes**: Do not mix unrelated refactorings, style changes, or multiple features into a single commit. Keep commits surgical and focused.
+4. **Descriptive Tags**: Use conventional commit-style prefixes (e.g., `feat:`, `fix:`, `docs:`, `refactor:`) to categorize changes.
+
+## project.yml
 
 `project.yml` is the XcodeGen spec. Changing any build setting, adding a new source file to the target, or modifying entitlements should be done here, not in a hand-edited `.xcodeproj`. Re-run `xcodegen generate` after any edit.
 
