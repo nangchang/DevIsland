@@ -81,7 +81,6 @@ struct MenuBarMenu: View {
         }
 
         Toggle("전체 화면 앱 위에 표시", isOn: $state.showInFullScreenApps)
-        Toggle("Safe 등급 툴 자동 승인 (조회성 작업)", isOn: $state.autoApproveSafeTools)
         Picker("요청 표시 위치", selection: $state.requestDisplayTarget) {
             ForEach(RequestDisplayTarget.allCases) { target in
                 Text(target.label).tag(target)
@@ -91,6 +90,8 @@ struct MenuBarMenu: View {
         Divider()
 
         Menu("자동 승인(Global) 툴 관리") {
+            Toggle("Safe 등급 툴 자동 승인 (조회성 작업)", isOn: $state.autoApproveSafeTools)
+            Divider()
             Button("직접 텍스트로 추가하기...") {
                 state.promptToAddGlobalAutoApprove()
             }
