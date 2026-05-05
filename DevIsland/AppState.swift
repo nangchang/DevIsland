@@ -53,6 +53,7 @@ struct ActiveSession: Identifiable, Equatable {
     var lastActiveAt: Date
     var isPending: Bool
     var isLifecycleTracked: Bool
+    var isAutoEditActive: Bool
     var status: SessionStatus
 }
 
@@ -103,6 +104,7 @@ class AppState: ObservableObject {
         static let showInFullScreenApps = "showInFullScreenApps"
         static let requestDisplayTarget = "requestDisplayTarget"
         static let globalAutoApproveTypes = "globalAutoApproveTypes"
+        static let autoApproveSafeTools = "autoApproveSafeTools"
     }
 
     static let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
@@ -149,6 +151,12 @@ class AppState: ObservableObject {
         }
     }
     
+    @Published var autoApproveSafeTools = false {
+        didSet {
+            UserDefaults.standard.set(autoApproveSafeTools, forKey: DefaultsKey.autoApproveSafeTools)
+        }
+    }
+    
     @Published var globalAutoApproveTypes: Set<String> = [] {
         didSet {
             UserDefaults.standard.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
@@ -157,6 +165,7 @@ class AppState: ObservableObject {
     @Published var sessionAutoApproveTypes: [String: Set<String>] = [:]
 
     private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
+    private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
 
     private var server = HookSocketServer()
     private var pendingQueue: [PendingRequest] = []
@@ -185,6 +194,7 @@ class AppState: ObservableObject {
         if let savedAutoApprove = defaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String] {
             globalAutoApproveTypes = Set(savedAutoApprove)
         }
+        autoApproveSafeTools = defaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
         ensureSelectedDisplay()
 
         server.onMessageReceived = { [weak self] message, responseHandler in
@@ -273,6 +283,8 @@ class AppState: ObservableObject {
         var terminalTabIndex = ""
         var displayMsg = ""
         var notificationType = ""
+        var isPlanAction = false
+        var displayToolName = ""
 
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -294,6 +306,14 @@ class AppState: ObservableObject {
                 agentKind = Self.agentKind(from: json, terminalTitle: terminalTitle)
                 let toolInput = json["tool_input"] as? [String: Any]
                 
+                // 제미나이의 계획(Plan) 작성인지 일반 코드 수정인지 구분하여 UI에 표시
+                let filePath = toolInput?["file_path"] as? String ?? ""
+                isPlanAction = filePath.contains(".gemini/tmp/")
+                // UI 표시 전용 이름 — 로직 체크(auto-approve, ToolKnowledge 등)에는 toolName 원본 사용
+                displayToolName = isPlanAction && (toolName == "write_file" || toolName == "replace")
+                    ? toolName + " (Plan)"
+                    : toolName
+
                 print("Parsed Hook: event=\(event), session=\(sessionId), title=\(terminalTitle)")
 
                 displayMsg = displayMessage(
@@ -308,6 +328,7 @@ class AppState: ObservableObject {
             displayMsg = message
         }
 
+        if displayToolName.isEmpty { displayToolName = toolName }
         let normalizedEvent = normalizedHookEventName(event)
         let stopEvents = ["exit", "shutdown", "sessionend", "onsessionend", "session_end", "on_session_end"]
         let notificationEvents = [
@@ -402,7 +423,7 @@ class AppState: ObservableObject {
                 terminalTTY: terminalTTY,
                 terminalWindowId: terminalWindowId,
                 terminalTabIndex: terminalTabIndex,
-                toolName: toolName,
+                toolName: displayToolName,
                 eventName: event,
                 message: sessionMessage,
                 isPending: hasPendingForSession,
@@ -425,7 +446,7 @@ class AppState: ObservableObject {
                     let isFrontmost = self.isTerminalFrontmost(for: session)
                     
                     if !isFrontmost {
-                        self.currentToolName = toolName
+                        self.currentToolName = displayToolName
                         self.currentEventName = event
                         self.currentMessage = sessionMessage
                         self.currentSessionId = fullSessionId
@@ -463,18 +484,72 @@ class AppState: ObservableObject {
         let request = PendingRequest(
             sessionId: sessionId,
             eventName: event,
-            toolName: toolName,
+            toolName: displayToolName,
             message: displayMsg,
             responseHandler: responseHandler,
             receivedAt: Date()
         )
 
-        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName)
-        let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
+        // [디자인 결정] 툴 필터링 및 자동 승인 전략
+        // -------------------------------------------------------------------
+        // 1. 완전 무시 (Bypass): 시스템에 영향이 없는 순수 내부 상태/UI 업데이트 툴들.
+        //    - 브릿지가 아닌 앱 단계에서 처리하는 이유: 앱이 에이전트의 현재 진행 상태를 계속 추적하여
+        //      UI를 동기화하고 세션 상태(예: Auto-Edit 모드 여부)를 관리해야 하기 때문입니다.
 
-        if isAutoApprovedGlobal || isAutoApprovedSession {
-            print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8))")
+        // 2. 터미널 유도 알림 (Interactive): 사용자가 터미널에서 직접 키보드 입력을 해야 하는 툴들.
+        //    - 목적: "DevIsland에서 승인 클릭" + "터미널에서 Y/Enter 입력" 이라는 '이중 승인'의 번거로움을 해결합니다.
+        //    - 동작: 앱에서는 즉시 승인(approved)을 보내어 터미널에 프롬프트가 즉시 뜨게 하되, 
+        //           노치 UI를 펼쳐 사용자에게 터미널로 돌아가야 함을 알립니다.
+        //    - 대상: 직접 입력(ask_user), 계획 승인(exit_plan_mode), 자체 보안 정책상 터미널 확인이 강제되는 툴(run_shell_command),
+        //           그리고 계획 단계에서 발생하는 임시 파일 작업들(.gemini/tmp/).
+        let isInteractive = ["ask_user", "exit_plan_mode", "run_shell_command"].contains(toolName) || isPlanAction
+        
+        // 자동 승인 여부 판단 (전역 설정 + 세션별 툴 등록 + 현재가 자동 편집 모드인지 + Safe 등급 툴 자동 승인 옵션)
+        let isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || Self.bypassTools.contains(toolName) || isInteractive
+        let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
+        
+        var isAutoEditActive = false
+        if let session = activeSessions.first(where: { $0.id == sessionId }) {
+            isAutoEditActive = session.isAutoEditActive
+        }
+
+        // 사용자가 메뉴에서 설정한 "Safe 등급 툴 자동 승인" 옵션 적용
+        let isSafeAutoApprove = autoApproveSafeTools && (ToolKnowledge.risk(for: toolName) == .safe)
+
+        if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
+            print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
             request.responseHandler("{\"response\": \"approved\"}")
+            
+            // 터미널 입력이 필요한 Interactive 툴인 경우 노치를 펼쳐 사용자에게 알림(Notification) 표시
+            if isInteractive {
+                DispatchQueue.main.async { [weak self] in
+                    self?.isNotchExpanded = true
+                    self?.isExpandingFromRequest = true
+                    self?.currentSessionId = sessionId
+                    self?.currentMessage = "터미널 창을 확인해 주세요 (\(displayToolName))"
+                }
+            }
+            
+            // [상태 추적] exit_plan_mode가 호출되면, 사용자가 터미널에서 계획을 승인할 것으로 간주하고
+            // 이후의 편집 작업들을 자동화하기 위해 Auto-Edit 모드 활성화를 준비합니다.
+            if toolName == "exit_plan_mode" {
+                DispatchQueue.main.async { [weak self] in
+                    if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                        self?.activeSessions[index].isAutoEditActive = true
+                        print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Auto-Edit mode")
+                    }
+                }
+            }
+
+            // Auto-Edit 중에 enter_plan_mode가 자동 승인되면 아래 리셋 블록에 도달하지 못하므로 여기서 처리
+            if toolName == "enter_plan_mode" {
+                DispatchQueue.main.async { [weak self] in
+                    if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                        self?.activeSessions[index].isAutoEditActive = false
+                        print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
+                    }
+                }
+            }
             
             DispatchQueue.main.async { [weak self] in
                 if !sessionId.isEmpty {
@@ -486,9 +561,10 @@ class AppState: ObservableObject {
                         terminalTTY: terminalTTY,
                         terminalWindowId: terminalWindowId,
                         terminalTabIndex: terminalTabIndex,
-                        toolName: toolName,
+                        toolName: displayToolName,
                         eventName: event,
-                        message: "Auto-approved: \(toolName)",
+                        // Interactive 툴인 경우 사용자에게 다음 행동 가이드를 제공
+                        message: isInteractive ? "터미널 확인 대기 중..." : "Auto-approved: \(displayToolName)",
                         isPending: false,
                         preserveMessage: true,
                         isLifecycleTracked: true,
@@ -497,6 +573,17 @@ class AppState: ObservableObject {
                 }
             }
             return
+        }
+        
+        // [상태 추적] enter_plan_mode가 호출되면 다시 신중한 계획 수립 단계로 돌아간 것이므로
+        // 실행 단계의 자동 승인(Auto-Edit) 모드를 해제하여 다시 모든 작업을 사용자에게 확인받습니다.
+        if toolName == "enter_plan_mode" {
+            DispatchQueue.main.async { [weak self] in
+                if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                    self?.activeSessions[index].isAutoEditActive = false
+                    print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
+                }
+            }
         }
 
         // Pass through check: 터미널이 이미 활성 상태라면 'pass' 응답으로 즉시 통과
@@ -521,7 +608,7 @@ class AppState: ObservableObject {
                             terminalTTY: terminalTTY,
                             terminalWindowId: terminalWindowId,
                             terminalTabIndex: terminalTabIndex,
-                            toolName: toolName,
+                            toolName: displayToolName,
                             eventName: event,
                             message: displayMsg,
                             isPending: false,
@@ -828,6 +915,7 @@ class AppState: ObservableObject {
                 lastActiveAt: Date(),
                 isPending: isPending,
                 isLifecycleTracked: isLifecycleTracked,
+                isAutoEditActive: false,
                 status: status ?? (isPending ? .pending : .idle)
             )
             activeSessions.insert(session, at: 0)
@@ -1010,6 +1098,15 @@ class AppState: ObservableObject {
         }
 
         print("[DevIsland] approve() called, handler=\(currentResponseHandler != nil ? "SET" : "NIL")")
+        
+        // exit_plan_mode를 수동으로 승인했을 때도 Auto-Edit 모드 활성화
+        if tool == "exit_plan_mode" {
+            if let index = activeSessions.firstIndex(where: { $0.id == sId }) {
+                activeSessions[index].isAutoEditActive = true
+                print("[DevIsland] [MODE] Session \(sId.prefix(8)) switched to Auto-Edit mode via manual approval")
+            }
+        }
+        
         sendDecision(approved: true)
     }
 

@@ -90,6 +90,8 @@ struct MenuBarMenu: View {
         Divider()
 
         Menu("자동 승인(Global) 툴 관리") {
+            Toggle("Safe 등급 툴 자동 승인 (조회성 작업)", isOn: $state.autoApproveSafeTools)
+            Divider()
             Button("직접 텍스트로 추가하기...") {
                 state.promptToAddGlobalAutoApprove()
             }

@@ -123,10 +123,14 @@ fi
 PAYLOAD=$(printf "%s" "$PAYLOAD" | TERM_TITLE="$TERM_TITLE" TERM_APP="$TERM_APP" TERM_TTY="$CURRENT_TTY" TERM_WINDOW_ID="$TERM_WINDOW_ID" TERM_TAB_INDEX="$TERM_TAB_INDEX" CLI_SOURCE_ARG="$CLI_SOURCE_ARG" python3 -c \
   'import os,sys,json; d=json.load(sys.stdin); d["terminal_title"]=os.environ.get("TERM_TITLE", "Terminal"); d["terminal_app"]=os.environ.get("TERM_APP", ""); d["terminal_tty"]=os.environ.get("TERM_TTY", ""); d["terminal_window_id"]=os.environ.get("TERM_WINDOW_ID", ""); d["terminal_tab_index"]=os.environ.get("TERM_TAB_INDEX", ""); d["cli_source"]=os.environ.get("CLI_SOURCE_ARG", ""); print(json.dumps(d))')
 
-# 이벤트 종류 추출 (PermissionRequest / PreToolUse / BeforeTool / Stop / ...)
+# 이벤트 종류 및 툴 이름 추출 (PermissionRequest / PreToolUse / BeforeTool / Stop / ...)
 EVENT=$(printf "%s" "$PAYLOAD" | python3 -c \
   "import sys,json; d=json.load(sys.stdin); print(d.get('hook_event_name', d.get('event', 'PermissionRequest')))" \
   2>/dev/null || echo "PermissionRequest")
+
+TOOL_NAME=$(printf "%s" "$PAYLOAD" | python3 -c \
+  "import sys,json; d=json.load(sys.stdin); print(d.get('tool_name', ''))" \
+  2>/dev/null || echo "")
 
 # CLI 종류 감지 (인자 우선, 그 후 필드 구조 기준)
 if [ -n "$CLI_SOURCE_ARG" ]; then
@@ -198,26 +202,47 @@ RESULT=$(printf "%s" "$RAW" | python3 -c \
   2>/dev/null || echo "denied")
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Result: $RESULT" >> /tmp/DevIsland.bridge.log
 
-EVENT="$EVENT" RESULT="$RESULT" CLI_SOURCE="$CLI_SOURCE" python3 -c '
+DATE_STR=$(date '+%Y-%m-%d %H:%M:%S') EVENT="$EVENT" RESULT="$RESULT" CLI_SOURCE="$CLI_SOURCE" TOOL_NAME="$TOOL_NAME" PAYLOAD="$PAYLOAD" python3 -c '
 import json
 import os
 
 event = os.environ.get("EVENT", "")
 result = os.environ.get("RESULT", "denied")
 cli_source = os.environ.get("CLI_SOURCE", "claude")
+tool_name = os.environ.get("TOOL_NAME", "")
+payload_str = os.environ.get("PAYLOAD", "{}")
+date_str = os.environ.get("DATE_STR", "")
 message = "DevIsland에서 거절되었습니다."
+
+try:
+    payload = json.loads(payload_str)
+    file_path = payload.get("tool_input", {}).get("file_path", "")
+    is_plan_action = ".gemini/tmp/" in file_path
+except:
+    is_plan_action = False
 
 if result == "pass":
     if cli_source == "claude":
-        print("{\"continue\": true, \"suppressOutput\": true}")
+        # Claude Code: pass는 앱이 개입하지 않고 터미널에 제어권을 넘긴다는 의미입니다.
+        output = {"continue": True, "suppressOutput": True}
     else:
-        print("{}")
+        # Gemini/Codex: 터미널이 포커스된 상태 등에서는 DevIsland가 개입하지 않도록 빈 객체를 반환합니다.
+        # 이를 통해 CLI 고유의 네이티브 프롬프트(질문 창)가 정상적으로 표시되도록 보장합니다.
+        output = {}
+    final_output = json.dumps(output, ensure_ascii=False)
+    with open("/tmp/DevIsland.bridge.log", "a") as f:
+        f.write(f"[{date_str}] Final Output: {final_output}\n")
+    print(final_output)
     import sys
     sys.exit(0)
 
 allow = (result == "approved")
 if cli_source == "gemini":
-    # Gemini CLI: { "decision": "allow" | "deny", "reason": "..." }
+    # Gemini CLI 공식 응답 규격: { "decision": "allow" | "deny", "reason": "...", "tool_input": { ... } }
+    # -------------------------------------------------------------------
+    # [참고] BeforeTool 훅 응답에는 터미널 프롬프트를 강제로 생략하는 공식 필드가 없습니다.
+    # 훅에서 allow를 반환하더라도 제미나이 자체 보안 정책(defaultApprovalMode: plan 등)에 따라
+    # 터미널에서 추가 승인(Y/n)을 요구할 수 있습니다.
     output = {"decision": "allow" if allow else "deny"}
     if not allow:
         output["reason"] = message
@@ -258,7 +283,10 @@ elif event == "PermissionRequest" and result in ("approved", "denied"):
 else:
     output = {"continue": True, "suppressOutput": True}
 
-print(json.dumps(output, ensure_ascii=False))
+final_output = json.dumps(output, ensure_ascii=False)
+with open("/tmp/DevIsland.bridge.log", "a") as f:
+    f.write(f"[{date_str}] Final Output: {final_output}\n")
+print(final_output)
 '
 
 exit 0
