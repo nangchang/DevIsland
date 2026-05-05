@@ -337,7 +337,7 @@ enum BridgeInstaller {
 
     private static func patchClaudeSettings(at url: URL, bridgePath: String) throws {
         let fm = FileManager.default
-        let bridgeCommand = "\(bridgePath) --source claude"
+        let bridgeCommand = "\"\(bridgePath)\" --source claude"
         var settings: [String: Any] = [:]
         if fm.fileExists(atPath: url.path) {
             let data = try Data(contentsOf: url)
@@ -399,7 +399,7 @@ enum BridgeInstaller {
 
     private static func patchCodexHooks(at url: URL, bridgePath: String) throws {
         let fm = FileManager.default
-        let bridgeCommand = "\(bridgePath) --source codex"
+        let bridgeCommand = "\"\(bridgePath)\" --source codex"
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         var data: [String: Any] = [:]
@@ -488,7 +488,7 @@ enum BridgeInstaller {
 
     private static func patchGeminiSettings(at url: URL, bridgePath: String) throws {
         let fm = FileManager.default
-        let bridgeCommand = "\(bridgePath) --source gemini"
+        let bridgeCommand = "\"\(bridgePath)\" --source gemini"
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         var data: [String: Any] = [:]
