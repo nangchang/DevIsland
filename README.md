@@ -24,12 +24,18 @@
 # XcodeGen 설치 (없을 경우)
 brew install xcodegen
 
-# 프로젝트 파일 생성
+# 프로젝트 파일 생성 (테스트 타겟 포함)
 xcodegen generate
 
 # Xcode에서 열기
 open DevIsland.xcodeproj
+
+# 유닛 테스트 실행 (CLI)
+xcodebuild test -project DevIsland.xcodeproj -scheme DevIsland -destination 'platform=macOS'
 ```
+
+### 2. 유닛 테스트
+프로젝트의 안정성을 위해 주요 로직(에이전트 판별, 메시지 처리, 자동 승인 등)에 대한 유닛 테스트가 포함되어 있습니다. 새로운 기능을 추가하거나 버그를 수정한 후에는 반드시 테스트를 실행하여 기존 기능에 영향이 없는지 확인해야 합니다.
 
 ### 2. CLI 에이전트 연동 (브릿지 설치)
 

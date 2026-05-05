@@ -19,9 +19,14 @@ xcodegen generate
 
 # Open in Xcode
 open DevIsland.xcodeproj
+
+# Run unit tests via CLI
+xcodebuild test -project DevIsland.xcodeproj -scheme DevIsland -destination 'platform=macOS'
 ```
 
-Build target: **macOS 14.0+**, Xcode 15+. There are no tests in the project.
+Build target: **macOS 14.0+**, Xcode 15+. 
+
+**Mandatory Requirement:** AI agents working on this codebase MUST run the existing unit tests and ensure they pass before committing any changes. If new logic is added, corresponding unit tests should be implemented or updated.
 
 **Release builds** are produced by CI (`.github/workflows/release.yml`) on version tags. The workflow runs `xcodebuild archive` unsigned and packages a DMG via `hdiutil`.
 

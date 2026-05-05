@@ -118,7 +118,7 @@ class TerminalFocuser {
         }
     }
 
-    private static func normalizedAppName(_ appName: String?) -> String? {
+    static func normalizedAppName(_ appName: String?) -> String? {
         switch appName?.lowercased() {
         case "iterm", "iterm.app", "iterm2":
             return "iTerm"
