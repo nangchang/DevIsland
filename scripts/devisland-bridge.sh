@@ -202,7 +202,7 @@ RESULT=$(printf "%s" "$RAW" | python3 -c \
   2>/dev/null || echo "denied")
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Result: $RESULT" >> /tmp/DevIsland.bridge.log
 
-EVENT="$EVENT" RESULT="$RESULT" CLI_SOURCE="$CLI_SOURCE" TOOL_NAME="$TOOL_NAME" PAYLOAD="$PAYLOAD" python3 -c '
+DATE_STR=$(date '+%Y-%m-%d %H:%M:%S') EVENT="$EVENT" RESULT="$RESULT" CLI_SOURCE="$CLI_SOURCE" TOOL_NAME="$TOOL_NAME" PAYLOAD="$PAYLOAD" python3 -c '
 import json
 import os
 
@@ -211,6 +211,7 @@ result = os.environ.get("RESULT", "denied")
 cli_source = os.environ.get("CLI_SOURCE", "claude")
 tool_name = os.environ.get("TOOL_NAME", "")
 payload_str = os.environ.get("PAYLOAD", "{}")
+date_str = os.environ.get("DATE_STR", "")
 message = "DevIsland에서 거절되었습니다."
 
 try:
@@ -222,10 +223,14 @@ except:
 
 if result == "pass":
     if cli_source == "claude":
-        print("{\"continue\": true, \"suppressOutput\": true}")
+        output = {"continue": True, "suppressOutput": True}
     else:
         # gemini 포함 다른 CLI는 터미널에 제어권을 넘깁니다.
-        print("{}")
+        output = {}
+    final_output = json.dumps(output, ensure_ascii=False)
+    with open("/tmp/DevIsland.bridge.log", "a") as f:
+        f.write(f"[{date_str}] Final Output: {final_output}\n")
+    print(final_output)
     import sys
     sys.exit(0)
 
@@ -238,6 +243,7 @@ if cli_source == "gemini":
         interactive_tools = ["ask_user", "exit_plan_mode", "run_shell_command"]
         if tool_name not in interactive_tools and not is_plan_action:
             output["skip_prompt"] = True
+            output["skipPrompt"] = True
     if not allow:
         output["reason"] = message
 elif cli_source == "codex":
@@ -277,7 +283,10 @@ elif event == "PermissionRequest" and result in ("approved", "denied"):
 else:
     output = {"continue": True, "suppressOutput": True}
 
-print(json.dumps(output, ensure_ascii=False))
+final_output=$(json.dumps(output, ensure_ascii=False))
+with open("/tmp/DevIsland.bridge.log", "a") as f:
+    f.write(f"[{{os.environ.get('DATE_STR', '')}}] Final Output: {{final_output}}\n")
+print(final_output)
 '
 
 exit 0
