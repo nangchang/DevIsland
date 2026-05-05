@@ -238,19 +238,12 @@ if result == "pass":
 
 allow = (result == "approved")
 if cli_source == "gemini":
-    # Gemini CLI 응답 규격: { "decision": "allow" | "deny", "reason": "...", "skip_prompt": true }
+    # Gemini CLI 공식 응답 규격: { "decision": "allow" | "deny", "reason": "...", "tool_input": { ... } }
     # -------------------------------------------------------------------
+    # [참고] BeforeTool 훅 응답에는 터미널 프롬프트를 강제로 생략하는 공식 필드가 없습니다.
+    # 훅에서 allow를 반환하더라도 제미나이 자체 보안 정책(defaultApprovalMode: plan 등)에 따라
+    # 터미널에서 추가 승인(Y/n)을 요구할 수 있습니다.
     output = {"decision": "allow" if allow else "deny"}
-    if allow:
-        # [중요] 터미널 프롬프트 생략 제어
-        # - 일반적인 파일 편집/읽기 등은 skip_prompt: true를 보내 이중 확인을 방지합니다.
-        # - 하지만 interactive_tools(직접 입력/계획 승인/쉘 명령어)나 계획 작성(.gemini/tmp/)의 경우
-        #   터미널에 반드시 질문 창이 나타나야 하므로 skip_prompt 설정을 의도적으로 생략합니다.
-        interactive_tools = ["ask_user", "exit_plan_mode", "run_shell_command"]
-        if tool_name not in interactive_tools and not is_plan_action:
-            # 다양한 버전의 제미나이 CLI 호환성을 위해 두 가지 표기법을 모두 전송합니다.
-            output["skip_prompt"] = True
-            output["skipPrompt"] = True
     if not allow:
         output["reason"] = message
 elif cli_source == "codex":
