@@ -527,13 +527,23 @@ class AppState: ObservableObject {
                 }
             }
             
-            // [상태 추적] exit_plan_mode가 호출되면, 사용자가 터미널에서 계획을 승인할 것으로 간주하고 
+            // [상태 추적] exit_plan_mode가 호출되면, 사용자가 터미널에서 계획을 승인할 것으로 간주하고
             // 이후의 편집 작업들을 자동화하기 위해 Auto-Edit 모드 활성화를 준비합니다.
             if toolName == "exit_plan_mode" {
                 DispatchQueue.main.async { [weak self] in
                     if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
                         self?.activeSessions[index].isAutoEditActive = true
                         print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Auto-Edit mode")
+                    }
+                }
+            }
+
+            // Auto-Edit 중에 enter_plan_mode가 자동 승인되면 아래 리셋 블록에 도달하지 못하므로 여기서 처리
+            if toolName == "enter_plan_mode" {
+                DispatchQueue.main.async { [weak self] in
+                    if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                        self?.activeSessions[index].isAutoEditActive = false
+                        print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
                     }
                 }
             }
