@@ -129,10 +129,16 @@ codex_hooks = true
 DevIsland uses `PreToolUse` as the primary approval hook. Response format:
 
 ```json
-{ "decision": "block", "reason": "Blocked by DevIsland" }
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "Blocked by DevIsland"
+  }
+}
 ```
 
-`decision`: `"approve"` | `"block"`. Omit or return `{}` to allow.
+Return `{}` or omit output to allow. Codex currently treats `permissionDecision: "allow"` and legacy `decision: "approve"` as unsupported for `PreToolUse`; only denial is explicit.
 
 ---
 
