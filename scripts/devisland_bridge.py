@@ -161,15 +161,19 @@ def final_output(
 
     if cli_source == "codex":
         if event == "PreToolUse":
+            if allow:
+                return {}
             return {
                 "hookSpecificOutput": {
-                    "permissionDecision": "allow" if allow else "deny",
-                    "permissionDecisionReason": message if not allow else "",
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": message,
                 }
             }
         if event == "PermissionRequest":
             return {
                 "hookSpecificOutput": {
+                    "hookEventName": "PermissionRequest",
                     "decision": {
                         "behavior": "allow" if allow else "deny",
                         "message": message if not allow else "",
