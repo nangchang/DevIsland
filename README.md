@@ -1,16 +1,19 @@
 # 🏝️ DevIsland
 
-**DevIsland**는 macOS의 노치 영역(Dynamic Island 스타일)을 활용하여 Claude Code와 같은 AI 에이전트의 활동을 실시간으로 모니터링하고 제어할 수 있는 오픈소스 대시보드입니다.
+**DevIsland**는 macOS의 노치 영역(Dynamic Island 스타일)을 활용하여 Claude Code, Gemini CLI 등 AI 에이전트의 활동을 실시간으로 모니터링하고 제어할 수 있는 오픈소스 대시보드입니다.
 
 ![DevIsland Showcase](https://raw.githubusercontent.com/nangchang/DevIsland/main/Assets/showcase.png) *(이미지 준비 중)*
 
 ## ✨ 주요 기능
 
 - **Dynamic Island 스타일 UI**: 평상시에는 노치 뒤에 숨어 있다가 에이전트 활동 시 우아하게 확장됩니다.
-- **세션 모니터링**: 실행 중인 Claude Code 세션을 확인하고, 세션별 권한 요청 상태를 추적할 수 있습니다.
-- **스마트 세션 관리**: 여러 터미널에서 실행 중인 에이전트 세션을 개별적으로 추적하고 관리합니다.
-- **원클릭 승인/거부**: 에이전트의 권한 요청을 대시보드에서 즉시 처리할 수 있습니다. (Command+Shift+Y/N 단축키 지원)
-- **자동 정리**: 종료된 세션이나 장시간 활동이 없는 세션을 자동으로 감지하여 목록을 청결하게 유지합니다.
+- **실시간 세션 모니터링**: 실행 중인 에이전트 세션을 확인하고, 세션별 권한 요청 상태를 실시간으로 추적합니다.
+- **스마트 승인 시스템**:
+  - **원클릭 승인/거부**: 대시보드에서 즉시 처리 (Command+Shift+Y/N 단축키 지원).
+  - **자동 편집 모드 감지**: Gemini CLI의 계획(Plan) 승인 후 이어지는 반복적인 파일 수정은 자동으로 통과시킵니다.
+  - **Safe 툴 자동 승인**: 파일 읽기 등 위험도가 낮은 조회성 작업은 승인 없이 통과하도록 설정 가능합니다.
+- **인터랙티브 알림**: 터미널 입력이 필요한 작업(`ask_user`, 쉘 명령어 등)은 승인 대기 대신 "터미널 확인" 알림을 띄워 흐름을 끊지 않습니다.
+- **자동 정리**: 종료된 세션이나 장시간 활동이 없는 세션을 자동으로 관리합니다.
 
 ## 🚀 시작하기
 
@@ -30,9 +33,9 @@ open DevIsland.xcodeproj
 
 ### 2. CLI 에이전트 연동 (브릿지 설치)
 
-터미널에서 실행되는 AI 에이전트의 이벤트를 DevIsland 앱으로 전달하기 위한 브릿지 스크립트를 설치해야 합니다. Claude Code, Gemini CLI, Codex CLI를 모두 지원합니다.
+터미널에서 실행되는 AI 에이전트의 이벤트를 DevIsland 앱으로 전달하기 위한 브릿지 스크립트를 설치해야 합니다.
 
-#### 자동 설치
+#### 자동 설치 (권장)
 
 ```bash
 # 모든 지원되는 CLI에 대해 설치
@@ -46,13 +49,13 @@ bash scripts/install-bridge.sh --codex
 
 #### 수동 설치
 
-스크립트를 실행하기 어려운 경우 아래 단계를 직접 수행하세요.
-
 **1) 브릿지 스크립트 준비**
 
 ```bash
+# 표준 경로 생성
 mkdir -p ~/Library/Application\ Support/DevIsland
-# 심볼릭 링크 생성
+
+# 심볼릭 링크 생성 (DevIsland 소스 경로 기준)
 ln -sf /path/to/DevIsland/scripts/devisland-bridge.sh ~/Library/Application\ Support/DevIsland/devisland-bridge.sh
 chmod +x ~/Library/Application\ Support/DevIsland/devisland-bridge.sh
 ```
@@ -60,12 +63,8 @@ chmod +x ~/Library/Application\ Support/DevIsland/devisland-bridge.sh
 **2) CLI별 설정**
 
 - **Claude Code**: `~/.claude/settings.json`에 `PermissionRequest`, `SessionStart`, `SessionEnd` 훅을 등록합니다.
-- **Gemini CLI**: `~/.gemini/settings.json`의 `hooks` 배열에 `BeforeTool`, `SessionStart`, `SessionEnd` 이벤트를 추가합니다.
-- **Codex CLI**: `~/.codex/hooks.json`의 `PreToolUse` 항목에 등록하고, `~/.codex/config.toml`에서 `codex_hooks = true`를 활성화합니다.
-
-상세한 설정 예시는 `scripts/install-bridge.sh` 파일 내의 Python 로직을 참조하세요.
-
-설치가 완료되면 각 CLI 실행 시 자동으로 DevIsland와 연결됩니다.
+- **Gemini CLI**: `~/.gemini/settings.json`의 `hooks` 섹션에 `BeforeTool`, `SessionStart`, `SessionEnd` 등을 추가합니다.
+- **Codex CLI**: `~/.codex/hooks.json`의 `PreToolUse` 항목에 등록하고, `config.toml`에서 `codex_hooks = true`를 활성화합니다.
 
 ### 3. 로그인 시 자동 시작 (선택)
 
@@ -79,12 +78,19 @@ PLIST=~/Library/LaunchAgents/kr.or.nes.DevIsland.plist
 launchctl unload "$PLIST" && rm "$PLIST"
 ```
 
+### 4. Gemini CLI 최적화 팁
+
+Gemini CLI 사용자라면 다음 설정을 통해 가장 쾌적한 환경을 구축할 수 있습니다.
+
+1.  **일반 모드 에뮬레이션**: Gemini CLI를 `--yolo` 또는 `--auto-approve` 모드로 실행하여 터미널 프롬프트를 끄고, DevIsland 메뉴에서 **"Gemini 일반 모드 에뮬레이션"**을 켜세요. 통제권이 DevIsland GUI로 넘어옵니다.
+2.  **Safe 툴 자동 승인**: 메뉴에서 이 옵션을 켜면 파일 읽기 등 단순 조회 작업 시 노치가 방해하지 않습니다.
+
 ## 🛠️ 개발 환경
 
-- **SwiftUI**: 현대적이고 선언적인 UI 프레임워크 사용
-- **Combine**: 실시간 이벤트 데이터 스트리밍 처리
-- **AppKit (NSPanel)**: 투명하고 항상 위에 떠 있는 특수 윈도우 구현
-- **TCP Socket**: CLI 브릿지와 앱 간의 저지연 통신
+- **SwiftUI**: 현대적이고 선언적인 UI 프레임워크
+- **Combine**: 실시간 이벤트 데이터 스트리밍
+- **AppKit (NSPanel)**: 투명하고 항상 위에 떠 있는 특수 윈도우
+- **Network.framework**: CLI 브릿지와 앱 간의 저지연 TCP 통신
 
 ## 🤝 기여하기
 
@@ -98,7 +104,7 @@ launchctl unload "$PLIST" && rm "$PLIST"
 
 ## 📄 라이선스
 
-이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+이 프로젝트는 MIT 라이선스 하에 배포됩니다.
 
 ---
 Created with ❤️ by [nangchang](https://github.com/nangchang)
