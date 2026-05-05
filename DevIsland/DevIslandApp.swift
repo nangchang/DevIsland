@@ -244,6 +244,7 @@ struct MenuBarMenu: View {
 
 enum BridgeInstaller {
     private static let sharedBridgePath = ".local/share/devisland"
+    private static let bridgeFileName = "devisland-bridge.sh"
 
     // MARK: Public entry points
 
@@ -259,7 +260,7 @@ enum BridgeInstaller {
         guard let bridgeURL = bridgeScriptURL() else { return }
         let home = URL(fileURLWithPath: NSHomeDirectory())
         let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent("devisland-bridge.sh")
+        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
         let settingsURL = home.appendingPathComponent(".claude/settings.json")
 
         do {
@@ -278,7 +279,7 @@ enum BridgeInstaller {
         guard let bridgeURL = bridgeScriptURL() else { return }
         let home    = URL(fileURLWithPath: NSHomeDirectory())
         let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent("devisland-bridge.sh")
+        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
         let codexHooksURL  = home.appendingPathComponent(".codex/hooks.json")
         let codexConfigURL = home.appendingPathComponent(".codex/config.toml")
 
@@ -299,7 +300,7 @@ enum BridgeInstaller {
         guard let bridgeURL = bridgeScriptURL() else { return }
         let home    = URL(fileURLWithPath: NSHomeDirectory())
         let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent("devisland-bridge.sh")
+        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
         let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
 
         do {
@@ -371,7 +372,7 @@ enum BridgeInstaller {
         func removingBridgeHooks(from list: [[String: Any]]) -> [[String: Any]] {
             list.compactMap { entry in
                 let subHooks = (entry["hooks"] as? [[String: Any]] ?? [])
-                    .filter { !($0["command"] as? String ?? "").contains("devisland-bridge.sh") }
+                    .filter { !($0["command"] as? String ?? "").contains(bridgeFileName) }
                 guard !subHooks.isEmpty else { return nil }
                 var updatedEntry = entry
                 updatedEntry["hooks"] = subHooks
@@ -420,7 +421,7 @@ enum BridgeInstaller {
                 var config = eventConfigs[i]
                 if (config["matcher"] as? String) == "*" {
                     var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
-                    subHooks.removeAll { ($0["command"] as? String ?? "").contains("devisland-bridge.sh") }
+                    subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgeFileName) }
                     subHooks.append(["type": "command", "command": bridgeCommand])
                     config["hooks"] = subHooks
                     eventConfigs[i] = config
@@ -508,7 +509,7 @@ enum BridgeInstaller {
                 var config = eventConfigs[i]
                 if (config["matcher"] as? String) == "*" {
                     var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
-                    subHooks.removeAll { ($0["command"] as? String ?? "").contains("devisland-bridge.sh") }
+                    subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgeFileName) }
                     var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
                     if event == "BeforeTool" {
                         hookEntry["timeout"] = 86400000
