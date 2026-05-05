@@ -43,3 +43,13 @@ targets:
       - target: DevIsland
     settings:
       GENERATE_INFOPLIST_FILE: YES
+schemes:
+  DevIsland:
+    build:
+      targets:
+        DevIsland: all
+    test:
+      targets:
+        - name: DevIslandTests
+      environmentVariables:
+        XCODE_RUNNING_UNIT_TESTS: "1"

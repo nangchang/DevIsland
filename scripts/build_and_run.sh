@@ -13,9 +13,11 @@ cd "$ROOT_DIR"
 
 NO_KILL=false
 NO_RUN=false
+VERIFY=false
 for arg in "$@"; do
   if [[ "$arg" == "--no-kill" ]]; then NO_KILL=true; fi
   if [[ "$arg" == "--no-run" ]]; then NO_RUN=true; fi
+  if [[ "$arg" == "--verify" ]]; then VERIFY=true; fi
 done
 
 if [[ "$NO_KILL" == "false" ]]; then
@@ -107,7 +109,7 @@ codesign -s - --force --deep --arch arm64 "$APP_BUNDLE"
 
 if [[ "$NO_RUN" == "false" ]]; then
   /usr/bin/open -n "$APP_BUNDLE"
-  if [[ "${1:-}" == "--verify" ]]; then
+  if [[ "$VERIFY" == "true" ]]; then
     sleep 1
     pgrep -x "$APP_NAME" >/dev/null
     echo "$APP_NAME launched"
