@@ -104,6 +104,7 @@ class AppState: ObservableObject {
         static let showInFullScreenApps = "showInFullScreenApps"
         static let requestDisplayTarget = "requestDisplayTarget"
         static let globalAutoApproveTypes = "globalAutoApproveTypes"
+        static let autoApproveSafeTools = "autoApproveSafeTools"
     }
 
     static let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
@@ -150,6 +151,12 @@ class AppState: ObservableObject {
         }
     }
     
+    @Published var autoApproveSafeTools = false {
+        didSet {
+            UserDefaults.standard.set(autoApproveSafeTools, forKey: DefaultsKey.autoApproveSafeTools)
+        }
+    }
+    
     @Published var globalAutoApproveTypes: Set<String> = [] {
         didSet {
             UserDefaults.standard.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
@@ -186,6 +193,7 @@ class AppState: ObservableObject {
         if let savedAutoApprove = defaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String] {
             globalAutoApproveTypes = Set(savedAutoApprove)
         }
+        autoApproveSafeTools = defaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
         ensureSelectedDisplay()
 
         server.onMessageReceived = { [weak self] message, responseHandler in
@@ -494,8 +502,10 @@ class AppState: ObservableObject {
             isAutoEditActive = session.isAutoEditActive
         }
 
-        if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive {
-            print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive))")
+        let isSafeAutoApprove = autoApproveSafeTools && (ToolKnowledge.risk(for: toolName) == .safe)
+
+        if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
+            print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
             request.responseHandler("{\"response\": \"approved\"}")
             
             // 터미널 입력이 필요한 툴인 경우 노치 알림(Notification) 표시
