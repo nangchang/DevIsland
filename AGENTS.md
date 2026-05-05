@@ -273,10 +273,11 @@ On collapse, the frame shrinks after a 0.45 s delay (matching the SwiftUI spring
 
 To maintain a clean and maintainable history, all AI agents must follow these commit rules:
 
-1. **Atomic Commits**: Divide work into meaningful, logical units. Each commit should represent a single task or fix.
-2. **Explain the "Why"**: Commit messages must not just describe *what* changed, but *why* the change was made (the rationale or the problem it solves).
-3. **No Mixed Changes**: Do not mix unrelated refactorings, style changes, or multiple features into a single commit. Keep commits surgical and focused.
-4. **Descriptive Tags**: Use conventional commit-style prefixes (e.g., `feat:`, `fix:`, `docs:`, `refactor:`) to categorize changes.
+1. **Feature Branches**: Never commit directly to the `main` branch. Always create a descriptive branch (e.g., `feature/xyz` or `fix/abc`) for your changes.
+2. **Atomic Commits**: Divide work into meaningful, logical units. Each commit should represent a single task or fix.
+3. **Explain the "Why"**: Commit messages must not just describe *what* changed, but *why* the change was made (the rationale or the problem it solves).
+4. **No Mixed Changes**: Do not mix unrelated refactorings, style changes, or multiple features into a single commit. Keep commits surgical and focused.
+5. **Descriptive Tags**: Use conventional commit-style prefixes (e.g., `feat:`, `fix:`, `docs:`, `refactor:`) to categorize changes.
 
 ## project.yml
 
