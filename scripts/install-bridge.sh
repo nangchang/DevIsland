@@ -92,7 +92,7 @@ if $INSTALL_CLAUDE; then
 import json, sys
 
 path, bridge_path = sys.argv[1], sys.argv[2]
-bridge_command = f"{bridge_path} --source claude"
+bridge_command = f'"{bridge_path}" --source claude'
 
 with open(path) as f:
     data = json.load(f)
@@ -151,7 +151,7 @@ if $INSTALL_CODEX; then
 import json, sys, os
 
 path, bridge_path = sys.argv[1], sys.argv[2]
-bridge_command = f"{bridge_path} --source codex"
+bridge_command = f'"{bridge_path}" --source codex'
 
 data = {}
 if os.path.exists(path):
@@ -250,7 +250,7 @@ if $INSTALL_GEMINI; then
 import json, sys, os
 
 path, bridge_path = sys.argv[1], sys.argv[2]
-bridge_command = f"{bridge_path} --source gemini"
+bridge_command = f'"{bridge_path}" --source gemini'
 
 data = {}
 if os.path.exists(path):
