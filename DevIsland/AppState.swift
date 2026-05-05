@@ -686,7 +686,8 @@ class AppState: ObservableObject {
                         toolName: request.toolName,
                         eventName: request.eventName,
                         message: request.message,
-                        isPending: true
+                        isPending: true,
+                        isLifecycleTracked: agentKind != .claudeCode
                     )
 
                     self.selectedSessionId = request.sessionId
