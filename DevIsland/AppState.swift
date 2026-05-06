@@ -564,12 +564,15 @@ class AppState: ObservableObject {
             request.responseHandler("{\"response\": \"approved\"}")
             
             // 터미널 입력이 필요한 Interactive 툴인 경우 노치를 펼쳐 사용자에게 알림(Notification) 표시
+            // 단, 터미널이 이미 포커스 상태라면 알림 불필요
             if isInteractive {
                 DispatchQueue.main.async { [weak self] in
-                    self?.isNotchExpanded = true
-                    self?.isExpandingFromRequest = true
-                    self?.currentSessionId = sessionId
-                    self?.currentMessage = "터미널 창을 확인해 주세요 (\(displayToolName))"
+                    guard let self else { return }
+                    guard !self.frontmostCheck(terminalApp, terminalTTY, terminalWindowId, terminalTabIndex) else { return }
+                    self.isNotchExpanded = true
+                    self.isExpandingFromRequest = true
+                    self.currentSessionId = sessionId
+                    self.currentMessage = "터미널 창을 확인해 주세요 (\(displayToolName))"
                 }
             }
             
