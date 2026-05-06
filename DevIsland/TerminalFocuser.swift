@@ -87,7 +87,8 @@ class TerminalFocuser {
             end tell
             """
         default:
-            return "return \"false\""
+            // Ghostty, Warp 등 탭 특정이 불가능한 앱 — 앱 레벨 포커스는 호출 전에 이미 확인됨
+            return "return \"true\""
         }
     }
 
