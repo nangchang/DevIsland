@@ -177,14 +177,15 @@ data.setdefault('hooks', {})
 
 # 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
 events_lifecycle = ["SessionStart", "SessionEnd", "PostToolUse", "Stop"]
-events_approval = ["PreToolUse", "PermissionRequest"]
+events_status = ["PreToolUse"]
+events_approval = ["PermissionRequest"]
 
-for event in events_lifecycle + events_approval:
+for event in events_lifecycle + events_status + events_approval:
     event_configs = data['hooks'].get(event, [])
     if not isinstance(event_configs, list):
         event_configs = []
 
-    # PermissionRequest나 PreToolUse는 승인이 필요하므로 타임아웃을 길게 설정함 (86400초 = 24시간)
+    # PermissionRequest만 실제 승인 대기 이벤트이므로 타임아웃을 길게 설정함 (86400초 = 24시간)
     h_cmd = {"type": "command", "command": bridge_command}
     if event in events_approval:
         h_cmd["timeout"] = 86400

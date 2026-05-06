@@ -108,7 +108,7 @@ class AppState: ObservableObject {
         static let emulateGeminiInteractiveMode = "emulateGeminiInteractiveMode"
     }
 
-    static let approvalEvents = ["permissionrequest", "pretooluse", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
+    static let approvalEvents = ["permissionrequest", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
     typealias FrontmostCheck = (_ appName: String?, _ tty: String?, _ windowId: String?, _ tabIndex: String?) -> Bool
 
     private let userDefaults: UserDefaults
@@ -363,9 +363,9 @@ class AppState: ObservableObject {
             "afteragent", "aftermodel", "afterturn", "stop"
         ]
         // approval: Claude/Codex의 PermissionRequest + Gemini의 BeforeTool
-        // Codex의 PreToolUse는 진행 상황 알림용으로 선호되지만, PermissionRequest가 없는 구버전 대응을 위해 승인 폴백으로 유지함
+        // Codex의 PreToolUse는 진행 상황 알림용으로만 사용하고, 실제 차단은 PermissionRequest에서 수행
         let isStop = stopEvents.contains(normalizedEvent)
-        let isCodexPreToolNotification = (agentKind == .codex && normalizedEvent == "pretooluse" && ToolKnowledge.risk(for: toolName) == .safe)
+        let isCodexPreToolNotification = (agentKind == .codex && normalizedEvent == "pretooluse")
         let isNotification = notificationEvents.contains(normalizedEvent) || isCodexPreToolNotification
         let isApproval = AppState.approvalEvents.contains(normalizedEvent)
 

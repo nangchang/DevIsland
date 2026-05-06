@@ -435,9 +435,9 @@ enum BridgeInstaller {
         for event in events {
             var eventConfigs = (hooks[event] as? [[String: Any]]) ?? []
             
-            // PermissionRequest나 PreToolUse는 승인이 필요하므로 타임아웃을 길게 설정함 (86400초 = 24시간)
+            // PermissionRequest만 실제 승인 대기 이벤트이므로 타임아웃을 길게 설정함 (86400초 = 24시간)
             var hCmd: [String: Any] = ["type": "command", "command": bridgeCommand]
-            if event == "PreToolUse" || event == "PermissionRequest" {
+            if event == "PermissionRequest" {
                 hCmd["timeout"] = 86400
             }
 
