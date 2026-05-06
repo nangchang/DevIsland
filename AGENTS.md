@@ -67,7 +67,7 @@ DevIsland supports multiple AI agent CLIs through the same bridge architecture.
 **Config file:** `~/.claude/settings.json` (or `.claude/settings.json` per-project)  
 **Full spec:** https://docs.anthropic.com/en/docs/claude-code/hooks
 
-> **Important (Auto Mode):** Claude Code has an internal **Auto Mode Classifier** that may block security-sensitive operations (like creating LaunchAgents or modifying system plists) *before* the bridge is even called. If you see "Denied by auto mode classifier", this is an internal Claude restriction and cannot be bypassed via DevIsland. Use manual/plan mode for such tasks.
+> **Important (Auto-Mode):** Claude Code has an internal **Auto-Mode Classifier** that may block security-sensitive operations (like creating LaunchAgents or modifying system plists) *before* the bridge is even called. If you see "Denied by auto-mode classifier", this is an internal Claude restriction and cannot be bypassed via DevIsland. Use interactive mode for such tasks.
 
 ```json
 {
