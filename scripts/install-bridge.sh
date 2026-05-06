@@ -176,26 +176,34 @@ if os.path.exists(path):
 data.setdefault('hooks', {})
 
 # 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-events = ["SessionStart", "SessionEnd", "PreToolUse", "PostToolUse", "Stop"]
-for event in events:
+events_lifecycle = ["SessionStart", "SessionEnd", "PostToolUse", "Stop"]
+events_status = ["PreToolUse"]
+events_approval = ["PermissionRequest"]
+
+for event in events_lifecycle + events_status + events_approval:
     event_configs = data['hooks'].get(event, [])
     if not isinstance(event_configs, list):
         event_configs = []
-    
+
+    # PermissionRequest만 실제 승인 대기 이벤트이므로 타임아웃을 길게 설정함 (86400초 = 24시간)
+    h_cmd = {"type": "command", "command": bridge_command}
+    if event in events_approval:
+        h_cmd["timeout"] = 86400
+
     found = False
     for config in event_configs:
         if config.get("matcher") == "*":
             sub_hooks = config.get("hooks", [])
             sub_hooks = [h for h in sub_hooks if "devisland-bridge.sh" not in h.get("command", "")]
-            sub_hooks.append({"type": "command", "command": bridge_command})
+            sub_hooks.append(h_cmd)
             config["hooks"] = sub_hooks
             found = True
             break
-    
+
     if not found:
         event_configs.append({
             "matcher": "*",
-            "hooks": [{"type": "command", "command": bridge_command}]
+            "hooks": [h_cmd]
         })
     
     data['hooks'][event] = event_configs

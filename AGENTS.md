@@ -57,7 +57,7 @@ DevIsland supports multiple AI agent CLIs through the same bridge architecture.
 | CLI Agent | Config File | Approval Event | Lifecycle Events | Docs |
 |---|---|---|---|---|
 | **Claude Code** | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `Notification`, `Stop`, … | [hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks) |
-| **Codex CLI** | `~/.codex/hooks.json` + `config.toml` | `PreToolUse` | `SessionStart`, `SessionEnd`, `PostToolUse`, `Stop` | [openai.com/codex](https://openai.com/codex) |
+| **Codex CLI** | `~/.codex/hooks.json` + `config.toml` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `Stop` | [openai.com/codex](https://openai.com/codex) |
 | **Gemini CLI** | `~/.gemini/settings.json` | `BeforeTool` | `SessionStart`, `SessionEnd`, `AfterTool`, `BeforeAgent`, … | [geminicli.com/hooks](https://geminicli.com/hooks) |
 
 ---
@@ -121,6 +121,14 @@ codex_hooks = true
 ```json
 {
   "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "/path/to/devisland-bridge.sh --source codex", "timeout": 86400 }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "*",
@@ -141,19 +149,21 @@ codex_hooks = true
 }
 ```
 
-DevIsland uses `PreToolUse` as the primary approval hook. Response format:
+DevIsland uses `PermissionRequest` as the primary approval hook. Response format:
 
 ```json
 {
   "hookSpecificOutput": {
-    "hookEventName": "PreToolUse",
-    "permissionDecision": "deny",
-    "permissionDecisionReason": "Blocked by DevIsland"
+    "hookEventName": "PermissionRequest",
+    "decision": {
+      "behavior": "deny",
+      "message": "Blocked by DevIsland"
+    }
   }
 }
 ```
 
-Return `{}` or omit output to allow. Codex currently treats `permissionDecision: "allow"` and legacy `decision: "approve"` as unsupported for `PreToolUse`; only denial is explicit.
+DevIsland keeps `PreToolUse` registered for status tracking only and returns `{}` for those events so Codex continues without a DevIsland approval prompt.
 
 ---
 
@@ -202,7 +212,7 @@ The bridge script supports an explicit `--source` flag to identify the originati
 - `devisland-bridge.sh --source codex`
 - `devisland-bridge.sh --source gemini`
 
-If omitted, the bridge auto-detects from `hook_event_name` (`PermissionRequest` → claude, `PreToolUse` → codex, `BeforeTool` → gemini).
+If omitted, the bridge auto-detects from `hook_event_name` and payload shape (`PreToolUse` → codex, `PermissionRequest` with Codex tool metadata → codex, `PermissionRequest` with Claude permission metadata → claude, `BeforeTool` → gemini).
 
 ### Communication Flow
 

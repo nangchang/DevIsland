@@ -78,6 +78,14 @@ def detect_cli_source(payload: dict[str, Any], event: str, cli_source_arg: str) 
     if event == "PreToolUse":
         return "codex"
 
+    if event == "PermissionRequest":
+        # Codex는 tool_name을 사용하고, Claude는 permission_type을 사용하는 경향이 있음
+        if "tool_name" in payload:
+            return "codex"
+        if "permission_type" in payload:
+            return "claude"
+        return "claude"  # 기본 폴백
+
     if event in {
         "onToolCall",
         "BeforeTool",
@@ -170,17 +178,9 @@ def final_output(
                     "permissionDecisionReason": message,
                 }
             }
-        if event == "PermissionRequest":
-            return {
-                "hookSpecificOutput": {
-                    "hookEventName": "PermissionRequest",
-                    "decision": {
-                        "behavior": "allow" if allow else "deny",
-                        "message": message if not allow else "",
-                    }
-                }
-            }
-        return {"continue": True}
+        # PermissionRequest는 아래의 글로벌 핸들러에서 공통 처리하도록 함
+        if event != "PermissionRequest":
+            return {"continue": True}
 
     if event == "PermissionRequest" and result in ("approved", "denied"):
         decision: dict[str, Any] = {"behavior": "allow" if result == "approved" else "deny"}
