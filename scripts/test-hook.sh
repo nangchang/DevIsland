@@ -78,7 +78,7 @@ send_event() {
     fi
 
     local response
-    response=$(printf "%s" "$payload" | "$BRIDGE_SCRIPT")
+    response=$(printf "%s" "$payload" | "$BRIDGE_SCRIPT" --source "$cli")
 
     printf "==> Response: %s\n" "$response"
 
@@ -96,9 +96,10 @@ send_event() {
             fi
             ;;
         codex)
-            if printf "%s" "$response" | grep -q '"permissionDecision":[[:space:]]*"allow"'; then
+            # PermissionRequest와 PreToolUse 두 형식을 모두 체크
+            if printf "%s" "$response" | grep -q '"behavior":[[:space:]]*"allow"' || printf "%s" "$response" | grep -q '"permissionDecision":[[:space:]]*"allow"'; then
                 echo "✅ ALLOWED"
-            elif printf "%s" "$response" | grep -q '"permissionDecision":[[:space:]]*"deny"'; then
+            elif printf "%s" "$response" | grep -q '"behavior":[[:space:]]*"deny"' || printf "%s" "$response" | grep -q '"permissionDecision":[[:space:]]*"deny"'; then
                 echo "❌ DENIED"
             elif [ -z "$response" ] || printf "%s" "$response" | grep -qE '^\{\}?$|^\s*$'; then
                 echo "⏭️  PASS (To Terminal)"
@@ -134,9 +135,10 @@ make_claude_permission() {
 # ── Codex CLI 이벤트 빌더 ────────────────────────────────────────────────
 
 make_codex_event() {
-    local tool="$1"
-    local tool_input="$2"
-    make_json hook_event_name PreToolUse session_id "$SESSION_ID" \
+    local event="${1:-PreToolUse}"
+    local tool="$2"
+    local tool_input="$3"
+    make_json hook_event_name "$event" session_id "$SESSION_ID" \
         tool_name "$tool" tool_input "$tool_input" cwd "$(pwd)"
 }
 
@@ -211,26 +213,27 @@ interactive_codex() {
 
     while true; do
         echo "무엇을 테스트하시겠습니까?"
-        echo "1) shell 명령 (ls -la)"
-        echo "2) 위험한 shell 명령 (rm -rf /)"
-        echo "3) apply_patch (파일 수정)"
+        echo "1) PreToolUse (조회성 - 알림)"
+        echo "2) PreToolUse (위험 - 승인 폴백)"
+        echo "3) apply_patch (PreToolUse)"
         echo "4) 커스텀 질문 (Notification)"
         echo "5) 툴 완료 (PostToolUse)"
         echo "6) 작업 완료 알림 (Stop)"
-        echo "7) 세션 종료 (SessionEnd)"
+        echo "7) 승인 요청 (PermissionRequest - 권장)"
+        echo "8) 세션 종료 (SessionEnd)"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 종료"
         read -p "선택: " choice
         case "$choice" in
             1)
                 input=$(make_json command "ls -la")
-                send_event "$(make_codex_event shell "$input")" codex ;;
+                send_event "$(make_codex_event PreToolUse shell "$input")" codex ;;
             2)
                 input=$(make_json command "rm -rf /")
-                send_event "$(make_codex_event shell "$input")" codex ;;
+                send_event "$(make_codex_event PreToolUse shell "$input")" codex ;;
             3)
                 input=$(make_json path "src/main.py" patch "- old line\n+ new line")
-                send_event "$(make_codex_event apply_patch "$input")" codex ;;
+                send_event "$(make_codex_event PreToolUse apply_patch "$input")" codex ;;
             4)
                 read -p "질문 메시지: " msg
                 send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "$msg")" codex ;;
@@ -239,6 +242,10 @@ interactive_codex() {
             6)
                 send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "작업이 완료되었습니다.")" codex ;;
             7)
+                read -p "도구 이름: " tool
+                read -p "도구 입력: " input
+                send_event "$(make_codex_event PermissionRequest "$tool" "$input")" codex ;;
+            8)
                 send_event "$(make_json hook_event_name SessionEnd session_id "$SESSION_ID")" codex
                 break ;;
             d|D)
@@ -359,7 +366,7 @@ case "$COMMAND" in
         TOOL=${1:-"shell"}
         CMD=${2:-"ls -la"}
         input=$(make_json command "$CMD")
-        send_event "$(make_codex_event "$TOOL" "$input")" codex ;;
+        send_event "$(make_codex_event PreToolUse "$TOOL" "$input")" codex ;;
 
     # ── Gemini CLI 이벤트 ───────────────────────────────────────────────
     gemini-tool)

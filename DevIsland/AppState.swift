@@ -362,9 +362,11 @@ class AppState: ObservableObject {
             "onsessionstart", "session_start", "on_session_start", "startup", "init", "onnotification",
             "afteragent", "aftermodel", "afterturn", "stop"
         ]
-        // approval: Claude의 PermissionRequest + Codex의 PreToolUse + Gemini의 BeforeTool
+        // approval: Claude/Codex의 PermissionRequest + Gemini의 BeforeTool
+        // Codex의 PreToolUse는 진행 상황 알림용으로 선호되지만, PermissionRequest가 없는 구버전 대응을 위해 승인 폴백으로 유지함
         let isStop = stopEvents.contains(normalizedEvent)
-        let isNotification = notificationEvents.contains(normalizedEvent)
+        let isCodexPreToolNotification = (agentKind == .codex && normalizedEvent == "pretooluse" && ToolKnowledge.risk(for: toolName) == .safe)
+        let isNotification = notificationEvents.contains(normalizedEvent) || isCodexPreToolNotification
         let isApproval = AppState.approvalEvents.contains(normalizedEvent)
 
         if isStop {
@@ -886,6 +888,10 @@ class AppState: ObservableObject {
         switch event {
         case "BeforeTool", "onToolCall":   return .gemini
         case "PreToolUse":                 return .codex
+        case "PermissionRequest":
+            if json["tool_name"] != nil { return .codex }
+            if json["permission_type"] != nil { return .claudeCode }
+            return .claudeCode // 폴백
         default: break
         }
         

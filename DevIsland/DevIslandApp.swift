@@ -431,17 +431,23 @@ enum BridgeInstaller {
         var hooks = (data["hooks"] as? [String: Any]) ?? [:]
         
         // 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-        let events = ["SessionStart", "SessionEnd", "PreToolUse", "PostToolUse", "Stop"]
+        let events = ["SessionStart", "SessionEnd", "PreToolUse", "PostToolUse", "Stop", "PermissionRequest"]
         for event in events {
             var eventConfigs = (hooks[event] as? [[String: Any]]) ?? []
             
+            // PermissionRequest나 PreToolUse는 승인이 필요하므로 타임아웃을 길게 설정함 (86400초 = 24시간)
+            var hCmd: [String: Any] = ["type": "command", "command": bridgeCommand]
+            if event == "PreToolUse" || event == "PermissionRequest" {
+                hCmd["timeout"] = 86400
+            }
+
             var found = false
             for i in 0..<eventConfigs.count {
                 var config = eventConfigs[i]
                 if (config["matcher"] as? String) == "*" {
                     var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
                     subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgeFileName) }
-                    subHooks.append(["type": "command", "command": bridgeCommand])
+                    subHooks.append(hCmd)
                     config["hooks"] = subHooks
                     eventConfigs[i] = config
                     found = true
@@ -452,7 +458,7 @@ enum BridgeInstaller {
             if !found {
                 eventConfigs.append([
                     "matcher": "*",
-                    "hooks": [["type": "command", "command": bridgeCommand]]
+                    "hooks": [hCmd]
                 ])
             }
             hooks[event] = eventConfigs
