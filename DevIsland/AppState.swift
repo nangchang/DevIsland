@@ -630,7 +630,8 @@ class AppState: ObservableObject {
         }
 
         // Pass through check: 터미널이 이미 활성 상태라면 'pass' 응답으로 즉시 통과
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        // NSAppleScript는 메인 스레드에서만 안전하게 실행 가능 (Apple 문서)
+        DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             let isFrontmost = self.frontmostCheck(
                 terminalApp,
@@ -639,69 +640,66 @@ class AppState: ObservableObject {
                 terminalTabIndex
             )
 
-            DispatchQueue.main.async {
-
-                if isFrontmost {
-                    print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
-                    request.responseHandler("{\"response\": \"pass\"}")
-                    if !sessionId.isEmpty {
-                        self.updateActiveSession(
-                            sessionId: sessionId,
-                            terminalTitle: terminalTitle,
-                            agentKind: agentKind,
-                            terminalApp: terminalApp,
-                            terminalTTY: terminalTTY,
-                            terminalWindowId: terminalWindowId,
-                            terminalTabIndex: terminalTabIndex,
-                            toolName: displayToolName,
-                            eventName: event,
-                            message: displayMsg,
-                            isPending: false,
-                            status: SessionStatus.timeoutBypassed(Date())
-                        )
-                    }
-                    return
-                }
-                
-                self.pendingQueue.append(request)
-                
-                let newItem = PendingItem(
-                    id: request.id,
-                    toolName: request.toolName,
-                    message: request.message,
-                    sessionId: request.sessionId,
-                    terminalTitle: terminalTitle,
-                    terminalWindowId: terminalWindowId,
-                    terminalTabIndex: terminalTabIndex,
-                    receivedAt: request.receivedAt
-                )
-                self.pendingItems.append(newItem)
-                self.pendingCount = self.pendingQueue.count
-
-                if !request.sessionId.isEmpty {
+            if isFrontmost {
+                print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
+                request.responseHandler("{\"response\": \"pass\"}")
+                if !sessionId.isEmpty {
                     self.updateActiveSession(
-                        sessionId: request.sessionId,
+                        sessionId: sessionId,
                         terminalTitle: terminalTitle,
                         agentKind: agentKind,
                         terminalApp: terminalApp,
                         terminalTTY: terminalTTY,
                         terminalWindowId: terminalWindowId,
                         terminalTabIndex: terminalTabIndex,
-                        toolName: request.toolName,
-                        eventName: request.eventName,
-                        message: request.message,
-                        isPending: true,
-                        isLifecycleTracked: agentKind != .claudeCode
+                        toolName: displayToolName,
+                        eventName: event,
+                        message: displayMsg,
+                        isPending: false,
+                        status: SessionStatus.timeoutBypassed(Date())
                     )
+                }
+                return
+            }
 
-                    self.selectedSessionId = request.sessionId
-                }
-                
-                if self.currentResponseHandler == nil {
-                    self.showNextRequest()
-                } else {
-                    self.syncDisplayToSelectedSession()
-                }
+            self.pendingQueue.append(request)
+
+            let newItem = PendingItem(
+                id: request.id,
+                toolName: request.toolName,
+                message: request.message,
+                sessionId: request.sessionId,
+                terminalTitle: terminalTitle,
+                terminalWindowId: terminalWindowId,
+                terminalTabIndex: terminalTabIndex,
+                receivedAt: request.receivedAt
+            )
+            self.pendingItems.append(newItem)
+            self.pendingCount = self.pendingQueue.count
+
+            if !request.sessionId.isEmpty {
+                self.updateActiveSession(
+                    sessionId: request.sessionId,
+                    terminalTitle: terminalTitle,
+                    agentKind: agentKind,
+                    terminalApp: terminalApp,
+                    terminalTTY: terminalTTY,
+                    terminalWindowId: terminalWindowId,
+                    terminalTabIndex: terminalTabIndex,
+                    toolName: request.toolName,
+                    eventName: request.eventName,
+                    message: request.message,
+                    isPending: true,
+                    isLifecycleTracked: agentKind != .claudeCode
+                )
+
+                self.selectedSessionId = request.sessionId
+            }
+
+            if self.currentResponseHandler == nil {
+                self.showNextRequest()
+            } else {
+                self.syncDisplayToSelectedSession()
             }
         }
     }
