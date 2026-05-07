@@ -134,6 +134,7 @@ printf "%s" "$PAYLOAD" \
     TERM_TTY="$CURRENT_TTY" \
     TERM_WINDOW_ID="$TERM_WINDOW_ID" \
     TERM_TAB_INDEX="$TERM_TAB_INDEX" \
+    TERM_TMUX_PANE="$TMUX_PANE" \
     python3 "$PY_BRIDGE" --source "$CLI_SOURCE_ARG"
 
 exit 0

@@ -12,7 +12,8 @@ class TerminalFocuser {
         appName: String?,
         tty: String?,
         windowId: String?,
-        tabIndex: String?
+        tabIndex: String?,
+        tmuxPane: String?
     ) -> Bool {
         let targetName = normalizedAppName(appName)
         let match = targetName.flatMap { name in
@@ -27,6 +28,14 @@ class TerminalFocuser {
         let isActive = frontBundleId == match.bundleId
         print("[DevIsland] isSessionFrontmost: \(match.name) frontmost=\(frontBundleId ?? "nil") expected=\(match.bundleId) isActive=\(isActive)")
         guard isActive else { return false }
+
+        if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
+            let currentPane = getShellOutput("tmux display-message -p '#{pane_id}'")
+            if !currentPane.isEmpty && currentPane != tmuxPane {
+                print("[DevIsland] isSessionFrontmost: tmux pane mismatch (current=\(currentPane) expected=\(tmuxPane))")
+                return false
+            }
+        }
 
         let script = frontmostCheckScript(appName: match.name, tty: tty, windowId: windowId, tabIndex: tabIndex)
         var error: NSDictionary?
@@ -92,12 +101,42 @@ class TerminalFocuser {
         }
     }
 
+    private static func getShellOutput(_ command: String) -> String {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-l", "-c", command]
+        process.standardOutput = pipe
+        
+        do {
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        } catch {
+            return ""
+        }
+    }
+
+    private static func runShellCommand(_ command: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-l", "-c", command]
+        
+        do {
+            try process.run()
+        } catch {
+            print("[DevIsland] Failed to run shell command: \(command), error: \(error)")
+        }
+    }
+
     static func focusTerminal(
         appName: String? = nil,
         title: String? = nil,
         tty: String? = nil,
         windowId: String? = nil,
-        tabIndex: String? = nil
+        tabIndex: String? = nil,
+        tmuxPane: String? = nil
     ) {
         let targetName = normalizedAppName(appName)
         let match = targetName.flatMap { name in
@@ -105,6 +144,11 @@ class TerminalFocuser {
         } ?? candidates.first(where: {
             !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
         })
+
+        if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
+            print("[DevIsland] tmux pane detected: \(tmuxPane), switching...")
+            runShellCommand("tmux select-pane -t \(tmuxPane)")
+        }
 
         guard let match else { return }
 
