@@ -1,6 +1,8 @@
 import AppKit
 
 class TerminalFocuser {
+    private static let tmuxCommandTimeout: TimeInterval = 1.0
+
     private static let candidates: [(bundleId: String, name: String)] = [
         ("com.mitchellh.ghostty",   "Ghostty"),
         ("com.googlecode.iterm2",   "iTerm"),
@@ -31,17 +33,12 @@ class TerminalFocuser {
         print("[DevIsland] isSessionFrontmost: \(match.name) frontmost=\(frontBundleId ?? "nil") expected=\(match.bundleId) isActive=\(isActive)")
         guard isActive else { return false }
 
-        let script = frontmostCheckScript(appName: match.name, tty: tty, windowId: windowId, tabIndex: tabIndex)
-        var error: NSDictionary?
-        
-        // Execute AppleScript with a safeguard
-        guard let scriptObject = NSAppleScript(source: script) else {
-            print("[DevIsland] isSessionFrontmost: Failed to create NSAppleScript object")
-            return false
-        }
-        
-        let result = scriptObject.executeAndReturnError(&error)
-        let resultStr = result.stringValue ?? "nil"
+        let (resultStr, error) = executeAppleScript(frontmostCheckScript(
+            appName: match.name,
+            tty: tty,
+            windowId: windowId,
+            tabIndex: tabIndex
+        ))
         let passed = resultStr == "true" || resultStr.hasPrefix("true|")
         
         if let error = error {
@@ -52,6 +49,8 @@ class TerminalFocuser {
         guard passed else { return false }
 
         if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
+            // tmux pane identity only makes sense after the terminal tab's outer TTY is frontmost.
+            // Otherwise another tab attached to the same tmux server could make the pane check look valid.
             guard isValidTmuxPane(tmuxPane) else {
                 print("[DevIsland] isSessionFrontmost: invalid tmux pane format: \(tmuxPane)")
                 return false
@@ -72,6 +71,32 @@ class TerminalFocuser {
         }
 
         return true
+    }
+
+    private static func executeAppleScript(_ source: String) -> (String, NSDictionary?) {
+        if Thread.isMainThread {
+            return executeAppleScriptOnCurrentThread(source)
+        }
+
+        var output = ""
+        var scriptError: NSDictionary?
+        DispatchQueue.main.sync {
+            let result = executeAppleScriptOnCurrentThread(source)
+            output = result.0
+            scriptError = result.1
+        }
+        return (output, scriptError)
+    }
+
+    private static func executeAppleScriptOnCurrentThread(_ source: String) -> (String, NSDictionary?) {
+        var error: NSDictionary?
+        guard let scriptObject = NSAppleScript(source: source) else {
+            print("[DevIsland] Failed to create NSAppleScript object")
+            return ("nil", nil)
+        }
+
+        let result = scriptObject.executeAndReturnError(&error)
+        return (result.stringValue ?? "nil", error)
     }
 
     private static func frontmostCheckScript(appName: String, tty: String?, windowId: String?, tabIndex: String?) -> String {
@@ -142,6 +167,7 @@ class TerminalFocuser {
 
         do {
             try process.run()
+            terminateProcess(process, after: tmuxCommandTimeout)
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0 else { return "" }
@@ -161,11 +187,21 @@ class TerminalFocuser {
 
         do {
             try process.run()
+            terminateProcess(process, after: tmuxCommandTimeout)
             process.waitUntilExit()
             return process.terminationStatus == 0
         } catch {
             print("[DevIsland] Failed to run process: \(executable.path) \(arguments.joined(separator: " ")), error: \(error)")
             return false
+        }
+    }
+
+    private static func terminateProcess(_ process: Process, after timeout: TimeInterval) {
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) {
+            if process.isRunning {
+                print("[DevIsland] tmux command timed out, terminating pid=\(process.processIdentifier)")
+                process.terminate()
+            }
         }
     }
 
@@ -232,10 +268,17 @@ class TerminalFocuser {
             executable: executable,
             arguments: tmuxArguments(socket: socket, command: ["select-window", "-t", pane])
         )
+        if !selectWindowSucceeded {
+            print("[DevIsland] tmux select-window failed for pane=\(pane) socket=\(socket ?? "nil")")
+        }
+
         let selectPaneSucceeded = runProcess(
             executable: executable,
             arguments: tmuxArguments(socket: socket, command: ["select-pane", "-t", pane])
         )
+        if !selectPaneSucceeded {
+            print("[DevIsland] tmux select-pane failed for pane=\(pane) socket=\(socket ?? "nil")")
+        }
 
         var switchCommand = ["switch-client"]
         if let client, isValidTmuxClient(client) {
@@ -247,6 +290,9 @@ class TerminalFocuser {
             executable: executable,
             arguments: tmuxArguments(socket: socket, command: switchCommand)
         )
+        if !switchSucceeded {
+            print("[DevIsland] tmux switch-client failed for pane=\(pane) client=\(client ?? "nil") target=\(targetSession.isEmpty ? pane : targetSession) socket=\(socket ?? "nil")")
+        }
 
         return selectWindowSucceeded && selectPaneSucceeded && switchSucceeded
     }
@@ -271,16 +317,18 @@ class TerminalFocuser {
         guard let match else { return }
 
         let name = match.name
-        DispatchQueue.global(qos: .userInitiated).async {
-            var error: NSDictionary?
-            NSAppleScript(source: focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))?
-                .executeAndReturnError(&error)
+        DispatchQueue.main.async {
+            let (_, error) = executeAppleScript(focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))
             if let error {
                 print("[DevIsland] terminal focus AppleScript error: \(error)")
             }
             if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
-                print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
-                _ = switchTmuxClient(socket: tmuxSocket, client: tmuxClient, pane: tmuxPane)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
+                    if !switchTmuxClient(socket: tmuxSocket, client: tmuxClient, pane: tmuxPane) {
+                        print("[DevIsland] tmux switch failed for pane=\(tmuxPane)")
+                    }
+                }
             }
         }
     }
@@ -322,13 +370,16 @@ class TerminalFocuser {
                   repeat with aWindow in windows
                     if (id of aWindow as text) is wantedWindowIdText then
                       set aTab to tab (wantedTabIndexText as integer) of aWindow
-                      select aWindow
-                      select aTab
-                      try
-                        select current session of aTab
-                      end try
-                      activate
-                      return
+                      repeat with aSession in sessions of aTab
+                        set sessionTTY to tty of aSession
+                        if ttyPath is not "" and (sessionTTY is ttyPath or sessionTTY is ttyName) then
+                          select aWindow
+                          select aTab
+                          select aSession
+                          activate
+                          return
+                        end if
+                      end repeat
                     end if
                   end repeat
                 end try

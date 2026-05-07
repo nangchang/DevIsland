@@ -56,6 +56,7 @@ current_tty() {
 }
 
 CURRENT_TTY=$(current_tty)
+CURRENT_TTY_NAME="${CURRENT_TTY##*/}"
 
 # tmux 안에서는 inner PTY 대신 outer(client) TTY 사용
 # 터미널 앱(iTerm/Terminal)은 outer TTY만 알고 있기 때문에
@@ -78,6 +79,7 @@ if [ -n "$TMUX" ]; then
   fi
   if [ -n "$CLIENT_TTY" ]; then
     CURRENT_TTY="$CLIENT_TTY"
+    CURRENT_TTY_NAME="${CURRENT_TTY##*/}"
   fi
 fi
 
@@ -85,7 +87,7 @@ if [ -n "$CURRENT_TTY" ] && (pgrep -x iTerm2 >/dev/null 2>&1 || pgrep -x iTerm >
   ITERM_INFO=$(osascript << ASEOF
 tell application "iTerm"
   set ttyPath to "$CURRENT_TTY"
-  set ttyName to do shell script "basename " & quoted form of ttyPath
+  set ttyName to "$CURRENT_TTY_NAME"
   repeat with aWindow in windows
     repeat with aTab in tabs of aWindow
       set tabIndex to 0
@@ -117,7 +119,7 @@ if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && pgrep -x Terminal >/dev/null 2
   TERM_INFO=$(osascript << ASEOF
 tell application "Terminal"
   set ttyPath to "$CURRENT_TTY"
-  set ttyName to do shell script "basename " & quoted form of ttyPath
+  set ttyName to "$CURRENT_TTY_NAME"
   repeat with aWin in windows
     set tabIndex to 0
     repeat with aTab in tabs of aWin
@@ -140,44 +142,19 @@ ASEOF
   fi
 fi
 
-if [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "iTerm.app" ]; then
-  TERM_APP="iTerm"
-  if [ -n "$CURRENT_TTY" ]; then
-	    TERM_TITLE=$(osascript << ASEOF
-tell application "iTerm"
-  set ttyPath to "$CURRENT_TTY"
-  set ttyName to do shell script "basename " & quoted form of ttyPath
-  repeat with aWindow in windows
-    repeat with aTab in tabs of aWindow
-      repeat with aSession in sessions of aTab
-        set sessionTTY to tty of aSession
-        if sessionTTY is ttyPath or sessionTTY is ttyName then
-          return (name of aSession) & ":::" & (id of aWindow as text) & ":::" & (index of aTab as text)
-        end if
-      end repeat
-    end repeat
-  end repeat
-  return (name of current session of current window) & "::::::"
-end tell
-ASEOF
-	    2>/dev/null || echo "iTerm")
-    TERM_WINDOW_ID=$(printf '%s' "$TERM_TITLE" | awk -F ':::' '{print $2}')
-    TERM_TAB_INDEX=$(printf '%s' "$TERM_TITLE" | awk -F ':::' '{print $3}')
-    TERM_TITLE=$(printf '%s' "$TERM_TITLE" | awk -F ':::' '{print $1}')
-  else
-    TERM_TITLE=$(osascript -e 'tell application "iTerm" to get name of current session of current window' 2>/dev/null || echo "iTerm")
-  fi
-elif [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
+if [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
   TERM_APP="Terminal"
   if [ -n "$CURRENT_TTY" ]; then
     TERM_INFO=$(osascript << ASEOF
 tell application "Terminal"
   set ttyPath to "$CURRENT_TTY"
+  set ttyName to "$CURRENT_TTY_NAME"
   repeat with aWin in windows
     set tabIndex to 0
     repeat with aTab in tabs of aWin
       set tabIndex to tabIndex + 1
-      if tty of aTab is ttyPath then
+      set tabTTY to tty of aTab
+      if tabTTY is ttyPath or tabTTY is ttyName then
         return (name of aWin) & ":::" & (id of aWin as text) & ":::" & (tabIndex as text)
       end if
     end repeat
