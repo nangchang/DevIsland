@@ -370,9 +370,9 @@ class AppState: ObservableObject {
         let stopEvents = ["exit", "shutdown", "sessionend"]
         let notificationEvents = [
             "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
-            "startup", "init", "afteragent", "stop"
+            "startup", "init", "afteragent"
         ]
-        let normalizedToolName = toolName.lowercased().replacingOccurrences(of: "-", with: "_")
+        let normalizedToolName = normalizedHookEventName(toolName)
         let isUserQuestionTool = Self.userQuestionTools.contains(normalizedToolName)
         // approval:
         // - Claude/Codex: PermissionRequest only
@@ -1030,6 +1030,7 @@ class AppState: ObservableObject {
             self.activeSessions.removeAll { $0.id == sessionId }
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
+                self.currentResponseHandler?("{\"response\": \"pass\"}")
                 self.currentResponseHandler = nil
                 self.isShowingRequest = false
                 self.showingRequestId = nil
