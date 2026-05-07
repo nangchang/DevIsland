@@ -1019,6 +1019,44 @@ class AppState: ObservableObject {
         }
     }
 
+    func dismissSession(_ sessionId: String) {
+        DispatchQueue.main.async {
+            let removedRequests = self.pendingQueue.filter { $0.sessionId == sessionId }
+            removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
+            self.pendingQueue.removeAll { $0.sessionId == sessionId }
+            self.pendingItems.removeAll { $0.sessionId == sessionId }
+            self.pendingCount = self.pendingQueue.count
+            self.sessionAutoApproveTypes.removeValue(forKey: sessionId)
+            self.activeSessions.removeAll { $0.id == sessionId }
+
+            if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
+                self.currentResponseHandler = nil
+                self.isShowingRequest = false
+                self.showingRequestId = nil
+                self.timeoutTimer?.invalidate()
+                self.timeoutProgress = 1.0
+                self.currentSessionId = ""
+                self.currentToolName = ""
+                self.currentEventName = ""
+                self.currentMessage = ""
+            }
+
+            if self.selectedSessionId == sessionId {
+                self.selectedSessionId = self.activeSessions.first?.id
+            }
+
+            if self.pendingQueue.isEmpty {
+                if self.activeSessions.isEmpty {
+                    self.isNotchExpanded = false
+                    self.selectedSessionId = nil
+                }
+                self.syncDisplayToSelectedSession()
+            } else if self.currentResponseHandler == nil {
+                self.showNextRequest()
+            }
+        }
+    }
+
     private func showNextRequest() {
         discardInvalidPendingRequests()
 

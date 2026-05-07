@@ -430,4 +430,37 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(secondCallCount, 1)
         XCTAssertEqual(appState.pendingCount, 0)
     }
+
+    func testDismissSessionRemovesPendingRequestAndPassesToTerminal() {
+        let expectation = XCTestExpectation(description: "Pending request passed when session dismissed")
+        var receivedResponse: String?
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "cli_source": "codex",
+            "session_id": "dismiss-session",
+            "tool_name": "shell",
+            "tool_input": {"command": "rm -rf build"}
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            receivedResponse = response
+            expectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+
+        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
+        XCTAssertTrue(appState.activeSessions.contains(where: { $0.id == "dismiss-session" }))
+
+        appState.dismissSession("dismiss-session")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(self.parseResponse(receivedResponse ?? "")?["response"] as? String, "pass")
+        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertFalse(appState.activeSessions.contains(where: { $0.id == "dismiss-session" }))
+    }
 }
