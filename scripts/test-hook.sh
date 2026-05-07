@@ -26,12 +26,23 @@ usage() {
     echo "  $0 [옵션] start             # 세션 시작 (Claude Code)"
     echo "  $0 [옵션] bash [command]    # Bash 명령 승인 요청 (Claude Code)"
     echo "  $0 [옵션] write [path]      # 파일 쓰기 승인 요청 (Claude Code)"
+    echo "  $0 [옵션] claude-pretool    # Claude PreToolUse 상태 이벤트"
+    echo "  $0 [옵션] claude-posttool   # Claude PostToolUse 상태 이벤트"
+    echo "  $0 [옵션] claude-smoke      # Claude 주요 훅 세트 재생"
     echo "  $0 [옵션] idle              # 입력 대기 알림"
     echo "  $0 [옵션] finish            # 작업 완료 알림"
     echo "  $0 [옵션] stop              # 세션 종료"
     echo "  $0 [옵션] codex-tool [name] # Codex PreToolUse 시뮬레이션"
+    echo "  $0 [옵션] codex-posttool    # Codex PostToolUse 상태 이벤트"
+    echo "  $0 [옵션] codex-permission  # Codex PermissionRequest 승인 요청"
+    echo "  $0 [옵션] codex-stop        # Codex Stop 완료 이벤트"
     echo "  $0 [옵션] codex-stale       # 삭제 버튼 테스트용 Codex 세션 생성"
+    echo "  $0 [옵션] codex-smoke       # Codex 주요 훅 세트 재생"
     echo "  $0 [옵션] gemini-tool [name]# Gemini BeforeTool 시뮬레이션"
+    echo "  $0 [옵션] gemini-afteragent # Gemini AfterAgent 완료 이벤트"
+    echo "  $0 [옵션] gemini-notify     # Gemini Notification 이벤트"
+    echo "  $0 [옵션] gemini-end        # Gemini SessionEnd 이벤트"
+    echo "  $0 [옵션] gemini-smoke      # Gemini 주요 훅 세트 재생"
     echo ""
     echo "옵션:"
     echo "  --cli claude|codex|gemini   # CLI 종류 선택 (기본: claude)"
@@ -133,6 +144,30 @@ make_claude_permission() {
         tool_name "$tool" tool_input "$tool_input"
 }
 
+send_claude_pretool() {
+    local tool="${1:-Bash}"
+    local command="${2:-ls -la}"
+    local input
+    input=$(make_json command "$command" description "상태 추적용 Claude PreToolUse")
+    send_event "$(make_json hook_event_name PreToolUse session_id "$SESSION_ID" tool_name "$tool" tool_input "$input" cwd "$(pwd)")" claude
+}
+
+send_claude_posttool() {
+    local tool="${1:-Bash}"
+    local command="${2:-ls -la}"
+    local input
+    input=$(make_json command "$command")
+    send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name "$tool" tool_input "$input" tool_response "completed" cwd "$(pwd)")" claude
+}
+
+send_claude_smoke() {
+    send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" source startup cwd "$(pwd)")" claude
+    send_claude_pretool Bash "ls -la"
+    send_claude_posttool Bash "ls -la"
+    send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" notification_type idle_prompt message "클로드가 다음 입력을 기다리고 있습니다.")" claude
+    send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "작업이 완료되었습니다.")" claude
+}
+
 # ── Codex CLI 이벤트 빌더 ────────────────────────────────────────────────
 
 make_codex_event() {
@@ -141,6 +176,23 @@ make_codex_event() {
     local tool_input="$3"
     make_json hook_event_name "$event" session_id "$SESSION_ID" \
         tool_name "$tool" tool_input "$tool_input" cwd "$(pwd)"
+}
+
+send_codex_stale() {
+    local input
+    send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" codex
+    input=$(make_json command "sleep 120")
+    send_event "$(make_codex_event PreToolUse shell "$input")" codex
+    send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name shell tool_input "$input" tool_response "still running" cwd "$(pwd)")" codex
+}
+
+send_codex_smoke() {
+    local input
+    send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" codex
+    input=$(make_json command "ls -la")
+    send_event "$(make_codex_event PreToolUse shell "$input")" codex
+    send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name shell tool_input "$input" tool_response "completed" cwd "$(pwd)")" codex
+    send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "Codex turn completed" cwd "$(pwd)")" codex
 }
 
 # ── Gemini CLI 이벤트 빌더 ──────────────────────────────────────────────
@@ -153,6 +205,15 @@ make_gemini_event() {
         tool_name "$tool" tool_input "$tool_input" cwd "$(pwd)"
 }
 
+send_gemini_smoke() {
+    local input
+    send_event "$(make_gemini_event SessionStart)" gemini
+    input=$(make_json command "ls -la")
+    send_event "$(make_gemini_event BeforeTool run_shell_command "$input")" gemini
+    send_event "$(make_json event Notification session_id "$SESSION_ID" message "Gemini notification" cwd "$(pwd)")" gemini
+    send_event "$(make_gemini_event AfterAgent)" gemini
+}
+
 # ── 대화형 모드 ─────────────────────────────────────────────────────────
 
 interactive_claude() {
@@ -163,14 +224,15 @@ interactive_claude() {
 
     while true; do
         echo "무엇을 테스트하시겠습니까?"
-        echo "1) 일반 Bash 명령 (ls -la)"
-        echo "2) 위험한 Bash 명령 (rm -rf /)"
-        echo "3) 파일 쓰기 (test.txt)"
-        echo "4) 파일 읽기 (AppState.swift)"
+        echo "1) 승인 요청: Bash 명령 (PermissionRequest)"
+        echo "2) 승인 요청: 위험한 Bash 명령 (PermissionRequest)"
+        echo "3) 승인 요청: 파일 쓰기 (PermissionRequest)"
+        echo "4) 상태 업데이트: 파일 읽기 (PreToolUse/PostToolUse)"
         echo "5) 커스텀 알림 (Notification)"
         echo "6) 입력 대기 알림 (idle_prompt)"
         echo "7) 작업 완료 알림 (Stop)"
-        echo "8) 작업 종료 (Stop)"
+        echo "8) 세션 종료 (SessionEnd)"
+        echo "9) Claude 주요 훅 세트 재생"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 그냥 종료"
         read -p "선택: " choice
@@ -185,8 +247,8 @@ interactive_claude() {
                 input=$(make_json file_path "test.txt" content "Hello DevIsland!")
                 send_event "$(make_claude_permission write "$input")" claude ;;
             4)
-                input=$(make_json file_path "DevIsland/AppState.swift")
-                send_event "$(make_claude_permission read "$input")" claude ;;
+                send_claude_pretool Read "DevIsland/AppState.swift"
+                send_claude_posttool Read "DevIsland/AppState.swift" ;;
             5)
                 read -p "알림 메시지: " msg
                 send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "$msg")" claude ;;
@@ -197,6 +259,8 @@ interactive_claude() {
             8)
                 send_event "$(make_json hook_event_name SessionEnd session_id "$SESSION_ID")" claude
                 break ;;
+            9)
+                send_claude_smoke ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
                 echo "지연 모드가 $([ "$DELAY" -eq 1 ] && echo "켜졌습니다" || echo "꺼졌습니다")." ;;
@@ -251,10 +315,7 @@ interactive_codex() {
                 send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "세션을 종료합니다.")" codex
                 break ;;
             9)
-                send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" codex
-                input=$(make_json command "sleep 120")
-                send_event "$(make_codex_event PreToolUse shell "$input")" codex
-                send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name shell tool_input "$input" tool_response "still running")" codex
+                send_codex_stale
                 echo "🧪 Codex 세션을 목록에 남겼습니다. 앱의 세션 row에서 x 버튼으로 삭제를 테스트하세요." ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
@@ -280,6 +341,7 @@ interactive_gemini() {
         echo "5) 커스텀 질문 (Notification)"
         echo "6) 작업 완료 알림 (AfterAgent)"
         echo "7) 세션 종료 (SessionEnd)"
+        echo "8) Gemini 주요 훅 세트 재생"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 종료"
         read -p "선택: " choice
@@ -304,6 +366,8 @@ interactive_gemini() {
             7)
                 send_event "$(make_gemini_event SessionEnd)" gemini
                 break ;;
+            8)
+                send_gemini_smoke ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
                 echo "지연 모드가 $([ "$DELAY" -eq 1 ] && echo "켜졌습니다" || echo "꺼졌습니다")." ;;
@@ -359,6 +423,12 @@ case "$COMMAND" in
         CONTENT=${2:-"Hello World"}
         input=$(make_json file_path "$FILE" content "$CONTENT")
         send_event "$(make_claude_permission write "$input")" claude ;;
+    claude-pretool)
+        send_claude_pretool "${1:-Bash}" "${2:-ls -la}" ;;
+    claude-posttool)
+        send_claude_posttool "${1:-Bash}" "${2:-ls -la}" ;;
+    claude-smoke)
+        send_claude_smoke ;;
     notification)
         MSG=${1:-"Hello from CLI"}
         send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "$MSG")" claude ;;
@@ -375,11 +445,20 @@ case "$COMMAND" in
         CMD=${2:-"ls -la"}
         input=$(make_json command "$CMD")
         send_event "$(make_codex_event PreToolUse "$TOOL" "$input")" codex ;;
+    codex-posttool)
+        input=$(make_json command "${1:-ls -la}")
+        send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name shell tool_input "$input" tool_response "completed" cwd "$(pwd)")" codex ;;
+    codex-permission)
+        TOOL=${1:-"shell"}
+        CMD=${2:-"rm -rf build"}
+        input=$(make_json command "$CMD")
+        send_event "$(make_codex_event PermissionRequest "$TOOL" "$input")" codex ;;
+    codex-stop)
+        send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "Codex turn completed" cwd "$(pwd)")" codex ;;
     codex-stale)
-        send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" codex
-        input=$(make_json command "sleep 120")
-        send_event "$(make_codex_event PreToolUse shell "$input")" codex
-        send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name shell tool_input "$input" tool_response "still running")" codex ;;
+        send_codex_stale ;;
+    codex-smoke)
+        send_codex_smoke ;;
 
     # ── Gemini CLI 이벤트 ───────────────────────────────────────────────
     gemini-tool)
@@ -387,6 +466,14 @@ case "$COMMAND" in
         CMD=${2:-"ls -la"}
         input=$(make_json command "$CMD")
         send_event "$(make_gemini_event BeforeTool "$TOOL" "$input")" gemini ;;
+    gemini-afteragent)
+        send_event "$(make_gemini_event AfterAgent)" gemini ;;
+    gemini-notify)
+        send_event "$(make_json event Notification session_id "$SESSION_ID" message "${1:-Gemini notification}" cwd "$(pwd)")" gemini ;;
+    gemini-end)
+        send_event "$(make_gemini_event SessionEnd)" gemini ;;
+    gemini-smoke)
+        send_gemini_smoke ;;
 
     *) usage ;;
 esac
