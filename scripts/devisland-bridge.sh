@@ -200,6 +200,11 @@ elif [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
   TERM_TITLE="Warp"
 fi
 
+if [ -z "$TERM_APP" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ignoring non-terminal hook source: TERM_PROGRAM=${TERM_PROGRAM:-} TERM_TTY=${CURRENT_TTY:-}" >> /tmp/DevIsland.bridge.log
+  exit 0
+fi
+
 # 타이틀을 얻지 못한 경우 현재 디렉토리 이름으로 폴백 (루트 '/' 제외)
 if [ -z "$TERM_TITLE" ] || [ "$TERM_TITLE" = "Terminal" ]; then
   _dir=$(basename "$PWD" 2>/dev/null)
