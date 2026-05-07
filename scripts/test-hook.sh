@@ -30,6 +30,7 @@ usage() {
     echo "  $0 [옵션] finish            # 작업 완료 알림"
     echo "  $0 [옵션] stop              # 세션 종료"
     echo "  $0 [옵션] codex-tool [name] # Codex PreToolUse 시뮬레이션"
+    echo "  $0 [옵션] codex-stale       # 삭제 버튼 테스트용 Codex 세션 생성"
     echo "  $0 [옵션] gemini-tool [name]# Gemini BeforeTool 시뮬레이션"
     echo ""
     echo "옵션:"
@@ -220,7 +221,8 @@ interactive_codex() {
         echo "5) 툴 완료 (PostToolUse)"
         echo "6) 작업 완료 알림 (Stop)"
         echo "7) 승인 요청 (PermissionRequest)"
-        echo "8) 세션 종료 (SessionEnd)"
+        echo "8) 작업 종료 (Stop)"
+        echo "9) 삭제 버튼 테스트용 stale 세션 생성"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 종료"
         read -p "선택: " choice
@@ -248,6 +250,12 @@ interactive_codex() {
             8)
                 send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "세션을 종료합니다.")" codex
                 break ;;
+            9)
+                send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" codex
+                input=$(make_json command "sleep 120")
+                send_event "$(make_codex_event PreToolUse shell "$input")" codex
+                send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name shell tool_input "$input" tool_response "still running")" codex
+                echo "🧪 Codex 세션을 목록에 남겼습니다. 앱의 세션 row에서 x 버튼으로 삭제를 테스트하세요." ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
                 echo "지연 모드가 $([ "$DELAY" -eq 1 ] && echo "켜졌습니다" || echo "꺼졌습니다")." ;;
@@ -367,6 +375,11 @@ case "$COMMAND" in
         CMD=${2:-"ls -la"}
         input=$(make_json command "$CMD")
         send_event "$(make_codex_event PreToolUse "$TOOL" "$input")" codex ;;
+    codex-stale)
+        send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" codex
+        input=$(make_json command "sleep 120")
+        send_event "$(make_codex_event PreToolUse shell "$input")" codex
+        send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name shell tool_input "$input" tool_response "still running")" codex ;;
 
     # ── Gemini CLI 이벤트 ───────────────────────────────────────────────
     gemini-tool)
