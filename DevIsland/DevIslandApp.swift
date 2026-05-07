@@ -382,10 +382,12 @@ enum BridgeInstaller {
             ("SessionEnd",        lifecycleConfig),
             ("Notification",      lifecycleConfig),
             ("Stop",              lifecycleConfig),
+            ("PreToolUse",        lifecycleConfig),
+            ("PostToolUse",       lifecycleConfig),
             ("PermissionRequest", approvalConfig),
         ]
         let retiredEntries = [
-            "SubagentStop", "PreToolUse", "PostToolUse", "PreCompact", "StopFailure"
+            "SubagentStop", "PreCompact", "StopFailure"
         ]
 
         func removingBridgeHooks(from list: [[String: Any]]) -> [[String: Any]] {
@@ -431,7 +433,7 @@ enum BridgeInstaller {
         var hooks = (data["hooks"] as? [String: Any]) ?? [:]
         
         // 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-        let events = ["SessionStart", "SessionEnd", "PreToolUse", "PostToolUse", "Stop", "PermissionRequest"]
+        let events = ["SessionStart", "PreToolUse", "PostToolUse", "Stop", "PermissionRequest"]
         for event in events {
             var eventConfigs = (hooks[event] as? [[String: Any]]) ?? []
             
@@ -462,6 +464,21 @@ enum BridgeInstaller {
                 ])
             }
             hooks[event] = eventConfigs
+        }
+        for event in ["SessionEnd"] {
+            let cleaned = ((hooks[event] as? [[String: Any]]) ?? []).compactMap { entry -> [String: Any]? in
+                let subHooks = (entry["hooks"] as? [[String: Any]] ?? [])
+                    .filter { !($0["command"] as? String ?? "").contains(bridgeFileName) }
+                guard !subHooks.isEmpty else { return nil }
+                var updatedEntry = entry
+                updatedEntry["hooks"] = subHooks
+                return updatedEntry
+            }
+            if cleaned.isEmpty {
+                hooks.removeValue(forKey: event)
+            } else {
+                hooks[event] = cleaned
+            }
         }
         
         data["hooks"] = hooks
@@ -526,7 +543,7 @@ enum BridgeInstaller {
         // Gemini CLI: hooks는 { "EventName": [ { "matcher": "*", "hooks": [...] } ] } 형태
         var hooks = (data["hooks"] as? [String: Any]) ?? [:]
 
-        for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent"] {
+        for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent", "Notification"] {
             var eventConfigs = (hooks[event] as? [[String: Any]]) ?? []
             
             var found = false
@@ -558,6 +575,21 @@ enum BridgeInstaller {
                 ])
             }
             hooks[event] = eventConfigs
+        }
+        for event in ["AfterTool", "BeforeAgent", "BeforeModel", "BeforeToolSelection", "AfterModel", "PreCompress"] {
+            let cleaned = ((hooks[event] as? [[String: Any]]) ?? []).compactMap { entry -> [String: Any]? in
+                let subHooks = (entry["hooks"] as? [[String: Any]] ?? [])
+                    .filter { !($0["command"] as? String ?? "").contains(bridgeFileName) }
+                guard !subHooks.isEmpty else { return nil }
+                var updatedEntry = entry
+                updatedEntry["hooks"] = subHooks
+                return updatedEntry
+            }
+            if cleaned.isEmpty {
+                hooks.removeValue(forKey: event)
+            } else {
+                hooks[event] = cleaned
+            }
         }
 
         data["hooks"] = hooks

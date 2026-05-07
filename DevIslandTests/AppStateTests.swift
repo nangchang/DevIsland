@@ -207,7 +207,7 @@ final class AppStateTests: XCTestCase {
     }
     
     func testGeminiInteractiveToolAutoApproval() {
-        let expectation = XCTestExpectation(description: "Interactive tool auto-approved")
+        let expectation = XCTestExpectation(description: "Interactive question shown as notification")
         let message = """
         {
             "hook_event_name": "BeforeTool",
@@ -228,8 +228,108 @@ final class AppStateTests: XCTestCase {
         
         wait(for: [expectation], timeout: 1.0)
         XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
         XCTAssertTrue(appState.isNotchExpanded)
-        XCTAssertTrue(appState.currentMessage.contains("터미널"))
+        XCTAssertTrue(appState.currentMessage.contains("how are you?"))
+    }
+
+    func testOnlySourceSpecificEventsBecomeApprovalRequests() {
+        let codexPreToolExpectation = XCTestExpectation(description: "Codex PreToolUse is notification")
+        let claudeBeforeToolExpectation = XCTestExpectation(description: "Claude BeforeTool is notification")
+        let geminiPreToolExpectation = XCTestExpectation(description: "Gemini PreToolUse is notification")
+
+        let codexPreTool = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "codex",
+            "session_id": "codex-pretool",
+            "tool_name": "shell",
+            "tool_input": {"command": "echo hello"}
+        }
+        """
+        appState.handleMessage(codexPreTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            codexPreToolExpectation.fulfill()
+        }
+
+        let claudeBeforeTool = """
+        {
+            "hook_event_name": "BeforeTool",
+            "cli_source": "claude",
+            "session_id": "claude-beforetool",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hello"}
+        }
+        """
+        appState.handleMessage(claudeBeforeTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            claudeBeforeToolExpectation.fulfill()
+        }
+
+        let geminiPreTool = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "gemini",
+            "session_id": "gemini-pretool",
+            "tool_name": "write_file",
+            "tool_input": {"file_path": "test.txt", "content": "hello"}
+        }
+        """
+        appState.handleMessage(geminiPreTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            geminiPreToolExpectation.fulfill()
+        }
+
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        wait(for: [codexPreToolExpectation, claudeBeforeToolExpectation, geminiPreToolExpectation], timeout: 1.0)
+        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+    }
+
+    func testClaudeToolLifecycleEventsAreStatusNotifications() {
+        let preToolExpectation = XCTestExpectation(description: "Claude PreToolUse is notification")
+        let postToolExpectation = XCTestExpectation(description: "Claude PostToolUse is notification")
+
+        let preTool = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "claude",
+            "session_id": "claude-lifecycle",
+            "tool_name": "Bash",
+            "tool_input": {"command": "swift test"}
+        }
+        """
+        appState.handleMessage(preTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            preToolExpectation.fulfill()
+        }
+
+        let postTool = """
+        {
+            "hook_event_name": "PostToolUse",
+            "cli_source": "claude",
+            "session_id": "claude-lifecycle",
+            "tool_name": "Bash",
+            "tool_response": {"stdout": "ok"}
+        }
+        """
+        appState.handleMessage(postTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            postToolExpectation.fulfill()
+        }
+
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        wait(for: [preToolExpectation, postToolExpectation], timeout: 1.0)
+        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertTrue(appState.activeSessions.contains(where: { $0.id == "claude-lifecycle" }))
     }
     
     func testMultipleSessions() {
@@ -329,5 +429,38 @@ final class AppStateTests: XCTestCase {
 
         XCTAssertEqual(secondCallCount, 1)
         XCTAssertEqual(appState.pendingCount, 0)
+    }
+
+    func testDismissSessionRemovesPendingRequestAndPassesToTerminal() {
+        let expectation = XCTestExpectation(description: "Pending request passed when session dismissed")
+        var receivedResponse: String?
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "cli_source": "codex",
+            "session_id": "dismiss-session",
+            "tool_name": "shell",
+            "tool_input": {"command": "rm -rf build"}
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            receivedResponse = response
+            expectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+
+        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
+        XCTAssertTrue(appState.activeSessions.contains(where: { $0.id == "dismiss-session" }))
+
+        appState.dismissSession("dismiss-session")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(self.parseResponse(receivedResponse ?? "")?["response"] as? String, "pass")
+        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertFalse(appState.activeSessions.contains(where: { $0.id == "dismiss-session" }))
     }
 }

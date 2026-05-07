@@ -1244,6 +1244,17 @@ struct SessionRowView: View {
             }
             .buttonStyle(.plain)
             .help("Focus terminal")
+
+            Button(action: { AppState.shared.dismissSession(session.id) }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.65))
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .help(session.isPending ? "Dismiss session and pass pending request to terminal" : "Dismiss session")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

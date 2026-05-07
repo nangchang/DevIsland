@@ -88,9 +88,9 @@ chmod +x ~/Library/Application\ Support/DevIsland/devisland_bridge.py
 
 **2) CLI별 설정**
 
-- **Claude Code**: `~/.claude/settings.json`에 `PermissionRequest`, `SessionStart`, `SessionEnd` 훅을 등록합니다.
-- **Gemini CLI**: `~/.gemini/settings.json`의 `hooks` 섹션에 `BeforeTool`, `SessionStart`, `SessionEnd` 등을 추가합니다.
-- **Codex CLI**: `~/.codex/hooks.json`의 `PermissionRequest` 항목을 승인용으로, `PreToolUse` 항목을 상태 추적용으로 등록하고, `config.toml`에서 `codex_hooks = true`를 활성화합니다.
+- **Claude Code**: `~/.claude/settings.json`에 `PermissionRequest`를 승인용으로, `PreToolUse`/`PostToolUse`/`SessionStart`/`SessionEnd`/`Notification`/`Stop`을 상태 추적용으로 등록합니다.
+- **Gemini CLI**: `~/.gemini/settings.json`에 `BeforeTool`, `SessionStart`, `SessionEnd`, `AfterAgent`, `Notification` 훅을 등록합니다.
+- **Codex CLI**: `~/.codex/hooks.json`의 `PermissionRequest` 항목을 승인용으로, `PreToolUse`/`PostToolUse`/`Stop` 항목을 상태 추적용으로 등록하고, `config.toml`에서 `codex_hooks = true`를 활성화합니다.
 
 ### 5. 로그인 시 자동 시작 (선택)
 
