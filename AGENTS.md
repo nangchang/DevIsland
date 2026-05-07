@@ -57,8 +57,8 @@ DevIsland supports multiple AI agent CLIs through the same bridge architecture.
 | CLI Agent | Config File | Approval Event | Lifecycle Events | Docs |
 |---|---|---|---|---|
 | **Claude Code** | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `Notification`, `Stop`, … | [hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks) |
-| **Codex CLI** | `~/.codex/hooks.json` + `config.toml` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `Stop` | [openai.com/codex](https://openai.com/codex) |
-| **Gemini CLI** | `~/.gemini/settings.json` | `BeforeTool` | `SessionStart`, `SessionEnd`, `AfterTool`, `BeforeAgent`, … | [geminicli.com/hooks](https://geminicli.com/hooks) |
+| **Codex CLI** | `~/.codex/hooks.json` + `config.toml` | `PermissionRequest` | `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` | [openai.com/codex](https://openai.com/codex) |
+| **Gemini CLI** | `~/.gemini/settings.json` | `BeforeTool` | `SessionStart`, `SessionEnd`, `AfterAgent`, `Notification` | [geminicli.com/hooks](https://geminicli.com/hooks) |
 
 ---
 
@@ -144,6 +144,22 @@ codex_hooks = true
           { "type": "command", "command": "/path/to/devisland-bridge.sh --source codex" }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "/path/to/devisland-bridge.sh --source codex" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "/path/to/devisland-bridge.sh --source codex" }
+        ]
+      }
     ]
   }
 }
@@ -187,6 +203,12 @@ DevIsland keeps `PreToolUse` registered for status tracking only and returns `{}
       { "matcher": "*", "hooks": [{ "type": "command", "command": "/path/to/devisland-bridge.sh --source gemini" }] }
     ],
     "SessionEnd": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "/path/to/devisland-bridge.sh --source gemini" }] }
+    ],
+    "AfterAgent": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "/path/to/devisland-bridge.sh --source gemini" }] }
+    ],
+    "Notification": [
       { "matcher": "*", "hooks": [{ "type": "command", "command": "/path/to/devisland-bridge.sh --source gemini" }] }
     ]
   }

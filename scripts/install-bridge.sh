@@ -176,9 +176,10 @@ if os.path.exists(path):
 data.setdefault('hooks', {})
 
 # 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-events_lifecycle = ["SessionStart", "SessionEnd", "PostToolUse", "Stop"]
+events_lifecycle = ["SessionStart", "PostToolUse", "Stop"]
 events_status = ["PreToolUse"]
 events_approval = ["PermissionRequest"]
+retired_events = ["SessionEnd"]
 
 for event in events_lifecycle + events_status + events_approval:
     event_configs = data['hooks'].get(event, [])
@@ -207,6 +208,19 @@ for event in events_lifecycle + events_status + events_approval:
         })
     
     data['hooks'][event] = event_configs
+
+for event in retired_events:
+    cleaned = []
+    for config in data['hooks'].get(event, []):
+        sub_hooks = [h for h in config.get("hooks", []) if "devisland-bridge.sh" not in h.get("command", "")]
+        if sub_hooks:
+            updated = dict(config)
+            updated["hooks"] = sub_hooks
+            cleaned.append(updated)
+    if cleaned:
+        data['hooks'][event] = cleaned
+    else:
+        data['hooks'].pop(event, None)
 
 with open(path, 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
@@ -284,7 +298,7 @@ hooks = data.get('hooks', {})
 if not isinstance(hooks, dict):
     hooks = {}
 
-for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent"]:
+for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent", "Notification"]:
     event_configs = hooks.get(event, [])
     if not isinstance(event_configs, list):
         event_configs = []
@@ -312,6 +326,19 @@ for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent"]:
         })
     
     hooks[event] = event_configs
+
+for event in ["AfterTool", "BeforeAgent", "BeforeModel", "BeforeToolSelection", "AfterModel", "PreCompress"]:
+    cleaned = []
+    for config in hooks.get(event, []):
+        sub_hooks = [h for h in config.get("hooks", []) if "devisland-bridge.sh" not in h.get("command", "")]
+        if sub_hooks:
+            updated = dict(config)
+            updated["hooks"] = sub_hooks
+            cleaned.append(updated)
+    if cleaned:
+        hooks[event] = cleaned
+    else:
+        hooks.pop(event, None)
 
 data['hooks'] = hooks
 

@@ -145,7 +145,7 @@ make_codex_event() {
 # ── Gemini CLI 이벤트 빌더 ──────────────────────────────────────────────
 
 make_gemini_event() {
-    local event="${1:-onToolCall}"
+    local event="${1:-BeforeTool}"
     local tool="$2"
     local tool_input="$3"
     make_json event "$event" session_id "$SESSION_ID" \
@@ -169,7 +169,7 @@ interactive_claude() {
         echo "5) 커스텀 알림 (Notification)"
         echo "6) 입력 대기 알림 (idle_prompt)"
         echo "7) 작업 완료 알림 (Stop)"
-        echo "8) 세션 종료 (SessionEnd)"
+        echo "8) 작업 종료 (Stop)"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 그냥 종료"
         read -p "선택: " choice
@@ -246,7 +246,7 @@ interactive_codex() {
                 read -p "도구 입력: " input
                 send_event "$(make_codex_event PermissionRequest "$tool" "$input")" codex ;;
             8)
-                send_event "$(make_json hook_event_name SessionEnd session_id "$SESSION_ID")" codex
+                send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "세션을 종료합니다.")" codex
                 break ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
@@ -373,7 +373,7 @@ case "$COMMAND" in
         TOOL=${1:-"run_shell_command"}
         CMD=${2:-"ls -la"}
         input=$(make_json command "$CMD")
-        send_event "$(make_gemini_event onToolCall "$TOOL" "$input")" gemini ;;
+        send_event "$(make_gemini_event BeforeTool "$TOOL" "$input")" gemini ;;
 
     *) usage ;;
 esac

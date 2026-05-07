@@ -22,21 +22,7 @@ PASSIVE_EVENTS = {
     "PreToolUse",
     "PostToolUse",
     "BeforeTool",
-    "onToolCall",
-    "onSessionStart",
-    "onSessionEnd",
-    "session_start",
-    "session_end",
     "AfterAgent",
-    "AfterModel",
-    "AfterTurn",
-}
-GEMINI_PASSTHROUGH_EVENTS = {
-    "AfterTool",
-    "BeforeAgent",
-    "BeforeModel",
-    "BeforeToolSelection",
-    "PreCompress",
 }
 
 
@@ -86,33 +72,17 @@ def detect_cli_source(payload: dict[str, Any], event: str, cli_source_arg: str) 
             return "claude"
         return "claude"  # 기본 폴백
 
-    if event in {
-        "onToolCall",
-        "BeforeTool",
-        "AfterTool",
-        "BeforeAgent",
-        "AfterAgent",
-        "BeforeModel",
-        "AfterModel",
-        "BeforeToolSelection",
-        "PreCompress",
-    }:
+    if event in {"BeforeTool", "AfterAgent"}:
         return "gemini"
 
     if event in {
-        "onSessionStart",
-        "onSessionEnd",
         "SessionStart",
         "SessionEnd",
         "Notification",
         "Stop",
-        "session_start",
-        "session_end",
     }:
         if "hook_event_name" in payload:
             return "claude"
-        if "decision" in payload or "reason" in payload or "onToolCall" in str(payload):
-            return "gemini"
         if "event" in payload and "hook_event_name" not in payload:
             return "gemini"
         return "claude"
@@ -208,11 +178,6 @@ def main() -> int:
 
     log(f"Raw Payload: {dump(payload)}")
     log(f"Event Detected: {event} (Source: {cli_source})")
-
-    if event in GEMINI_PASSTHROUGH_EVENTS:
-        log(f"Gemini lifecycle event passthrough: {event}")
-        print("{}")
-        return 0
 
     if event not in PASSIVE_EVENTS:
         log(f"Passive event suppressed before app: {event}")

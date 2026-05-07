@@ -207,7 +207,7 @@ final class AppStateTests: XCTestCase {
     }
     
     func testGeminiInteractiveToolAutoApproval() {
-        let expectation = XCTestExpectation(description: "Interactive tool auto-approved")
+        let expectation = XCTestExpectation(description: "Interactive question shown as notification")
         let message = """
         {
             "hook_event_name": "BeforeTool",
@@ -228,8 +228,66 @@ final class AppStateTests: XCTestCase {
         
         wait(for: [expectation], timeout: 1.0)
         XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
         XCTAssertTrue(appState.isNotchExpanded)
-        XCTAssertTrue(appState.currentMessage.contains("터미널"))
+        XCTAssertTrue(appState.currentMessage.contains("how are you?"))
+    }
+
+    func testOnlySourceSpecificEventsBecomeApprovalRequests() {
+        let codexPreToolExpectation = XCTestExpectation(description: "Codex PreToolUse is notification")
+        let claudeBeforeToolExpectation = XCTestExpectation(description: "Claude BeforeTool is notification")
+        let geminiPreToolExpectation = XCTestExpectation(description: "Gemini PreToolUse is notification")
+
+        let codexPreTool = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "codex",
+            "session_id": "codex-pretool",
+            "tool_name": "shell",
+            "tool_input": {"command": "echo hello"}
+        }
+        """
+        appState.handleMessage(codexPreTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            codexPreToolExpectation.fulfill()
+        }
+
+        let claudeBeforeTool = """
+        {
+            "hook_event_name": "BeforeTool",
+            "cli_source": "claude",
+            "session_id": "claude-beforetool",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hello"}
+        }
+        """
+        appState.handleMessage(claudeBeforeTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            claudeBeforeToolExpectation.fulfill()
+        }
+
+        let geminiPreTool = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "gemini",
+            "session_id": "gemini-pretool",
+            "tool_name": "write_file",
+            "tool_input": {"file_path": "test.txt", "content": "hello"}
+        }
+        """
+        appState.handleMessage(geminiPreTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            geminiPreToolExpectation.fulfill()
+        }
+
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        wait(for: [codexPreToolExpectation, claudeBeforeToolExpectation, geminiPreToolExpectation], timeout: 1.0)
+        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
     }
     
     func testMultipleSessions() {
