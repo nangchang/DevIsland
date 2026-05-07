@@ -380,7 +380,7 @@ class AppState: ObservableObject {
         // User-question tools are shown as notifications even when delivered through an approval-capable hook.
         let isStop = stopEvents.contains(normalizedEvent)
         let isApproval = Self.isApprovalEvent(normalizedEvent, for: agentKind) && !isUserQuestionTool
-        let isNotification = !isStop && !isApproval || notificationEvents.contains(normalizedEvent)
+        let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
 
         if isStop {
             guard !sessionId.isEmpty else {
