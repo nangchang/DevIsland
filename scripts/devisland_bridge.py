@@ -22,21 +22,7 @@ PASSIVE_EVENTS = {
     "PreToolUse",
     "PostToolUse",
     "BeforeTool",
-    "onToolCall",
-    "onSessionStart",
-    "onSessionEnd",
-    "session_start",
-    "session_end",
     "AfterAgent",
-    "AfterModel",
-    "AfterTurn",
-}
-GEMINI_PASSTHROUGH_EVENTS = {
-    "AfterTool",
-    "BeforeAgent",
-    "BeforeModel",
-    "BeforeToolSelection",
-    "PreCompress",
 }
 
 
@@ -71,55 +57,6 @@ def event_name(payload: dict[str, Any]) -> str:
     return str(payload.get("hook_event_name", payload.get("event", "PermissionRequest")))
 
 
-def detect_cli_source(payload: dict[str, Any], event: str, cli_source_arg: str) -> str:
-    if cli_source_arg:
-        return cli_source_arg
-
-    if event == "PreToolUse":
-        return "codex"
-
-    if event == "PermissionRequest":
-        # Codex는 tool_name을 사용하고, Claude는 permission_type을 사용하는 경향이 있음
-        if "tool_name" in payload:
-            return "codex"
-        if "permission_type" in payload:
-            return "claude"
-        return "claude"  # 기본 폴백
-
-    if event in {
-        "onToolCall",
-        "BeforeTool",
-        "AfterTool",
-        "BeforeAgent",
-        "AfterAgent",
-        "BeforeModel",
-        "AfterModel",
-        "BeforeToolSelection",
-        "PreCompress",
-    }:
-        return "gemini"
-
-    if event in {
-        "onSessionStart",
-        "onSessionEnd",
-        "SessionStart",
-        "SessionEnd",
-        "Notification",
-        "Stop",
-        "session_start",
-        "session_end",
-    }:
-        if "hook_event_name" in payload:
-            return "claude"
-        if "decision" in payload or "reason" in payload or "onToolCall" in str(payload):
-            return "gemini"
-        if "event" in payload and "hook_event_name" not in payload:
-            return "gemini"
-        return "claude"
-
-    return "claude"
-
-
 def send_to_app(payload: dict[str, Any]) -> str:
     encoded = dump(payload).encode("utf-8")
     with socket.create_connection(("127.0.0.1", 9090), timeout=5) as sock:
@@ -144,15 +81,7 @@ def response_result(raw: str) -> str:
         return "pass"
 
 
-def final_output(
-    *,
-    event: str,
-    result: str,
-    cli_source: str,
-    tool_name: str,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    del tool_name
+def final_output(*, event: str, result: str, cli_source: str) -> dict[str, Any]:
     message = "DevIsland에서 거절되었습니다."
 
     if result == "pass":
@@ -198,21 +127,15 @@ def final_output(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", default="")
+    parser.add_argument("--source", required=True)
     args = parser.parse_args()
 
-    payload = enrich_payload(load_payload(), args.source)
+    cli_source = args.source
+    payload = enrich_payload(load_payload(), cli_source)
     event = event_name(payload)
-    tool_name = str(payload.get("tool_name", ""))
-    cli_source = detect_cli_source(payload, event, args.source)
 
     log(f"Raw Payload: {dump(payload)}")
     log(f"Event Detected: {event} (Source: {cli_source})")
-
-    if event in GEMINI_PASSTHROUGH_EVENTS:
-        log(f"Gemini lifecycle event passthrough: {event}")
-        print("{}")
-        return 0
 
     if event not in PASSIVE_EVENTS:
         log(f"Passive event suppressed before app: {event}")
@@ -229,13 +152,7 @@ def main() -> int:
 
     log(f"Result: {result}")
 
-    output = final_output(
-        event=event,
-        result=result,
-        cli_source=cli_source,
-        tool_name=tool_name,
-        payload=payload,
-    )
+    output = final_output(event=event, result=result, cli_source=cli_source)
     final = dump(output)
     log(f"Final Output: {final}")
     print(final)

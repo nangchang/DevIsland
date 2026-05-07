@@ -7,6 +7,7 @@ import AppKit
 struct PendingRequest: Identifiable {
     let id = UUID()
     let sessionId: String
+    let agentKind: BuddyKind
     let eventName: String
     let toolName: String
     let message: String
@@ -108,7 +109,17 @@ class AppState: ObservableObject {
         static let emulateGeminiInteractiveMode = "emulateGeminiInteractiveMode"
     }
 
-    static let approvalEvents = ["permissionrequest", "beforetool", "ontoolcall", "on_tool_call", "onbeforetool"]
+    private static let approvalEventsByAgent: [BuddyKind: Set<String>] = [
+        .claudeCode: ["permissionrequest"],
+        .codex: ["permissionrequest"],
+        .gemini: ["beforetool"]
+    ]
+    private static let userQuestionTools: Set<String> = [
+        "ask_user",
+        "askuser",
+        "request_user_input",
+        "requestuserinput"
+    ]
     typealias FrontmostCheck = (_ appName: String?, _ tty: String?, _ windowId: String?, _ tabIndex: String?) -> Bool
 
     private let userDefaults: UserDefaults
@@ -356,18 +367,20 @@ class AppState: ObservableObject {
 
         if displayToolName.isEmpty { displayToolName = toolName }
         let normalizedEvent = normalizedHookEventName(event)
-        let stopEvents = ["exit", "shutdown", "sessionend", "onsessionend", "session_end", "on_session_end"]
+        let stopEvents = ["exit", "shutdown", "sessionend"]
         let notificationEvents = [
             "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
-            "onsessionstart", "session_start", "on_session_start", "startup", "init", "onnotification",
-            "afteragent", "aftermodel", "afterturn", "stop"
+            "startup", "init", "afteragent"
         ]
-        // approval: Claude/Codex의 PermissionRequest + Gemini의 BeforeTool
-        // Codex의 PreToolUse는 진행 상황 알림용으로만 사용하고, 실제 차단은 PermissionRequest에서 수행
+        let normalizedToolName = normalizedHookEventName(toolName)
+        let isUserQuestionTool = Self.userQuestionTools.contains(normalizedToolName)
+        // approval:
+        // - Claude/Codex: PermissionRequest only
+        // - Gemini: BeforeTool only
+        // User-question tools are shown as notifications even when delivered through an approval-capable hook.
         let isStop = stopEvents.contains(normalizedEvent)
-        let isCodexPreToolNotification = (agentKind == .codex && normalizedEvent == "pretooluse")
-        let isNotification = notificationEvents.contains(normalizedEvent) || isCodexPreToolNotification
-        let isApproval = AppState.approvalEvents.contains(normalizedEvent)
+        let isApproval = Self.isApprovalEvent(normalizedEvent, for: agentKind) && !isUserQuestionTool
+        let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
 
         if isStop {
             guard !sessionId.isEmpty else {
@@ -424,14 +437,14 @@ class AppState: ObservableObject {
             }
             let fullSessionId = sessionId
             let hasPendingForSession = self.pendingQueue.contains { $0.sessionId == fullSessionId }
-            let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "onsessionstart" || normalizedEvent == "session_start" || normalizedEvent == "startup" || normalizedEvent == "init")
+            let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "startup" || normalizedEvent == "init")
             
             // [UX] 에이전트 작업 완료 대기 상태(Idle Prompt) 판별 로직
             // - Claude Code: notification 훅에 idle_prompt 또는 input_required 타입으로 전달됨
             // - Gemini CLI: afteragent, aftermodel 등 턴 종료 시 발생하는 훅을 대기 상태로 간주
             // - Codex CLI: posttooluse를 쓰면 툴 연속 자동 실행 시 스팸 알림이 생기므로 제외함. 대신 stop 이벤트를 통해 완료됨을 알림
             let isIdlePrompt = (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
-                               (normalizedEvent == "afteragent" || normalizedEvent == "aftermodel" || normalizedEvent == "afterturn")
+                               normalizedEvent == "afteragent"
             
             let sessionMessage: String
             if isStartEvent {
@@ -467,6 +480,7 @@ class AppState: ObservableObject {
                 
                 // 알림 확장 로직 (질문이나 작업 완료 시)
                 let isInformational = (normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
+                                     isUserQuestionTool ||
                                      (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode))
                 
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
@@ -512,6 +526,7 @@ class AppState: ObservableObject {
 
         let request = PendingRequest(
             sessionId: sessionId,
+            agentKind: agentKind,
             eventName: event,
             toolName: displayToolName,
             message: displayMsg,
@@ -716,6 +731,10 @@ class AppState: ObservableObject {
             .replacingOccurrences(of: "-", with: "")
     }
 
+    private static func isApprovalEvent(_ normalizedEvent: String, for agentKind: BuddyKind) -> Bool {
+        approvalEventsByAgent[agentKind]?.contains(normalizedEvent) == true
+    }
+
     private func displayMessage(for toolName: String, toolInput: [String: Any]?, json: [String: Any], eventName: String) -> String {
         if normalizedHookEventName(eventName) == "posttooluse" {
             return postToolMessage(from: json["tool_response"] as? [String: Any])
@@ -885,10 +904,14 @@ class AppState: ObservableObject {
 
         // 2. hook_event_name 또는 event로 CLI 종류를 추측
         let event = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? ""
-        switch event {
-        case "BeforeTool", "onToolCall":   return .gemini
-        case "PreToolUse":                 return .codex
-        case "PermissionRequest":
+        let normalizedEvent = event
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+        switch normalizedEvent {
+        case "beforetool":                 return .gemini
+        case "pretooluse":                 return .codex
+        case "permissionrequest":
             if json["tool_name"] != nil { return .codex }
             if json["permission_type"] != nil { return .claudeCode }
             return .claudeCode // 폴백
@@ -996,6 +1019,45 @@ class AppState: ObservableObject {
         }
     }
 
+    func dismissSession(_ sessionId: String) {
+        DispatchQueue.main.async {
+            let removedRequests = self.pendingQueue.filter { $0.sessionId == sessionId }
+            removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
+            self.pendingQueue.removeAll { $0.sessionId == sessionId }
+            self.pendingItems.removeAll { $0.sessionId == sessionId }
+            self.pendingCount = self.pendingQueue.count
+            self.sessionAutoApproveTypes.removeValue(forKey: sessionId)
+            self.activeSessions.removeAll { $0.id == sessionId }
+
+            if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
+                self.currentResponseHandler?("{\"response\": \"pass\"}")
+                self.currentResponseHandler = nil
+                self.isShowingRequest = false
+                self.showingRequestId = nil
+                self.timeoutTimer?.invalidate()
+                self.timeoutProgress = 1.0
+                self.currentSessionId = ""
+                self.currentToolName = ""
+                self.currentEventName = ""
+                self.currentMessage = ""
+            }
+
+            if self.selectedSessionId == sessionId {
+                self.selectedSessionId = self.activeSessions.first?.id
+            }
+
+            if self.pendingQueue.isEmpty {
+                if self.activeSessions.isEmpty {
+                    self.isNotchExpanded = false
+                    self.selectedSessionId = nil
+                }
+                self.syncDisplayToSelectedSession()
+            } else if self.currentResponseHandler == nil {
+                self.showNextRequest()
+            }
+        }
+    }
+
     private func showNextRequest() {
         discardInvalidPendingRequests()
 
@@ -1063,7 +1125,7 @@ class AppState: ObservableObject {
     }
 
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
-        return AppState.approvalEvents.contains(normalizedHookEventName(request.eventName))
+        return Self.isApprovalEvent(normalizedHookEventName(request.eventName), for: request.agentKind)
             && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 
