@@ -127,10 +127,10 @@ def final_output(*, event: str, result: str, cli_source: str) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", default="")
+    parser.add_argument("--source", required=True)
     args = parser.parse_args()
 
-    cli_source = args.source or "claude"
+    cli_source = args.source
     payload = enrich_payload(load_payload(), cli_source)
     event = event_name(payload)
 
