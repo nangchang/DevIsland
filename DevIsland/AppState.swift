@@ -370,9 +370,9 @@ class AppState: ObservableObject {
         let stopEvents = ["exit", "shutdown", "sessionend"]
         let notificationEvents = [
             "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
-            "startup", "init", "afteragent", "stop"
+            "startup", "init", "afteragent"
         ]
-        let normalizedToolName = toolName.lowercased().replacingOccurrences(of: "-", with: "_")
+        let normalizedToolName = normalizedHookEventName(toolName)
         let isUserQuestionTool = Self.userQuestionTools.contains(normalizedToolName)
         // approval:
         // - Claude/Codex: PermissionRequest only
@@ -380,7 +380,7 @@ class AppState: ObservableObject {
         // User-question tools are shown as notifications even when delivered through an approval-capable hook.
         let isStop = stopEvents.contains(normalizedEvent)
         let isApproval = Self.isApprovalEvent(normalizedEvent, for: agentKind) && !isUserQuestionTool
-        let isNotification = !isStop && !isApproval || notificationEvents.contains(normalizedEvent)
+        let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
 
         if isStop {
             guard !sessionId.isEmpty else {
@@ -1030,6 +1030,7 @@ class AppState: ObservableObject {
             self.activeSessions.removeAll { $0.id == sessionId }
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
+                self.currentResponseHandler?("{\"response\": \"pass\"}")
                 self.currentResponseHandler = nil
                 self.isShowingRequest = false
                 self.showingRequestId = nil
