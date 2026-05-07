@@ -49,6 +49,9 @@ def enrich_payload(payload: dict[str, Any], cli_source_arg: str) -> dict[str, An
     payload["terminal_tty"] = os.environ.get("TERM_TTY", "")
     payload["terminal_window_id"] = os.environ.get("TERM_WINDOW_ID", "")
     payload["terminal_tab_index"] = os.environ.get("TERM_TAB_INDEX", "")
+    payload["terminal_tmux_pane"] = os.environ.get("TERM_TMUX_PANE", "")
+    payload["terminal_tmux_socket"] = os.environ.get("TERM_TMUX_SOCKET", "")
+    payload["terminal_tmux_client"] = os.environ.get("TERM_TMUX_CLIENT", "")
     payload["cli_source"] = cli_source_arg
     return payload
 

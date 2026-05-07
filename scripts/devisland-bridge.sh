@@ -22,9 +22,12 @@ fi
 
 # 현재 터미널 창/탭 타이틀 추출 (TTY로 정확한 창/탭 특정)
 TERM_TITLE="Terminal"
-TERM_APP="${TERM_PROGRAM:-}"
+TERM_APP=""
 TERM_WINDOW_ID=""
 TERM_TAB_INDEX=""
+TERM_TMUX_SOCKET=""
+TERM_TMUX_CLIENT=""
+TERM_TMUX_PANE="${TMUX_PANE:-}"
 
 current_tty() {
   local tty_path
@@ -53,40 +56,105 @@ current_tty() {
 }
 
 CURRENT_TTY=$(current_tty)
+CURRENT_TTY_NAME="${CURRENT_TTY##*/}"
 
-if [ "$TERM_PROGRAM" = "iTerm.app" ]; then
-  TERM_APP="iTerm"
-  if [ -n "$CURRENT_TTY" ]; then
-    TERM_TITLE=$(osascript << ASEOF
+# tmux 안에서는 inner PTY 대신 outer(client) TTY 사용
+# 터미널 앱(iTerm/Terminal)은 outer TTY만 알고 있기 때문에
+# inner PTY로는 올바른 창/탭을 찾을 수 없음
+if [ -n "$TMUX" ]; then
+  TERM_TMUX_SOCKET="${TMUX%%,*}"
+  CLIENT_TTY=""
+  TERM_TMUX_CLIENT=""
+  while IFS='|' read -r client_name client_tty client_pane; do
+    if [ "$client_pane" = "$TERM_TMUX_PANE" ]; then
+      TERM_TMUX_CLIENT="$client_name"
+      CLIENT_TTY="$client_tty"
+      break
+    fi
+  done < <(tmux list-clients -F '#{client_name}|#{client_tty}|#{pane_id}' 2>/dev/null)
+
+  if [ -z "$CLIENT_TTY" ]; then
+    CLIENT_TTY=$(tmux display-message -p '#{client_tty}' 2>/dev/null)
+    TERM_TMUX_CLIENT=$(tmux display-message -p '#{client_name}' 2>/dev/null)
+  fi
+  if [ -n "$CLIENT_TTY" ]; then
+    CURRENT_TTY="$CLIENT_TTY"
+    CURRENT_TTY_NAME="${CURRENT_TTY##*/}"
+  fi
+fi
+
+if [ -n "$CURRENT_TTY" ] && (pgrep -x iTerm2 >/dev/null 2>&1 || pgrep -x iTerm >/dev/null 2>&1); then
+  ITERM_INFO=$(osascript << ASEOF
 tell application "iTerm"
   set ttyPath to "$CURRENT_TTY"
+  set ttyName to "$CURRENT_TTY_NAME"
   repeat with aWindow in windows
     repeat with aTab in tabs of aWindow
+      set tabIndex to 0
+      repeat with candidateTab in tabs of aWindow
+        set tabIndex to tabIndex + 1
+        if candidateTab is aTab then exit repeat
+      end repeat
       repeat with aSession in sessions of aTab
-        if tty of aSession is ttyPath then
-          return name of aSession
+        set sessionTTY to tty of aSession
+        if sessionTTY is ttyPath or sessionTTY is ttyName then
+          return (name of aSession) & ":::" & (id of aWindow as text) & ":::" & (tabIndex as text)
         end if
       end repeat
     end repeat
   end repeat
-  return name of current session of current window
+  return ""
 end tell
 ASEOF
-    2>/dev/null || echo "iTerm")
-  else
-    TERM_TITLE=$(osascript -e 'tell application "iTerm" to get name of current session of current window' 2>/dev/null || echo "iTerm")
+  2>/dev/null)
+  if [ -n "$ITERM_INFO" ]; then
+    TERM_APP="iTerm"
+    TERM_TITLE=$(printf '%s' "$ITERM_INFO" | awk -F ':::' '{print $1}')
+    TERM_WINDOW_ID=$(printf '%s' "$ITERM_INFO" | awk -F ':::' '{print $2}')
+    TERM_TAB_INDEX=$(printf '%s' "$ITERM_INFO" | awk -F ':::' '{print $3}')
   fi
-elif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
+fi
+
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && pgrep -x Terminal >/dev/null 2>&1; then
+  TERM_INFO=$(osascript << ASEOF
+tell application "Terminal"
+  set ttyPath to "$CURRENT_TTY"
+  set ttyName to "$CURRENT_TTY_NAME"
+  repeat with aWin in windows
+    set tabIndex to 0
+    repeat with aTab in tabs of aWin
+      set tabIndex to tabIndex + 1
+      set tabTTY to tty of aTab
+      if tabTTY is ttyPath or tabTTY is ttyName then
+        return (name of aWin) & ":::" & (id of aWin as text) & ":::" & (tabIndex as text)
+      end if
+    end repeat
+  end repeat
+  return ""
+end tell
+ASEOF
+  2>/dev/null)
+  if [ -n "$TERM_INFO" ]; then
+    TERM_APP="Terminal"
+    TERM_TITLE=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $1}')
+    TERM_WINDOW_ID=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $2}')
+    TERM_TAB_INDEX=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $3}')
+  fi
+fi
+
+if [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
   TERM_APP="Terminal"
   if [ -n "$CURRENT_TTY" ]; then
     TERM_INFO=$(osascript << ASEOF
 tell application "Terminal"
   set ttyPath to "$CURRENT_TTY"
+  set ttyName to "$CURRENT_TTY_NAME"
   repeat with aWin in windows
     set tabIndex to 0
     repeat with aTab in tabs of aWin
       set tabIndex to tabIndex + 1
-      if tty of aTab is ttyPath then
+      set tabTTY to tty of aTab
+      if tabTTY is ttyPath or tabTTY is ttyName then
         return (name of aWin) & ":::" & (id of aWin as text) & ":::" & (tabIndex as text)
       end if
     end repeat
@@ -107,6 +175,11 @@ elif [ -n "$GHOSTTY_BIN_DIR" ]; then
 elif [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
   TERM_APP="Warp"
   TERM_TITLE="Warp"
+fi
+
+if [ -z "$TERM_APP" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ignoring non-terminal hook source: TERM_PROGRAM=${TERM_PROGRAM:-} TERM_TTY=${CURRENT_TTY:-}" >> /tmp/DevIsland.bridge.log
+  exit 0
 fi
 
 # 타이틀을 얻지 못한 경우 현재 디렉토리 이름으로 폴백 (루트 '/' 제외)
@@ -134,6 +207,9 @@ printf "%s" "$PAYLOAD" \
     TERM_TTY="$CURRENT_TTY" \
     TERM_WINDOW_ID="$TERM_WINDOW_ID" \
     TERM_TAB_INDEX="$TERM_TAB_INDEX" \
+    TERM_TMUX_PANE="$TERM_TMUX_PANE" \
+    TERM_TMUX_SOCKET="$TERM_TMUX_SOCKET" \
+    TERM_TMUX_CLIENT="$TERM_TMUX_CLIENT" \
     python3 "$PY_BRIDGE" --source "$CLI_SOURCE_ARG"
 
 exit 0
