@@ -24,6 +24,8 @@ struct PendingItem: Identifiable, Equatable {
     let terminalWindowId: String
     let terminalTabIndex: String
     let terminalTmuxPane: String
+    let terminalTmuxSocket: String
+    let terminalTmuxClient: String
     let receivedAt: Date
 }
 
@@ -49,6 +51,8 @@ struct ActiveSession: Identifiable, Equatable {
     var terminalWindowId: String
     var terminalTabIndex: String
     var terminalTmuxPane: String
+    var terminalTmuxSocket: String
+    var terminalTmuxClient: String
     var lastToolName: String
     var lastEventName: String
     var lastMessage: String
@@ -122,7 +126,15 @@ class AppState: ObservableObject {
         "request_user_input",
         "requestuserinput"
     ]
-    typealias FrontmostCheck = (_ appName: String?, _ tty: String?, _ windowId: String?, _ tabIndex: String?, _ tmuxPane: String?) -> Bool
+    typealias FrontmostCheck = (
+        _ appName: String?,
+        _ tty: String?,
+        _ windowId: String?,
+        _ tabIndex: String?,
+        _ tmuxPane: String?,
+        _ tmuxSocket: String?,
+        _ tmuxClient: String?
+    ) -> Bool
 
     private let userDefaults: UserDefaults
     private let frontmostCheck: FrontmostCheck
@@ -321,6 +333,8 @@ class AppState: ObservableObject {
         var terminalWindowId = ""
         var terminalTabIndex = ""
         var terminalTmuxPane = ""
+        var terminalTmuxSocket = ""
+        var terminalTmuxClient = ""
         var displayMsg = ""
         var notificationType = ""
         var isPlanAction = false
@@ -338,6 +352,8 @@ class AppState: ObservableObject {
                 terminalWindowId = json["terminal_window_id"] as? String ?? ""
                 terminalTabIndex = json["terminal_tab_index"] as? String ?? ""
                 terminalTmuxPane = json["terminal_tmux_pane"] as? String ?? ""
+                terminalTmuxSocket = json["terminal_tmux_socket"] as? String ?? ""
+                terminalTmuxClient = json["terminal_tmux_client"] as? String ?? ""
                 notificationType = json["notification_type"] as? String ?? ""
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
                 if Self.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
@@ -470,6 +486,8 @@ class AppState: ObservableObject {
                 terminalWindowId: terminalWindowId,
                 terminalTabIndex: terminalTabIndex,
                 terminalTmuxPane: terminalTmuxPane,
+                terminalTmuxSocket: terminalTmuxSocket,
+                terminalTmuxClient: terminalTmuxClient,
                 toolName: displayToolName,
                 eventName: event,
                 message: sessionMessage,
@@ -590,7 +608,15 @@ class AppState: ObservableObject {
             if isInteractive {
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    guard !self.frontmostCheck(terminalApp, terminalTTY, terminalWindowId, terminalTabIndex, terminalTmuxPane) else { return }
+                    guard !self.frontmostCheck(
+                        terminalApp,
+                        terminalTTY,
+                        terminalWindowId,
+                        terminalTabIndex,
+                        terminalTmuxPane,
+                        terminalTmuxSocket,
+                        terminalTmuxClient
+                    ) else { return }
                     self.isNotchExpanded = true
                     self.isExpandingFromRequest = true
                     self.currentSessionId = sessionId
@@ -630,6 +656,8 @@ class AppState: ObservableObject {
                         terminalWindowId: terminalWindowId,
                         terminalTabIndex: terminalTabIndex,
                         terminalTmuxPane: terminalTmuxPane,
+                        terminalTmuxSocket: terminalTmuxSocket,
+                        terminalTmuxClient: terminalTmuxClient,
                         toolName: displayToolName,
                         eventName: event,
                         // Interactive 툴인 경우 사용자에게 다음 행동 가이드를 제공
@@ -664,7 +692,9 @@ class AppState: ObservableObject {
                 terminalTTY,
                 terminalWindowId,
                 terminalTabIndex,
-                terminalTmuxPane
+                terminalTmuxPane,
+                terminalTmuxSocket,
+                terminalTmuxClient
             )
 
             if isFrontmost {
@@ -680,6 +710,8 @@ class AppState: ObservableObject {
                         terminalWindowId: terminalWindowId,
                         terminalTabIndex: terminalTabIndex,
                         terminalTmuxPane: terminalTmuxPane,
+                        terminalTmuxSocket: terminalTmuxSocket,
+                        terminalTmuxClient: terminalTmuxClient,
                         toolName: displayToolName,
                         eventName: event,
                         message: displayMsg,
@@ -701,6 +733,8 @@ class AppState: ObservableObject {
                 terminalWindowId: terminalWindowId,
                 terminalTabIndex: terminalTabIndex,
                 terminalTmuxPane: terminalTmuxPane,
+                terminalTmuxSocket: terminalTmuxSocket,
+                terminalTmuxClient: terminalTmuxClient,
                 receivedAt: request.receivedAt
             )
             self.pendingItems.append(newItem)
@@ -716,6 +750,8 @@ class AppState: ObservableObject {
                     terminalWindowId: terminalWindowId,
                     terminalTabIndex: terminalTabIndex,
                     terminalTmuxPane: terminalTmuxPane,
+                    terminalTmuxSocket: terminalTmuxSocket,
+                    terminalTmuxClient: terminalTmuxClient,
                     toolName: request.toolName,
                     eventName: request.eventName,
                     message: request.message,
@@ -948,6 +984,8 @@ class AppState: ObservableObject {
         terminalWindowId: String,
         terminalTabIndex: String,
         terminalTmuxPane: String,
+        terminalTmuxSocket: String,
+        terminalTmuxClient: String,
         toolName: String,
         eventName: String,
         message: String,
@@ -978,6 +1016,12 @@ class AppState: ObservableObject {
             if !terminalTmuxPane.isEmpty {
                 activeSessions[index].terminalTmuxPane = terminalTmuxPane
             }
+            if !terminalTmuxSocket.isEmpty {
+                activeSessions[index].terminalTmuxSocket = terminalTmuxSocket
+            }
+            if !terminalTmuxClient.isEmpty {
+                activeSessions[index].terminalTmuxClient = terminalTmuxClient
+            }
             activeSessions[index].lastToolName = toolName
             activeSessions[index].lastEventName = eventName
             if !preserveMessage {
@@ -999,6 +1043,8 @@ class AppState: ObservableObject {
                 terminalWindowId: terminalWindowId,
                 terminalTabIndex: terminalTabIndex,
                 terminalTmuxPane: terminalTmuxPane,
+                terminalTmuxSocket: terminalTmuxSocket,
+                terminalTmuxClient: terminalTmuxClient,
                 lastToolName: toolName,
                 lastEventName: eventName,
                 lastMessage: message,
@@ -1127,7 +1173,9 @@ class AppState: ObservableObject {
             session?.terminalTTY,
             session?.terminalWindowId,
             session?.terminalTabIndex,
-            session?.terminalTmuxPane
+            session?.terminalTmuxPane,
+            session?.terminalTmuxSocket,
+            session?.terminalTmuxClient
         )
     }
 
@@ -1317,7 +1365,9 @@ class AppState: ObservableObject {
             tty: session?.terminalTTY,
             windowId: session?.terminalWindowId,
             tabIndex: session?.terminalTabIndex,
-            tmuxPane: session?.terminalTmuxPane
+            tmuxPane: session?.terminalTmuxPane,
+            tmuxSocket: session?.terminalTmuxSocket,
+            tmuxClient: session?.terminalTmuxClient
         )
     }
 }

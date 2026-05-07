@@ -13,7 +13,9 @@ class TerminalFocuser {
         tty: String?,
         windowId: String?,
         tabIndex: String?,
-        tmuxPane: String?
+        tmuxPane: String?,
+        tmuxSocket: String?,
+        tmuxClient: String?
     ) -> Bool {
         let targetName = normalizedAppName(appName)
         let match = targetName.flatMap { name in
@@ -28,14 +30,6 @@ class TerminalFocuser {
         let isActive = frontBundleId == match.bundleId
         print("[DevIsland] isSessionFrontmost: \(match.name) frontmost=\(frontBundleId ?? "nil") expected=\(match.bundleId) isActive=\(isActive)")
         guard isActive else { return false }
-
-        if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
-            let currentPane = getShellOutput("tmux display-message -p '#{pane_id}'")
-            if !currentPane.isEmpty && currentPane != tmuxPane {
-                print("[DevIsland] isSessionFrontmost: tmux pane mismatch (current=\(currentPane) expected=\(tmuxPane))")
-                return false
-            }
-        }
 
         let script = frontmostCheckScript(appName: match.name, tty: tty, windowId: windowId, tabIndex: tabIndex)
         var error: NSDictionary?
@@ -55,12 +49,36 @@ class TerminalFocuser {
         }
         
         print("[DevIsland] isSessionFrontmost: app=\(match.name) tty=\(tty ?? "nil") → \(passed ? "YES" : "NO") (\(resultStr))")
-        return passed
+        guard passed else { return false }
+
+        if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
+            guard isValidTmuxPane(tmuxPane) else {
+                print("[DevIsland] isSessionFrontmost: invalid tmux pane format: \(tmuxPane)")
+                return false
+            }
+
+            let currentPane = currentTmuxPane(socket: tmuxSocket, client: tmuxClient)
+            guard !currentPane.isEmpty else {
+                print("[DevIsland] isSessionFrontmost: tmux pane unavailable for client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
+                return false
+            }
+
+            if currentPane == tmuxPane {
+                return true
+            } else {
+                print("[DevIsland] isSessionFrontmost: tmux pane mismatch (current=\(currentPane) expected=\(tmuxPane))")
+                return false
+            }
+        }
+
+        return true
     }
 
     private static func frontmostCheckScript(appName: String, tty: String?, windowId: String?, tabIndex: String?) -> String {
         let ttyLiteral = appleScriptLiteral(tty ?? "")
         let ttyNameLiteral = appleScriptLiteral((tty ?? "").split(separator: "/").last.map(String.init) ?? "")
+        let windowIdLiteral = appleScriptLiteral(windowId ?? "")
+        let tabIndexLiteral = appleScriptLiteral(tabIndex ?? "")
 
         switch appName {
         case "iTerm":
@@ -69,7 +87,20 @@ class TerminalFocuser {
               try
                 set ttyPath to \(ttyLiteral)
                 set ttyName to \(ttyNameLiteral)
+                set wantedWindowIdText to \(windowIdLiteral)
+                set wantedTabIndexText to \(tabIndexLiteral)
                 set sess to current session of current window
+                if wantedWindowIdText is not "" and wantedTabIndexText is not "" then
+                  set fwId to (id of current window as text)
+                  set selectedTabNumber to 0
+                  repeat with aTab in tabs of current window
+                    set selectedTabNumber to selectedTabNumber + 1
+                    if aTab is current tab of current window then exit repeat
+                  end repeat
+                  if fwId is wantedWindowIdText and (selectedTabNumber as text) is wantedTabIndexText then
+                    if ttyPath is "" or tty of sess is ttyPath or tty of sess is ttyName then return "true"
+                  end if
+                end if
                 if (ttyPath is not "" and (tty of sess is ttyPath or tty of sess is ttyName)) then return "true"
               end try
               return "false"
@@ -101,33 +132,123 @@ class TerminalFocuser {
         }
     }
 
-    private static func getShellOutput(_ command: String) -> String {
+    private static func getProcessOutput(executable: URL, arguments: [String]) -> String {
         let process = Process()
         let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-l", "-c", command]
+        process.executableURL = executable
+        process.arguments = arguments
         process.standardOutput = pipe
-        
+        process.standardError = Pipe()
+
         do {
             try process.run()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return "" }
             return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         } catch {
+            print("[DevIsland] Failed to run process: \(executable.path) \(arguments.joined(separator: " ")), error: \(error)")
             return ""
         }
     }
 
-    private static func runShellCommand(_ command: String) {
+    private static func runProcess(executable: URL, arguments: [String]) -> Bool {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-l", "-c", command]
-        
+        process.executableURL = executable
+        process.arguments = arguments
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
         do {
             try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
         } catch {
-            print("[DevIsland] Failed to run shell command: \(command), error: \(error)")
+            print("[DevIsland] Failed to run process: \(executable.path) \(arguments.joined(separator: " ")), error: \(error)")
+            return false
         }
+    }
+
+    private static func tmuxExecutableURL() -> URL {
+        let paths = ["/opt/homebrew/bin/tmux", "/usr/local/bin/tmux", "/usr/bin/tmux"]
+        if let path = paths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return URL(fileURLWithPath: path)
+        }
+        return URL(fileURLWithPath: "/usr/bin/env")
+    }
+
+    private static func tmuxArguments(socket: String?, command: [String]) -> [String] {
+        let executable = tmuxExecutableURL().path
+        var arguments = executable == "/usr/bin/env" ? ["tmux"] : []
+        if let socket, isValidTmuxSocket(socket) {
+            arguments += ["-S", socket]
+        }
+        arguments += command
+        return arguments
+    }
+
+    private static func isValidTmuxPane(_ pane: String) -> Bool {
+        pane.range(of: #"^%\d+$"#, options: .regularExpression) != nil
+    }
+
+    private static func isValidTmuxSocket(_ socket: String) -> Bool {
+        socket.hasPrefix("/") && !socket.contains("\u{0}")
+    }
+
+    private static func isValidTmuxClient(_ client: String) -> Bool {
+        !client.isEmpty && !client.contains("\u{0}")
+    }
+
+    private static func currentTmuxPane(socket: String?, client: String?) -> String {
+        let executable = tmuxExecutableURL()
+        var command = ["display-message", "-p"]
+        if let client, isValidTmuxClient(client) {
+            command += ["-c", client]
+        }
+        command.append("#{pane_id}")
+        return getProcessOutput(
+            executable: executable,
+            arguments: tmuxArguments(socket: socket, command: command)
+        )
+    }
+
+    private static func tmuxFormat(socket: String?, target: String, format: String) -> String {
+        getProcessOutput(
+            executable: tmuxExecutableURL(),
+            arguments: tmuxArguments(socket: socket, command: ["display-message", "-p", "-t", target, format])
+        )
+    }
+
+    @discardableResult
+    private static func switchTmuxClient(socket: String?, client: String?, pane: String) -> Bool {
+        guard isValidTmuxPane(pane) else {
+            print("[DevIsland] focusTerminal: invalid tmux pane format: \(pane)")
+            return false
+        }
+
+        let executable = tmuxExecutableURL()
+        let targetSession = tmuxFormat(socket: socket, target: pane, format: "#{session_id}")
+        let selectWindowSucceeded = runProcess(
+            executable: executable,
+            arguments: tmuxArguments(socket: socket, command: ["select-window", "-t", pane])
+        )
+        let selectPaneSucceeded = runProcess(
+            executable: executable,
+            arguments: tmuxArguments(socket: socket, command: ["select-pane", "-t", pane])
+        )
+
+        var switchCommand = ["switch-client"]
+        if let client, isValidTmuxClient(client) {
+            switchCommand += ["-c", client]
+        }
+        switchCommand += ["-t", targetSession.isEmpty ? pane : targetSession]
+
+        let switchSucceeded = runProcess(
+            executable: executable,
+            arguments: tmuxArguments(socket: socket, command: switchCommand)
+        )
+
+        return selectWindowSucceeded && selectPaneSucceeded && switchSucceeded
     }
 
     static func focusTerminal(
@@ -136,7 +257,9 @@ class TerminalFocuser {
         tty: String? = nil,
         windowId: String? = nil,
         tabIndex: String? = nil,
-        tmuxPane: String? = nil
+        tmuxPane: String? = nil,
+        tmuxSocket: String? = nil,
+        tmuxClient: String? = nil
     ) {
         let targetName = normalizedAppName(appName)
         let match = targetName.flatMap { name in
@@ -144,11 +267,6 @@ class TerminalFocuser {
         } ?? candidates.first(where: {
             !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
         })
-
-        if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
-            print("[DevIsland] tmux pane detected: \(tmuxPane), switching...")
-            runShellCommand("tmux select-pane -t \(tmuxPane)")
-        }
 
         guard let match else { return }
 
@@ -159,6 +277,10 @@ class TerminalFocuser {
                 .executeAndReturnError(&error)
             if let error {
                 print("[DevIsland] terminal focus AppleScript error: \(error)")
+            }
+            if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
+                print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
+                _ = switchTmuxClient(socket: tmuxSocket, client: tmuxClient, pane: tmuxPane)
             }
         }
     }
@@ -193,13 +315,33 @@ class TerminalFocuser {
               set ttyPath to \(ttyLiteral)
               set ttyName to \(ttyNameLiteral)
               set wantedTitle to \(titleLiteral)
+              set wantedWindowIdText to \(windowIdLiteral)
+              set wantedTabIndexText to \(tabIndexLiteral)
+              if wantedWindowIdText is not "" and wantedTabIndexText is not "" then
+                try
+                  repeat with aWindow in windows
+                    if (id of aWindow as text) is wantedWindowIdText then
+                      set aTab to tab (wantedTabIndexText as integer) of aWindow
+                      select aWindow
+                      select aTab
+                      try
+                        select current session of aTab
+                      end try
+                      activate
+                      return
+                    end if
+                  end repeat
+                end try
+              end if
               repeat with aWindow in windows
                 repeat with aTab in tabs of aWindow
                   repeat with aSession in sessions of aTab
                     set sessionTTY to tty of aSession
                     if (ttyPath is not "" and (sessionTTY is ttyPath or sessionTTY is ttyName)) or (wantedTitle is not "" and name of aSession is wantedTitle) then
-                      set index of aWindow to 1
+                      select aWindow
                       select aTab
+                      select aSession
+                      activate
                       return
                     end if
                   end repeat
