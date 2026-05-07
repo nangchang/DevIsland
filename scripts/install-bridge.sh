@@ -129,13 +129,15 @@ for key, config in [
     ('SessionEnd',        lifecycle_config),
     ('Notification',      lifecycle_config),
     ('Stop',              lifecycle_config),
+    ('PreToolUse',        lifecycle_config),
+    ('PostToolUse',       lifecycle_config),
     ('PermissionRequest', approval_config),
 ]:
     data['hooks'].setdefault(key, [])
     data['hooks'][key] = remove_bridge_hooks(data['hooks'][key])
     data['hooks'][key].append(config)
 
-for key in ['SubagentStop', 'PreToolUse', 'PostToolUse', 'PreCompact', 'StopFailure']:
+for key in ['SubagentStop', 'PreCompact', 'StopFailure']:
     entries = remove_bridge_hooks(data['hooks'].get(key, []))
     if entries:
         data['hooks'][key] = entries

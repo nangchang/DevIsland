@@ -382,10 +382,12 @@ enum BridgeInstaller {
             ("SessionEnd",        lifecycleConfig),
             ("Notification",      lifecycleConfig),
             ("Stop",              lifecycleConfig),
+            ("PreToolUse",        lifecycleConfig),
+            ("PostToolUse",       lifecycleConfig),
             ("PermissionRequest", approvalConfig),
         ]
         let retiredEntries = [
-            "SubagentStop", "PreToolUse", "PostToolUse", "PreCompact", "StopFailure"
+            "SubagentStop", "PreCompact", "StopFailure"
         ]
 
         func removingBridgeHooks(from list: [[String: Any]]) -> [[String: Any]] {

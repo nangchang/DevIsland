@@ -289,6 +289,48 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
     }
+
+    func testClaudeToolLifecycleEventsAreStatusNotifications() {
+        let preToolExpectation = XCTestExpectation(description: "Claude PreToolUse is notification")
+        let postToolExpectation = XCTestExpectation(description: "Claude PostToolUse is notification")
+
+        let preTool = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "claude",
+            "session_id": "claude-lifecycle",
+            "tool_name": "Bash",
+            "tool_input": {"command": "swift test"}
+        }
+        """
+        appState.handleMessage(preTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            preToolExpectation.fulfill()
+        }
+
+        let postTool = """
+        {
+            "hook_event_name": "PostToolUse",
+            "cli_source": "claude",
+            "session_id": "claude-lifecycle",
+            "tool_name": "Bash",
+            "tool_response": {"stdout": "ok"}
+        }
+        """
+        appState.handleMessage(postTool) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            postToolExpectation.fulfill()
+        }
+
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        wait(for: [preToolExpectation, postToolExpectation], timeout: 1.0)
+        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertTrue(appState.activeSessions.contains(where: { $0.id == "claude-lifecycle" }))
+    }
     
     func testMultipleSessions() {
         var callCount1 = 0

@@ -56,7 +56,7 @@ DevIsland supports multiple AI agent CLIs through the same bridge architecture.
 
 | CLI Agent | Config File | Approval Event | Lifecycle Events | Docs |
 |---|---|---|---|---|
-| **Claude Code** | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `Notification`, `Stop`, … | [hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks) |
+| **Claude Code** | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop` | [hooks reference](https://docs.anthropic.com/en/docs/claude-code/hooks) |
 | **Codex CLI** | `~/.codex/hooks.json` + `config.toml` | `PermissionRequest` | `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` | [openai.com/codex](https://openai.com/codex) |
 | **Gemini CLI** | `~/.gemini/settings.json` | `BeforeTool` | `SessionStart`, `SessionEnd`, `AfterAgent`, `Notification` | [geminicli.com/hooks](https://geminicli.com/hooks) |
 
@@ -87,6 +87,22 @@ DevIsland supports multiple AI agent CLIs through the same bridge architecture.
           { "type": "command", "command": "/path/to/devisland-bridge.sh --source claude" }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "/path/to/devisland-bridge.sh --source claude" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "/path/to/devisland-bridge.sh --source claude" }
+        ]
+      }
     ]
   }
 }
@@ -104,6 +120,8 @@ DevIsland uses `PermissionRequest` as the primary approval hook. Response format
 ```
 
 Exit codes: `0` = success, `2` = hard block (stderr shown to user), other = warning.
+
+DevIsland registers Claude `PreToolUse`/`PostToolUse` for progress tracking only. Approval decisions still happen exclusively through `PermissionRequest`.
 
 ---
 
