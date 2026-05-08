@@ -83,9 +83,9 @@ if [ -n "$TMUX" ]; then
   fi
 fi
 
-if [ -n "$CURRENT_TTY" ]; then
+if [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "iTerm.app" ]; then
   ITERM_INFO=$(osascript << ASEOF
-if not (application "iTerm" is running) then return ""
+if not ((application "iTerm2" is running) or (application "iTerm" is running)) then return ""
 tell application "iTerm"
   set ttyPath to "$CURRENT_TTY"
   set ttyName to "$CURRENT_TTY_NAME"
@@ -116,7 +116,7 @@ ASEOF
   fi
 fi
 
-if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ]; then
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
   TERM_INFO=$(osascript << ASEOF
 if not (application "Terminal" is running) then return ""
 tell application "Terminal"
