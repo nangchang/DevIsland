@@ -142,7 +142,7 @@ ASEOF
   fi
 fi
 
-if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "Apple_Terminal" ] && pgrep -x Terminal >/dev/null 2>&1; then
   TERM_INFO=$(osascript << ASEOF
 tell application "Terminal"
   set ttyPath to "$CURRENT_TTY"

@@ -469,7 +469,7 @@ case "$COMMAND" in
     gemini-afteragent)
         send_event "$(make_gemini_event AfterAgent)" gemini ;;
     gemini-notify)
-        send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "${1:-Gemini notification}" cwd "$(pwd)")" gemini ;;
+        send_event "$(make_json event Notification session_id "$SESSION_ID" message "${1:-Gemini notification}" cwd "$(pwd)")" gemini ;;
     gemini-end)
         send_event "$(make_gemini_event SessionEnd)" gemini ;;
     gemini-smoke)
