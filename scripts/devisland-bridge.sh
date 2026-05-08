@@ -142,10 +142,8 @@ ASEOF
   fi
 fi
 
-if [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
-  TERM_APP="Terminal"
-  if [ -n "$CURRENT_TTY" ]; then
-    TERM_INFO=$(osascript << ASEOF
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "Apple_Terminal" ] && pgrep -x Terminal >/dev/null 2>&1; then
+  TERM_INFO=$(osascript << ASEOF
 tell application "Terminal"
   set ttyPath to "$CURRENT_TTY"
   set ttyName to "$CURRENT_TTY_NAME"
@@ -159,20 +157,24 @@ tell application "Terminal"
       end if
     end repeat
   end repeat
-  return (name of front window) & ":::" & (id of front window as text) & ":::1"
+  return ""
 end tell
 ASEOF
-    2>/dev/null)
+  2>/dev/null)
+  if [ -n "$TERM_INFO" ]; then
+    TERM_APP="Terminal"
     TERM_TITLE=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $1}')
     TERM_WINDOW_ID=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $2}')
     TERM_TAB_INDEX=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $3}')
-  else
-    TERM_TITLE=$(osascript -e 'tell application "Terminal" to get name of front window' 2>/dev/null)
   fi
-elif [ -n "$GHOSTTY_BIN_DIR" ]; then
+fi
+
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ -n "$GHOSTTY_BIN_DIR" ] && pgrep -x Ghostty >/dev/null 2>&1; then
   TERM_APP="Ghostty"
   TERM_TITLE=$(osascript -e 'tell application "Ghostty" to get name of front window' 2>/dev/null || echo "Ghostty")
-elif [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
+fi
+
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "WarpTerminal" ] && pgrep -f "Warp.app" >/dev/null 2>&1; then
   TERM_APP="Warp"
   TERM_TITLE="Warp"
 fi
