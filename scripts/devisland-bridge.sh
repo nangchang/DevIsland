@@ -174,7 +174,7 @@ if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ -n "$GHOSTTY_BIN_DIR" ] && p
   TERM_TITLE=$(osascript -e 'tell application "Ghostty" to get name of front window' 2>/dev/null || echo "Ghostty")
 fi
 
-if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "WarpTerminal" ] && pgrep -x Warp >/dev/null 2>&1; then
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "WarpTerminal" ] && pgrep -f "Warp.app" >/dev/null 2>&1; then
   TERM_APP="Warp"
   TERM_TITLE="Warp"
 fi
