@@ -260,7 +260,7 @@ for i, line in enumerate(new_lines):
     strip_line = line.strip()
     if strip_line == '[features]':
         features_idx = i
-    if 'codex_hooks' in strip_line:
+    if strip_line.startswith('codex_hooks'):
         if 'false' in line:
             new_lines[i] = line.replace('false', 'true')
         found_flag = True
@@ -272,8 +272,11 @@ if not found_flag:
         insert_idx = features_idx + 1
         while insert_idx < len(new_lines):
             s = new_lines[insert_idx].strip()
-            if s.startswith('[') and not s.startswith('[['):
+            if s.startswith('['):
                 break
+            insert_idx += 1
+        if new_lines[insert_idx - 1].strip() and not new_lines[insert_idx - 1].endswith('\n'):
+            new_lines.insert(insert_idx, '\n')
             insert_idx += 1
         new_lines.insert(insert_idx, 'codex_hooks = true\n')
     else:
