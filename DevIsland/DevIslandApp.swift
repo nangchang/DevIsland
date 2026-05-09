@@ -584,16 +584,35 @@ enum BridgeInstaller {
     // MARK: Uninstall entry points
 
     static func uninstallAll() {
-        uninstall()
-        uninstallCodex()
-        uninstallGemini()
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        var errors: [String] = []
+        let targets: [(URL, String)] = [
+            (home.appendingPathComponent(".claude/settings.json"), "Claude Code"),
+            (home.appendingPathComponent(".codex/hooks.json"),     "Codex CLI"),
+            (home.appendingPathComponent(".gemini/settings.json"), "Gemini CLI"),
+        ]
+        for (url, name) in targets {
+            do {
+                try removeHooks(at: url, fileName: url.lastPathComponent)
+            } catch {
+                errors.append("\(name): \(error.localizedDescription)")
+            }
+        }
+        if errors.isEmpty {
+            showAlert(title: "전체 제거 완료",
+                      message: "모든 브리지 훅이 제거되었습니다.\n각 CLI 세션을 재시작해주세요.",
+                      isError: false)
+        } else {
+            showAlert(title: "일부 제거 실패",
+                      message: errors.joined(separator: "\n"),
+                      isError: true)
+        }
     }
 
     static func uninstall() {
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let settingsURL = home.appendingPathComponent(".claude/settings.json")
+        let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/settings.json")
         do {
-            try removeClaudeHooks(at: settingsURL)
+            try removeHooks(at: url, fileName: url.lastPathComponent)
             showAlert(title: "Claude Code 제거 완료",
                       message: "훅이 제거되었습니다.\nClaude Code 세션을 재시작해주세요.",
                       isError: false)
@@ -603,10 +622,9 @@ enum BridgeInstaller {
     }
 
     static func uninstallCodex() {
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let codexHooksURL = home.appendingPathComponent(".codex/hooks.json")
+        let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".codex/hooks.json")
         do {
-            try removeCodexHooks(at: codexHooksURL)
+            try removeHooks(at: url, fileName: url.lastPathComponent)
             showAlert(title: "Codex CLI 제거 완료",
                       message: "훅이 제거되었습니다.\nCodex CLI 세션을 재시작해주세요.",
                       isError: false)
@@ -616,10 +634,9 @@ enum BridgeInstaller {
     }
 
     static func uninstallGemini() {
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
+        let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".gemini/settings.json")
         do {
-            try removeGeminiHooks(at: geminiSettingsURL)
+            try removeHooks(at: url, fileName: url.lastPathComponent)
             showAlert(title: "Gemini CLI 제거 완료",
                       message: "훅이 제거되었습니다.\nGemini CLI 세션을 재시작해주세요.",
                       isError: false)
@@ -630,54 +647,21 @@ enum BridgeInstaller {
 
     // MARK: Uninstall helpers
 
-    private static func removeClaudeHooks(at url: URL) throws {
+    private static func removeHooks(at url: URL, fileName: String) throws {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else { return }
-        let data = try Data(contentsOf: url)
-        guard var settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        let raw = try Data(contentsOf: url)
+        guard var json = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else {
             throw NSError(domain: "BridgeInstaller", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "settings.json 파싱 실패"])
+                          userInfo: [NSLocalizedDescriptionKey: "\(fileName) 파싱 실패"])
         }
-        var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
-        let allKeys = Array(hooks.keys)
-        for key in allKeys {
+        var hooks = (json["hooks"] as? [String: Any]) ?? [:]
+        for key in Array(hooks.keys) {
             let cleaned = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
             if cleaned.isEmpty { hooks.removeValue(forKey: key) } else { hooks[key] = cleaned }
         }
-        settings["hooks"] = hooks
-        let out = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
-        try out.write(to: url, options: .atomic)
-    }
-
-    private static func removeCodexHooks(at url: URL) throws {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path) else { return }
-        guard let raw = try? Data(contentsOf: url),
-              var data = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else { return }
-        var hooks = (data["hooks"] as? [String: Any]) ?? [:]
-        let allKeys = Array(hooks.keys)
-        for key in allKeys {
-            let cleaned = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
-            if cleaned.isEmpty { hooks.removeValue(forKey: key) } else { hooks[key] = cleaned }
-        }
-        data["hooks"] = hooks
-        let out = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
-        try out.write(to: url, options: .atomic)
-    }
-
-    private static func removeGeminiHooks(at url: URL) throws {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path) else { return }
-        guard let raw = try? Data(contentsOf: url),
-              var data = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else { return }
-        var hooks = (data["hooks"] as? [String: Any]) ?? [:]
-        let allKeys = Array(hooks.keys)
-        for key in allKeys {
-            let cleaned = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
-            if cleaned.isEmpty { hooks.removeValue(forKey: key) } else { hooks[key] = cleaned }
-        }
-        data["hooks"] = hooks
-        let out = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
+        json["hooks"] = hooks
+        let out = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
         try out.write(to: url, options: .atomic)
     }
 
