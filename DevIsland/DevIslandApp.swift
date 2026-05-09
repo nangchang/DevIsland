@@ -217,6 +217,22 @@ struct MenuBarMenu: View {
             }
         }
 
+        Menu("브리지 제거") {
+            Button("전부 제거 (Claude · Codex · Gemini)") {
+                BridgeInstaller.uninstallAll()
+            }
+            Divider()
+            Button("Claude Code만 제거...") {
+                BridgeInstaller.uninstall()
+            }
+            Button("Codex CLI만 제거...") {
+                BridgeInstaller.uninstallCodex()
+            }
+            Button("Gemini CLI만 제거...") {
+                BridgeInstaller.uninstallGemini()
+            }
+        }
+
         if !GlobalShortcutManager.shared.hasAccessibilityPermission {
             Button("접근성 권한 요청...") {
                 GlobalShortcutManager.shared.requestAccessibilityPermission()
@@ -390,24 +406,13 @@ enum BridgeInstaller {
             "SubagentStop", "PreCompact", "StopFailure"
         ]
 
-        func removingBridgeHooks(from list: [[String: Any]]) -> [[String: Any]] {
-            list.compactMap { entry in
-                let subHooks = (entry["hooks"] as? [[String: Any]] ?? [])
-                    .filter { !($0["command"] as? String ?? "").contains(bridgeFileName) }
-                guard !subHooks.isEmpty else { return nil }
-                var updatedEntry = entry
-                updatedEntry["hooks"] = subHooks
-                return updatedEntry
-            }
-        }
-
         for (key, config) in entries {
-            var list = removingBridgeHooks(from: (hooks[key] as? [[String: Any]]) ?? [])
+            var list = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
             list.append(config)
             hooks[key] = list
         }
         for key in retiredEntries {
-            let list = removingBridgeHooks(from: (hooks[key] as? [[String: Any]]) ?? [])
+            let list = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
             if list.isEmpty { hooks.removeValue(forKey: key) } else { hooks[key] = list }
         }
 
@@ -456,7 +461,7 @@ enum BridgeInstaller {
                     break
                 }
             }
-            
+
             if !found {
                 eventConfigs.append([
                     "matcher": "*",
@@ -466,19 +471,8 @@ enum BridgeInstaller {
             hooks[event] = eventConfigs
         }
         for event in ["SessionEnd"] {
-            let cleaned = ((hooks[event] as? [[String: Any]]) ?? []).compactMap { entry -> [String: Any]? in
-                let subHooks = (entry["hooks"] as? [[String: Any]] ?? [])
-                    .filter { !($0["command"] as? String ?? "").contains(bridgeFileName) }
-                guard !subHooks.isEmpty else { return nil }
-                var updatedEntry = entry
-                updatedEntry["hooks"] = subHooks
-                return updatedEntry
-            }
-            if cleaned.isEmpty {
-                hooks.removeValue(forKey: event)
-            } else {
-                hooks[event] = cleaned
-            }
+            let cleaned = removingBridgeHooksFrom(list: (hooks[event] as? [[String: Any]]) ?? [])
+            if cleaned.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = cleaned }
         }
         
         data["hooks"] = hooks
@@ -577,25 +571,125 @@ enum BridgeInstaller {
             hooks[event] = eventConfigs
         }
         for event in ["AfterTool", "BeforeAgent", "BeforeModel", "BeforeToolSelection", "AfterModel", "PreCompress"] {
-            let cleaned = ((hooks[event] as? [[String: Any]]) ?? []).compactMap { entry -> [String: Any]? in
-                let subHooks = (entry["hooks"] as? [[String: Any]] ?? [])
-                    .filter { !($0["command"] as? String ?? "").contains(bridgeFileName) }
-                guard !subHooks.isEmpty else { return nil }
-                var updatedEntry = entry
-                updatedEntry["hooks"] = subHooks
-                return updatedEntry
-            }
-            if cleaned.isEmpty {
-                hooks.removeValue(forKey: event)
-            } else {
-                hooks[event] = cleaned
-            }
+            let cleaned = removingBridgeHooksFrom(list: (hooks[event] as? [[String: Any]]) ?? [])
+            if cleaned.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = cleaned }
         }
 
         data["hooks"] = hooks
 
         let out = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
         try out.write(to: url, options: .atomic)
+    }
+
+    // MARK: Uninstall entry points
+
+    static func uninstallAll() {
+        uninstall()
+        uninstallCodex()
+        uninstallGemini()
+    }
+
+    static func uninstall() {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let settingsURL = home.appendingPathComponent(".claude/settings.json")
+        do {
+            try removeClaudeHooks(at: settingsURL)
+            showAlert(title: "Claude Code 제거 완료",
+                      message: "훅이 제거되었습니다.\nClaude Code 세션을 재시작해주세요.",
+                      isError: false)
+        } catch {
+            showAlert(title: "Claude Code 제거 실패", message: error.localizedDescription, isError: true)
+        }
+    }
+
+    static func uninstallCodex() {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let codexHooksURL = home.appendingPathComponent(".codex/hooks.json")
+        do {
+            try removeCodexHooks(at: codexHooksURL)
+            showAlert(title: "Codex CLI 제거 완료",
+                      message: "훅이 제거되었습니다.\nCodex CLI 세션을 재시작해주세요.",
+                      isError: false)
+        } catch {
+            showAlert(title: "Codex CLI 제거 실패", message: error.localizedDescription, isError: true)
+        }
+    }
+
+    static func uninstallGemini() {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
+        do {
+            try removeGeminiHooks(at: geminiSettingsURL)
+            showAlert(title: "Gemini CLI 제거 완료",
+                      message: "훅이 제거되었습니다.\nGemini CLI 세션을 재시작해주세요.",
+                      isError: false)
+        } catch {
+            showAlert(title: "Gemini CLI 제거 실패", message: error.localizedDescription, isError: true)
+        }
+    }
+
+    // MARK: Uninstall helpers
+
+    private static func removeClaudeHooks(at url: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        let data = try Data(contentsOf: url)
+        guard var settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw NSError(domain: "BridgeInstaller", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "settings.json 파싱 실패"])
+        }
+        var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
+        let allKeys = Array(hooks.keys)
+        for key in allKeys {
+            let cleaned = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
+            if cleaned.isEmpty { hooks.removeValue(forKey: key) } else { hooks[key] = cleaned }
+        }
+        settings["hooks"] = hooks
+        let out = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
+        try out.write(to: url, options: .atomic)
+    }
+
+    private static func removeCodexHooks(at url: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        guard let raw = try? Data(contentsOf: url),
+              var data = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else { return }
+        var hooks = (data["hooks"] as? [String: Any]) ?? [:]
+        let allKeys = Array(hooks.keys)
+        for key in allKeys {
+            let cleaned = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
+            if cleaned.isEmpty { hooks.removeValue(forKey: key) } else { hooks[key] = cleaned }
+        }
+        data["hooks"] = hooks
+        let out = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
+        try out.write(to: url, options: .atomic)
+    }
+
+    private static func removeGeminiHooks(at url: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        guard let raw = try? Data(contentsOf: url),
+              var data = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else { return }
+        var hooks = (data["hooks"] as? [String: Any]) ?? [:]
+        let allKeys = Array(hooks.keys)
+        for key in allKeys {
+            let cleaned = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
+            if cleaned.isEmpty { hooks.removeValue(forKey: key) } else { hooks[key] = cleaned }
+        }
+        data["hooks"] = hooks
+        let out = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
+        try out.write(to: url, options: .atomic)
+    }
+
+    private static func removingBridgeHooksFrom(list: [[String: Any]]) -> [[String: Any]] {
+        list.compactMap { entry in
+            let subHooks = (entry["hooks"] as? [[String: Any]] ?? [])
+                .filter { !($0["command"] as? String ?? "").contains(bridgeFileName) }
+            guard !subHooks.isEmpty else { return nil }
+            var updated = entry
+            updated["hooks"] = subHooks
+            return updated
+        }
     }
 
     // MARK: Alert helper
