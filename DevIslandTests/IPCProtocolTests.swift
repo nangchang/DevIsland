@@ -79,11 +79,15 @@ final class IPCEnvelopeTests: XCTestCase {
     func testRawJSONIsNotAnEnvelope() {
         let raw = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash"}"#
         let decoded = try? JSONDecoder().decode(IPCEnvelope.self, from: Data(raw.utf8))
-        // Raw JSON may decode partially but won't have the correct protocol field.
+        // Raw JSON lacks the required `protocol` field, so decoding must fail or produce
+        // a mismatched protocol value — neither is a valid IPC envelope.
         if let decoded {
-            XCTAssertNotEqual(decoded.protocol, IPCEnvelope.protocolName)
+            XCTAssertNotEqual(decoded.protocol, IPCEnvelope.protocolName,
+                              "Raw JSON must not be treated as a valid IPC envelope")
+        } else {
+            // Decode failed outright — correct behavior.
+            XCTAssertNil(decoded)
         }
-        // Either decode fails or protocol doesn't match — both are correct.
     }
 }
 
@@ -114,7 +118,7 @@ final class IPCRichResponseTests: XCTestCase {
         let response = IPCRichResponse(requestId: "req-frm", decision: "pass")
         let framed = try response.framedData()
         XCTAssertGreaterThan(framed.count, 4)
-        let length = framed.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian }
+        let length = framed.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian }
         XCTAssertEqual(Int(length), framed.count - 4)
         // The body must decode back correctly.
         let body = framed.dropFirst(4)
@@ -268,8 +272,10 @@ final class AppStateEnvelopeTests: XCTestCase {
             "payload": {"hook_event_name": "SessionStart", "session_id": "s2"}
         }
         """
-        // Should NOT crash; falls back to treating as raw JSON.
+        // Should NOT crash; falls back to raw JSON path and auto-approve SessionStart.
         let response = sendAndReceive(raw)
-        XCTAssertFalse(response.isEmpty)
+        let obj = try? JSONSerialization.jsonObject(with: Data(response.utf8)) as? [String: Any]
+        XCTAssertEqual(obj?["response"] as? String, "approved",
+                       "Invalid-protocol envelope should fall back to raw JSON and auto-approve SessionStart")
     }
 }
