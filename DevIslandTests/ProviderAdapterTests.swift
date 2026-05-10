@@ -88,6 +88,51 @@ final class ProviderAdapterTests: XCTestCase {
         XCTAssertEqual(decision?["message"] as? String, ProviderAdapter.denialMessage)
     }
 
+    func testClaudeAskUserQuestionPreToolUsePreservesQuestionsAndAddsAnswers() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "approved",
+            event: "PreToolUse",
+            provider: .claude,
+            toolName: "AskUserQuestion",
+            toolInput: [
+                "questions": .array([
+                    .object([
+                        "id": .string("q1"),
+                        "prompt": .string("Proceed?")
+                    ])
+                ])
+            ]
+        )
+
+        let hookOutput = output?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        let updatedInput = hookOutput?["updatedInput"] as? [String: Any]
+        let questions = updatedInput?["questions"] as? [[String: Any]]
+        let answers = updatedInput?["answers"] as? [String: Any]
+
+        XCTAssertEqual(hookOutput?["hookEventName"] as? String, "PreToolUse")
+        XCTAssertEqual(hookOutput?["permissionDecision"] as? String, "allow")
+        XCTAssertEqual(questions?.first?["id"] as? String, "q1")
+        XCTAssertNotNil(answers)
+    }
+
+    func testClaudeExitPlanModePreToolUseReturnsUpdatedInput() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "approved",
+            event: "PreToolUse",
+            provider: .claude,
+            toolName: "ExitPlanMode",
+            toolInput: [
+                "plan": .string("Implement the feature")
+            ]
+        )
+
+        let hookOutput = output?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        let updatedInput = hookOutput?["updatedInput"] as? [String: Any]
+
+        XCTAssertEqual(hookOutput?["permissionDecision"] as? String, "allow")
+        XCTAssertEqual(updatedInput?["plan"] as? String, "Implement the feature")
+    }
+
     func testCodexLifecycleOutputContinues() {
         let output = ProviderAdapter.providerOutput(
             decision: "approved",

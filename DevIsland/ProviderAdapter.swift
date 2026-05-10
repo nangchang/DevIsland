@@ -10,6 +10,7 @@ struct ProviderAdapter {
         approvalScope: RuleScope? = nil,
         toolName: String? = nil,
         ruleContent: String? = nil,
+        toolInput: [String: AnyJSON]? = nil,
         claudeSessionApprovalMode: ClaudeSessionApprovalMode = .nativePermissions,
         claudePersistentApprovalDestination: ClaudePersistentApprovalDestination = .userSettings,
         denialMessage: String = Self.denialMessage
@@ -21,6 +22,7 @@ struct ProviderAdapter {
             approvalScope: approvalScope,
             toolName: toolName,
             ruleContent: ruleContent,
+            toolInput: toolInput,
             claudeSessionApprovalMode: claudeSessionApprovalMode,
             claudePersistentApprovalDestination: claudePersistentApprovalDestination,
             denialMessage: denialMessage
@@ -34,6 +36,7 @@ struct ProviderAdapter {
         approvalScope: RuleScope? = nil,
         toolName: String? = nil,
         ruleContent: String? = nil,
+        toolInput: [String: AnyJSON]? = nil,
         claudeSessionApprovalMode: ClaudeSessionApprovalMode = .nativePermissions,
         claudePersistentApprovalDestination: ClaudePersistentApprovalDestination = .userSettings,
         denialMessage: String = Self.denialMessage
@@ -77,6 +80,15 @@ struct ProviderAdapter {
             }
         }
 
+        if provider == .claude, event == "PreToolUse" {
+            return claudePreToolUseOutput(
+                allow: allow,
+                toolName: toolName,
+                toolInput: toolInput,
+                denialMessage: denialMessage
+            )
+        }
+
         if event == "PermissionRequest", decision == "approved" || decision == "denied" {
             var hookDecision: [String: AnyJSON] = [
                 "behavior": .string(allow ? "allow" : "deny")
@@ -106,6 +118,42 @@ struct ProviderAdapter {
             "continue": .bool(true),
             "suppressOutput": .bool(true)
         ]
+    }
+
+    private static func claudePreToolUseOutput(
+        allow: Bool,
+        toolName: String?,
+        toolInput: [String: AnyJSON]?,
+        denialMessage: String
+    ) -> [String: AnyJSON] {
+        var hookOutput: [String: AnyJSON] = [
+            "hookEventName": .string("PreToolUse"),
+            "permissionDecision": .string(allow ? "allow" : "deny")
+        ]
+        if !allow {
+            hookOutput["permissionDecisionReason"] = .string(denialMessage)
+        }
+        if allow,
+           let updatedInput = claudeUpdatedInput(for: toolName, toolInput: toolInput) {
+            hookOutput["updatedInput"] = updatedInput
+        }
+        return ["hookSpecificOutput": .object(hookOutput)]
+    }
+
+    private static func claudeUpdatedInput(for toolName: String?, toolInput: [String: AnyJSON]?) -> AnyJSON? {
+        guard let toolName else { return nil }
+        switch HookEventNormalizer.normalizedName(toolName) {
+        case "askuserquestion":
+            var input = toolInput ?? [:]
+            if input["answers"] == nil {
+                input["answers"] = .object([:])
+            }
+            return .object(input)
+        case "exitplanmode":
+            return toolInput.map(AnyJSON.object)
+        default:
+            return nil
+        }
     }
 
     private static func claudePermissionUpdate(

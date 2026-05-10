@@ -337,6 +337,7 @@ final class AppStateEnvelopeTests: XCTestCase {
         XCTAssertEqual(context.event, "PermissionRequest")
         XCTAssertEqual(context.toolName, "shell")
         XCTAssertEqual(context.ruleContent, "npm test")
+        XCTAssertEqual(context.toolInput?["command"]?.rawValue as? String, "npm test")
     }
 
     func testEnvelopeWithInvalidProtocolFallsBackToRaw() {

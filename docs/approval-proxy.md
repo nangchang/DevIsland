@@ -602,7 +602,7 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 - [x] Claude `PermissionRequest.updatedPermissions` 지원.
 - [x] Claude session approval mode: native/app/hybrid 지원.
 - [x] Claude persistent destination 설정 지원.
-- `PreToolUse` AskUserQuestion / ExitPlanMode 처리.
+- [x] `PreToolUse` AskUserQuestion / ExitPlanMode 응답 포맷 처리.
 - `Elicitation` 처리.
 - `UserPromptSubmit` prompt policy 처리.
 
