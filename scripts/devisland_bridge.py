@@ -119,7 +119,9 @@ def send_to_app(payload: dict[str, Any], source: str) -> tuple[str, dict[str, An
     with socket.create_connection(("127.0.0.1", 9090), timeout=5) as sock:
         sock.settimeout(300)
         sock.sendall(frame)
-        # Do NOT shutdown write — framing signals message boundary.
+        # Half-close write so older HookSocketServer (EOF-based) can detect end-of-message.
+        # The framing server reads exactly `length` bytes and ignores the FIN, so this is safe.
+        sock.shutdown(socket.SHUT_WR)
 
         response_chunks: list[bytes] = []
         while True:
