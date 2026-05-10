@@ -125,13 +125,14 @@ struct BridgeRuntimeConfig: Codable, Equatable {
     let bridgeResponseTimeoutSeconds: Double
     let approvalFallbackPolicy: String
 
-    init(settings: AppSettings) {
-        // Transport selection and listener reconfiguration are future Approval Proxy
-        // work. Keep the installed bridge aligned with the currently-running app.
+    init(approvalFallbackPolicy: ApprovalFallbackPolicy) {
+        // Transport selection and listener reconfiguration are future Approval Proxy work.
+        // Until then, expose the running app's fixed listener values to the bridge and
+        // only sync the fallback policy from user settings.
         self.bridgeTcpPort = AppSettings.defaults.bridgeTcpPort
         self.bridgeConnectTimeoutSeconds = AppSettings.defaults.bridgeConnectTimeoutSeconds
         self.bridgeResponseTimeoutSeconds = AppSettings.defaults.bridgeResponseTimeoutSeconds
-        self.approvalFallbackPolicy = settings.approvalFallbackPolicy.rawValue
+        self.approvalFallbackPolicy = approvalFallbackPolicy.rawValue
     }
 }
 
@@ -189,12 +190,23 @@ final class SettingsStore: ObservableObject {
 
     private func writeBridgeConfig(_ settings: AppSettings) {
         do {
-            try FileManager.default.createDirectory(
+            let fileManager = FileManager.default
+            try fileManager.createDirectory(
                 at: bridgeConfigURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let data = try JSONEncoder().encode(BridgeRuntimeConfig(settings: settings))
-            try data.write(to: bridgeConfigURL, options: .atomic)
+            let data = try JSONEncoder().encode(BridgeRuntimeConfig(approvalFallbackPolicy: settings.approvalFallbackPolicy))
+            let attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
+            if fileManager.fileExists(atPath: bridgeConfigURL.path) {
+                try data.write(to: bridgeConfigURL, options: .atomic)
+                try fileManager.setAttributes(attributes, ofItemAtPath: bridgeConfigURL.path)
+            } else if !fileManager.createFile(atPath: bridgeConfigURL.path, contents: data, attributes: attributes) {
+                throw NSError(
+                    domain: "SettingsStore",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Unable to create bridge config"]
+                )
+            }
         } catch {
             print("SettingsStore: failed to write bridge config – \(error)")
         }

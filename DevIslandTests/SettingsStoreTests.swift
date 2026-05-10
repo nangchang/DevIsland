@@ -90,6 +90,7 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
         store.settings.approvalFallbackPolicy = .allowReadOnly
+        // Runtime config intentionally ignores transport settings until the transport phase.
         store.settings.bridgeTcpPort = 19191
 
         let data = try Data(contentsOf: bridgeConfigURL)
@@ -98,5 +99,13 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(config.bridgeTcpPort, AppSettings.defaults.bridgeTcpPort)
         XCTAssertEqual(config.bridgeConnectTimeoutSeconds, AppSettings.defaults.bridgeConnectTimeoutSeconds)
         XCTAssertEqual(config.bridgeResponseTimeoutSeconds, AppSettings.defaults.bridgeResponseTimeoutSeconds)
+    }
+
+    func testBridgeRuntimeConfigUsesRestrictedPermissions() throws {
+        _ = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: bridgeConfigURL.path)
+        let permissions = attributes[.posixPermissions] as? NSNumber
+        XCTAssertEqual(permissions?.intValue, 0o600)
     }
 }

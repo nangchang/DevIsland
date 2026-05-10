@@ -191,11 +191,7 @@ def fallback_decision() -> str:
     Reads approvalFallbackPolicy from bridge-config.json; defaults to "deny".
     "allowReadOnly" maps to "pass" (let the CLI handle it), everything else → "deny".
     """
-    try:
-        config = load_config()
-        policy = config.get("approvalFallbackPolicy", "denyUnknown")
-    except Exception:
-        policy = "denyUnknown"
+    policy = load_config().get("approvalFallbackPolicy", "denyUnknown")
     return "pass" if policy == "allowReadOnly" else "deny"
 
 
