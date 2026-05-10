@@ -242,8 +242,14 @@ class AppState: ObservableObject {
                 // Wrap responseHandler to produce a rich response for framed (v1 envelope) requests.
                 let effectiveHandler: (String) -> Void
                 if let rid = requestId {
+                    let providerContext = Self.providerContext(fromEnvelopeMessage: message)
                     effectiveHandler = { rawResponse in
-                        responseHandler(Self.richResponseString(fromLegacyResponse: rawResponse, requestId: rid))
+                        responseHandler(Self.richResponseString(
+                            fromLegacyResponse: rawResponse,
+                            requestId: rid,
+                            source: providerContext.source,
+                            event: providerContext.event
+                        ))
                     }
                 } else {
                     effectiveHandler = responseHandler
@@ -272,15 +278,43 @@ class AppState: ObservableObject {
         }
     }
 
-    static func richResponseString(fromLegacyResponse rawResponse: String, requestId: String) -> String {
+    static func richResponseString(
+        fromLegacyResponse rawResponse: String,
+        requestId: String,
+        source: String? = nil,
+        event: String? = nil
+    ) -> String {
         let parsed = try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any]
         let decision = parsed?["response"] as? String
-        let rich = IPCRichResponse(requestId: requestId, decision: decision)
+        let providerOutput: [String: AnyJSON]?
+        if let source, let event {
+            providerOutput = ProviderAdapter.providerOutput(decision: decision, event: event, source: source)
+        } else {
+            providerOutput = nil
+        }
+        let rich = IPCRichResponse(requestId: requestId, decision: decision, providerOutput: providerOutput)
         if let richData = try? JSONEncoder().encode(rich),
            let richString = String(data: richData, encoding: .utf8) {
             return richString
         }
         return rawResponse
+    }
+
+    static func providerContext(fromEnvelopeMessage message: String) -> (source: String?, event: String?) {
+        guard let data = message.data(using: .utf8),
+              let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: data),
+              envelope.protocol == IPCEnvelope.protocolName else {
+            return (nil, nil)
+        }
+        let event: String?
+        if case .string(let hookEvent)? = envelope.payload["hook_event_name"] {
+            event = hookEvent
+        } else if case .string(let fallbackEvent)? = envelope.payload["event"] {
+            event = fallbackEvent
+        } else {
+            event = nil
+        }
+        return (envelope.source, event)
     }
 
     private func ensureSelectedDisplay() {

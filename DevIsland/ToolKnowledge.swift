@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum ToolRiskLevel: String, Comparable, CaseIterable {
+enum ToolRiskLevel: String, Comparable, CaseIterable, Codable {
     case safe = "Safe"
     case low = "Low Risk"
     case medium = "Medium Risk"
