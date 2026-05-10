@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DevIsland hook bridge payload processing and TCP transport."""
+"""DevIsland hook bridge payload processing and IPC transport (protocol v1)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,17 @@ import argparse
 import json
 import os
 import socket
+import struct
 import sys
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 
 LOG_PATH = "/tmp/DevIsland.bridge.log"
+
+# Events forwarded to the app (all others are suppressed before reaching the app).
 PASSIVE_EVENTS = {
     "PermissionRequest",
     "SessionStart",
@@ -25,12 +30,24 @@ PASSIVE_EVENTS = {
     "AfterAgent",
 }
 
+_APP_SUPPORT = Path("~/Library/Application Support/DevIsland").expanduser()
+_TOKEN_PATH = _APP_SUPPORT / "bridge-token"
+_CONFIG_PATH = _APP_SUPPORT / "bridge-config.json"
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
 
 def log(message: str) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOG_PATH, "a", encoding="utf-8") as handle:
         handle.write(f"[{timestamp}] {message}\n")
 
+
+# ---------------------------------------------------------------------------
+# Payload helpers
+# ---------------------------------------------------------------------------
 
 def load_payload() -> dict[str, Any]:
     try:
@@ -60,39 +77,123 @@ def event_name(payload: dict[str, Any]) -> str:
     return str(payload.get("hook_event_name", payload.get("event", "PermissionRequest")))
 
 
-def send_to_app(payload: dict[str, Any]) -> str:
-    encoded = dump(payload).encode("utf-8")
+# ---------------------------------------------------------------------------
+# Token
+# ---------------------------------------------------------------------------
+
+def load_token() -> str | None:
+    try:
+        return _TOKEN_PATH.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# IPC protocol v1: envelope + length-prefixed framing
+# ---------------------------------------------------------------------------
+
+def build_envelope(payload: dict[str, Any], source: str, token: str | None) -> dict[str, Any]:
+    envelope: dict[str, Any] = {
+        "protocol": "dev-island-hook-ipc",
+        "version": 1,
+        "requestId": str(uuid.uuid4()),
+        "sentAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": source,
+        "payload": payload,
+    }
+    if token is not None:
+        envelope["token"] = token
+    return envelope
+
+
+def send_to_app(payload: dict[str, Any], source: str) -> tuple[str, dict[str, Any] | None]:
+    """Send an IPC v1 envelope to the app and return (decision, providerOutput|None).
+
+    Falls back to a legacy raw-JSON exchange if the app responds without framing.
+    """
+    token = load_token()
+    envelope = build_envelope(payload, source, token)
+    body = json.dumps(envelope, ensure_ascii=False).encode("utf-8")
+    frame = struct.pack(">I", len(body)) + body
+
     with socket.create_connection(("127.0.0.1", 9090), timeout=5) as sock:
         sock.settimeout(300)
-        sock.sendall(encoded)
-        sock.shutdown(socket.SHUT_WR)
+        sock.sendall(frame)
+        # Do NOT shutdown write — framing signals message boundary.
 
-        chunks: list[bytes] = []
+        response_chunks: list[bytes] = []
         while True:
             chunk = sock.recv(65536)
             if not chunk:
                 break
-            chunks.append(chunk)
+            response_chunks.append(chunk)
 
-    return b"".join(chunks).decode("utf-8", errors="replace")
+    raw = b"".join(response_chunks)
+    return _parse_response(raw)
 
 
-def response_result(raw: str) -> str:
+def _parse_response(raw: bytes) -> tuple[str, dict[str, Any] | None]:
+    """Return (decision, providerOutput|None).
+
+    Handles both framed rich responses and legacy raw-JSON responses.
+    """
+    if not raw:
+        return "pass", None
+
+    if raw[0] == 0 and len(raw) >= 4:
+        # Length-prefixed rich response.
+        length = struct.unpack(">I", raw[:4])[0]
+        try:
+            obj = json.loads(raw[4: 4 + length])
+        except Exception:
+            return "pass", None
+        provider_output = obj.get("providerOutput") or None
+        decision = obj.get("decision") or "pass"
+        return decision, provider_output
+
+    # Legacy raw JSON response: {"response": "approved|denied|pass"}
     try:
-        return str(json.loads(raw).get("response", "pass"))
+        obj = json.loads(raw)
+        return str(obj.get("response", "pass")), None
     except Exception:
-        return "pass"
+        return "pass", None
 
 
-def final_output(*, event: str, result: str, cli_source: str) -> dict[str, Any]:
+# ---------------------------------------------------------------------------
+# Transport failure fallback
+# ---------------------------------------------------------------------------
+
+def fallback_decision() -> str:
+    """Return the fallback decision when the app is unreachable.
+
+    Reads approvalFallbackPolicy from bridge-config.json; defaults to "deny".
+    "allowReadOnly" maps to "pass" (let the CLI handle it), everything else → "deny".
+    """
+    try:
+        config = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        policy = config.get("approvalFallbackPolicy", "denyUnknown")
+    except OSError:
+        policy = "denyUnknown"
+    return "pass" if policy == "allowReadOnly" else "deny"
+
+
+# ---------------------------------------------------------------------------
+# Provider-specific output
+# ---------------------------------------------------------------------------
+
+def final_output(*, event: str, decision: str, provider_output: dict[str, Any] | None, cli_source: str) -> dict[str, Any]:
+    # If the app already provided formatted provider output, use it directly.
+    if provider_output:
+        return provider_output
+
     message = "DevIsland에서 거절되었습니다."
 
-    if result == "pass":
+    if decision == "pass":
         if cli_source == "claude":
             return {"continue": True, "suppressOutput": True}
         return {}
 
-    allow = result == "approved"
+    allow = decision == "approved"
     if cli_source == "gemini":
         output: dict[str, Any] = {"decision": "allow" if allow else "deny"}
         if not allow:
@@ -110,23 +211,26 @@ def final_output(*, event: str, result: str, cli_source: str) -> dict[str, Any]:
                     "permissionDecisionReason": message,
                 }
             }
-        # PermissionRequest는 아래의 글로벌 핸들러에서 공통 처리하도록 함
         if event != "PermissionRequest":
             return {"continue": True}
 
-    if event == "PermissionRequest" and result in ("approved", "denied"):
-        decision: dict[str, Any] = {"behavior": "allow" if result == "approved" else "deny"}
-        if result != "approved":
-            decision["message"] = message
+    if event == "PermissionRequest" and decision in ("approved", "denied"):
+        hook_decision: dict[str, Any] = {"behavior": "allow" if allow else "deny"}
+        if not allow:
+            hook_decision["message"] = message
         return {
             "hookSpecificOutput": {
                 "hookEventName": "PermissionRequest",
-                "decision": decision,
+                "decision": hook_decision,
             }
         }
 
     return {"continue": True, "suppressOutput": True}
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -146,16 +250,15 @@ def main() -> int:
         return 0
 
     try:
-        raw = send_to_app(payload)
-        log(f"Raw Response: {raw}")
-        result = response_result(raw)
+        decision, provider_output = send_to_app(payload, cli_source)
+        log(f"Decision: {decision}, hasProviderOutput: {provider_output is not None}")
     except Exception as error:
         log(f"Bridge transport error: {error}")
-        result = "pass"
+        decision = fallback_decision()
+        provider_output = None
+        log(f"Fallback decision: {decision}")
 
-    log(f"Result: {result}")
-
-    output = final_output(event=event, result=result, cli_source=cli_source)
+    output = final_output(event=event, decision=decision, provider_output=provider_output, cli_source=cli_source)
     final = dump(output)
     log(f"Final Output: {final}")
     print(final)
