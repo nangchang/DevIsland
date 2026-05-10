@@ -254,15 +254,7 @@ class AppState: ObservableObject {
                 let effectiveHandler: (String) -> Void
                 if let rid = requestId {
                     effectiveHandler = { rawResponse in
-                        let decision = (try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any])
-                            .flatMap { $0["response"] as? String }
-                        let rich = IPCRichResponse(requestId: rid, decision: decision)
-                        if let richData = try? JSONEncoder().encode(rich),
-                           let richStr = String(data: richData, encoding: .utf8) {
-                            responseHandler(richStr)
-                        } else {
-                            responseHandler(rawResponse)
-                        }
+                        responseHandler(Self.richResponseString(fromLegacyResponse: rawResponse, requestId: rid))
                     }
                 } else {
                     effectiveHandler = responseHandler
@@ -289,6 +281,17 @@ class AppState: ObservableObject {
                 self?.pruneInactiveSessions()
             }
         }
+    }
+
+    static func richResponseString(fromLegacyResponse rawResponse: String, requestId: String) -> String {
+        let parsed = try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any]
+        let decision = parsed?["response"] as? String
+        let rich = IPCRichResponse(requestId: requestId, decision: decision)
+        if let richData = try? JSONEncoder().encode(rich),
+           let richString = String(data: richData, encoding: .utf8) {
+            return richString
+        }
+        return rawResponse
     }
 
     private func ensureSelectedDisplay() {
