@@ -558,6 +558,8 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 ### Phase 1. 문서화 및 설정창 기반
 
+> 상태: ✅ 완료
+
 - 이 문서를 repository에 추가한다.
 - Settings window scaffold 추가.
 - menubar menu를 quick action 중심으로 축소한다.
@@ -565,6 +567,8 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 - Claude session approval mode 설정값을 추가한다.
 
 ### Phase 2. IPC protocol v1
+
+> 상태: 🔧 진행 중
 
 - bridge envelope 추가.
 - app envelope parser 추가.
@@ -576,6 +580,8 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 ### Phase 3. ApprovalProxyController / PolicyEngine
 
+> 상태: 📅 예정
+
 - AppState.handleMessage에서 provider/policy 책임 분리.
 - HookEventNormalizer 추가.
 - ProviderAdapter 추가.
@@ -583,6 +589,8 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 - session_cache / rules / replay log 테이블 추가.
 
 ### Phase 4. Claude advanced hooks
+
+> 상태: 📅 예정
 
 - Claude `PermissionRequest.updatedPermissions` 지원.
 - Claude session approval mode: native/app/hybrid 지원.
@@ -593,11 +601,15 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 ### Phase 5. Codex cache/rules
 
+> 상태: 📅 예정
+
 - Codex session cache 안정화.
 - persistent rules UI 연결.
 - optional Codex external rule sync adapter 설계/구현.
 
 ### Phase 6. Unix domain socket
+
+> 상태: 📅 예정
 
 - HookIPCServer transport abstraction.
 - UDS listener 구현.
@@ -606,6 +618,8 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 - TCP fallback 유지.
 
 ### Phase 7. Replay / PTY
+
+> 상태: 📅 예정
 
 - Replay Log window 추가.
 - event replay / rule creation from event 추가.
