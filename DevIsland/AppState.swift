@@ -248,7 +248,11 @@ class AppState: ObservableObject {
                             fromLegacyResponse: rawResponse,
                             requestId: rid,
                             source: providerContext.source,
-                            event: providerContext.event
+                            event: providerContext.event,
+                            toolName: providerContext.toolName,
+                            ruleContent: providerContext.ruleContent,
+                            claudeSessionApprovalMode: Self.currentClaudeSessionApprovalMode(),
+                            claudePersistentApprovalDestination: Self.currentClaudePersistentApprovalDestination()
                         ))
                     }
                 } else {
@@ -282,13 +286,27 @@ class AppState: ObservableObject {
         fromLegacyResponse rawResponse: String,
         requestId: String,
         source: String? = nil,
-        event: String? = nil
+        event: String? = nil,
+        toolName: String? = nil,
+        ruleContent: String? = nil,
+        claudeSessionApprovalMode: ClaudeSessionApprovalMode = .nativePermissions,
+        claudePersistentApprovalDestination: ClaudePersistentApprovalDestination = .userSettings
     ) -> String {
         let parsed = try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any]
         let decision = parsed?["response"] as? String
+        let approvalScope = (parsed?["approval_scope"] as? String).flatMap(RuleScope.init(rawValue:))
         let providerOutput: [String: AnyJSON]?
         if let source, let event {
-            providerOutput = ProviderAdapter.providerOutput(decision: decision, event: event, source: source)
+            providerOutput = ProviderAdapter.providerOutput(
+                decision: decision,
+                event: event,
+                source: source,
+                approvalScope: approvalScope,
+                toolName: (parsed?["tool_name"] as? String) ?? toolName,
+                ruleContent: (parsed?["rule_content"] as? String) ?? ruleContent,
+                claudeSessionApprovalMode: claudeSessionApprovalMode,
+                claudePersistentApprovalDestination: claudePersistentApprovalDestination
+            )
         } else {
             providerOutput = nil
         }
@@ -300,11 +318,16 @@ class AppState: ObservableObject {
         return rawResponse
     }
 
-    static func providerContext(fromEnvelopeMessage message: String) -> (source: String?, event: String?) {
+    static func providerContext(fromEnvelopeMessage message: String) -> (
+        source: String?,
+        event: String?,
+        toolName: String?,
+        ruleContent: String?
+    ) {
         guard let data = message.data(using: .utf8),
               let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: data),
               envelope.protocol == IPCEnvelope.protocolName else {
-            return (nil, nil)
+            return (nil, nil, nil, nil)
         }
         let event: String?
         if case .string(let hookEvent)? = envelope.payload["hook_event_name"] {
@@ -314,7 +337,38 @@ class AppState: ObservableObject {
         } else {
             event = nil
         }
-        return (envelope.source, event)
+        let toolName: String?
+        if case .string(let payloadToolName)? = envelope.payload["tool_name"] {
+            toolName = payloadToolName
+        } else {
+            toolName = nil
+        }
+        let ruleContent = Self.claudePermissionRuleContent(from: envelope.payload)
+        return (envelope.source, event, toolName, ruleContent)
+    }
+
+    private static func claudePermissionRuleContent(from payload: [String: AnyJSON]) -> String? {
+        guard case .object(let toolInput)? = payload["tool_input"] else { return nil }
+        if case .string(let command)? = toolInput["command"], !command.isEmpty {
+            return command
+        }
+        if case .string(let filePath)? = toolInput["file_path"], !filePath.isEmpty {
+            return filePath
+        }
+        if case .string(let pattern)? = toolInput["pattern"], !pattern.isEmpty {
+            return pattern
+        }
+        return nil
+    }
+
+    private static func currentClaudeSessionApprovalMode() -> ClaudeSessionApprovalMode {
+        let raw = UserDefaults.standard.string(forKey: "claudeSessionApprovalMode")
+        return raw.flatMap(ClaudeSessionApprovalMode.init(rawValue:)) ?? AppSettings.defaults.claudeSessionApprovalMode
+    }
+
+    private static func currentClaudePersistentApprovalDestination() -> ClaudePersistentApprovalDestination {
+        let raw = UserDefaults.standard.string(forKey: "claudePersistentApprovalDestination")
+        return raw.flatMap(ClaudePersistentApprovalDestination.init(rawValue:)) ?? AppSettings.defaults.claudePersistentApprovalDestination
     }
 
     private func ensureSelectedDisplay() {
@@ -1229,10 +1283,22 @@ class AppState: ObservableObject {
         }
     }
 
-    private func sendDecision(approved: Bool, reason: String? = nil, status: SessionStatus? = nil, passToTerminal: Bool = false) {
-        let payload = passToTerminal
-            ? "{\"response\": \"pass\"}"
-            : approved ? "{\"response\": \"approved\"}" : "{\"response\": \"denied\"}"
+    private func sendDecision(
+        approved: Bool,
+        reason: String? = nil,
+        status: SessionStatus? = nil,
+        passToTerminal: Bool = false,
+        approvalScope: RuleScope? = nil
+    ) {
+        let response = passToTerminal ? "pass" : approved ? "approved" : "denied"
+        var responsePayload: [String: Any] = ["response": response]
+        if let approvalScope {
+            responsePayload["approval_scope"] = approvalScope.rawValue
+            responsePayload["tool_name"] = currentToolName
+            responsePayload["rule_content"] = currentMessage
+        }
+        let data = try? JSONSerialization.data(withJSONObject: responsePayload)
+        let payload = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"response\":\"\(response)\"}"
         print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
         currentResponseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
@@ -1306,7 +1372,8 @@ class AppState: ObservableObject {
             }
         }
         
-        sendDecision(approved: true)
+        let approvalScope: RuleScope? = sessionAlways ? .session : globalAlways ? .persistent : nil
+        sendDecision(approved: true, approvalScope: approvalScope)
     }
 
     func deny() {
