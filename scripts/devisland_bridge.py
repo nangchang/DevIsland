@@ -106,18 +106,31 @@ def build_envelope(payload: dict[str, Any], source: str, token: str | None) -> d
     return envelope
 
 
+def load_config() -> dict[str, Any]:
+    try:
+        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 def send_to_app(payload: dict[str, Any], source: str) -> tuple[str, dict[str, Any] | None]:
     """Send an IPC v1 envelope to the app and return (decision, providerOutput|None).
 
-    Falls back to a legacy raw-JSON exchange if the app responds without framing.
+    If a framed request receives an unframed response, treat that as a version
+    mismatch and fail closed.
     """
+    config = load_config()
     token = load_token()
     envelope = build_envelope(payload, source, token)
     body = json.dumps(envelope, ensure_ascii=False).encode("utf-8")
     frame = struct.pack(">I", len(body)) + body
 
-    with socket.create_connection(("127.0.0.1", 9090), timeout=5) as sock:
-        sock.settimeout(300)
+    port = int(config.get("bridgeTcpPort", 9090))
+    connect_timeout = float(config.get("bridgeConnectTimeoutSeconds", 5))
+    response_timeout = float(config.get("bridgeResponseTimeoutSeconds", 300))
+
+    with socket.create_connection(("127.0.0.1", port), timeout=connect_timeout) as sock:
+        sock.settimeout(response_timeout)
         sock.sendall(frame)
         # Half-close write so older HookSocketServer (EOF-based) can detect end-of-message.
         # The framing server reads exactly `length` bytes and ignores the FIN, so this is safe.
@@ -131,10 +144,10 @@ def send_to_app(payload: dict[str, Any], source: str) -> tuple[str, dict[str, An
             response_chunks.append(chunk)
 
     raw = b"".join(response_chunks)
-    return _parse_response(raw)
+    return _parse_response(raw, framed_request=True)
 
 
-def _parse_response(raw: bytes) -> tuple[str, dict[str, Any] | None]:
+def _parse_response(raw: bytes, *, framed_request: bool = False) -> tuple[str, dict[str, Any] | None]:
     """Return (decision, providerOutput|None).
 
     Handles both framed rich responses and legacy raw-JSON responses.
@@ -152,6 +165,13 @@ def _parse_response(raw: bytes) -> tuple[str, dict[str, Any] | None]:
         provider_output = obj.get("providerOutput") or None
         decision = obj.get("decision") or "pass"
         return decision, provider_output
+
+    if framed_request:
+        # A v1-capable app must answer a framed request with a framed response. If a
+        # legacy app receives the binary-prefixed envelope as raw JSON, it may parse
+        # failure as a harmless notification and return {"response":"approved"}.
+        # Treat that version mismatch as fail-closed instead of trusting the raw body.
+        return "denied", None
 
     # Legacy raw JSON response: {"response": "approved|denied|pass"}
     try:
@@ -171,11 +191,7 @@ def fallback_decision() -> str:
     Reads approvalFallbackPolicy from bridge-config.json; defaults to "deny".
     "allowReadOnly" maps to "pass" (let the CLI handle it), everything else → "deny".
     """
-    try:
-        config = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-        policy = config.get("approvalFallbackPolicy", "denyUnknown")
-    except OSError:
-        policy = "denyUnknown"
+    policy = load_config().get("approvalFallbackPolicy", "denyUnknown")
     return "pass" if policy == "allowReadOnly" else "deny"
 
 

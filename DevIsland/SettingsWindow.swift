@@ -258,32 +258,25 @@ private struct BridgeIPCSettingsPane: View {
     var body: some View {
         Form {
             Section("Transport") {
-                Picker("Transport", selection: store.binding(\.bridgeTransportKind)) {
-                    ForEach(BridgeTransportKind.allCases) { transport in
-                        Text(transport.label).tag(transport)
-                    }
-                }
-                Toggle("Fallback to TCP when Unix socket is unavailable", isOn: store.binding(\.bridgeFallbackToTcp))
+                LabeledContent("Transport", value: BridgeTransportKind.tcpLoopback.label)
+                Text("Unix domain socket transport is planned for a later Approval Proxy phase. The installed bridge and app currently communicate over TCP loopback.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("TCP") {
-                Stepper(value: store.binding(\.bridgeTcpPort), in: 1...65535) {
-                    Text("Port: \(store.settings.bridgeTcpPort)")
-                }
+                LabeledContent("Port", value: "\(AppSettings.defaults.bridgeTcpPort)")
             }
 
             Section("Unix domain socket") {
                 TextField("Socket path", text: store.binding(\.bridgeSocketPath))
                     .textFieldStyle(.roundedBorder)
+                    .disabled(true)
             }
 
             Section("Timeouts") {
-                Stepper(value: store.binding(\.bridgeConnectTimeoutSeconds), in: 1...60, step: 1) {
-                    Text("Connect timeout: \(Int(store.settings.bridgeConnectTimeoutSeconds)) seconds")
-                }
-                Stepper(value: store.binding(\.bridgeResponseTimeoutSeconds), in: 1...86400, step: 10) {
-                    Text("Response timeout: \(Int(store.settings.bridgeResponseTimeoutSeconds)) seconds")
-                }
+                LabeledContent("Connect timeout", value: "\(Int(AppSettings.defaults.bridgeConnectTimeoutSeconds)) seconds")
+                LabeledContent("Response timeout", value: "\(Int(AppSettings.defaults.bridgeResponseTimeoutSeconds)) seconds")
             }
         }
         .formStyle(.grouped)

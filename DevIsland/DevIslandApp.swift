@@ -5,6 +5,10 @@ struct DevIslandApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject private var state = AppState.shared
 
+    init() {
+        _ = SettingsStore.shared
+    }
+
     var body: some Scene {
         MenuBarExtra {
             MenuBarMenu()

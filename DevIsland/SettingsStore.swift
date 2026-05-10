@@ -96,6 +96,15 @@ struct AppSettings: Equatable {
             .path
     }()
 
+    static let defaultBridgeConfigURL: URL = {
+        let fileManager = FileManager.default
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+        return appSupport
+            .appendingPathComponent("DevIsland", isDirectory: true)
+            .appendingPathComponent("bridge-config.json")
+    }()
+
     static let defaults = AppSettings(
         claudeSessionApprovalMode: .nativePermissions,
         claudePersistentApprovalDestination: .userSettings,
@@ -108,6 +117,23 @@ struct AppSettings: Equatable {
         approvalFallbackPolicy: .denyUnknown,
         replayRetentionDays: 30
     )
+}
+
+struct BridgeRuntimeConfig: Codable, Equatable {
+    let bridgeTcpPort: Int
+    let bridgeConnectTimeoutSeconds: Double
+    let bridgeResponseTimeoutSeconds: Double
+    let approvalFallbackPolicy: String
+
+    init(approvalFallbackPolicy: ApprovalFallbackPolicy) {
+        // Transport selection and listener reconfiguration are future Approval Proxy work.
+        // Until then, expose the running app's fixed listener values to the bridge and
+        // only sync the fallback policy from user settings.
+        self.bridgeTcpPort = AppSettings.defaults.bridgeTcpPort
+        self.bridgeConnectTimeoutSeconds = AppSettings.defaults.bridgeConnectTimeoutSeconds
+        self.bridgeResponseTimeoutSeconds = AppSettings.defaults.bridgeResponseTimeoutSeconds
+        self.approvalFallbackPolicy = approvalFallbackPolicy.rawValue
+    }
 }
 
 @MainActor
@@ -128,14 +154,20 @@ final class SettingsStore: ObservableObject {
     }
 
     private let userDefaults: UserDefaults
+    private let bridgeConfigURL: URL
 
     @Published var settings: AppSettings {
         didSet { save(settings) }
     }
 
-    init(userDefaults: UserDefaults = .standard) {
+    init(
+        userDefaults: UserDefaults = .standard,
+        bridgeConfigURL: URL = AppSettings.defaultBridgeConfigURL
+    ) {
         self.userDefaults = userDefaults
+        self.bridgeConfigURL = bridgeConfigURL
         self.settings = Self.load(from: userDefaults)
+        writeBridgeConfig(settings)
     }
 
     func resetToDefaults() {
@@ -153,6 +185,31 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.bridgeFallbackToTcp, forKey: DefaultsKey.bridgeFallbackToTcp)
         userDefaults.set(settings.approvalFallbackPolicy.rawValue, forKey: DefaultsKey.approvalFallbackPolicy)
         userDefaults.set(settings.replayRetentionDays, forKey: DefaultsKey.replayRetentionDays)
+        writeBridgeConfig(settings)
+    }
+
+    private func writeBridgeConfig(_ settings: AppSettings) {
+        do {
+            let fileManager = FileManager.default
+            try fileManager.createDirectory(
+                at: bridgeConfigURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try JSONEncoder().encode(BridgeRuntimeConfig(approvalFallbackPolicy: settings.approvalFallbackPolicy))
+            let attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
+            if fileManager.fileExists(atPath: bridgeConfigURL.path) {
+                try data.write(to: bridgeConfigURL, options: .atomic)
+                try fileManager.setAttributes(attributes, ofItemAtPath: bridgeConfigURL.path)
+            } else if !fileManager.createFile(atPath: bridgeConfigURL.path, contents: data, attributes: attributes) {
+                throw NSError(
+                    domain: "SettingsStore",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Unable to create bridge config"]
+                )
+            }
+        } catch {
+            print("SettingsStore: failed to write bridge config – \(error)")
+        }
     }
 
     private static func load(from userDefaults: UserDefaults) -> AppSettings {
