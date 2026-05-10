@@ -115,17 +115,6 @@ class AppState: ObservableObject {
         static let emulateGeminiInteractiveMode = "emulateGeminiInteractiveMode"
     }
 
-    private static let approvalEventsByAgent: [BuddyKind: Set<String>] = [
-        .claudeCode: ["permissionrequest"],
-        .codex: ["permissionrequest"],
-        .gemini: ["beforetool"]
-    ]
-    private static let userQuestionTools: Set<String> = [
-        "ask_user",
-        "askuser",
-        "request_user_input",
-        "requestuserinput"
-    ]
     typealias FrontmostCheck = (
         _ appName: String?,
         _ tty: String?,
@@ -254,15 +243,7 @@ class AppState: ObservableObject {
                 let effectiveHandler: (String) -> Void
                 if let rid = requestId {
                     effectiveHandler = { rawResponse in
-                        let decision = (try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any])
-                            .flatMap { $0["response"] as? String }
-                        let rich = IPCRichResponse(requestId: rid, decision: decision)
-                        if let richData = try? JSONEncoder().encode(rich),
-                           let richStr = String(data: richData, encoding: .utf8) {
-                            responseHandler(richStr)
-                        } else {
-                            responseHandler(rawResponse)
-                        }
+                        responseHandler(Self.richResponseString(fromLegacyResponse: rawResponse, requestId: rid))
                     }
                 } else {
                     effectiveHandler = responseHandler
@@ -289,6 +270,17 @@ class AppState: ObservableObject {
                 self?.pruneInactiveSessions()
             }
         }
+    }
+
+    static func richResponseString(fromLegacyResponse rawResponse: String, requestId: String) -> String {
+        let parsed = try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any]
+        let decision = parsed?["response"] as? String
+        let rich = IPCRichResponse(requestId: requestId, decision: decision)
+        if let richData = try? JSONEncoder().encode(rich),
+           let richString = String(data: richData, encoding: .utf8) {
+            return richString
+        }
+        return rawResponse
     }
 
     private func ensureSelectedDisplay() {
@@ -417,14 +409,13 @@ class AppState: ObservableObject {
         }
 
         if displayToolName.isEmpty { displayToolName = toolName }
-        let normalizedEvent = normalizedHookEventName(event)
+        let normalizedEvent = HookEventNormalizer.normalizedName(event)
         let stopEvents = ["exit", "shutdown", "sessionend"]
         let notificationEvents = [
             "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
             "startup", "init", "afteragent"
         ]
-        let normalizedToolName = normalizedHookEventName(toolName)
-        let isUserQuestionTool = Self.userQuestionTools.contains(normalizedToolName)
+        let isUserQuestionTool = HookEventNormalizer.isUserQuestionTool(toolName)
         // approval:
         // - Claude/Codex: PermissionRequest only
         // - Gemini: BeforeTool only
@@ -801,19 +792,12 @@ class AppState: ObservableObject {
         }
     }
 
-    func normalizedHookEventName(_ event: String) -> String {
-        event
-            .lowercased()
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: "-", with: "")
-    }
-
     private static func isApprovalEvent(_ normalizedEvent: String, for agentKind: BuddyKind) -> Bool {
-        approvalEventsByAgent[agentKind]?.contains(normalizedEvent) == true
+        HookEventNormalizer.isApprovalEvent(normalizedEvent, for: agentKind)
     }
 
     private func displayMessage(for toolName: String, toolInput: [String: Any]?, json: [String: Any], eventName: String) -> String {
-        if normalizedHookEventName(eventName) == "posttooluse" {
+        if HookEventNormalizer.normalizedName(eventName) == "posttooluse" {
             return postToolMessage(from: json["tool_response"] as? [String: Any])
         }
 
@@ -969,41 +953,7 @@ class AppState: ObservableObject {
     }
 
     static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
-        // 1. cli_source 필드가 명시적으로 있으면 최우선 적용
-        if let explicitSource = json["cli_source"] as? String, !explicitSource.isEmpty {
-            switch explicitSource {
-            case "gemini": return .gemini
-            case "codex":  return .codex
-            case "claude": return .claudeCode
-            default: break
-            }
-        }
-
-        // 2. hook_event_name 또는 event로 CLI 종류를 추측
-        let event = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? ""
-        let normalizedEvent = event
-            .lowercased()
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: "-", with: "")
-        switch normalizedEvent {
-        case "beforetool":                 return .gemini
-        case "pretooluse":                 return .codex
-        case "permissionrequest":
-            if json["tool_name"] != nil { return .codex }
-            if json["permission_type"] != nil { return .claudeCode }
-            return .claudeCode // 폴백
-        default: break
-        }
-        
-        // 3. 필드 구조나 타이틀로 추측 (폴백)
-        let candidateKeys = [
-            "agent", "agent_name", "agentName", "source", "client",
-            "app", "application", "cli", "model", "model_name"
-        ]
-        let candidates = candidateKeys.compactMap { json[$0] as? String } + [terminalTitle]
-        let joined = candidates.joined(separator: " ")
-
-        return BuddyKind(from: joined)
+        HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)
     }
 
     private func updateActiveSession(
@@ -1220,7 +1170,7 @@ class AppState: ObservableObject {
     }
 
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
-        return Self.isApprovalEvent(normalizedHookEventName(request.eventName), for: request.agentKind)
+        return Self.isApprovalEvent(HookEventNormalizer.normalizedName(request.eventName), for: request.agentKind)
             && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 

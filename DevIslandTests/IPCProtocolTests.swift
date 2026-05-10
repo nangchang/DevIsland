@@ -260,6 +260,33 @@ final class AppStateEnvelopeTests: XCTestCase {
         XCTAssertEqual(obj?["response"] as? String, "approved")
     }
 
+    func testLegacyResponseCanBeWrappedAsRichResponse() throws {
+        let response = AppState.richResponseString(
+            fromLegacyResponse: #"{"response":"approved"}"#,
+            requestId: "req-rich"
+        )
+
+        let data = try XCTUnwrap(response.data(using: .utf8))
+        let decoded = try JSONDecoder().decode(IPCRichResponse.self, from: data)
+        XCTAssertEqual(decoded.protocol, IPCEnvelope.protocolName)
+        XCTAssertEqual(decoded.version, IPCEnvelope.currentVersion)
+        XCTAssertEqual(decoded.requestId, "req-rich")
+        XCTAssertEqual(decoded.status, "ok")
+        XCTAssertEqual(decoded.decision, "approved")
+    }
+
+    func testLegacyDeniedResponseCanBeWrappedAsRichResponse() throws {
+        let response = AppState.richResponseString(
+            fromLegacyResponse: #"{"response":"denied"}"#,
+            requestId: "req-denied"
+        )
+
+        let data = try XCTUnwrap(response.data(using: .utf8))
+        let decoded = try JSONDecoder().decode(IPCRichResponse.self, from: data)
+        XCTAssertEqual(decoded.requestId, "req-denied")
+        XCTAssertEqual(decoded.decision, "denied")
+    }
+
     func testEnvelopeWithInvalidProtocolFallsBackToRaw() {
         // A JSON object that looks like an envelope but has wrong protocol.
         let raw = """

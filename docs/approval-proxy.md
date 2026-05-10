@@ -556,6 +556,12 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 ## 10. 구현 단계
 
+진행 원칙:
+
+- 각 Phase 작업을 시작하거나 완료할 때 이 섹션의 `상태`와 체크리스트를 같은 변경 안에서 갱신한다.
+- 코드만 먼저 진행하지 않는다. Approval Proxy는 장기 설계 문서가 기준이므로, 구현 상태와 문서 상태가 어긋나면 다음 작업자가 잘못된 우선순위를 잡기 쉽다.
+- 부분 구현은 `🔧 진행 중`으로 표시하고, 완료된 하위 항목은 체크된 bullet로 남긴다.
+
 ### Phase 1. 문서화 및 설정창 기반
 
 > 상태: ✅ 완료
@@ -568,22 +574,22 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 ### Phase 2. IPC protocol v1
 
-> 상태: 🔧 진행 중
+> 상태: ✅ 완료
 
-- bridge envelope 추가.
-- app envelope parser 추가.
-- raw JSON backward compatibility 유지.
-- token 파일 생성/검증 추가.
-- length-prefixed framing 추가.
-- rich response 추가.
-- transport failure fallback 정책 추가.
+- [x] bridge envelope 추가.
+- [x] app envelope parser 추가.
+- [x] raw JSON backward compatibility 유지.
+- [x] token 파일 생성/검증 추가.
+- [x] length-prefixed framing 추가.
+- [x] rich response 추가.
+- [x] transport failure fallback 정책 추가.
 
 ### Phase 3. ApprovalProxyController / PolicyEngine
 
-> 상태: 📅 예정
+> 상태: 🔧 진행 중
 
 - AppState.handleMessage에서 provider/policy 책임 분리.
-- HookEventNormalizer 추가.
+- [x] HookEventNormalizer 추가.
 - ProviderAdapter 추가.
 - SQLiteApprovalStore 추가.
 - session_cache / rules / replay log 테이블 추가.

@@ -172,8 +172,8 @@ class HookSocketServer {
             self?.onMessageReceived?(message, requestId) { response in
                 // Framed request → length-prefixed response.
                 let responseBytes = Data(response.utf8)
-                var length = UInt32(responseBytes.count).bigEndian
-                var framed = Data(bytes: &length, count: 4)
+                let length = UInt32(responseBytes.count).bigEndian
+                var framed = withUnsafeBytes(of: length) { Data($0) }
                 framed.append(responseBytes)
                 connection.send(content: framed, completion: .contentProcessed({ _ in
                     self?.closeConnection(id: id, connection: connection)

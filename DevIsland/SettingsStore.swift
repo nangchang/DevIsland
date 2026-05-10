@@ -198,7 +198,16 @@ final class SettingsStore: ObservableObject {
             let data = try JSONEncoder().encode(BridgeRuntimeConfig(approvalFallbackPolicy: settings.approvalFallbackPolicy))
             let attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
             if fileManager.fileExists(atPath: bridgeConfigURL.path) {
-                try data.write(to: bridgeConfigURL, options: .atomic)
+                let tempURL = bridgeConfigURL.deletingLastPathComponent()
+                    .appendingPathComponent(".\(bridgeConfigURL.lastPathComponent).\(UUID().uuidString).tmp")
+                guard fileManager.createFile(atPath: tempURL.path, contents: data, attributes: attributes) else {
+                    throw NSError(
+                        domain: "SettingsStore",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "Unable to create temporary bridge config"]
+                    )
+                }
+                _ = try fileManager.replaceItemAt(bridgeConfigURL, withItemAt: tempURL)
                 try fileManager.setAttributes(attributes, ofItemAtPath: bridgeConfigURL.path)
             } else if !fileManager.createFile(atPath: bridgeConfigURL.path, contents: data, attributes: attributes) {
                 throw NSError(
