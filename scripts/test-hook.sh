@@ -201,7 +201,7 @@ make_gemini_event() {
     local event="${1:-BeforeTool}"
     local tool="$2"
     local tool_input="$3"
-    make_json event "$event" session_id "$SESSION_ID" \
+    make_json hook_event_name "$event" session_id "$SESSION_ID" \
         tool_name "$tool" tool_input "$tool_input" cwd "$(pwd)"
 }
 
@@ -210,7 +210,7 @@ send_gemini_smoke() {
     send_event "$(make_gemini_event SessionStart)" gemini
     input=$(make_json command "ls -la")
     send_event "$(make_gemini_event BeforeTool run_shell_command "$input")" gemini
-    send_event "$(make_json event Notification session_id "$SESSION_ID" message "Gemini notification" cwd "$(pwd)")" gemini
+    send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "Gemini notification" cwd "$(pwd)")" gemini
     send_event "$(make_gemini_event AfterAgent)" gemini
 }
 
@@ -220,7 +220,7 @@ interactive_claude() {
     echo "🤖 Claude Code 훅 테스트"
     echo "Session ID: $SESSION_ID"
     echo "----------------------------"
-    send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID")" claude
+    send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" claude
 
     while true; do
         echo "무엇을 테스트하시겠습니까?"
@@ -274,7 +274,7 @@ interactive_codex() {
     echo "📦 Codex CLI 훅 테스트"
     echo "Session ID: $SESSION_ID"
     echo "----------------------------"
-    send_event "$(make_json event SessionStart session_id "$SESSION_ID")" codex
+    send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" codex
 
     while true; do
         echo "무엇을 테스트하시겠습니까?"
@@ -330,7 +330,7 @@ interactive_gemini() {
     echo "✨ Gemini CLI 훅 테스트"
     echo "Session ID: $SESSION_ID"
     echo "----------------------------"
-    send_event "$(make_gemini_event SessionStart)" gemini
+    send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" gemini
 
     while true; do
         echo "무엇을 테스트하시겠습니까?"
@@ -353,14 +353,14 @@ interactive_gemini() {
                 input=$(make_json command "rm -rf /")
                 send_event "$(make_gemini_event BeforeTool run_shell_command "$input")" gemini ;;
             3)
-                input=$(make_json path "test.txt" content "Hello from Gemini!")
+                input=$(make_json file_path "test.txt" content "Hello from Gemini!")
                 send_event "$(make_gemini_event BeforeTool write_file "$input")" gemini ;;
             4)
-                input=$(make_json path "README.md")
+                input=$(make_json file_path "README.md")
                 send_event "$(make_gemini_event BeforeTool read_file "$input")" gemini ;;
             5)
                 read -p "질문 메시지: " msg
-                send_event "$(make_json event BeforeTool session_id "$SESSION_ID" message "$msg")" gemini ;;
+                send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "$msg")" gemini ;;
             6)
                 send_event "$(make_gemini_event AfterAgent)" gemini ;;
             7)
@@ -413,7 +413,7 @@ fi
 case "$COMMAND" in
     # ── Claude Code 이벤트 ──────────────────────────────────────────────
     start)
-        send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID")" claude ;;
+        send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" cwd "$(pwd)")" claude ;;
     bash)
         CMD=${1:-"ls -la"}
         input=$(make_json command "$CMD")
@@ -469,7 +469,7 @@ case "$COMMAND" in
     gemini-afteragent)
         send_event "$(make_gemini_event AfterAgent)" gemini ;;
     gemini-notify)
-        send_event "$(make_json event Notification session_id "$SESSION_ID" message "${1:-Gemini notification}" cwd "$(pwd)")" gemini ;;
+        send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "${1:-Gemini notification}" cwd "$(pwd)")" gemini ;;
     gemini-end)
         send_event "$(make_gemini_event SessionEnd)" gemini ;;
     gemini-smoke)
