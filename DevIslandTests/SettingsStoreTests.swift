@@ -1,6 +1,7 @@
 import XCTest
 @testable import DevIsland
 
+@MainActor
 final class SettingsStoreTests: XCTestCase {
     private var defaults: UserDefaults!
 
@@ -23,6 +24,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings.claudePersistentApprovalDestination, .userSettings)
         XCTAssertEqual(store.settings.bridgeTransportKind, .tcpLoopback)
         XCTAssertEqual(store.settings.bridgeSocketPath, AppSettings.defaultBridgeSocketPath)
+        XCTAssertFalse(store.settings.bridgeSocketPath.hasPrefix("~"))
+        XCTAssertTrue(store.settings.bridgeSocketPath.hasSuffix("DevIsland/dev-island.sock"))
         XCTAssertEqual(store.settings.bridgeTcpPort, 9090)
         XCTAssertEqual(store.settings.bridgeConnectTimeoutSeconds, 5)
         XCTAssertEqual(store.settings.bridgeResponseTimeoutSeconds, 300)

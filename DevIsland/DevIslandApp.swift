@@ -36,7 +36,7 @@ struct MenuBarMenu: View {
             Text("대기 중인 요청 없음")
                 .foregroundStyle(.secondary)
         } else {
-            Text("Pending Requests: \(state.pendingItems.count)")
+            Text("요청 대기 중: \(state.pendingItems.count)건")
                 .font(.headline)
             ForEach(state.pendingItems) { item in
                 HStack(spacing: 6) {

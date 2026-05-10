@@ -3,38 +3,61 @@ import AppKit
 
 // MARK: - Window Routing
 
+@MainActor
 enum AppWindowRouter {
-    private static let settingsController = HostedWindowController(
-        title: "DevIsland Settings",
-        size: NSSize(width: 760, height: 560),
-        rootView: AnyView(SettingsWindowView())
-    )
+    private static var settingsController: HostedWindowController?
+    private static var approvalRulesController: HostedWindowController?
+    private static var replayLogController: HostedWindowController?
 
-    private static let approvalRulesController = HostedWindowController(
-        title: "Approval Rules",
-        size: NSSize(width: 720, height: 480),
-        rootView: AnyView(PlaceholderToolWindowView(
-            title: "Approval Rules",
-            systemImage: "checklist.checked",
-            message: "Persistent and session approval rule management will be implemented in a later Approval Proxy phase."
-        ))
-    )
+    static func showSettings() {
+        let controller = cachedController(&settingsController) {
+            HostedWindowController(
+                title: "DevIsland Settings",
+                size: NSSize(width: 760, height: 560),
+                rootView: AnyView(SettingsWindowView())
+            )
+        }
+        controller.show()
+    }
 
-    private static let replayLogController = HostedWindowController(
-        title: "Replay Log",
-        size: NSSize(width: 720, height: 480),
-        rootView: AnyView(PlaceholderToolWindowView(
-            title: "Replay Log",
-            systemImage: "clock.arrow.circlepath",
-            message: "Hook event replay, decision audit, and rule creation from events will be implemented in a later Approval Proxy phase."
-        ))
-    )
+    static func showApprovalRules() {
+        let controller = cachedController(&approvalRulesController) {
+            HostedWindowController(
+                title: "Approval Rules",
+                size: NSSize(width: 760, height: 560),
+                rootView: AnyView(ApprovalRulesWindowView())
+            )
+        }
+        controller.show()
+    }
 
-    static func showSettings() { settingsController.show() }
-    static func showApprovalRules() { approvalRulesController.show() }
-    static func showReplayLog() { replayLogController.show() }
+    static func showReplayLog() {
+        let controller = cachedController(&replayLogController) {
+            HostedWindowController(
+                title: "Replay Log",
+                size: NSSize(width: 720, height: 480),
+                rootView: AnyView(PlaceholderToolWindowView(
+                    title: "Replay Log",
+                    systemImage: "clock.arrow.circlepath",
+                    message: "Hook event replay, decision audit, and rule creation from events will be implemented in a later Approval Proxy phase."
+                ))
+            )
+        }
+        controller.show()
+    }
+
+    private static func cachedController(
+        _ storage: inout HostedWindowController?,
+        make: () -> HostedWindowController
+    ) -> HostedWindowController {
+        if let storage { return storage }
+        let controller = make()
+        storage = controller
+        return controller
+    }
 }
 
+@MainActor
 final class HostedWindowController: NSWindowController {
     init(title: String, size: NSSize, rootView: AnyView) {
         let hostingController = NSHostingController(rootView: rootView)
@@ -69,8 +92,8 @@ private extension NSWindow {
 // MARK: - Settings
 
 struct SettingsWindowView: View {
-    @ObservedObject private var appState = AppState.shared
-    @ObservedObject private var store = SettingsStore.shared
+    @StateObject private var appState = AppState.shared
+    @StateObject private var store = SettingsStore.shared
 
     var body: some View {
         TabView {
@@ -94,6 +117,15 @@ struct SettingsWindowView: View {
         }
         .padding(16)
         .frame(minWidth: 700, minHeight: 500)
+    }
+}
+
+private extension SettingsStore {
+    func binding<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
+        Binding(
+            get: { self.settings[keyPath: keyPath] },
+            set: { self.settings[keyPath: keyPath] = $0 }
+        )
     }
 }
 
@@ -167,7 +199,7 @@ private struct ApprovalSettingsPane: View {
             }
 
             Section("Transport failure fallback") {
-                Picker("Fallback policy", selection: binding(\.approvalFallbackPolicy)) {
+                Picker("Fallback policy", selection: store.binding(\.approvalFallbackPolicy)) {
                     ForEach(ApprovalFallbackPolicy.allCases) { policy in
                         Text(policy.label).tag(policy)
                     }
@@ -175,13 +207,6 @@ private struct ApprovalSettingsPane: View {
             }
         }
         .formStyle(.grouped)
-    }
-
-    private func binding<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
-        Binding(
-            get: { store.settings[keyPath: keyPath] },
-            set: { store.settings[keyPath: keyPath] = $0 }
-        )
     }
 }
 
@@ -191,7 +216,7 @@ private struct ProviderSettingsPane: View {
     var body: some View {
         Form {
             Section("Claude Code") {
-                Picker("Session approval mode", selection: binding(\.claudeSessionApprovalMode)) {
+                Picker("Session approval mode", selection: store.binding(\.claudeSessionApprovalMode)) {
                     ForEach(ClaudeSessionApprovalMode.allCases) { mode in
                         Text(mode.label).tag(mode)
                     }
@@ -201,7 +226,7 @@ private struct ProviderSettingsPane: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Picker("Persistent approval destination", selection: binding(\.claudePersistentApprovalDestination)) {
+                Picker("Persistent approval destination", selection: store.binding(\.claudePersistentApprovalDestination)) {
                     ForEach(ClaudePersistentApprovalDestination.allCases) { destination in
                         Text(destination.label).tag(destination)
                     }
@@ -225,13 +250,6 @@ private struct ProviderSettingsPane: View {
         }
         .formStyle(.grouped)
     }
-
-    private func binding<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
-        Binding(
-            get: { store.settings[keyPath: keyPath] },
-            set: { store.settings[keyPath: keyPath] = $0 }
-        )
-    }
 }
 
 private struct BridgeIPCSettingsPane: View {
@@ -240,42 +258,35 @@ private struct BridgeIPCSettingsPane: View {
     var body: some View {
         Form {
             Section("Transport") {
-                Picker("Transport", selection: binding(\.bridgeTransportKind)) {
+                Picker("Transport", selection: store.binding(\.bridgeTransportKind)) {
                     ForEach(BridgeTransportKind.allCases) { transport in
                         Text(transport.label).tag(transport)
                     }
                 }
-                Toggle("Fallback to TCP when Unix socket is unavailable", isOn: binding(\.bridgeFallbackToTcp))
+                Toggle("Fallback to TCP when Unix socket is unavailable", isOn: store.binding(\.bridgeFallbackToTcp))
             }
 
             Section("TCP") {
-                Stepper(value: binding(\.bridgeTcpPort), in: 1...65535) {
+                Stepper(value: store.binding(\.bridgeTcpPort), in: 1...65535) {
                     Text("Port: \(store.settings.bridgeTcpPort)")
                 }
             }
 
             Section("Unix domain socket") {
-                TextField("Socket path", text: binding(\.bridgeSocketPath))
+                TextField("Socket path", text: store.binding(\.bridgeSocketPath))
                     .textFieldStyle(.roundedBorder)
             }
 
             Section("Timeouts") {
-                Stepper(value: binding(\.bridgeConnectTimeoutSeconds), in: 1...60, step: 1) {
+                Stepper(value: store.binding(\.bridgeConnectTimeoutSeconds), in: 1...60, step: 1) {
                     Text("Connect timeout: \(Int(store.settings.bridgeConnectTimeoutSeconds)) seconds")
                 }
-                Stepper(value: binding(\.bridgeResponseTimeoutSeconds), in: 1...86400, step: 10) {
+                Stepper(value: store.binding(\.bridgeResponseTimeoutSeconds), in: 1...86400, step: 10) {
                     Text("Response timeout: \(Int(store.settings.bridgeResponseTimeoutSeconds)) seconds")
                 }
             }
         }
         .formStyle(.grouped)
-    }
-
-    private func binding<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
-        Binding(
-            get: { store.settings[keyPath: keyPath] },
-            set: { store.settings[keyPath: keyPath] = $0 }
-        )
     }
 }
 
@@ -288,6 +299,130 @@ private struct ExperimentalPTYSettingsPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct ApprovalRulesWindowView: View {
+    @StateObject private var state = AppState.shared
+    private let riskGroups = ToolRiskLevel.allCases
+
+    var body: some View {
+        Form {
+            Section("Global auto-approval tools") {
+                Text("These existing DevIsland rules are checked for every session before showing an approval prompt.")
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Button("Add manually…") {
+                        state.promptToAddGlobalAutoApprove()
+                    }
+                    predefinedToolMenu { tool in
+                        state.globalAutoApproveTypes.insert(tool.id)
+                    }
+                }
+
+                if state.globalAutoApproveTypes.isEmpty {
+                    Text("No global auto-approval tools are configured.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button(role: .destructive) {
+                        state.globalAutoApproveTypes.removeAll()
+                    } label: {
+                        Label("Remove all global tools", systemImage: "trash.fill")
+                    }
+
+                    ForEach(Array(state.globalAutoApproveTypes.sorted()), id: \.self) { tool in
+                        ruleRow(tool: tool) {
+                            state.globalAutoApproveTypes.remove(tool)
+                        }
+                    }
+                }
+            }
+
+            Section("Session auto-approval tools") {
+                Text("Session rules remain available until the corresponding active session is removed.")
+                    .foregroundStyle(.secondary)
+
+                if state.activeSessions.isEmpty {
+                    Text("No active sessions.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(state.activeSessions) { session in
+                        let tools = state.sessionAutoApproveTypes[session.id] ?? []
+                        DisclosureGroup("Session \(session.id.prefix(8)) (\(tools.count) tools)") {
+                            HStack {
+                                Button("Add manually…") {
+                                    state.promptToAddSessionAutoApprove(for: session.id)
+                                }
+                                predefinedToolMenu { tool in
+                                    addSessionTool(tool.id, to: session.id)
+                                }
+                            }
+
+                            if tools.isEmpty {
+                                Text("No session auto-approval tools are configured.")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Button(role: .destructive) {
+                                    state.sessionAutoApproveTypes[session.id]?.removeAll()
+                                } label: {
+                                    Label("Remove all session tools", systemImage: "trash.fill")
+                                }
+
+                                ForEach(Array(tools.sorted()), id: \.self) { tool in
+                                    ruleRow(tool: tool) {
+                                        state.sessionAutoApproveTypes[session.id]?.remove(tool)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding(16)
+        .frame(minWidth: 700, minHeight: 500)
+    }
+
+    private func predefinedToolMenu(onSelect: @escaping (KnownTool) -> Void) -> some View {
+        Menu("Add from list") {
+            ForEach(riskGroups, id: \.self) { risk in
+                let tools = ToolKnowledge.predefined.filter { $0.risk == risk }
+                if !tools.isEmpty {
+                    Menu("\(risk.emoji) \(risk.rawValue)") {
+                        Button("Add all \(risk.rawValue) tools") {
+                            tools.forEach(onSelect)
+                        }
+                        Divider()
+                        ForEach(tools) { tool in
+                            Button("\(tool.name) (\(tool.id)) \(risk.emoji)") {
+                                onSelect(tool)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func ruleRow(tool: String, onRemove: @escaping () -> Void) -> some View {
+        HStack {
+            let risk = ToolKnowledge.risk(for: tool)
+            Label("\(tool) \(risk.emoji)", systemImage: "checkmark.circle")
+            Spacer()
+            Button(role: .destructive, action: onRemove) {
+                Image(systemName: "minus.circle")
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private func addSessionTool(_ tool: String, to sessionId: String) {
+        if state.sessionAutoApproveTypes[sessionId] == nil {
+            state.sessionAutoApproveTypes[sessionId] = []
+        }
+        state.sessionAutoApproveTypes[sessionId]?.insert(tool)
     }
 }
 

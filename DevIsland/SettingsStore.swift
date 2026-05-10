@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 // MARK: - Approval Proxy Settings
 
@@ -85,7 +86,15 @@ struct AppSettings: Equatable {
     var approvalFallbackPolicy: ApprovalFallbackPolicy
     var replayRetentionDays: Int
 
-    static let defaultBridgeSocketPath = "~/Library/Application Support/DevIsland/dev-island.sock"
+    static let defaultBridgeSocketPath: String = {
+        let fileManager = FileManager.default
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+        return appSupport
+            .appendingPathComponent("DevIsland", isDirectory: true)
+            .appendingPathComponent("dev-island.sock")
+            .path
+    }()
 
     static let defaults = AppSettings(
         claudeSessionApprovalMode: .nativePermissions,
@@ -101,6 +110,7 @@ struct AppSettings: Equatable {
     )
 }
 
+@MainActor
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
@@ -224,6 +234,7 @@ final class SettingsStore: ObservableObject {
     }
 
     private static func positiveInt(key: String, from userDefaults: UserDefaults, default defaultValue: Int) -> Int {
+        guard userDefaults.object(forKey: key) != nil else { return defaultValue }
         let value = userDefaults.integer(forKey: key)
         return value > 0 ? value : defaultValue
     }
