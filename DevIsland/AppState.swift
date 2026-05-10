@@ -247,8 +247,27 @@ class AppState: ObservableObject {
         ensureSelectedDisplay()
 
         if startServer {
-            server.onMessageReceived = { [weak self] message, responseHandler in
-                self?.handleMessage(message, responseHandler: responseHandler)
+            BridgeTokenManager.shared.generateIfNeeded()
+
+            server.onMessageReceived = { [weak self] message, requestId, responseHandler in
+                // Wrap responseHandler to produce a rich response for framed (v1 envelope) requests.
+                let effectiveHandler: (String) -> Void
+                if let rid = requestId {
+                    effectiveHandler = { rawResponse in
+                        let decision = (try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any])
+                            .flatMap { $0["response"] as? String }
+                        let rich = IPCRichResponse(requestId: rid, decision: decision)
+                        if let richData = try? JSONEncoder().encode(rich),
+                           let richStr = String(data: richData, encoding: .utf8) {
+                            responseHandler(richStr)
+                        } else {
+                            responseHandler(rawResponse)
+                        }
+                    }
+                } else {
+                    effectiveHandler = responseHandler
+                }
+                self?.handleMessage(message, responseHandler: effectiveHandler)
             }
             server.onServerFailed = {
                 print("[DevIsland] [ERROR] Socket server failed. Check if port 9090 is occupied.")
@@ -321,7 +340,27 @@ class AppState: ObservableObject {
     }
 
     func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
-        guard let data = message.data(using: .utf8) else { return }
+        guard let rawData = message.data(using: .utf8) else { return }
+
+        // Detect IPC protocol v1 envelope vs raw JSON.
+        // Raw JSON always starts with '{' (0x7B); envelopes use length-prefixed framing so
+        // the HookSocketServer already stripped the length header before calling us.
+        let data: Data
+        if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData),
+           envelope.protocol == IPCEnvelope.protocolName {
+            guard BridgeTokenManager.shared.validate(envelope.token) else {
+                print("[DevIsland] IPC token validation failed – denying request")
+                responseHandler("{\"response\": \"denied\"}")
+                return
+            }
+            guard let payloadData = try? JSONEncoder().encode(envelope.payload) else {
+                responseHandler("{\"response\": \"denied\"}")
+                return
+            }
+            data = payloadData
+        } else {
+            data = rawData
+        }
 
         var event     = "Unknown"
         var toolName  = ""
