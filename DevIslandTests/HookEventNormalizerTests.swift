@@ -37,6 +37,7 @@ final class HookEventNormalizerTests: XCTestCase {
 
     func testApprovalEventClassificationIsProviderSpecific() {
         XCTAssertTrue(HookEventNormalizer.isApprovalEvent("permissionrequest", for: .claudeCode))
+        XCTAssertTrue(HookEventNormalizer.isApprovalEvent("elicitation", for: .claudeCode))
         XCTAssertTrue(HookEventNormalizer.isApprovalEvent("permissionrequest", for: .codex))
         XCTAssertTrue(HookEventNormalizer.isApprovalEvent("beforetool", for: .gemini))
         XCTAssertFalse(HookEventNormalizer.isApprovalEvent("pretooluse", for: .claudeCode))

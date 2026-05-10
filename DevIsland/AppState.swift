@@ -299,6 +299,7 @@ class AppState: ObservableObject {
         let approvalScope = (parsed?["approval_scope"] as? String).flatMap(RuleScope.init(rawValue:))
         let providerOutput: [String: AnyJSON]?
         if let source, let event {
+            let denialMessage = parsed?["reason"] as? String ?? ProviderAdapter.denialMessage
             providerOutput = ProviderAdapter.providerOutput(
                 decision: decision,
                 event: event,
@@ -308,7 +309,8 @@ class AppState: ObservableObject {
                 ruleContent: (parsed?["rule_content"] as? String) ?? ruleContent,
                 toolInput: toolInput,
                 claudeSessionApprovalMode: claudeSessionApprovalMode,
-                claudePersistentApprovalDestination: claudePersistentApprovalDestination
+                claudePersistentApprovalDestination: claudePersistentApprovalDestination,
+                denialMessage: denialMessage
             )
         } else {
             providerOutput = nil
@@ -506,8 +508,20 @@ class AppState: ObservableObject {
                 )
         }
 
-        if displayToolName.isEmpty { displayToolName = toolName }
         let normalizedEvent = HookEventNormalizer.normalizedName(event)
+        if displayToolName.isEmpty {
+            if normalizedEvent == "elicitation" {
+                if let serverName = parsedJSON?["mcp_server_name"] as? String, !serverName.isEmpty {
+                    displayToolName = "Elicitation (\(serverName))"
+                } else {
+                    displayToolName = "Elicitation"
+                }
+            } else if normalizedEvent == "userpromptsubmit" {
+                displayToolName = "User Prompt"
+            } else {
+                displayToolName = toolName
+            }
+        }
         let stopEvents = ["exit", "shutdown", "sessionend"]
         let notificationEvents = [
             "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
@@ -561,6 +575,23 @@ class AppState: ObservableObject {
                 }
             }
             responseHandler("{\"response\": \"approved\"}")
+            return
+        }
+
+        if normalizedEvent == "userpromptsubmit", agentKind == .claudeCode,
+           let prompt = parsedJSON?["prompt"] as? String,
+           let denialReason = ClaudePromptPolicy.denialReason(for: prompt) {
+            print("[DevIsland] Claude UserPromptSubmit blocked by prompt policy")
+            let responsePayload: [String: Any] = [
+                "response": "denied",
+                "reason": denialReason
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: responsePayload),
+               let payload = String(data: data, encoding: .utf8) {
+                responseHandler(payload)
+            } else {
+                responseHandler("{\"response\":\"denied\"}")
+            }
             return
         }
 
@@ -895,6 +926,11 @@ class AppState: ObservableObject {
     }
 
     private func displayMessage(for toolName: String, toolInput: [String: Any]?, json: [String: Any], eventName: String) -> String {
+        if HookEventNormalizer.normalizedName(eventName) == "userpromptsubmit",
+           let prompt = json["prompt"] as? String {
+            return prompt
+        }
+
         if HookEventNormalizer.normalizedName(eventName) == "posttooluse" {
             return postToolMessage(from: json["tool_response"] as? [String: Any])
         }
@@ -1302,6 +1338,9 @@ class AppState: ObservableObject {
     ) {
         let response = passToTerminal ? "pass" : approved ? "approved" : "denied"
         var responsePayload: [String: Any] = ["response": response]
+        if let reason {
+            responsePayload["reason"] = reason
+        }
         if let approvalScope {
             responsePayload["approval_scope"] = approvalScope.rawValue
             responsePayload["tool_name"] = currentToolName

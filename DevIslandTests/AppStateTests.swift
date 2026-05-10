@@ -80,6 +80,27 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.activeSessions.contains(where: { $0.id == "test-session" }))
     }
 
+    func testClaudeUserPromptSubmitPolicyBlocksSecretPrompt() {
+        let expectation = XCTestExpectation(description: "Prompt policy response")
+        let message = """
+        {
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "test-session-prompt",
+            "cli_source": "claude",
+            "prompt": "api_key=sk-test"
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "denied")
+            XCTAssertNotNil(json?["reason"] as? String)
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 2.0)
+    }
+
     func testPendingRequestQueue() {
         let expectation = XCTestExpectation(description: "Response handler called for approval")
         let message = """

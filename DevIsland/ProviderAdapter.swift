@@ -80,6 +80,16 @@ struct ProviderAdapter {
             }
         }
 
+        let normalizedEvent = HookEventNormalizer.normalizedName(event)
+
+        if provider == .claude, normalizedEvent == "userpromptsubmit" {
+            return claudeUserPromptSubmitOutput(allow: allow, denialMessage: denialMessage)
+        }
+
+        if provider == .claude, normalizedEvent == "elicitation" {
+            return claudeElicitationOutput(allow: allow)
+        }
+
         if provider == .claude, event == "PreToolUse" {
             return claudePreToolUseOutput(
                 allow: allow,
@@ -138,6 +148,34 @@ struct ProviderAdapter {
             hookOutput["updatedInput"] = updatedInput
         }
         return ["hookSpecificOutput": .object(hookOutput)]
+    }
+
+    private static func claudeUserPromptSubmitOutput(allow: Bool, denialMessage: String) -> [String: AnyJSON] {
+        guard !allow else {
+            return [
+                "continue": .bool(true),
+                "suppressOutput": .bool(true)
+            ]
+        }
+        return [
+            "decision": .string("block"),
+            "reason": .string(denialMessage)
+        ]
+    }
+
+    private static func claudeElicitationOutput(allow: Bool) -> [String: AnyJSON] {
+        guard !allow else {
+            return [
+                "continue": .bool(true),
+                "suppressOutput": .bool(true)
+            ]
+        }
+        return [
+            "hookSpecificOutput": .object([
+                "hookEventName": .string("Elicitation"),
+                "action": .string("decline")
+            ])
+        ]
     }
 
     private static func claudeUpdatedInput(for toolName: String?, toolInput: [String: AnyJSON]?) -> AnyJSON? {
