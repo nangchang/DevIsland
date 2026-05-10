@@ -263,7 +263,9 @@ final class AppStateEnvelopeTests: XCTestCase {
     func testLegacyResponseCanBeWrappedAsRichResponse() throws {
         let response = AppState.richResponseString(
             fromLegacyResponse: #"{"response":"approved"}"#,
-            requestId: "req-rich"
+            requestId: "req-rich",
+            source: "claude",
+            event: "PermissionRequest"
         )
 
         let data = try XCTUnwrap(response.data(using: .utf8))
@@ -273,18 +275,46 @@ final class AppStateEnvelopeTests: XCTestCase {
         XCTAssertEqual(decoded.requestId, "req-rich")
         XCTAssertEqual(decoded.status, "ok")
         XCTAssertEqual(decoded.decision, "approved")
+        let hookOutput = decoded.providerOutput?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        XCTAssertEqual(hookOutput?["hookEventName"] as? String, "PermissionRequest")
     }
 
     func testLegacyDeniedResponseCanBeWrappedAsRichResponse() throws {
         let response = AppState.richResponseString(
             fromLegacyResponse: #"{"response":"denied"}"#,
-            requestId: "req-denied"
+            requestId: "req-denied",
+            source: "claude",
+            event: "PermissionRequest"
         )
 
         let data = try XCTUnwrap(response.data(using: .utf8))
         let decoded = try JSONDecoder().decode(IPCRichResponse.self, from: data)
         XCTAssertEqual(decoded.requestId, "req-denied")
         XCTAssertEqual(decoded.decision, "denied")
+        let hookOutput = decoded.providerOutput?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        let decision = hookOutput?["decision"] as? [String: Any]
+        XCTAssertEqual(decision?["behavior"] as? String, "deny")
+    }
+
+    func testProviderContextExtractsEnvelopeSourceAndEvent() {
+        let message = """
+        {
+            "protocol": "dev-island-hook-ipc",
+            "version": 1,
+            "requestId": "req-context",
+            "sentAt": "2026-05-10T00:00:00Z",
+            "source": "codex",
+            "payload": {
+                "hook_event_name": "PermissionRequest",
+                "session_id": "s1"
+            }
+        }
+        """
+
+        let context = AppState.providerContext(fromEnvelopeMessage: message)
+
+        XCTAssertEqual(context.source, "codex")
+        XCTAssertEqual(context.event, "PermissionRequest")
     }
 
     func testEnvelopeWithInvalidProtocolFallsBackToRaw() {

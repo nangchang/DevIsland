@@ -590,7 +590,7 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 - AppState.handleMessage에서 provider/policy 책임 분리.
 - [x] HookEventNormalizer 추가.
-- ProviderAdapter 추가.
+- [x] ProviderAdapter 추가.
 - SQLiteApprovalStore 추가.
 - session_cache / rules / replay log 테이블 추가.
 
