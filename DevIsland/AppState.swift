@@ -247,8 +247,27 @@ class AppState: ObservableObject {
         ensureSelectedDisplay()
 
         if startServer {
-            server.onMessageReceived = { [weak self] message, responseHandler in
-                self?.handleMessage(message, responseHandler: responseHandler)
+            BridgeTokenManager.shared.generateIfNeeded()
+
+            server.onMessageReceived = { [weak self] message, requestId, responseHandler in
+                // Wrap responseHandler to produce a rich response for framed (v1 envelope) requests.
+                let effectiveHandler: (String) -> Void
+                if let rid = requestId {
+                    effectiveHandler = { rawResponse in
+                        let decision = (try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any])
+                            .flatMap { $0["response"] as? String }
+                        let rich = IPCRichResponse(requestId: rid, decision: decision)
+                        if let richData = try? JSONEncoder().encode(rich),
+                           let richStr = String(data: richData, encoding: .utf8) {
+                            responseHandler(richStr)
+                        } else {
+                            responseHandler(rawResponse)
+                        }
+                    }
+                } else {
+                    effectiveHandler = responseHandler
+                }
+                self?.handleMessage(message, responseHandler: effectiveHandler)
             }
             server.onServerFailed = {
                 print("[DevIsland] [ERROR] Socket server failed. Check if port 9090 is occupied.")
@@ -321,7 +340,24 @@ class AppState: ObservableObject {
     }
 
     func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
-        guard let data = message.data(using: .utf8) else { return }
+        guard let rawData = message.data(using: .utf8) else { return }
+
+        // Detect IPC protocol v1 envelope vs raw JSON.
+        // Raw JSON always starts with '{' (0x7B); the HookSocketServer strips the
+        // length-prefix before delivering framed payloads here as plain JSON strings.
+        let parsedJSON: [String: Any]?
+        if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData),
+           envelope.protocol == IPCEnvelope.protocolName {
+            guard BridgeTokenManager.shared.validate(envelope.token) else {
+                print("[DevIsland] IPC token validation failed – denying request")
+                responseHandler("{\"response\": \"denied\"}")
+                return
+            }
+            // Convert AnyJSON payload to [String: Any] directly — avoids encode+decode roundtrip.
+            parsedJSON = envelope.payload.mapValues { $0.rawValue } as [String: Any]
+        } else {
+            parsedJSON = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any]
+        }
 
         var event     = "Unknown"
         var toolName  = ""
@@ -340,8 +376,7 @@ class AppState: ObservableObject {
         var isPlanAction = false
         var displayToolName = ""
 
-        do {
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if let json = parsedJSON {
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
                 toolName  = json["tool_name"] as? String ?? ""
                 sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
@@ -379,10 +414,6 @@ class AppState: ObservableObject {
                     json: json,
                     eventName: event
                 )
-            }
-        } catch {
-            print("JSON parse error: \(error)")
-            displayMsg = message
         }
 
         if displayToolName.isEmpty { displayToolName = toolName }
