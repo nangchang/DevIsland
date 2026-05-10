@@ -31,6 +31,16 @@ final class SQLiteApprovalStoreTests: XCTestCase {
         XCTAssertTrue(tables.contains("approval_decisions"))
         XCTAssertTrue(tables.contains("pty_messages"))
         XCTAssertTrue(tables.contains("settings"))
+        XCTAssertEqual(try store.schemaVersion(), SQLiteApprovalStore.currentSchemaVersion)
+    }
+
+    func testDatabaseFileUsesRestrictedPermissions() throws {
+        _ = try SQLiteApprovalStore(databaseURL: databaseURL)
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: databaseURL.path)
+        let permissions = attributes[.posixPermissions] as? NSNumber
+
+        XCTAssertEqual(permissions?.intValue, 0o600)
     }
 
     func testSessionCacheDecisionMatchesProviderSessionAndTool() throws {
@@ -94,6 +104,26 @@ final class SQLiteApprovalStoreTests: XCTestCase {
         XCTAssertEqual(decision?.action, .deny)
         XCTAssertEqual(decision?.source, .persistentRule)
         XCTAssertEqual(decision?.ruleId, ruleId)
+    }
+
+    func testNonExactPersistentRuleIsPersistedButNotEvaluatedInPhase3() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        try store.insertRule(ApprovalRule(
+            provider: .claude,
+            toolName: "Bash",
+            matchKind: .commandPrefix,
+            pattern: "npm",
+            action: .allow,
+            scope: .persistent
+        ))
+
+        let decision = try store.persistentDecision(for: ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "session-1",
+            toolName: "Bash"
+        ))
+
+        XCTAssertNil(decision)
     }
 
     func testHookEventAndDecisionAreInserted() throws {

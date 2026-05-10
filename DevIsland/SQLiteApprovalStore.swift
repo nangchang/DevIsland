@@ -4,10 +4,15 @@ import SQLite3
 final class SQLiteApprovalStore {
     enum StoreError: Error {
         case openFailed(String)
+        case createFailed(String)
         case executeFailed(String)
         case prepareFailed(String)
         case stepFailed(String)
+        case unsupportedBindType(String)
+        case unsupportedSchemaVersion(Int32)
     }
+
+    static let currentSchemaVersion: Int32 = 1
 
     static let defaultDatabaseURL: URL = {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -26,6 +31,7 @@ final class SQLiteApprovalStore {
             at: databaseURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        try createDatabaseFileIfNeeded()
         try open()
         try migrate()
     }
@@ -175,6 +181,8 @@ final class SQLiteApprovalStore {
     }
 
     func persistentDecision(for request: ApprovalPolicyRequest) throws -> ApprovalPolicyDecision? {
+        // Phase 3 stores all planned MatchKind values, but only exact persistent
+        // matching is evaluated until the dedicated matcher layer is introduced.
         try firstDecision(
             sql:
                 """
@@ -218,6 +226,29 @@ final class SQLiteApprovalStore {
         return names
     }
 
+    func schemaVersion() throws -> Int32 {
+        var statement: OpaquePointer?
+        let sql = "PRAGMA user_version"
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { return 0 }
+        return sqlite3_column_int(statement, 0)
+    }
+
+    private func createDatabaseFileIfNeeded() throws {
+        let fileManager = FileManager.default
+        let attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
+        if fileManager.fileExists(atPath: databaseURL.path) {
+            try fileManager.setAttributes(attributes, ofItemAtPath: databaseURL.path)
+            return
+        }
+        guard fileManager.createFile(atPath: databaseURL.path, contents: Data(), attributes: attributes) else {
+            throw StoreError.createFailed("Unable to create \(databaseURL.path)")
+        }
+    }
+
     private func open() throws {
         let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
         if sqlite3_open_v2(databaseURL.path, &database, flags, nil) != SQLITE_OK {
@@ -229,6 +260,15 @@ final class SQLiteApprovalStore {
         try execute("PRAGMA journal_mode=WAL")
         try execute("PRAGMA busy_timeout=5000")
         try execute("PRAGMA foreign_keys=ON")
+        let version = try schemaVersion()
+        guard version <= Self.currentSchemaVersion else {
+            throw StoreError.unsupportedSchemaVersion(version)
+        }
+        try migrateToVersion1()
+        try execute("PRAGMA user_version = \(Self.currentSchemaVersion)")
+    }
+
+    private func migrateToVersion1() throws {
         try execute(
             """
             CREATE TABLE IF NOT EXISTS rules (
@@ -376,7 +416,7 @@ final class SQLiteApprovalStore {
             case let value as Bool:
                 result = sqlite3_bind_int(statement, position, value ? 1 : 0)
             default:
-                result = sqlite3_bind_text(statement, position, String(describing: value), -1, SQLITE_TRANSIENT)
+                throw StoreError.unsupportedBindType(String(describing: type(of: value as Any)))
             }
             guard result == SQLITE_OK else {
                 throw StoreError.executeFailed(lastErrorMessage)

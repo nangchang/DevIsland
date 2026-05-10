@@ -65,10 +65,20 @@ final class ProviderAdapterTests: XCTestCase {
         let output = ProviderAdapter.providerOutput(
             decision: "pass",
             event: "PermissionRequest",
-            source: "claude"
+            source: "ClaudeCode"
         )
 
         XCTAssertEqual(output?["continue"]?.rawValue as? Bool, true)
         XCTAssertEqual(output?["suppressOutput"]?.rawValue as? Bool, true)
+    }
+
+    func testProviderKindOverloadAvoidsSourceStringBranching() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "denied",
+            event: "BeforeTool",
+            provider: .gemini
+        )
+
+        XCTAssertEqual(output?["decision"]?.rawValue as? String, "deny")
     }
 }

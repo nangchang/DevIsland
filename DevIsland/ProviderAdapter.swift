@@ -9,10 +9,24 @@ struct ProviderAdapter {
         source: String,
         denialMessage: String = Self.denialMessage
     ) -> [String: AnyJSON]? {
+        providerOutput(
+            decision: decision,
+            event: event,
+            provider: ProviderKind(source: source),
+            denialMessage: denialMessage
+        )
+    }
+
+    static func providerOutput(
+        decision: String?,
+        event: String,
+        provider: ProviderKind,
+        denialMessage: String = Self.denialMessage
+    ) -> [String: AnyJSON]? {
         guard let decision else { return nil }
 
         if decision == "pass" {
-            if source == "claude" {
+            if provider == .claude {
                 return [
                     "continue": .bool(true),
                     "suppressOutput": .bool(true)
@@ -22,7 +36,7 @@ struct ProviderAdapter {
         }
 
         let allow = decision == "approved"
-        if source == "gemini" {
+        if provider == .gemini {
             var output: [String: AnyJSON] = [
                 "decision": .string(allow ? "allow" : "deny")
             ]
@@ -32,7 +46,7 @@ struct ProviderAdapter {
             return output
         }
 
-        if source == "codex" {
+        if provider == .codex {
             if event == "PreToolUse" {
                 if allow { return [:] }
                 return [

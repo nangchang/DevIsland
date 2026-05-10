@@ -23,6 +23,9 @@ enum ProviderKind: String, Codable, CaseIterable, Identifiable {
 }
 
 enum MatchKind: String, Codable, CaseIterable, Identifiable {
+    /// Phase 3 persists every planned match kind so settings/rule UI can share the
+    /// model early. SQLiteApprovalStore intentionally evaluates only `exact`
+    /// persistent rules until the dedicated matcher work lands in a later phase.
     case exact
     case glob
     case regex
