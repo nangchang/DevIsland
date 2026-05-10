@@ -96,6 +96,15 @@ struct AppSettings: Equatable {
             .path
     }()
 
+    static let defaultBridgeConfigURL: URL = {
+        let fileManager = FileManager.default
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+        return appSupport
+            .appendingPathComponent("DevIsland", isDirectory: true)
+            .appendingPathComponent("bridge-config.json")
+    }()
+
     static let defaults = AppSettings(
         claudeSessionApprovalMode: .nativePermissions,
         claudePersistentApprovalDestination: .userSettings,
@@ -108,6 +117,22 @@ struct AppSettings: Equatable {
         approvalFallbackPolicy: .denyUnknown,
         replayRetentionDays: 30
     )
+}
+
+struct BridgeRuntimeConfig: Codable, Equatable {
+    let bridgeTcpPort: Int
+    let bridgeConnectTimeoutSeconds: Double
+    let bridgeResponseTimeoutSeconds: Double
+    let approvalFallbackPolicy: String
+
+    init(settings: AppSettings) {
+        // Transport selection and listener reconfiguration are future Approval Proxy
+        // work. Keep the installed bridge aligned with the currently-running app.
+        self.bridgeTcpPort = AppSettings.defaults.bridgeTcpPort
+        self.bridgeConnectTimeoutSeconds = AppSettings.defaults.bridgeConnectTimeoutSeconds
+        self.bridgeResponseTimeoutSeconds = AppSettings.defaults.bridgeResponseTimeoutSeconds
+        self.approvalFallbackPolicy = settings.approvalFallbackPolicy.rawValue
+    }
 }
 
 @MainActor
@@ -128,14 +153,20 @@ final class SettingsStore: ObservableObject {
     }
 
     private let userDefaults: UserDefaults
+    private let bridgeConfigURL: URL
 
     @Published var settings: AppSettings {
         didSet { save(settings) }
     }
 
-    init(userDefaults: UserDefaults = .standard) {
+    init(
+        userDefaults: UserDefaults = .standard,
+        bridgeConfigURL: URL = AppSettings.defaultBridgeConfigURL
+    ) {
         self.userDefaults = userDefaults
+        self.bridgeConfigURL = bridgeConfigURL
         self.settings = Self.load(from: userDefaults)
+        writeBridgeConfig(settings)
     }
 
     func resetToDefaults() {
@@ -153,6 +184,20 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.bridgeFallbackToTcp, forKey: DefaultsKey.bridgeFallbackToTcp)
         userDefaults.set(settings.approvalFallbackPolicy.rawValue, forKey: DefaultsKey.approvalFallbackPolicy)
         userDefaults.set(settings.replayRetentionDays, forKey: DefaultsKey.replayRetentionDays)
+        writeBridgeConfig(settings)
+    }
+
+    private func writeBridgeConfig(_ settings: AppSettings) {
+        do {
+            try FileManager.default.createDirectory(
+                at: bridgeConfigURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try JSONEncoder().encode(BridgeRuntimeConfig(settings: settings))
+            try data.write(to: bridgeConfigURL, options: .atomic)
+        } catch {
+            print("SettingsStore: failed to write bridge config – \(error)")
+        }
     }
 
     private static func load(from userDefaults: UserDefaults) -> AppSettings {

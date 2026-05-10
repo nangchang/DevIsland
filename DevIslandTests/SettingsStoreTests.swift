@@ -4,21 +4,30 @@ import XCTest
 @MainActor
 final class SettingsStoreTests: XCTestCase {
     private var defaults: UserDefaults!
+    private var tempDir: URL!
+    private var bridgeConfigURL: URL!
 
     override func setUp() {
         super.setUp()
         defaults = UserDefaults(suiteName: "SettingsStoreTests")
         defaults.removePersistentDomain(forName: "SettingsStoreTests")
+        tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DevIslandSettingsStoreTests-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        bridgeConfigURL = tempDir.appendingPathComponent("bridge-config.json")
     }
 
     override func tearDown() {
         defaults.removePersistentDomain(forName: "SettingsStoreTests")
         defaults = nil
+        try? FileManager.default.removeItem(at: tempDir)
+        tempDir = nil
+        bridgeConfigURL = nil
         super.tearDown()
     }
 
     func testApprovalProxyDefaults() {
-        let store = SettingsStore(userDefaults: defaults)
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
         XCTAssertEqual(store.settings.claudeSessionApprovalMode, .nativePermissions)
         XCTAssertEqual(store.settings.claudePersistentApprovalDestination, .userSettings)
@@ -35,7 +44,7 @@ final class SettingsStoreTests: XCTestCase {
     }
 
     func testSettingsPersistAndReload() {
-        let store = SettingsStore(userDefaults: defaults)
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
         store.settings.claudeSessionApprovalMode = .hybrid
         store.settings.claudePersistentApprovalDestination = .projectSettings
         store.settings.bridgeTransportKind = .unixDomainSocket
@@ -47,7 +56,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.approvalFallbackPolicy = .allowReadOnly
         store.settings.replayRetentionDays = 14
 
-        let reloaded = SettingsStore(userDefaults: defaults)
+        let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
         XCTAssertEqual(reloaded.settings.claudeSessionApprovalMode, .hybrid)
         XCTAssertEqual(reloaded.settings.claudePersistentApprovalDestination, .projectSettings)
@@ -72,8 +81,22 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set("bad-policy", forKey: SettingsStore.DefaultsKey.approvalFallbackPolicy)
         defaults.set(0, forKey: SettingsStore.DefaultsKey.replayRetentionDays)
 
-        let store = SettingsStore(userDefaults: defaults)
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
         XCTAssertEqual(store.settings, .defaults)
+    }
+
+    func testBridgeRuntimeConfigIsWrittenForBridgeFallbackPolicy() throws {
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+
+        store.settings.approvalFallbackPolicy = .allowReadOnly
+        store.settings.bridgeTcpPort = 19191
+
+        let data = try Data(contentsOf: bridgeConfigURL)
+        let config = try JSONDecoder().decode(BridgeRuntimeConfig.self, from: data)
+        XCTAssertEqual(config.approvalFallbackPolicy, "allowReadOnly")
+        XCTAssertEqual(config.bridgeTcpPort, AppSettings.defaults.bridgeTcpPort)
+        XCTAssertEqual(config.bridgeConnectTimeoutSeconds, AppSettings.defaults.bridgeConnectTimeoutSeconds)
+        XCTAssertEqual(config.bridgeResponseTimeoutSeconds, AppSettings.defaults.bridgeResponseTimeoutSeconds)
     }
 }
