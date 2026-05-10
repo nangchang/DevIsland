@@ -1,13 +1,13 @@
 import Foundation
 
 struct HookEventNormalizer {
-    static let approvalEventsByAgent: [BuddyKind: Set<String>] = [
+    private static let approvalEventsByAgent: [BuddyKind: Set<String>] = [
         .claudeCode: ["permissionrequest"],
         .codex: ["permissionrequest"],
         .gemini: ["beforetool"]
     ]
 
-    static let userQuestionTools: Set<String> = [
+    private static let userQuestionTools: Set<String> = [
         "ask_user",
         "askuser",
         "request_user_input",

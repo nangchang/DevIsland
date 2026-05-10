@@ -792,16 +792,12 @@ class AppState: ObservableObject {
         }
     }
 
-    func normalizedHookEventName(_ event: String) -> String {
-        HookEventNormalizer.normalizedName(event)
-    }
-
     private static func isApprovalEvent(_ normalizedEvent: String, for agentKind: BuddyKind) -> Bool {
         HookEventNormalizer.isApprovalEvent(normalizedEvent, for: agentKind)
     }
 
     private func displayMessage(for toolName: String, toolInput: [String: Any]?, json: [String: Any], eventName: String) -> String {
-        if normalizedHookEventName(eventName) == "posttooluse" {
+        if HookEventNormalizer.normalizedName(eventName) == "posttooluse" {
             return postToolMessage(from: json["tool_response"] as? [String: Any])
         }
 
@@ -1174,7 +1170,7 @@ class AppState: ObservableObject {
     }
 
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
-        return Self.isApprovalEvent(normalizedHookEventName(request.eventName), for: request.agentKind)
+        return Self.isApprovalEvent(HookEventNormalizer.normalizedName(request.eventName), for: request.agentKind)
             && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 

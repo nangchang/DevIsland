@@ -32,10 +32,10 @@ final class AppStateTests: XCTestCase {
     }
     
     func testNormalizedHookEventName() {
-        XCTAssertEqual(appState.normalizedHookEventName("BeforeTool"), "beforetool")
-        XCTAssertEqual(appState.normalizedHookEventName("on_tool_call"), "ontoolcall")
-        XCTAssertEqual(appState.normalizedHookEventName("Pre-Tool-Use"), "pretooluse")
-        XCTAssertEqual(appState.normalizedHookEventName("SESSION_START"), "sessionstart")
+        XCTAssertEqual(HookEventNormalizer.normalizedName("BeforeTool"), "beforetool")
+        XCTAssertEqual(HookEventNormalizer.normalizedName("on_tool_call"), "ontoolcall")
+        XCTAssertEqual(HookEventNormalizer.normalizedName("Pre-Tool-Use"), "pretooluse")
+        XCTAssertEqual(HookEventNormalizer.normalizedName("SESSION_START"), "sessionstart")
     }
     
     func testAgentKindDetection() {
