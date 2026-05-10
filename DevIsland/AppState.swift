@@ -343,9 +343,9 @@ class AppState: ObservableObject {
         guard let rawData = message.data(using: .utf8) else { return }
 
         // Detect IPC protocol v1 envelope vs raw JSON.
-        // Raw JSON always starts with '{' (0x7B); envelopes use length-prefixed framing so
-        // the HookSocketServer already stripped the length header before calling us.
-        let data: Data
+        // Raw JSON always starts with '{' (0x7B); the HookSocketServer strips the
+        // length-prefix before delivering framed payloads here as plain JSON strings.
+        let parsedJSON: [String: Any]?
         if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData),
            envelope.protocol == IPCEnvelope.protocolName {
             guard BridgeTokenManager.shared.validate(envelope.token) else {
@@ -353,13 +353,10 @@ class AppState: ObservableObject {
                 responseHandler("{\"response\": \"denied\"}")
                 return
             }
-            guard let payloadData = try? JSONEncoder().encode(envelope.payload) else {
-                responseHandler("{\"response\": \"denied\"}")
-                return
-            }
-            data = payloadData
+            // Convert AnyJSON payload to [String: Any] directly — avoids encode+decode roundtrip.
+            parsedJSON = envelope.payload.mapValues { $0.rawValue } as [String: Any]
         } else {
-            data = rawData
+            parsedJSON = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any]
         }
 
         var event     = "Unknown"
@@ -379,8 +376,7 @@ class AppState: ObservableObject {
         var isPlanAction = false
         var displayToolName = ""
 
-        do {
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if let json = parsedJSON {
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
                 toolName  = json["tool_name"] as? String ?? ""
                 sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
@@ -418,10 +414,6 @@ class AppState: ObservableObject {
                     json: json,
                     eventName: event
                 )
-            }
-        } catch {
-            print("JSON parse error: \(error)")
-            displayMsg = message
         }
 
         if displayToolName.isEmpty { displayToolName = toolName }

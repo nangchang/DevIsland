@@ -119,7 +119,7 @@ class HookSocketServer {
     private func receiveFramedHeader(on connection: NWConnection, id: UUID, headerSoFar: Data) {
         let remaining = 4 - headerSoFar.count
         if remaining == 0 {
-            let length = headerSoFar.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian }
+            let length = headerSoFar.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian }
             receiveFramedBody(on: connection, id: id, expectedLength: Int(length), accumulated: Data())
             return
         }
