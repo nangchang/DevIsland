@@ -11,7 +11,8 @@ final class BridgeTokenManager {
     static let shared = BridgeTokenManager()
 
     private let tokenURL: URL = {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         return support.appendingPathComponent("DevIsland/bridge-token")
     }()
 
@@ -41,15 +42,14 @@ final class BridgeTokenManager {
         }
 
         let token = UUID().uuidString
-        do {
-            try token.write(to: tokenURL, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tokenURL.path)
-            cachedToken = token
-            tokenFileExists = true
-            print("BridgeTokenManager: token generated")
-        } catch {
-            print("BridgeTokenManager: failed to write token – \(error)")
+        let attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
+        guard FileManager.default.createFile(atPath: tokenURL.path, contents: Data(token.utf8), attributes: attributes) else {
+            print("BridgeTokenManager: failed to write token")
+            return
         }
+        cachedToken = token
+        tokenFileExists = true
+        print("BridgeTokenManager: token generated")
     }
 
     /// Returns true if the incoming token is acceptable.
@@ -57,8 +57,13 @@ final class BridgeTokenManager {
     /// - If no token file exists on the app side (grace mode), always returns true.
     /// - If a token file exists, the incoming token must match exactly.
     func validate(_ incoming: String?) -> Bool {
+        // If the cache hasn't been populated yet but the file exists on disk, reload before
+        // deciding — prevents accepting arbitrary tokens when generateIfNeeded was never called.
+        if !tokenFileExists && FileManager.default.fileExists(atPath: tokenURL.path) {
+            reload()
+        }
         guard tokenFileExists, let expected = cachedToken else {
-            // Grace mode: token file absent, accept anything.
+            // Grace mode: token file genuinely absent on disk, accept anything.
             return true
         }
         return incoming == expected

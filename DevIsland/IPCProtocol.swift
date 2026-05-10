@@ -107,8 +107,8 @@ struct IPCRichResponse: Codable {
     /// Encode to length-prefixed bytes: [4-byte big-endian length][JSON].
     func framedData() throws -> Data {
         let body = try JSONEncoder().encode(self)
-        var length = UInt32(body.count).bigEndian
-        var result = Data(bytes: &length, count: 4)
+        let length = UInt32(body.count).bigEndian
+        var result = withUnsafeBytes(of: length) { Data($0) }
         result.append(body)
         return result
     }
