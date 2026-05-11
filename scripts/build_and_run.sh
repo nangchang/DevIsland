@@ -117,3 +117,14 @@ if [[ "$NO_RUN" == "false" ]]; then
 else
   echo "Build complete. App not launched due to --no-run."
 fi
+
+# 브릿지가 이미 설치되어 있으면 빌드 결과물로 즉시 갱신
+BRIDGE_INSTALL_DIR="$HOME/Library/Application Support/DevIsland"
+BRIDGE_DEST="$BRIDGE_INSTALL_DIR/devisland-bridge.sh"
+HELPER_DEST="$BRIDGE_INSTALL_DIR/devisland_bridge.py"
+if [[ -e "$BRIDGE_DEST" ]]; then
+  cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$BRIDGE_DEST"
+  cp "$ROOT_DIR/scripts/devisland_bridge.py" "$HELPER_DEST"
+  chmod 755 "$BRIDGE_DEST" "$HELPER_DEST"
+  echo "브릿지 스크립트 갱신 완료: $BRIDGE_DEST"
+fi
