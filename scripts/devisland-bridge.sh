@@ -92,7 +92,7 @@ fi
 if [ -n "$CURRENT_TTY" ] && { [ "$TERM_PROGRAM" = "iTerm.app" ] || { [ "$_TMUX_FALLBACK" = "1" ] && osascript -e 'return (application "iTerm2" is running) or (application "iTerm" is running)' 2>/dev/null | grep -q "true"; }; }; then
   ITERM_INFO=$(osascript 2>> /tmp/DevIsland.bridge.log << ASEOF
 if not ((application "iTerm2" is running) or (application "iTerm" is running)) then return ""
-tell application "iTerm2"
+tell application "iTerm"
   set ttyPath to "$CURRENT_TTY"
   set ttyName to "$CURRENT_TTY_NAME"
   repeat with aWindow in windows
@@ -125,7 +125,7 @@ ASEOF
 fi
 
 if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ "$TERM_PROGRAM" = "Apple_Terminal" ] || { [ "$_TMUX_FALLBACK" = "1" ] && osascript -e 'return (application "Terminal" is running)' 2>/dev/null | grep -q "true"; }; }; then
-  TERM_INFO=$(osascript 2>/dev/null << ASEOF
+  TERM_INFO=$(osascript 2>> /tmp/DevIsland.bridge.log << ASEOF
 if not (application "Terminal" is running) then return ""
 tell application "Terminal"
   set ttyPath to "$CURRENT_TTY"
@@ -134,10 +134,12 @@ tell application "Terminal"
     set tabIndex to 0
     repeat with aTab in tabs of aWin
       set tabIndex to tabIndex + 1
-      set tabTTY to tty of aTab
-      if tabTTY is ttyPath or tabTTY is ttyName then
-        return (name of aWin) & ":::" & (id of aWin as text) & ":::" & (tabIndex as text)
-      end if
+      try
+        set tabTTY to tty of aTab
+        if tabTTY is ttyPath or tabTTY is ttyName then
+          return (name of aWin) & ":::" & (id of aWin as text) & ":::" & (tabIndex as text)
+        end if
+      end try
     end repeat
   end repeat
   return ""
