@@ -83,8 +83,14 @@ if [ -n "$TMUX" ]; then
   fi
 fi
 
-if [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "iTerm.app" ]; then
-  ITERM_INFO=$(osascript << ASEOF
+# tmux 안에서 TERM_PROGRAM이 없거나 "tmux"로 덮여 있으면 각 앱 블록을 TTY 매칭으로 순서대로 시도
+_TMUX_FALLBACK=0
+if [ -n "$TMUX" ] && { [ -z "$TERM_PROGRAM" ] || [ "$TERM_PROGRAM" = "tmux" ]; }; then
+  _TMUX_FALLBACK=1
+fi
+
+if [ -n "$CURRENT_TTY" ] && { [ "$TERM_PROGRAM" = "iTerm.app" ] || { [ "$_TMUX_FALLBACK" = "1" ] && osascript -e 'return (application "iTerm2" is running) or (application "iTerm" is running)' 2>/dev/null | grep -q "true"; }; }; then
+  ITERM_INFO=$(osascript 2>> /tmp/DevIsland.bridge.log << ASEOF
 if not ((application "iTerm2" is running) or (application "iTerm" is running)) then return ""
 tell application "iTerm"
   set ttyPath to "$CURRENT_TTY"
@@ -97,17 +103,19 @@ tell application "iTerm"
         if candidateTab is aTab then exit repeat
       end repeat
       repeat with aSession in sessions of aTab
-        set sessionTTY to tty of aSession
-        if sessionTTY is ttyPath or sessionTTY is ttyName then
-          return (name of aSession) & ":::" & (id of aWindow as text) & ":::" & (tabIndex as text)
-        end if
+        try
+          set sessionTTY to tty of aSession
+          if sessionTTY is ttyPath or sessionTTY is ttyName then
+            return (name of aSession) & ":::" & (id of aWindow as text) & ":::" & (tabIndex as text)
+          end if
+        end try
       end repeat
     end repeat
   end repeat
   return ""
 end tell
 ASEOF
-  2>/dev/null)
+)
   if [ -n "$ITERM_INFO" ]; then
     TERM_APP="iTerm"
     TERM_TITLE=$(printf '%s' "$ITERM_INFO" | awk -F ':::' '{print $1}')
@@ -116,8 +124,8 @@ ASEOF
   fi
 fi
 
-if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
-  TERM_INFO=$(osascript << ASEOF
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ "$TERM_PROGRAM" = "Apple_Terminal" ] || { [ "$_TMUX_FALLBACK" = "1" ] && osascript -e 'return (application "Terminal" is running)' 2>/dev/null | grep -q "true"; }; }; then
+  TERM_INFO=$(osascript 2>> /tmp/DevIsland.bridge.log << ASEOF
 if not (application "Terminal" is running) then return ""
 tell application "Terminal"
   set ttyPath to "$CURRENT_TTY"
@@ -126,16 +134,18 @@ tell application "Terminal"
     set tabIndex to 0
     repeat with aTab in tabs of aWin
       set tabIndex to tabIndex + 1
-      set tabTTY to tty of aTab
-      if tabTTY is ttyPath or tabTTY is ttyName then
-        return (name of aWin) & ":::" & (id of aWin as text) & ":::" & (tabIndex as text)
-      end if
+      try
+        set tabTTY to tty of aTab
+        if tabTTY is ttyPath or tabTTY is ttyName then
+          return (name of aWin) & ":::" & (id of aWin as text) & ":::" & (tabIndex as text)
+        end if
+      end try
     end repeat
   end repeat
   return ""
 end tell
 ASEOF
-  2>/dev/null)
+)
   if [ -n "$TERM_INFO" ]; then
     TERM_APP="Terminal"
     TERM_TITLE=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $1}')
