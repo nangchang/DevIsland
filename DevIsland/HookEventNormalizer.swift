@@ -10,6 +10,7 @@ struct HookEventNormalizer {
     private static let userQuestionTools: Set<String> = [
         "ask_user",
         "askuser",
+        "askuserquestion",
         "request_user_input",
         "requestuserinput"
     ]

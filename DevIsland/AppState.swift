@@ -251,6 +251,7 @@ class AppState: ObservableObject {
                             event: providerContext.event,
                             toolName: providerContext.toolName,
                             ruleContent: providerContext.ruleContent,
+                            toolInput: providerContext.toolInput,
                             claudeSessionApprovalMode: Self.currentClaudeSessionApprovalMode(),
                             claudePersistentApprovalDestination: Self.currentClaudePersistentApprovalDestination()
                         ))
@@ -289,6 +290,7 @@ class AppState: ObservableObject {
         event: String? = nil,
         toolName: String? = nil,
         ruleContent: String? = nil,
+        toolInput: [String: AnyJSON]? = nil,
         claudeSessionApprovalMode: ClaudeSessionApprovalMode = .nativePermissions,
         claudePersistentApprovalDestination: ClaudePersistentApprovalDestination = .userSettings
     ) -> String {
@@ -304,6 +306,7 @@ class AppState: ObservableObject {
                 approvalScope: approvalScope,
                 toolName: (parsed?["tool_name"] as? String) ?? toolName,
                 ruleContent: (parsed?["rule_content"] as? String) ?? ruleContent,
+                toolInput: toolInput,
                 claudeSessionApprovalMode: claudeSessionApprovalMode,
                 claudePersistentApprovalDestination: claudePersistentApprovalDestination
             )
@@ -322,12 +325,13 @@ class AppState: ObservableObject {
         source: String?,
         event: String?,
         toolName: String?,
-        ruleContent: String?
+        ruleContent: String?,
+        toolInput: [String: AnyJSON]?
     ) {
         guard let data = message.data(using: .utf8),
               let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: data),
               envelope.protocol == IPCEnvelope.protocolName else {
-            return (nil, nil, nil, nil)
+            return (nil, nil, nil, nil, nil)
         }
         let event: String?
         if case .string(let hookEvent)? = envelope.payload["hook_event_name"] {
@@ -344,7 +348,13 @@ class AppState: ObservableObject {
             toolName = nil
         }
         let ruleContent = Self.claudePermissionRuleContent(from: envelope.payload)
-        return (envelope.source, event, toolName, ruleContent)
+        let toolInput: [String: AnyJSON]?
+        if case .object(let input)? = envelope.payload["tool_input"] {
+            toolInput = input
+        } else {
+            toolInput = nil
+        }
+        return (envelope.source, event, toolName, ruleContent, toolInput)
     }
 
     private static func claudePermissionRuleContent(from payload: [String: AnyJSON]) -> String? {

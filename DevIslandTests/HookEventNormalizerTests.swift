@@ -45,7 +45,9 @@ final class HookEventNormalizerTests: XCTestCase {
 
     func testUserQuestionToolNormalization() {
         XCTAssertTrue(HookEventNormalizer.isUserQuestionTool("ask_user"))
+        XCTAssertTrue(HookEventNormalizer.isUserQuestionTool("AskUserQuestion"))
         XCTAssertTrue(HookEventNormalizer.isUserQuestionTool("request-user-input"))
+        XCTAssertFalse(HookEventNormalizer.isUserQuestionTool("ExitPlanMode"))
         XCTAssertFalse(HookEventNormalizer.isUserQuestionTool("write_file"))
     }
 }
