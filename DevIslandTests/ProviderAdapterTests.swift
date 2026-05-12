@@ -88,7 +88,23 @@ final class ProviderAdapterTests: XCTestCase {
         XCTAssertEqual(decision?["message"] as? String, ProviderAdapter.denialMessage)
     }
 
-    func testClaudeAskUserQuestionPreToolUsePreservesQuestionsAndAddsAnswers() {
+    func testClaudePreToolUseApprovalWithoutHandledInputContinues() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "approved",
+            event: "PreToolUse",
+            provider: .claude,
+            toolName: "Bash",
+            toolInput: [
+                "command": .string("npm test")
+            ]
+        )
+
+        XCTAssertEqual(output?["continue"]?.rawValue as? Bool, true)
+        XCTAssertEqual(output?["suppressOutput"]?.rawValue as? Bool, true)
+        XCTAssertNil(output?["hookSpecificOutput"])
+    }
+
+    func testClaudeAskUserQuestionPreToolUseWithoutAnswersContinues() {
         let output = ProviderAdapter.providerOutput(
             decision: "approved",
             event: "PreToolUse",
@@ -104,6 +120,30 @@ final class ProviderAdapterTests: XCTestCase {
             ]
         )
 
+        XCTAssertEqual(output?["continue"]?.rawValue as? Bool, true)
+        XCTAssertEqual(output?["suppressOutput"]?.rawValue as? Bool, true)
+        XCTAssertNil(output?["hookSpecificOutput"])
+    }
+
+    func testClaudeAskUserQuestionPreToolUsePreservesExistingAnswers() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "approved",
+            event: "PreToolUse",
+            provider: .claude,
+            toolName: "AskUserQuestion",
+            toolInput: [
+                "questions": .array([
+                    .object([
+                        "id": .string("q1"),
+                        "prompt": .string("Proceed?")
+                    ])
+                ]),
+                "answers": .object([
+                    "q1": .string("Yes")
+                ])
+            ]
+        )
+
         let hookOutput = output?["hookSpecificOutput"]?.rawValue as? [String: Any]
         let updatedInput = hookOutput?["updatedInput"] as? [String: Any]
         let questions = updatedInput?["questions"] as? [[String: Any]]
@@ -112,7 +152,7 @@ final class ProviderAdapterTests: XCTestCase {
         XCTAssertEqual(hookOutput?["hookEventName"] as? String, "PreToolUse")
         XCTAssertEqual(hookOutput?["permissionDecision"] as? String, "allow")
         XCTAssertEqual(questions?.first?["id"] as? String, "q1")
-        XCTAssertNotNil(answers)
+        XCTAssertEqual(answers?["q1"] as? String, "Yes")
     }
 
     func testClaudeExitPlanModePreToolUseReturnsUpdatedInput() {
