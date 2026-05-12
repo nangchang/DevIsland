@@ -120,19 +120,22 @@ struct AppSettings: Equatable {
 }
 
 struct BridgeRuntimeConfig: Codable, Equatable {
+    let bridgeTransportKind: String
+    let bridgeSocketPath: String
     let bridgeTcpPort: Int
     let bridgeConnectTimeoutSeconds: Double
     let bridgeResponseTimeoutSeconds: Double
+    let bridgeFallbackToTcp: Bool
     let approvalFallbackPolicy: String
 
-    init(approvalFallbackPolicy: ApprovalFallbackPolicy) {
-        // Transport selection and listener reconfiguration are future Approval Proxy work.
-        // Until then, expose the running app's fixed listener values to the bridge and
-        // only sync the fallback policy from user settings.
-        self.bridgeTcpPort = AppSettings.defaults.bridgeTcpPort
-        self.bridgeConnectTimeoutSeconds = AppSettings.defaults.bridgeConnectTimeoutSeconds
-        self.bridgeResponseTimeoutSeconds = AppSettings.defaults.bridgeResponseTimeoutSeconds
-        self.approvalFallbackPolicy = approvalFallbackPolicy.rawValue
+    init(settings: AppSettings) {
+        self.bridgeTransportKind = settings.bridgeTransportKind.rawValue
+        self.bridgeSocketPath = settings.bridgeSocketPath
+        self.bridgeTcpPort = settings.bridgeTcpPort
+        self.bridgeConnectTimeoutSeconds = settings.bridgeConnectTimeoutSeconds
+        self.bridgeResponseTimeoutSeconds = settings.bridgeResponseTimeoutSeconds
+        self.bridgeFallbackToTcp = settings.bridgeFallbackToTcp
+        self.approvalFallbackPolicy = settings.approvalFallbackPolicy.rawValue
     }
 }
 
@@ -195,7 +198,7 @@ final class SettingsStore: ObservableObject {
                 at: bridgeConfigURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let data = try JSONEncoder().encode(BridgeRuntimeConfig(approvalFallbackPolicy: settings.approvalFallbackPolicy))
+            let data = try JSONEncoder().encode(BridgeRuntimeConfig(settings: settings))
             let attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
             if fileManager.fileExists(atPath: bridgeConfigURL.path) {
                 let tempURL = bridgeConfigURL.deletingLastPathComponent()

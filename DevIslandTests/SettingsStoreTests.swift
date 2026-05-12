@@ -86,19 +86,26 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings, .defaults)
     }
 
-    func testBridgeRuntimeConfigIsWrittenForBridgeFallbackPolicy() throws {
+    func testBridgeRuntimeConfigWritesTransportSettingsForBridge() throws {
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
-        store.settings.approvalFallbackPolicy = .allowReadOnly
-        // Runtime config intentionally ignores transport settings until the transport phase.
+        store.settings.bridgeTransportKind = .unixDomainSocket
+        store.settings.bridgeSocketPath = "/tmp/dev-island.sock"
         store.settings.bridgeTcpPort = 19191
+        store.settings.bridgeConnectTimeoutSeconds = 7
+        store.settings.bridgeResponseTimeoutSeconds = 123
+        store.settings.bridgeFallbackToTcp = false
+        store.settings.approvalFallbackPolicy = .allowReadOnly
 
         let data = try Data(contentsOf: bridgeConfigURL)
         let config = try JSONDecoder().decode(BridgeRuntimeConfig.self, from: data)
+        XCTAssertEqual(config.bridgeTransportKind, "unixDomainSocket")
+        XCTAssertEqual(config.bridgeSocketPath, "/tmp/dev-island.sock")
+        XCTAssertEqual(config.bridgeTcpPort, 19191)
+        XCTAssertEqual(config.bridgeConnectTimeoutSeconds, 7)
+        XCTAssertEqual(config.bridgeResponseTimeoutSeconds, 123)
+        XCTAssertFalse(config.bridgeFallbackToTcp)
         XCTAssertEqual(config.approvalFallbackPolicy, "allowReadOnly")
-        XCTAssertEqual(config.bridgeTcpPort, AppSettings.defaults.bridgeTcpPort)
-        XCTAssertEqual(config.bridgeConnectTimeoutSeconds, AppSettings.defaults.bridgeConnectTimeoutSeconds)
-        XCTAssertEqual(config.bridgeResponseTimeoutSeconds, AppSettings.defaults.bridgeResponseTimeoutSeconds)
     }
 
     func testBridgeRuntimeConfigUsesRestrictedPermissions() throws {
