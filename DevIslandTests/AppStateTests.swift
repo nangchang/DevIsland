@@ -134,6 +134,92 @@ final class AppStateTests: XCTestCase {
         wait(for: [expectation], timeout: 2.0)
         XCTAssertEqual(appState.pendingCount, 0)
     }
+
+    func testCodexSessionCacheAutoApprovesPermissionRequest() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateCodexPolicyTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let controller = try ApprovalProxyController(databaseURL: tempDir.appendingPathComponent("approval-proxy.sqlite3"))
+        try controller.store.upsertSessionApproval(
+            provider: .codex,
+            sessionId: "codex-session",
+            toolName: "shell",
+            action: .allow,
+            expiresAt: nil
+        )
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller
+        )
+        let expectation = XCTestExpectation(description: "Codex policy auto-approval")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "codex-session",
+            "cli_source": "codex",
+            "tool_name": "shell",
+            "tool_input": {"command": "npm test"}
+        }
+        """
+
+        state.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 2.0)
+        XCTAssertEqual(state.pendingCount, 0)
+    }
+
+    func testCodexSessionApprovalPersistsToSQLiteCache() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateCodexPolicyTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let controller = try ApprovalProxyController(databaseURL: tempDir.appendingPathComponent("approval-proxy.sqlite3"))
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller
+        )
+        let expectation = XCTestExpectation(description: "Codex manual session approval")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "codex-session",
+            "cli_source": "codex",
+            "tool_name": "shell",
+            "tool_input": {"command": "npm test"}
+        }
+        """
+
+        state.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+
+        XCTAssertEqual(state.pendingCount, 1)
+        state.approve(sessionAlways: true)
+
+        wait(for: [expectation], timeout: 2.0)
+        state.flushApprovalPersistenceForTesting()
+        let decision = try controller.store.sessionDecision(for: ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "codex-session",
+            toolName: "shell"
+        ))
+        XCTAssertEqual(decision?.action, .allow)
+        XCTAssertEqual(decision?.source, .sessionCache)
+    }
     
     func testSafeToolAutoApproval() {
         appState.autoApproveSafeTools = true

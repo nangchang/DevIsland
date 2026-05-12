@@ -14,6 +14,39 @@ final class SQLiteApprovalStore {
 
     static let currentSchemaVersion: Int32 = 1
 
+    static func deterministicRuleID(
+        provider: ProviderKind,
+        toolName: String,
+        scope: RuleScope,
+        workspaceRoot: String?
+    ) -> UUID {
+        let key = "\(provider.rawValue)|\(scope.rawValue)|\(toolName)|\(workspaceRoot ?? "")"
+        let digest = customHash128(key)
+        var bytes = digest
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5],
+            bytes[6], bytes[7],
+            bytes[8], bytes[9],
+            bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+    }
+
+    private static func customHash128(_ value: String) -> [UInt8] {
+        let bytes = Array(value.utf8)
+        var first: UInt64 = 0xcbf29ce484222325
+        var second: UInt64 = 0x84222325cbf29ce4
+        for byte in bytes {
+            first ^= UInt64(byte)
+            first = first &* 0x100000001b3
+            second ^= UInt64(byte) &+ 0x9e3779b97f4a7c15
+            second = second &* 0x100000001b3
+        }
+        return first.bigEndianBytes + second.bigEndianBytes
+    }
+
     static let defaultDatabaseURL: URL = {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
@@ -156,6 +189,36 @@ final class SQLiteApprovalStore {
                 rule.enabled ? 1 : 0
             ]
         )
+    }
+
+    func rules(provider: ProviderKind? = nil, scope: RuleScope? = nil) throws -> [ApprovalRule] {
+        var clauses: [String] = []
+        var parameters: [Any?] = []
+        if let provider {
+            clauses.append("provider = ?")
+            parameters.append(provider.rawValue)
+        }
+        if let scope {
+            clauses.append("scope = ?")
+            parameters.append(scope.rawValue)
+        }
+
+        let whereClause = clauses.isEmpty ? "" : "WHERE \(clauses.joined(separator: " AND "))"
+        return try fetchRules(
+            sql:
+                """
+                SELECT id, provider, tool_name, match_kind, pattern, action, scope, risk_floor,
+                       workspace_root, created_at, expires_at, enabled
+                FROM rules
+                \(whereClause)
+                ORDER BY created_at DESC
+                """,
+            parameters: parameters
+        )
+    }
+
+    func deleteRule(id: UUID) throws {
+        try execute("DELETE FROM rules WHERE id = ?", [id.uuidString])
     }
 
     func sessionDecision(for request: ApprovalPolicyRequest) throws -> ApprovalPolicyDecision? {
@@ -379,6 +442,61 @@ final class SQLiteApprovalStore {
         )
     }
 
+    private func fetchRules(sql: String, parameters: [Any?]) throws -> [ApprovalRule] {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(statement) }
+        try bind(parameters, to: statement)
+
+        var rules: [ApprovalRule] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard
+                let id = columnString(statement, 0).flatMap(UUID.init(uuidString:)),
+                let provider = columnString(statement, 1).flatMap(ProviderKind.init(rawValue:)),
+                let toolName = columnString(statement, 2),
+                let matchKind = columnString(statement, 3).flatMap(MatchKind.init(rawValue:)),
+                let pattern = columnString(statement, 4),
+                let action = columnString(statement, 5).flatMap(RuleAction.init(rawValue:)),
+                let scope = columnString(statement, 6).flatMap(RuleScope.init(rawValue:))
+            else {
+                continue
+            }
+
+            let riskFloor = columnString(statement, 7).flatMap(ToolRiskLevel.init(rawValue:))
+            let workspaceRoot = columnString(statement, 8)
+            let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(statement, 9))
+            let expiresAt = sqlite3_column_type(statement, 10) == SQLITE_NULL
+                ? nil
+                : Date(timeIntervalSince1970: sqlite3_column_double(statement, 10))
+            let enabled = sqlite3_column_int(statement, 11) != 0
+            rules.append(ApprovalRule(
+                id: id,
+                provider: provider,
+                toolName: toolName,
+                matchKind: matchKind,
+                pattern: pattern,
+                action: action,
+                scope: scope,
+                riskFloor: riskFloor,
+                workspaceRoot: workspaceRoot,
+                createdAt: createdAt,
+                expiresAt: expiresAt,
+                enabled: enabled
+            ))
+        }
+        return rules
+    }
+
+    private func columnString(_ statement: OpaquePointer?, _ index: Int32) -> String? {
+        guard sqlite3_column_type(statement, index) != SQLITE_NULL,
+              let value = sqlite3_column_text(statement, index) else {
+            return nil
+        }
+        return String(cString: value)
+    }
+
     private func execute(_ sql: String, _ parameters: [Any?] = []) throws {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -429,6 +547,12 @@ final class SQLiteApprovalStore {
             return String(cString: message)
         }
         return "Unknown SQLite error"
+    }
+}
+
+private extension UInt64 {
+    var bigEndianBytes: [UInt8] {
+        withUnsafeBytes(of: bigEndian) { Array($0) }
     }
 }
 

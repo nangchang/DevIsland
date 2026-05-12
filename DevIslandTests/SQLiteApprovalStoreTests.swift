@@ -106,6 +106,58 @@ final class SQLiteApprovalStoreTests: XCTestCase {
         XCTAssertEqual(decision?.ruleId, ruleId)
     }
 
+    func testRulesCanBeListedAndDeleted() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let codexRuleId = UUID()
+        let claudeRuleId = UUID()
+        try store.insertRule(ApprovalRule(
+            id: codexRuleId,
+            provider: .codex,
+            toolName: "shell",
+            action: .allow,
+            scope: .persistent
+        ))
+        try store.insertRule(ApprovalRule(
+            id: claudeRuleId,
+            provider: .claude,
+            toolName: "Bash",
+            action: .deny,
+            scope: .persistent
+        ))
+
+        let codexRules = try store.rules(provider: .codex, scope: .persistent)
+        XCTAssertEqual(codexRules.map(\.id), [codexRuleId])
+        XCTAssertEqual(codexRules.first?.toolName, "shell")
+
+        try store.deleteRule(id: codexRuleId)
+        XCTAssertTrue(try store.rules(provider: .codex, scope: .persistent).isEmpty)
+        XCTAssertEqual(try store.rules(provider: .claude, scope: .persistent).first?.id, claudeRuleId)
+    }
+
+    func testDeterministicRuleIDIsStableForProviderToolScopeAndWorkspace() {
+        let first = SQLiteApprovalStore.deterministicRuleID(
+            provider: .codex,
+            toolName: "shell",
+            scope: .persistent,
+            workspaceRoot: "/tmp/project"
+        )
+        let second = SQLiteApprovalStore.deterministicRuleID(
+            provider: .codex,
+            toolName: "shell",
+            scope: .persistent,
+            workspaceRoot: "/tmp/project"
+        )
+        let differentWorkspace = SQLiteApprovalStore.deterministicRuleID(
+            provider: .codex,
+            toolName: "shell",
+            scope: .persistent,
+            workspaceRoot: "/tmp/other"
+        )
+
+        XCTAssertEqual(first, second)
+        XCTAssertNotEqual(first, differentWorkspace)
+    }
+
     func testNonExactPersistentRuleIsPersistedButNotEvaluatedInPhase3() throws {
         let store = try SQLiteApprovalStore(databaseURL: databaseURL)
         try store.insertRule(ApprovalRule(
