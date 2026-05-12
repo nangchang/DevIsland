@@ -296,6 +296,24 @@ final class AppStateEnvelopeTests: XCTestCase {
         XCTAssertEqual(decision?["behavior"] as? String, "deny")
     }
 
+    func testSessionScopedClaudeResponseWrapsUpdatedPermissions() throws {
+        let response = AppState.richResponseString(
+            fromLegacyResponse: #"{"response":"approved","approval_scope":"session","tool_name":"Bash","rule_content":"npm test"}"#,
+            requestId: "req-session",
+            source: "claude",
+            event: "PermissionRequest",
+            claudeSessionApprovalMode: .nativePermissions
+        )
+
+        let data = try XCTUnwrap(response.data(using: .utf8))
+        let decoded = try JSONDecoder().decode(IPCRichResponse.self, from: data)
+        let hookOutput = decoded.providerOutput?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        let decision = hookOutput?["decision"] as? [String: Any]
+        let updatedPermissions = decision?["updatedPermissions"] as? [[String: Any]]
+
+        XCTAssertEqual(updatedPermissions?.first?["destination"] as? String, "session")
+    }
+
     func testProviderContextExtractsEnvelopeSourceAndEvent() {
         let message = """
         {
@@ -306,6 +324,8 @@ final class AppStateEnvelopeTests: XCTestCase {
             "source": "codex",
             "payload": {
                 "hook_event_name": "PermissionRequest",
+                "tool_name": "shell",
+                "tool_input": {"command": "npm test"},
                 "session_id": "s1"
             }
         }
@@ -315,6 +335,8 @@ final class AppStateEnvelopeTests: XCTestCase {
 
         XCTAssertEqual(context.source, "codex")
         XCTAssertEqual(context.event, "PermissionRequest")
+        XCTAssertEqual(context.toolName, "shell")
+        XCTAssertEqual(context.ruleContent, "npm test")
     }
 
     func testEnvelopeWithInvalidProtocolFallsBackToRaw() {

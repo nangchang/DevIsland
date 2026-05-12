@@ -597,11 +597,11 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 ### Phase 4. Claude advanced hooks
 
-> 상태: 📅 예정
+> 상태: 🔧 진행 중
 
-- Claude `PermissionRequest.updatedPermissions` 지원.
-- Claude session approval mode: native/app/hybrid 지원.
-- Claude persistent destination 설정 지원.
+- [x] Claude `PermissionRequest.updatedPermissions` 지원.
+- [x] Claude session approval mode: native/app/hybrid 지원.
+- [x] Claude persistent destination 설정 지원.
 - `PreToolUse` AskUserQuestion / ExitPlanMode 처리.
 - `Elicitation` 처리.
 - `UserPromptSubmit` prompt policy 처리.
