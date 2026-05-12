@@ -10,6 +10,8 @@ struct PendingRequest: Identifiable {
     let agentKind: BuddyKind
     let eventName: String
     let toolName: String
+    let rawToolName: String
+    let workspaceRoot: String?
     let message: String
     let responseHandler: (String) -> Void
     let receivedAt: Date
@@ -34,10 +36,12 @@ enum SessionStatus: Equatable {
     case pending
     case timeoutBypassed(Date)
     case autoApproved(Date)
+    case policyApproved(Date)
 
     var isTimeoutBypassed: Bool {
         if case .timeoutBypassed = self { return true }
         if case .autoApproved = self { return true }
+        if case .policyApproved = self { return true }
         return false
     }
 }
@@ -103,7 +107,19 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 // MARK: - App State
 
 class AppState: ObservableObject {
-    static let shared = AppState(startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1")
+    static let shared = AppState(
+        startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1",
+        approvalProxy: AppState.makeApprovalProxy()
+    )
+
+    private static func makeApprovalProxy() -> ApprovalProxyController? {
+        do {
+            return try ApprovalProxyController()
+        } catch {
+            print("[DevIsland] ApprovalProxyController init failed: \(error)")
+            return nil
+        }
+    }
 
     private enum DefaultsKey {
         static let notchDisplayTarget = "notchDisplayTarget"
@@ -192,25 +208,32 @@ class AppState: ObservableObject {
     private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
     private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
 
+    private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
     private var pendingQueue: [PendingRequest] = []
     private var currentResponseHandler: ((String) -> Void)?
     var hasResponseHandler: Bool { currentResponseHandler != nil }
+    private var currentAgentKind: BuddyKind?
+    private var currentRawToolName: String = ""
+    private var currentWorkspaceRoot: String?
     private var isShowingRequest = false
     private var showingRequestId: UUID?
     private var timeoutTimer: Timer?
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
+    private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
     private let timeoutDuration: Double = 120
     private let lifecycleSessionTimeout: Double = 15 * 60
 
     init(
         startServer: Bool = true,
         userDefaults: UserDefaults = .standard,
-        frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost
+        frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost,
+        approvalProxy: ApprovalProxyController? = nil
     ) {
         self.userDefaults = userDefaults
         self.frontmostCheck = frontmostCheck
+        self.approvalProxy = approvalProxy
         
         if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
            let target = NotchDisplayTarget(rawValue: rawTarget) {
@@ -467,6 +490,7 @@ class AppState: ObservableObject {
         var notificationType = ""
         var isPlanAction = false
         var displayToolName = ""
+        var workspaceRoot: String?
 
         if let json = parsedJSON {
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
@@ -481,6 +505,7 @@ class AppState: ObservableObject {
                 terminalTmuxPane = json["terminal_tmux_pane"] as? String ?? ""
                 terminalTmuxSocket = json["terminal_tmux_socket"] as? String ?? ""
                 terminalTmuxClient = json["terminal_tmux_client"] as? String ?? ""
+                workspaceRoot = json["cwd"] as? String
                 notificationType = json["notification_type"] as? String ?? ""
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
                 if Self.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
@@ -703,6 +728,8 @@ class AppState: ObservableObject {
             agentKind: agentKind,
             eventName: event,
             toolName: displayToolName,
+            rawToolName: toolName,
+            workspaceRoot: workspaceRoot,
             message: displayMsg,
             responseHandler: responseHandler,
             receivedAt: Date()
@@ -748,6 +775,38 @@ class AppState: ObservableObject {
                 isAutoEditActive = false
                 print("[DevIsland] [EMULATION] Gemini interactive emulation forced for tool: \(toolName)")
             }
+        }
+
+        if agentKind == .codex,
+           let policyDecision = codexPolicyDecision(
+               sessionId: sessionId,
+               toolName: toolName,
+               workspaceRoot: workspaceRoot
+           ) {
+            print("[DevIsland] [POLICY] Codex \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
+            request.responseHandler(responsePayload(approved: policyDecision.action == .allow))
+            DispatchQueue.main.async { [weak self] in
+                self?.updateActiveSession(
+                    sessionId: sessionId,
+                    terminalTitle: terminalTitle,
+                    agentKind: agentKind,
+                    terminalApp: terminalApp,
+                    terminalTTY: terminalTTY,
+                    terminalWindowId: terminalWindowId,
+                    terminalTabIndex: terminalTabIndex,
+                    terminalTmuxPane: terminalTmuxPane,
+                    terminalTmuxSocket: terminalTmuxSocket,
+                    terminalTmuxClient: terminalTmuxClient,
+                    toolName: displayToolName,
+                    eventName: event,
+                    message: "Policy \(policyDecision.action.rawValue): \(displayToolName)",
+                    isPending: false,
+                    preserveMessage: true,
+                    isLifecycleTracked: true,
+                    status: .policyApproved(Date())
+                )
+            }
+            return
         }
 
         if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
@@ -1245,6 +1304,9 @@ class AppState: ObservableObject {
             timeoutProgress = 1.0
             currentEventName = ""
             currentToolName = ""
+            currentRawToolName = ""
+            currentAgentKind = nil
+            currentWorkspaceRoot = nil
             currentMessage = ""
             currentSessionId = ""
             selectedSessionId = nil
@@ -1266,6 +1328,9 @@ class AppState: ObservableObject {
             print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
             currentResponseHandler = next.responseHandler
             currentSessionId = next.sessionId
+            currentRawToolName = next.rawToolName
+            currentAgentKind = next.agentKind
+            currentWorkspaceRoot = next.workspaceRoot
             sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
             return
         }
@@ -1274,6 +1339,9 @@ class AppState: ObservableObject {
         currentResponseHandler = next.responseHandler
         currentEventName  = next.eventName
         currentToolName   = next.toolName
+        currentRawToolName = next.rawToolName
+        currentAgentKind  = next.agentKind
+        currentWorkspaceRoot = next.workspaceRoot
         currentMessage    = next.message
         currentSessionId  = next.sessionId
 
@@ -1306,6 +1374,70 @@ class AppState: ObservableObject {
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
         return Self.isApprovalEvent(HookEventNormalizer.normalizedName(request.eventName), for: request.agentKind)
             && (!request.toolName.isEmpty || !request.message.isEmpty)
+    }
+
+    private func codexPolicyDecision(
+        sessionId: String,
+        toolName: String,
+        workspaceRoot: String?
+    ) -> ApprovalPolicyDecision? {
+        guard let approvalProxy, !sessionId.isEmpty, !toolName.isEmpty else { return nil }
+        do {
+            let request = ApprovalPolicyRequest(
+                provider: .codex,
+                sessionId: sessionId,
+                toolName: toolName,
+                workspaceRoot: workspaceRoot
+            )
+            let decision = try approvalProxy.evaluate(request)
+            guard decision.action != .prompt else { return nil }
+            try approvalProxy.recordDecision(
+                hookEventId: nil,
+                request: request,
+                decision: decision,
+                reason: "matched \(decision.source.rawValue)"
+            )
+            return decision
+        } catch {
+            print("[DevIsland] [POLICY] Codex policy evaluation failed: \(error)")
+            return nil
+        }
+    }
+
+    private func responsePayload(approved: Bool) -> String {
+        approved ? "{\"response\":\"approved\"}" : "{\"response\":\"denied\"}"
+    }
+
+    func codexPersistentRules() throws -> [ApprovalRule] {
+        guard let approvalProxy else { return [] }
+        return try approvalProxy.store.rules(provider: .codex, scope: .persistent)
+    }
+
+    func addCodexPersistentRule(toolName: String, action: RuleAction) throws {
+        guard let approvalProxy else { return }
+        let trimmed = toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        try approvalProxy.store.insertRule(ApprovalRule(
+            id: SQLiteApprovalStore.deterministicRuleID(
+                provider: .codex,
+                toolName: trimmed,
+                scope: .persistent,
+                workspaceRoot: nil
+            ),
+            provider: .codex,
+            toolName: trimmed,
+            action: action,
+            scope: .persistent
+        ))
+    }
+
+    func deleteCodexPersistentRule(_ rule: ApprovalRule) throws {
+        guard let approvalProxy else { return }
+        try approvalProxy.store.deleteRule(id: rule.id)
+    }
+
+    func flushApprovalPersistenceForTesting() {
+        approvalPersistenceQueue.sync {}
     }
 
     private func startTimeout() {
@@ -1349,6 +1481,7 @@ class AppState: ObservableObject {
         print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
         currentResponseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
+        persistCodexApprovalScope(approved: approved, approvalScope: approvalScope)
         currentResponseHandler = nil
         isShowingRequest = false
         showingRequestId = nil
@@ -1395,14 +1528,77 @@ class AppState: ObservableObject {
         }
     }
 
+    private func persistCodexApprovalScope(approved: Bool, approvalScope: RuleScope?) {
+        guard approved,
+              currentAgentKind == .codex,
+              let approvalScope,
+              let approvalProxy,
+              !currentSessionId.isEmpty,
+              !currentRawToolName.isEmpty else {
+            return
+        }
+
+        let sessionId = currentSessionId
+        let toolName = currentRawToolName
+        let workspaceRoot = currentWorkspaceRoot
+        approvalPersistenceQueue.sync {
+            persistCodexApprovalScopeOnPersistenceQueue(
+                approvalProxy: approvalProxy,
+                approvalScope: approvalScope,
+                sessionId: sessionId,
+                toolName: toolName,
+                workspaceRoot: workspaceRoot
+            )
+        }
+    }
+
+    private func persistCodexApprovalScopeOnPersistenceQueue(
+        approvalProxy: ApprovalProxyController,
+        approvalScope: RuleScope,
+        sessionId: String,
+        toolName: String,
+        workspaceRoot: String?
+    ) {
+        do {
+            switch approvalScope {
+            case .session:
+                try approvalProxy.store.upsertSessionApproval(
+                    provider: .codex,
+                    sessionId: sessionId,
+                    toolName: toolName,
+                    action: .allow,
+                    expiresAt: nil
+                )
+            case .persistent:
+                try approvalProxy.store.insertRule(ApprovalRule(
+                    id: SQLiteApprovalStore.deterministicRuleID(
+                        provider: .codex,
+                        toolName: toolName,
+                        scope: .persistent,
+                        workspaceRoot: workspaceRoot
+                    ),
+                    provider: .codex,
+                    toolName: toolName,
+                    action: .allow,
+                    scope: .persistent,
+                    workspaceRoot: workspaceRoot
+                ))
+            case .once:
+                break
+            }
+        } catch {
+            print("[DevIsland] [POLICY] Failed to persist Codex approval scope: \(error)")
+        }
+    }
+
     func approve(globalAlways: Bool = false, sessionAlways: Bool = false) {
-        let tool = currentToolName
+        let tool = currentRawToolName.isEmpty ? currentToolName : currentRawToolName
         let sId = currentSessionId
         
-        if globalAlways && !tool.isEmpty {
+        if globalAlways && !tool.isEmpty && currentAgentKind != .codex {
             globalAutoApproveTypes.insert(tool)
         }
-        if sessionAlways && !tool.isEmpty && !sId.isEmpty {
+        if sessionAlways && !tool.isEmpty && !sId.isEmpty && currentAgentKind != .codex {
             if sessionAutoApproveTypes[sId] == nil {
                 sessionAutoApproveTypes[sId] = []
             }
