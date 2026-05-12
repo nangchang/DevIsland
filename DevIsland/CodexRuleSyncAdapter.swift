@@ -22,6 +22,7 @@ struct CodexRuleSyncResult: Equatable {
 }
 
 protocol CodexRuleSyncAdapter {
+    /// Exports DevIsland-managed Codex persistent rules supplied by the caller.
     func sync(rules: [ApprovalRule], generatedAt: Date) throws -> CodexRuleSyncResult
 }
 
@@ -46,8 +47,7 @@ struct CodexJSONRuleSyncAdapter: CodexRuleSyncAdapter {
     }
 
     func sync(rules: [ApprovalRule], generatedAt: Date = Date()) throws -> CodexRuleSyncResult {
-        let codexRules = rules
-            .filter { $0.provider == .codex && $0.scope == .persistent }
+        let snapshotRules = rules
             .sorted { lhs, rhs in
                 if lhs.toolName == rhs.toolName {
                     return lhs.id.uuidString < rhs.id.uuidString
@@ -68,7 +68,7 @@ struct CodexJSONRuleSyncAdapter: CodexRuleSyncAdapter {
         let snapshot = CodexRuleSyncSnapshot(
             version: 1,
             generatedAt: generatedAt,
-            rules: codexRules
+            rules: snapshotRules
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -79,19 +79,27 @@ struct CodexJSONRuleSyncAdapter: CodexRuleSyncAdapter {
             at: snapshotURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        if fileManager.fileExists(atPath: snapshotURL.path) {
-            try data.write(to: snapshotURL, options: .atomic)
-            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: snapshotURL.path)
-        } else {
-            guard fileManager.createFile(
-                atPath: snapshotURL.path,
-                contents: data,
-                attributes: [.posixPermissions: 0o600]
-            ) else {
-                throw CocoaError(.fileWriteUnknown)
+        let tempURL = snapshotURL.deletingLastPathComponent()
+            .appendingPathComponent(".\(snapshotURL.lastPathComponent).\(UUID().uuidString).tmp")
+        guard fileManager.createFile(
+            atPath: tempURL.path,
+            contents: data,
+            attributes: [.posixPermissions: 0o600]
+        ) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        do {
+            if fileManager.fileExists(atPath: snapshotURL.path) {
+                _ = try fileManager.replaceItemAt(snapshotURL, withItemAt: tempURL)
+            } else {
+                try fileManager.moveItem(at: tempURL, to: snapshotURL)
             }
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: snapshotURL.path)
+        } catch {
+            try? fileManager.removeItem(at: tempURL)
+            throw error
         }
 
-        return CodexRuleSyncResult(url: snapshotURL, ruleCount: codexRules.count)
+        return CodexRuleSyncResult(url: snapshotURL, ruleCount: snapshotRules.count)
     }
 }

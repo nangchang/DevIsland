@@ -327,7 +327,6 @@ private struct ApprovalRulesWindowView: View {
                     } label: {
                         Label("Export Snapshot", systemImage: "square.and.arrow.up")
                     }
-                    .disabled(codexPersistentRules.isEmpty)
                 }
 
                 if let codexRuleError {
