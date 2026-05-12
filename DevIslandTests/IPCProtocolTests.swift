@@ -314,6 +314,37 @@ final class AppStateEnvelopeTests: XCTestCase {
         XCTAssertEqual(updatedPermissions?.first?["destination"] as? String, "session")
     }
 
+    func testClaudeUserPromptSubmitRichResponseUsesPolicyReason() throws {
+        let response = AppState.richResponseString(
+            fromLegacyResponse: #"{"response":"denied","reason":"Prompt contains a secret"}"#,
+            requestId: "req-prompt",
+            source: "claude",
+            event: "UserPromptSubmit"
+        )
+
+        let data = try XCTUnwrap(response.data(using: .utf8))
+        let decoded = try JSONDecoder().decode(IPCRichResponse.self, from: data)
+
+        XCTAssertEqual(decoded.providerOutput?["decision"]?.rawValue as? String, "block")
+        XCTAssertEqual(decoded.providerOutput?["reason"]?.rawValue as? String, "Prompt contains a secret")
+    }
+
+    func testClaudeElicitationRichResponseDeclinesOnDeny() throws {
+        let response = AppState.richResponseString(
+            fromLegacyResponse: #"{"response":"denied"}"#,
+            requestId: "req-elicitation",
+            source: "claude",
+            event: "Elicitation"
+        )
+
+        let data = try XCTUnwrap(response.data(using: .utf8))
+        let decoded = try JSONDecoder().decode(IPCRichResponse.self, from: data)
+        let hookOutput = decoded.providerOutput?["hookSpecificOutput"]?.rawValue as? [String: Any]
+
+        XCTAssertEqual(hookOutput?["hookEventName"] as? String, "Elicitation")
+        XCTAssertEqual(hookOutput?["action"] as? String, "decline")
+    }
+
     func testProviderContextExtractsEnvelopeSourceAndEvent() {
         let message = """
         {

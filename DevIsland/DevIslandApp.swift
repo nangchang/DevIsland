@@ -275,6 +275,8 @@ enum BridgeInstaller {
             ("Stop",              lifecycleConfig),
             ("PreToolUse",        lifecycleConfig),
             ("PostToolUse",       lifecycleConfig),
+            ("UserPromptSubmit",  lifecycleConfig),
+            ("Elicitation",       lifecycleConfig),
             ("PermissionRequest", approvalConfig),
         ]
         let retiredEntries = [

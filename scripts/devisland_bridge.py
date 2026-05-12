@@ -26,6 +26,8 @@ PASSIVE_EVENTS = {
     "Stop",
     "PreToolUse",
     "PostToolUse",
+    "UserPromptSubmit",
+    "Elicitation",
     "BeforeTool",
     "AfterAgent",
 }
@@ -231,6 +233,21 @@ def final_output(*, event: str, decision: str, provider_output: dict[str, Any] |
             }
         if event != "PermissionRequest":
             return {"continue": True}
+
+    if cli_source == "claude":
+        if event == "UserPromptSubmit":
+            if allow:
+                return {"continue": True, "suppressOutput": True}
+            return {"decision": "block", "reason": message}
+        if event == "Elicitation":
+            if allow:
+                return {"continue": True, "suppressOutput": True}
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "Elicitation",
+                    "action": "decline",
+                }
+            }
 
     if event == "PermissionRequest" and decision in ("approved", "denied"):
         hook_decision: dict[str, Any] = {"behavior": "allow" if allow else "deny"}

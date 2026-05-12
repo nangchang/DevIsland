@@ -173,6 +173,41 @@ final class ProviderAdapterTests: XCTestCase {
         XCTAssertEqual(updatedInput?["plan"] as? String, "Implement the feature")
     }
 
+    func testClaudeUserPromptSubmitDenyBlocksPrompt() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "denied",
+            event: "UserPromptSubmit",
+            provider: .claude,
+            denialMessage: "Prompt contains a secret"
+        )
+
+        XCTAssertEqual(output?["decision"]?.rawValue as? String, "block")
+        XCTAssertEqual(output?["reason"]?.rawValue as? String, "Prompt contains a secret")
+    }
+
+    func testClaudeUserPromptSubmitApprovalContinues() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "approved",
+            event: "UserPromptSubmit",
+            provider: .claude
+        )
+
+        XCTAssertEqual(output?["continue"]?.rawValue as? Bool, true)
+        XCTAssertEqual(output?["suppressOutput"]?.rawValue as? Bool, true)
+    }
+
+    func testClaudeElicitationDenyDeclinesRequest() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "denied",
+            event: "Elicitation",
+            provider: .claude
+        )
+
+        let hookOutput = output?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        XCTAssertEqual(hookOutput?["hookEventName"] as? String, "Elicitation")
+        XCTAssertEqual(hookOutput?["action"] as? String, "decline")
+    }
+
     func testCodexLifecycleOutputContinues() {
         let output = ProviderAdapter.providerOutput(
             decision: "approved",

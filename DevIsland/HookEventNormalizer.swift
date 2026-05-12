@@ -2,7 +2,7 @@ import Foundation
 
 struct HookEventNormalizer {
     private static let approvalEventsByAgent: [BuddyKind: Set<String>] = [
-        .claudeCode: ["permissionrequest"],
+        .claudeCode: ["permissionrequest", "elicitation"],
         .codex: ["permissionrequest"],
         .gemini: ["beforetool"]
     ]
