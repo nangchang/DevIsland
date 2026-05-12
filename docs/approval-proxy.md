@@ -608,10 +608,10 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 ### Phase 5. Codex cache/rules
 
-> 상태: 📅 예정
+> 상태: 🔧 진행 중
 
-- Codex session cache 안정화.
-- persistent rules UI 연결.
+- [x] Codex session cache 안정화.
+- [x] persistent rules UI 연결.
 - optional Codex external rule sync adapter 설계/구현.
 
 ### Phase 6. Unix domain socket

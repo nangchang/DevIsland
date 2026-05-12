@@ -297,10 +297,59 @@ private struct ExperimentalPTYSettingsPane: View {
 
 private struct ApprovalRulesWindowView: View {
     @StateObject private var state = AppState.shared
+    @State private var codexPersistentRules: [ApprovalRule] = []
+    @State private var codexToolName = ""
+    @State private var codexRuleAction: RuleAction = .allow
+    @State private var codexRuleError: String?
     private let riskGroups = ToolRiskLevel.allCases
 
     var body: some View {
         Form {
+            Section("Codex persistent SQLite rules") {
+                HStack {
+                    TextField("Tool name", text: $codexToolName)
+                        .textFieldStyle(.roundedBorder)
+                    Picker("Action", selection: $codexRuleAction) {
+                        Text("Allow").tag(RuleAction.allow)
+                        Text("Deny").tag(RuleAction.deny)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 160)
+                    Button {
+                        addCodexPersistentRule()
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                    .disabled(codexToolName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                if let codexRuleError {
+                    Label(codexRuleError, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+
+                if codexPersistentRules.isEmpty {
+                    Text("No Codex persistent SQLite rules are configured.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(codexPersistentRules) { rule in
+                        HStack {
+                            let risk = ToolKnowledge.risk(for: rule.toolName)
+                            Label("\(rule.toolName) \(risk.emoji)", systemImage: rule.action == .allow ? "checkmark.circle" : "xmark.octagon")
+                            Text(rule.action.rawValue)
+                                .foregroundStyle(rule.action == .allow ? .green : .red)
+                            Spacer()
+                            Button(role: .destructive) {
+                                deleteCodexPersistentRule(rule)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+            }
+
             Section("Global auto-approval tools") {
                 Text("These existing DevIsland rules are checked for every session before showing an approval prompt.")
                     .foregroundStyle(.secondary)
@@ -376,6 +425,40 @@ private struct ApprovalRulesWindowView: View {
         .formStyle(.grouped)
         .padding(16)
         .frame(minWidth: 700, minHeight: 500)
+        .onAppear(perform: loadCodexPersistentRules)
+    }
+
+    private func addCodexPersistentRule() {
+        let toolName = codexToolName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !toolName.isEmpty else { return }
+        do {
+            try state.addCodexPersistentRule(toolName: toolName, action: codexRuleAction)
+            codexToolName = ""
+            codexRuleError = nil
+            loadCodexPersistentRules()
+        } catch {
+            codexRuleError = "Failed to save Codex rule: \(error.localizedDescription)"
+        }
+    }
+
+    private func deleteCodexPersistentRule(_ rule: ApprovalRule) {
+        do {
+            try state.deleteCodexPersistentRule(rule)
+            codexRuleError = nil
+            loadCodexPersistentRules()
+        } catch {
+            codexRuleError = "Failed to delete Codex rule: \(error.localizedDescription)"
+        }
+    }
+
+    private func loadCodexPersistentRules() {
+        do {
+            codexPersistentRules = try state.codexPersistentRules()
+            codexRuleError = nil
+        } catch {
+            codexPersistentRules = []
+            codexRuleError = "Failed to load Codex rules: \(error.localizedDescription)"
+        }
     }
 
     private func predefinedToolMenu(onSelect: @escaping (KnownTool) -> Void) -> some View {
