@@ -301,6 +301,7 @@ private struct ApprovalRulesWindowView: View {
     @State private var codexToolName = ""
     @State private var codexRuleAction: RuleAction = .allow
     @State private var codexRuleError: String?
+    @State private var codexRuleSyncMessage: String?
     private let riskGroups = ToolRiskLevel.allCases
 
     var body: some View {
@@ -321,11 +322,21 @@ private struct ApprovalRulesWindowView: View {
                         Label("Add", systemImage: "plus")
                     }
                     .disabled(codexToolName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button {
+                        syncCodexPersistentRules()
+                    } label: {
+                        Label("Export Snapshot", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(codexPersistentRules.isEmpty)
                 }
 
                 if let codexRuleError {
                     Label(codexRuleError, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                }
+                if let codexRuleSyncMessage {
+                    Label(codexRuleSyncMessage, systemImage: "doc.text")
+                        .foregroundStyle(.secondary)
                 }
 
                 if codexPersistentRules.isEmpty {
@@ -458,6 +469,17 @@ private struct ApprovalRulesWindowView: View {
         } catch {
             codexPersistentRules = []
             codexRuleError = "Failed to load Codex rules: \(error.localizedDescription)"
+        }
+    }
+
+    private func syncCodexPersistentRules() {
+        do {
+            let result = try state.syncCodexPersistentRules()
+            codexRuleSyncMessage = "Exported \(result.ruleCount) Codex rules to \(result.url.path)"
+            codexRuleError = nil
+        } catch {
+            codexRuleSyncMessage = nil
+            codexRuleError = "Failed to export Codex rules: \(error.localizedDescription)"
         }
     }
 

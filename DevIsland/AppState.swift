@@ -143,6 +143,7 @@ class AppState: ObservableObject {
 
     private let userDefaults: UserDefaults
     private let frontmostCheck: FrontmostCheck
+    private let codexRuleSyncAdapter: CodexRuleSyncAdapter
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
@@ -229,11 +230,13 @@ class AppState: ObservableObject {
         startServer: Bool = true,
         userDefaults: UserDefaults = .standard,
         frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost,
-        approvalProxy: ApprovalProxyController? = nil
+        approvalProxy: ApprovalProxyController? = nil,
+        codexRuleSyncAdapter: CodexRuleSyncAdapter = CodexJSONRuleSyncAdapter()
     ) {
         self.userDefaults = userDefaults
         self.frontmostCheck = frontmostCheck
         self.approvalProxy = approvalProxy
+        self.codexRuleSyncAdapter = codexRuleSyncAdapter
         
         if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
            let target = NotchDisplayTarget(rawValue: rawTarget) {
@@ -1434,6 +1437,10 @@ class AppState: ObservableObject {
     func deleteCodexPersistentRule(_ rule: ApprovalRule) throws {
         guard let approvalProxy else { return }
         try approvalProxy.store.deleteRule(id: rule.id)
+    }
+
+    func syncCodexPersistentRules() throws -> CodexRuleSyncResult {
+        try codexRuleSyncAdapter.sync(rules: codexPersistentRules(), generatedAt: Date())
     }
 
     func flushApprovalPersistenceForTesting() {

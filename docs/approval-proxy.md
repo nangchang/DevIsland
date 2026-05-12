@@ -612,7 +612,7 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 - [x] Codex session cache 안정화.
 - [x] persistent rules UI 연결.
-- optional Codex external rule sync adapter 설계/구현.
+- [x] optional Codex external rule sync adapter 설계/구현.
 
 ### Phase 6. Unix domain socket
 
