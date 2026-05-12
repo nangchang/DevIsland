@@ -299,7 +299,7 @@ class AppState: ObservableObject {
                     NSApplication.shared.terminate(nil)
                 }
             }
-            server.start()
+            server.start(transport: Self.currentBridgeTransport())
             GlobalShortcutManager.shared.start()
             
             // Prune inactive sessions every 10 seconds
@@ -407,6 +407,19 @@ class AppState: ObservableObject {
     private static func currentClaudePersistentApprovalDestination() -> ClaudePersistentApprovalDestination {
         let raw = UserDefaults.standard.string(forKey: "claudePersistentApprovalDestination")
         return raw.flatMap(ClaudePersistentApprovalDestination.init(rawValue:)) ?? AppSettings.defaults.claudePersistentApprovalDestination
+    }
+
+    private static func currentBridgeTransport() -> HookIPCTransport {
+        let transportRaw = UserDefaults.standard.string(forKey: SettingsStore.DefaultsKey.bridgeTransportKind)
+        let transport = transportRaw.flatMap(BridgeTransportKind.init(rawValue:)) ?? AppSettings.defaults.bridgeTransportKind
+        switch transport {
+        case .tcpLoopback:
+            let port = UserDefaults.standard.integer(forKey: SettingsStore.DefaultsKey.bridgeTcpPort)
+            return .tcp(port: UInt16(port > 0 ? port : AppSettings.defaults.bridgeTcpPort))
+        case .unixDomainSocket:
+            let socketPath = UserDefaults.standard.string(forKey: SettingsStore.DefaultsKey.bridgeSocketPath)
+            return .unix(path: (socketPath?.isEmpty == false) ? socketPath! : AppSettings.defaults.bridgeSocketPath)
+        }
     }
 
     private func ensureSelectedDisplay() {

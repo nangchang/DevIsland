@@ -1,13 +1,21 @@
 import Foundation
 import Network
 import Combine
+import Darwin
+
+enum HookIPCTransport: Equatable {
+    case tcp(port: UInt16)
+    case unix(path: String)
+}
 
 class HookSocketServer {
     private var listener: NWListener?
-    private let port: NWEndpoint.Port = 9090
     private let maxPayloadSize = 1_048_576
     private var activeConnections: [UUID: NWConnection] = [:]
     private let connectionQueue = DispatchQueue(label: "DevIsland.HookSocketServer.connections")
+    private let unixQueue = DispatchQueue(label: "DevIsland.HookSocketServer.unix")
+    private var unixListenFD: Int32 = -1
+    private var unixAcceptSource: DispatchSourceRead?
 
     /// Called when a complete message is received.
     /// - Parameters:
@@ -18,7 +26,20 @@ class HookSocketServer {
     var onMessageReceived: ((String, String?, @escaping (String) -> Void) -> Void)?
     var onServerFailed: (() -> Void)?
 
-    func start() {
+    deinit {
+        stopUnixListener()
+    }
+
+    func start(transport: HookIPCTransport = .tcp(port: 9090)) {
+        switch transport {
+        case .tcp(let port):
+            startTCP(port: NWEndpoint.Port(rawValue: port) ?? 9090)
+        case .unix(let path):
+            startUnix(path: path)
+        }
+    }
+
+    private func startTCP(port: NWEndpoint.Port) {
         do {
             let parameters = NWParameters.tcp
             listener = try NWListener(using: parameters, on: port)
@@ -26,7 +47,7 @@ class HookSocketServer {
             listener?.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    print("Server listening on port \(self.port)")
+                    print("Server listening on port \(port)")
                 case .failed(let error):
                     print("Server failed: \(error)")
                     DispatchQueue.main.async { self.onServerFailed?() }
@@ -42,6 +63,175 @@ class HookSocketServer {
             listener?.start(queue: .global())
         } catch {
             print("Failed to start server: \(error)")
+        }
+    }
+
+    private func startUnix(path: String) {
+        do {
+            let url = URL(fileURLWithPath: path)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try removeStaleSocket(at: url)
+
+            let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+            guard fd >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+
+            var flags = fcntl(fd, F_GETFL, 0)
+            if flags >= 0 {
+                flags = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+            }
+
+            var address = sockaddr_un()
+            address.sun_family = sa_family_t(AF_UNIX)
+            let pathBytes = Array(path.utf8)
+            guard pathBytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
+                close(fd)
+                throw POSIXError(.ENAMETOOLONG)
+            }
+            let sunPathCapacity = MemoryLayout.size(ofValue: address.sun_path)
+            withUnsafeMutablePointer(to: &address.sun_path) { pointer in
+                pointer.withMemoryRebound(to: CChar.self, capacity: sunPathCapacity) { buffer in
+                    for (index, byte) in pathBytes.enumerated() {
+                        buffer[index] = CChar(bitPattern: byte)
+                    }
+                    buffer[pathBytes.count] = 0
+                }
+            }
+
+            let bindResult = withUnsafePointer(to: &address) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                    bind(fd, socketAddress, socklen_t(MemoryLayout<sa_family_t>.size + pathBytes.count + 1))
+                }
+            }
+            guard bindResult == 0 else {
+                let error = POSIXError(.init(rawValue: errno) ?? .EIO)
+                close(fd)
+                throw error
+            }
+            chmod(path, S_IRUSR | S_IWUSR)
+            guard listen(fd, SOMAXCONN) == 0 else {
+                let error = POSIXError(.init(rawValue: errno) ?? .EIO)
+                close(fd)
+                throw error
+            }
+
+            unixListenFD = fd
+            let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: unixQueue)
+            source.setEventHandler { [weak self] in
+                self?.acceptUnixConnections()
+            }
+            source.setCancelHandler {
+                close(fd)
+            }
+            unixAcceptSource = source
+            source.resume()
+            print("Server listening on Unix socket \(path)")
+        } catch {
+            print("Failed to start Unix socket server: \(error)")
+            DispatchQueue.main.async { self.onServerFailed?() }
+        }
+    }
+
+    private func removeStaleSocket(at url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        var statBuffer = stat()
+        guard lstat(url.path, &statBuffer) == 0 else {
+            throw POSIXError(.init(rawValue: errno) ?? .EIO)
+        }
+        guard (statBuffer.st_mode & S_IFMT) == S_IFSOCK else {
+            throw POSIXError(.EEXIST)
+        }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    private func stopUnixListener() {
+        unixAcceptSource?.cancel()
+        unixAcceptSource = nil
+        unixListenFD = -1
+    }
+
+    private func acceptUnixConnections() {
+        while true {
+            let clientFD = accept(unixListenFD, nil, nil)
+            if clientFD < 0 {
+                if errno == EWOULDBLOCK || errno == EAGAIN { return }
+                print("Unix accept failed: \(errno)")
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.handleUnixClient(clientFD)
+            }
+        }
+    }
+
+    private func handleUnixClient(_ fd: Int32) {
+        var payload = Data()
+        var buffer = [UInt8](repeating: 0, count: 65_536)
+        while true {
+            let readCount = recv(fd, &buffer, buffer.count, 0)
+            if readCount > 0 {
+                payload.append(buffer, count: readCount)
+                if payload.count > maxPayloadSize {
+                    close(fd)
+                    return
+                }
+            } else if readCount == 0 {
+                break
+            } else if errno == EINTR {
+                continue
+            } else {
+                close(fd)
+                return
+            }
+        }
+
+        guard !payload.isEmpty else {
+            close(fd)
+            return
+        }
+
+        if payload.first == 0x7B {
+            deliverUnixPayload(payload, framed: false, fd: fd)
+        } else {
+            guard payload.count >= 4 else {
+                close(fd)
+                return
+            }
+            let length = payload.prefix(4).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian }
+            guard length <= maxPayloadSize, payload.count >= Int(4 + length) else {
+                close(fd)
+                return
+            }
+            deliverUnixPayload(payload.dropFirst(4).prefix(Int(length)), framed: true, fd: fd)
+        }
+    }
+
+    private func deliverUnixPayload(_ data: Data, framed: Bool, fd: Int32) {
+        guard let message = String(data: data, encoding: .utf8) else {
+            close(fd)
+            return
+        }
+        let requestId = framed ? extractRequestId(from: data) : nil
+        DispatchQueue.main.async { [weak self] in
+            self?.onMessageReceived?(message, requestId) { response in
+                let responseData: Data
+                if framed {
+                    let responseBytes = Data(response.utf8)
+                    let length = UInt32(responseBytes.count).bigEndian
+                    var framedResponse = withUnsafeBytes(of: length) { Data($0) }
+                    framedResponse.append(responseBytes)
+                    responseData = framedResponse
+                } else {
+                    responseData = Data(response.utf8)
+                }
+                responseData.withUnsafeBytes { rawBuffer in
+                    guard let baseAddress = rawBuffer.baseAddress else { return }
+                    _ = send(fd, baseAddress, rawBuffer.count, 0)
+                }
+                close(fd)
+            }
         }
     }
 
