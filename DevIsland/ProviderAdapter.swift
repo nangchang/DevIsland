@@ -136,6 +136,14 @@ struct ProviderAdapter {
         toolInput: [String: AnyJSON]?,
         denialMessage: String
     ) -> [String: AnyJSON] {
+        let updatedInput = allow ? claudeUpdatedInput(for: toolName, toolInput: toolInput) : nil
+        if allow, updatedInput == nil {
+            return [
+                "continue": .bool(true),
+                "suppressOutput": .bool(true)
+            ]
+        }
+
         var hookOutput: [String: AnyJSON] = [
             "hookEventName": .string("PreToolUse"),
             "permissionDecision": .string(allow ? "allow" : "deny")
@@ -143,8 +151,7 @@ struct ProviderAdapter {
         if !allow {
             hookOutput["permissionDecisionReason"] = .string(denialMessage)
         }
-        if allow,
-           let updatedInput = claudeUpdatedInput(for: toolName, toolInput: toolInput) {
+        if let updatedInput {
             hookOutput["updatedInput"] = updatedInput
         }
         return ["hookSpecificOutput": .object(hookOutput)]
@@ -182,10 +189,7 @@ struct ProviderAdapter {
         guard let toolName else { return nil }
         switch HookEventNormalizer.normalizedName(toolName) {
         case "askuserquestion":
-            var input = toolInput ?? [:]
-            if input["answers"] == nil {
-                input["answers"] = .object([:])
-            }
+            guard let input = toolInput, input["answers"] != nil else { return nil }
             return .object(input)
         case "exitplanmode":
             return toolInput.map(AnyJSON.object)

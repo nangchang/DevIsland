@@ -1343,8 +1343,6 @@ class AppState: ObservableObject {
         }
         if let approvalScope {
             responsePayload["approval_scope"] = approvalScope.rawValue
-            responsePayload["tool_name"] = currentToolName
-            responsePayload["rule_content"] = currentMessage
         }
         let data = try? JSONSerialization.data(withJSONObject: responsePayload)
         let payload = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"response\":\"\(response)\"}"

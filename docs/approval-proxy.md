@@ -278,7 +278,7 @@ Claude Persistent Approval Destination
 
 `AskUserQuestion`과 `ExitPlanMode`는 `PreToolUse`에서 처리한다.
 
-- `AskUserQuestion`: 질문 UI를 표시하고 `updatedInput.answers`를 포함해 allow.
+- `AskUserQuestion`: 질문 UI에서 실제 답변을 수집한 경우에만 `updatedInput.answers`를 포함해 allow. 답변을 수집하지 못한 경우에는 Claude 기본 흐름을 유지한다.
 - `ExitPlanMode`: plan approval UI를 표시하고 필요 시 `updatedInput`으로 승인 내용을 반영.
 - non-interactive mode에서는 `defer` 지원을 옵션으로 둔다.
 
