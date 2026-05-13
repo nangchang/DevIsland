@@ -26,6 +26,7 @@ import sys
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
@@ -39,6 +40,8 @@ DEFAULT_CONFIG_PATH = (
 DEFAULT_TCP_PORT = 9090
 PROTOCOL_NAME = "dev-island-hook-ipc"
 PROTOCOL_VERSION = 1
+# Maximum number of concurrent IPC calls to the app.
+_IPC_MAX_WORKERS = 4
 
 
 def load_config(config_path: Path) -> dict:
@@ -89,6 +92,7 @@ def send_pty_output(
     try:
         with socket.create_connection(("127.0.0.1", tcp_port), timeout=5) as sock:
             sock.sendall(framed)
+            sock.shutdown(socket.SHUT_WR)  # half-close so server sees EOF on write side
             # Read 4-byte length prefix then body
             raw_len = _recv_exactly(sock, 4)
             if not raw_len:
@@ -141,8 +145,10 @@ def run_pty(command: list[str], source: str, tcp_port: int) -> int:
             with injection_lock:
                 injection_queue.append(injection.encode())
 
+    # IPC calls are dispatched to a bounded thread pool to cap resource usage
+    # even when the child produces bursts of output (e.g. find, cat).
+    executor = ThreadPoolExecutor(max_workers=_IPC_MAX_WORKERS)
     exit_code = 0
-    pending_output: list[bytes] = []
 
     try:
         while True:
@@ -162,11 +168,9 @@ def run_pty(command: list[str], source: str, tcp_port: int) -> int:
                         readable = []
                         break
                     os.write(sys.stdout.fileno(), data)
-                    # Dispatch PTY output to IPC (non-blocking)
                     text = data.decode(errors="replace")
-                    threading.Thread(
-                        target=dispatch_pty_output, args=(text,), daemon=True
-                    ).start()
+                    if text:
+                        executor.submit(dispatch_pty_output, text)
 
                 elif fd == sys.stdin.fileno():
                     try:
@@ -202,6 +206,7 @@ def run_pty(command: list[str], source: str, tcp_port: int) -> int:
             pass
 
     finally:
+        executor.shutdown(wait=False)
         try:
             os.close(master_fd)
         except OSError:
