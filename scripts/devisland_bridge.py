@@ -216,11 +216,11 @@ def _parse_response(raw: bytes, *, framed_request: bool = False) -> tuple[str, d
 def fallback_decision() -> str:
     """Return the fallback decision when the app is unreachable.
 
-    Reads approvalFallbackPolicy from bridge-config.json; defaults to "deny".
-    "allowReadOnly" maps to "pass" (let the CLI handle it), everything else → "deny".
+    Reads approvalFallbackPolicy from bridge-config.json; defaults to "pass".
+    "deny" maps to "deny", everything else → "pass" (let the CLI handle it).
     """
-    policy = load_config().get("approvalFallbackPolicy", "denyUnknown")
-    return "pass" if policy == "allowReadOnly" else "deny"
+    policy = load_config().get("approvalFallbackPolicy", "allowReadOnly")
+    return "deny" if policy == "deny" else "pass"
 
 
 # ---------------------------------------------------------------------------
@@ -241,10 +241,12 @@ def final_output(*, event: str, decision: str, provider_output: dict[str, Any] |
 
     allow = decision == "approved"
     if cli_source == "gemini":
-        output: dict[str, Any] = {"decision": "allow" if allow else "deny"}
-        if not allow:
-            output["reason"] = message
-        return output
+        if event == "BeforeTool":
+            output: dict[str, Any] = {"decision": "allow" if allow else "deny"}
+            if not allow:
+                output["reason"] = message
+            return output
+        return {}
 
     if cli_source == "codex":
         if event == "PreToolUse":
