@@ -1146,6 +1146,8 @@ struct SessionRowView: View {
             return "Bypassed"
         case .autoApproved:
             return "Auto-Approved"
+        case .policyApproved:
+            return "Policy-Approved"
         case .idle:
             return nil
         }
@@ -1158,6 +1160,8 @@ struct SessionRowView: View {
             return Color(red: 0.2, green: 0.8, blue: 0.9)
         case .autoApproved:
             return Color(red: 0.2, green: 0.9, blue: 0.5)
+        case .policyApproved:
+            return Color(red: 0.45, green: 0.75, blue: 1.0)
         case .idle:
             return .white.opacity(0.3)
         }

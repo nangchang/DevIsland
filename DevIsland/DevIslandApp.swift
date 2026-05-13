@@ -5,6 +5,10 @@ struct DevIslandApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject private var state = AppState.shared
 
+    init() {
+        _ = SettingsStore.shared
+    }
+
     var body: some Scene {
         MenuBarExtra {
             MenuBarMenu()
@@ -36,6 +40,8 @@ struct MenuBarMenu: View {
             Text("대기 중인 요청 없음")
                 .foregroundStyle(.secondary)
         } else {
+            Text("요청 대기 중: \(state.pendingItems.count)건")
+                .font(.headline)
             ForEach(state.pendingItems) { item in
                 HStack(spacing: 6) {
                     Image(systemName: toolInfo(for: item.toolName).icon)
@@ -54,154 +60,34 @@ struct MenuBarMenu: View {
             Divider()
         }
 
-        if state.isNotchExpanded {
-            Button("Focus Terminal") { state.focusTerminal() }
-            Divider()
-            Button("Approve  ⌘⇧Y") { state.approve() }
-                .keyboardShortcut("y", modifiers: [.command, .shift])
-            Button("Deny  ⌘⇧N") { state.deny() }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
-            Divider()
+        Button("Focus Terminal") { state.focusTerminal() }
+            .disabled(state.pendingItems.isEmpty && state.activeSessions.isEmpty)
+
+        Button("Approve  ⌘⇧Y") { state.approve() }
+            .keyboardShortcut("y", modifiers: [.command, .shift])
+            .disabled(!state.hasResponseHandler)
+        Button("Deny  ⌘⇧N") { state.deny() }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+            .disabled(!state.hasResponseHandler)
+
+        Divider()
+
+        Button("Settings…") {
+            AppWindowRouter.showSettings()
+        }
+        Button("Approval Rules…") {
+            AppWindowRouter.showApprovalRules()
+        }
+        Button("Replay Log…") {
+            AppWindowRouter.showReplayLog()
+        }
+        Button("PTY Transcript…") {
+            AppWindowRouter.showPTYTranscript()
         }
 
         Divider()
 
-        Picker("노치 표시 위치", selection: $state.notchDisplayTarget) {
-            ForEach(NotchDisplayTarget.allCases) { target in
-                Text(target.label).tag(target)
-            }
-        }
-
-        if state.notchDisplayTarget == .specific {
-            Picker("모니터 선택", selection: $state.selectedDisplayId) {
-                ForEach(NSScreen.screens, id: \.displayId) { screen in
-                    Text(Self.displayName(for: screen)).tag(screen.displayId)
-                }
-            }
-        }
-
-        Toggle("전체 화면 앱 위에 표시", isOn: $state.showInFullScreenApps)
-        Picker("요청 표시 위치", selection: $state.requestDisplayTarget) {
-            ForEach(RequestDisplayTarget.allCases) { target in
-                Text(target.label).tag(target)
-            }
-        }
-
-        Divider()
-
-        Menu("자동 승인(Global) 툴 관리") {
-            Toggle("Safe 등급 툴 자동 승인 (조회성 작업)", isOn: $state.autoApproveSafeTools)
-            Toggle("Gemini 일반 모드 에뮬레이션 (DevIsland가 통제)", isOn: $state.emulateGeminiInteractiveMode)
-            Divider()
-            Button("직접 텍스트로 추가하기...") {
-                state.promptToAddGlobalAutoApprove()
-            }
-            Menu("목록에서 추가하기") {
-                ForEach([ToolRiskLevel.safe, .low, .medium, .high, .critical], id: \.self) { risk in
-                    let tools = ToolKnowledge.predefined.filter { $0.risk == risk }
-                    if !tools.isEmpty {
-                        Menu("\(risk.emoji) \(risk.rawValue)") {
-                            Button("이 위험도의 모든 툴 추가") {
-                                for t in tools { state.globalAutoApproveTypes.insert(t.id) }
-                            }
-                            Divider()
-                            ForEach(tools) { tool in
-                                Button("\(tool.name) (\(tool.id)) \(risk.emoji)") {
-                                    state.globalAutoApproveTypes.insert(tool.id)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Divider()
-            Menu("등록된 툴 관리 (\(state.globalAutoApproveTypes.count)개)") {
-                if state.globalAutoApproveTypes.isEmpty {
-                    Text("설정된 자동 승인 툴이 없습니다.").disabled(true)
-                } else {
-                    Button(role: .destructive) {
-                        state.globalAutoApproveTypes.removeAll()
-                    } label: {
-                        Label("모두 지우기", systemImage: "trash.fill")
-                    }
-                    Divider()
-                    ForEach(Array(state.globalAutoApproveTypes.sorted()), id: \.self) { tool in
-                        let risk = ToolKnowledge.risk(for: tool)
-                        Button(role: .destructive) {
-                            state.globalAutoApproveTypes.remove(tool)
-                        } label: {
-                            Label("\(tool) \(risk.emoji)", systemImage: "minus.circle")
-                        }
-                    }
-                }
-            }
-        }
-
-        Menu("자동 승인(Session) 툴 관리") {
-            if state.activeSessions.isEmpty {
-                Text("활성화된 세션이 없습니다.").disabled(true)
-            } else {
-                ForEach(state.activeSessions) { session in
-                    let tools = state.sessionAutoApproveTypes[session.id] ?? []
-                    Menu("Session \(session.id.prefix(8)) (\(tools.count)개)") {
-                        Button("직접 텍스트로 추가하기...") {
-                            state.promptToAddSessionAutoApprove(for: session.id)
-                        }
-                        Menu("목록에서 추가하기") {
-                            ForEach([ToolRiskLevel.safe, .low, .medium, .high, .critical], id: \.self) { risk in
-                                let pTools = ToolKnowledge.predefined.filter { $0.risk == risk }
-                                if !pTools.isEmpty {
-                                    Menu("\(risk.emoji) \(risk.rawValue)") {
-                                        Button("이 위험도의 모든 툴 추가") {
-                                            for t in pTools {
-                                                if state.sessionAutoApproveTypes[session.id] == nil {
-                                                    state.sessionAutoApproveTypes[session.id] = []
-                                                }
-                                                state.sessionAutoApproveTypes[session.id]?.insert(t.id)
-                                            }
-                                        }
-                                        Divider()
-                                        ForEach(pTools) { tool in
-                                            Button("\(tool.name) (\(tool.id)) \(risk.emoji)") {
-                                                if state.sessionAutoApproveTypes[session.id] == nil {
-                                                    state.sessionAutoApproveTypes[session.id] = []
-                                                }
-                                                state.sessionAutoApproveTypes[session.id]?.insert(tool.id)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Divider()
-                        Menu("등록된 툴 관리 (\(tools.count)개)") {
-                            if tools.isEmpty {
-                                Text("설정된 툴 없음").disabled(true)
-                            } else {
-                                Button(role: .destructive) {
-                                    state.sessionAutoApproveTypes[session.id]?.removeAll()
-                                } label: {
-                                    Label("모두 지우기", systemImage: "trash.fill")
-                                }
-                                Divider()
-                                ForEach(Array(tools.sorted()), id: \.self) { tool in
-                                    let risk = ToolKnowledge.risk(for: tool)
-                                    Button(role: .destructive) {
-                                        state.sessionAutoApproveTypes[session.id]?.remove(tool)
-                                    } label: {
-                                        Label("\(tool) \(risk.emoji)", systemImage: "minus.circle")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Divider()
-
-        Menu("브리지 설치") {
+        Menu("Install / Repair Hooks") {
             Button("전부 설치 (Claude · Codex · Gemini)") {
                 BridgeInstaller.installAll()
             }
@@ -215,13 +101,10 @@ struct MenuBarMenu: View {
             Button("Gemini CLI만 설치...") {
                 BridgeInstaller.installGemini()
             }
-        }
-
-        Menu("브리지 제거") {
+            Divider()
             Button("전부 제거 (Claude · Codex · Gemini)") {
                 BridgeInstaller.uninstallAll()
             }
-            Divider()
             Button("Claude Code만 제거...") {
                 BridgeInstaller.uninstall()
             }
@@ -252,11 +135,6 @@ struct MenuBarMenu: View {
         }
     }
 
-    private static func displayName(for screen: NSScreen) -> String {
-        let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 1
-        let role = screen == NSScreen.main ? "주 모니터" : "모니터 \(index)"
-        return "\(role) · \(Int(screen.frame.width))×\(Int(screen.frame.height))"
-    }
 }
 
 // MARK: - Bridge Installer
@@ -400,6 +278,8 @@ enum BridgeInstaller {
             ("Stop",              lifecycleConfig),
             ("PreToolUse",        lifecycleConfig),
             ("PostToolUse",       lifecycleConfig),
+            ("UserPromptSubmit",  lifecycleConfig),
+            ("Elicitation",       lifecycleConfig),
             ("PermissionRequest", approvalConfig),
         ]
         let retiredEntries = [

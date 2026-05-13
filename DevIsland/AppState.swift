@@ -6,10 +6,14 @@ import AppKit
 
 struct PendingRequest: Identifiable {
     let id = UUID()
+    let hookEventId: Int64?
     let sessionId: String
     let agentKind: BuddyKind
     let eventName: String
     let toolName: String
+    let rawToolName: String
+    let workspaceRoot: String?
+    let isReplay: Bool
     let message: String
     let responseHandler: (String) -> Void
     let receivedAt: Date
@@ -34,10 +38,12 @@ enum SessionStatus: Equatable {
     case pending
     case timeoutBypassed(Date)
     case autoApproved(Date)
+    case policyApproved(Date)
 
     var isTimeoutBypassed: Bool {
         if case .timeoutBypassed = self { return true }
         if case .autoApproved = self { return true }
+        if case .policyApproved = self { return true }
         return false
     }
 }
@@ -102,8 +108,29 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 
 // MARK: - App State
 
+// AppState is the central hub: owns the IPC server, session list, pending approval queue,
+// and decision dispatch. It also holds Gemini-specific UX state (auto-edit mode, emulation).
+//
+// TODO(gap-5): AppState (~93 KB) handles too many responsibilities. Planned decomposition:
+//   - Hook parsing/normalization → ApprovalProxyController / HookEventNormalizer (partially done)
+//   - AskUserQuestion / ExitPlanMode flow → QuestionBroker (new type)
+//   - Gemini UX logic → GeminiSessionState or GeminiPromptPolicy
+//   Splitting reduces test surface and makes each concern independently testable.
+//   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
 class AppState: ObservableObject {
-    static let shared = AppState(startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1")
+    static let shared = AppState(
+        startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1",
+        approvalProxy: AppState.makeApprovalProxy()
+    )
+
+    private static func makeApprovalProxy() -> ApprovalProxyController? {
+        do {
+            return try ApprovalProxyController()
+        } catch {
+            print("[DevIsland] ApprovalProxyController init failed: \(error)")
+            return nil
+        }
+    }
 
     private enum DefaultsKey {
         static let notchDisplayTarget = "notchDisplayTarget"
@@ -115,17 +142,6 @@ class AppState: ObservableObject {
         static let emulateGeminiInteractiveMode = "emulateGeminiInteractiveMode"
     }
 
-    private static let approvalEventsByAgent: [BuddyKind: Set<String>] = [
-        .claudeCode: ["permissionrequest"],
-        .codex: ["permissionrequest"],
-        .gemini: ["beforetool"]
-    ]
-    private static let userQuestionTools: Set<String> = [
-        "ask_user",
-        "askuser",
-        "request_user_input",
-        "requestuserinput"
-    ]
     typealias FrontmostCheck = (
         _ appName: String?,
         _ tty: String?,
@@ -138,6 +154,7 @@ class AppState: ObservableObject {
 
     private let userDefaults: UserDefaults
     private let frontmostCheck: FrontmostCheck
+    private let codexRuleSyncAdapter: CodexRuleSyncAdapter
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
@@ -193,6 +210,13 @@ class AppState: ObservableObject {
         }
     }
     
+    // TODO(gap-3): globalAutoApproveTypes and sessionAutoApproveTypes are in-memory Sets
+    //   (globalAutoApproveTypes persisted to UserDefaults only). Claude and Gemini approvals
+    //   currently write here instead of SQLiteApprovalStore. Consequence: rules vanish on restart
+    //   and are invisible to the Approval Rules UI.
+    //   Target: route Claude/Gemini approve() through ApprovalProxyController.store.insertRule()
+    //   so all providers share a single SQLite source of truth (rules + session_cache tables).
+    //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
     @Published var globalAutoApproveTypes: Set<String> = [] {
         didSet {
             userDefaults.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
@@ -203,25 +227,39 @@ class AppState: ObservableObject {
     private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
     private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
 
+    private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
     private var pendingQueue: [PendingRequest] = []
     private var currentResponseHandler: ((String) -> Void)?
     var hasResponseHandler: Bool { currentResponseHandler != nil }
+    private var currentAgentKind: BuddyKind?
+    private var currentRawToolName: String = ""
+    private var currentWorkspaceRoot: String?
+    private var currentHookEventId: Int64?
     private var isShowingRequest = false
     private var showingRequestId: UUID?
     private var timeoutTimer: Timer?
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
+    private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
+    private var ptyOutputBuffers: [String: String] = [:]
+    private let ptyBufferLock = NSLock()
     private let timeoutDuration: Double = 120
     private let lifecycleSessionTimeout: Double = 15 * 60
+    private static let replayTerminalApp = "DevIsland Replay"
+    private static let replayTimestampFormatter = ISO8601DateFormatter()
 
     init(
         startServer: Bool = true,
         userDefaults: UserDefaults = .standard,
-        frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost
+        frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost,
+        approvalProxy: ApprovalProxyController? = nil,
+        codexRuleSyncAdapter: CodexRuleSyncAdapter = CodexJSONRuleSyncAdapter()
     ) {
         self.userDefaults = userDefaults
         self.frontmostCheck = frontmostCheck
+        self.approvalProxy = approvalProxy
+        self.codexRuleSyncAdapter = codexRuleSyncAdapter
         
         if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
            let target = NotchDisplayTarget(rawValue: rawTarget) {
@@ -247,8 +285,30 @@ class AppState: ObservableObject {
         ensureSelectedDisplay()
 
         if startServer {
-            server.onMessageReceived = { [weak self] message, responseHandler in
-                self?.handleMessage(message, responseHandler: responseHandler)
+            BridgeTokenManager.shared.generateIfNeeded()
+
+            server.onMessageReceived = { [weak self] message, requestId, responseHandler in
+                // Wrap responseHandler to produce a rich response for framed (v1 envelope) requests.
+                let effectiveHandler: (String) -> Void
+                if let rid = requestId {
+                    let providerContext = Self.providerContext(fromEnvelopeMessage: message)
+                    effectiveHandler = { rawResponse in
+                        responseHandler(Self.richResponseString(
+                            fromLegacyResponse: rawResponse,
+                            requestId: rid,
+                            source: providerContext.source,
+                            event: providerContext.event,
+                            toolName: providerContext.toolName,
+                            ruleContent: providerContext.ruleContent,
+                            toolInput: providerContext.toolInput,
+                            claudeSessionApprovalMode: Self.currentClaudeSessionApprovalMode(),
+                            claudePersistentApprovalDestination: Self.currentClaudePersistentApprovalDestination()
+                        ))
+                    }
+                } else {
+                    effectiveHandler = responseHandler
+                }
+                self?.handleMessage(message, responseHandler: effectiveHandler)
             }
             server.onServerFailed = {
                 print("[DevIsland] [ERROR] Socket server failed. Check if port 9090 is occupied.")
@@ -262,13 +322,128 @@ class AppState: ObservableObject {
                     NSApplication.shared.terminate(nil)
                 }
             }
-            server.start()
+            server.start(transport: Self.currentBridgeTransport())
             GlobalShortcutManager.shared.start()
             
             // Prune inactive sessions every 10 seconds
             sessionPruningTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
                 self?.pruneInactiveSessions()
             }
+        }
+    }
+
+    static func richResponseString(
+        fromLegacyResponse rawResponse: String,
+        requestId: String,
+        source: String? = nil,
+        event: String? = nil,
+        toolName: String? = nil,
+        ruleContent: String? = nil,
+        toolInput: [String: AnyJSON]? = nil,
+        claudeSessionApprovalMode: ClaudeSessionApprovalMode = .nativePermissions,
+        claudePersistentApprovalDestination: ClaudePersistentApprovalDestination = .userSettings
+    ) -> String {
+        let parsed = try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any]
+        let decision = parsed?["response"] as? String
+        let approvalScope = (parsed?["approval_scope"] as? String).flatMap(RuleScope.init(rawValue:))
+        let providerOutput: [String: AnyJSON]?
+        if let source, let event {
+            let denialMessage = parsed?["reason"] as? String ?? ProviderAdapter.denialMessage
+            providerOutput = ProviderAdapter.providerOutput(
+                decision: decision,
+                event: event,
+                source: source,
+                approvalScope: approvalScope,
+                toolName: (parsed?["tool_name"] as? String) ?? toolName,
+                ruleContent: (parsed?["rule_content"] as? String) ?? ruleContent,
+                toolInput: toolInput,
+                claudeSessionApprovalMode: claudeSessionApprovalMode,
+                claudePersistentApprovalDestination: claudePersistentApprovalDestination,
+                denialMessage: denialMessage
+            )
+        } else {
+            providerOutput = nil
+        }
+        let injection = parsed?["injection"] as? String
+        let rich = IPCRichResponse(requestId: requestId, decision: decision, injection: injection, providerOutput: providerOutput)
+        if let richData = try? JSONEncoder().encode(rich),
+           let richString = String(data: richData, encoding: .utf8) {
+            return richString
+        }
+        return rawResponse
+    }
+
+    static func providerContext(fromEnvelopeMessage message: String) -> (
+        source: String?,
+        event: String?,
+        toolName: String?,
+        ruleContent: String?,
+        toolInput: [String: AnyJSON]?
+    ) {
+        guard let data = message.data(using: .utf8),
+              let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: data),
+              envelope.protocol == IPCEnvelope.protocolName else {
+            return (nil, nil, nil, nil, nil)
+        }
+        let event: String?
+        if case .string(let hookEvent)? = envelope.payload["hook_event_name"] {
+            event = hookEvent
+        } else if case .string(let fallbackEvent)? = envelope.payload["event"] {
+            event = fallbackEvent
+        } else {
+            event = nil
+        }
+        let toolName: String?
+        if case .string(let payloadToolName)? = envelope.payload["tool_name"] {
+            toolName = payloadToolName
+        } else {
+            toolName = nil
+        }
+        let ruleContent = Self.claudePermissionRuleContent(from: envelope.payload)
+        let toolInput: [String: AnyJSON]?
+        if case .object(let input)? = envelope.payload["tool_input"] {
+            toolInput = input
+        } else {
+            toolInput = nil
+        }
+        return (envelope.source, event, toolName, ruleContent, toolInput)
+    }
+
+    private static func claudePermissionRuleContent(from payload: [String: AnyJSON]) -> String? {
+        guard case .object(let toolInput)? = payload["tool_input"] else { return nil }
+        if case .string(let command)? = toolInput["command"], !command.isEmpty {
+            return command
+        }
+        if case .string(let filePath)? = toolInput["file_path"], !filePath.isEmpty {
+            return filePath
+        }
+        if case .string(let pattern)? = toolInput["pattern"], !pattern.isEmpty {
+            return pattern
+        }
+        return nil
+    }
+
+    private static func currentClaudeSessionApprovalMode() -> ClaudeSessionApprovalMode {
+        let raw = UserDefaults.standard.string(forKey: "claudeSessionApprovalMode")
+        return raw.flatMap(ClaudeSessionApprovalMode.init(rawValue:)) ?? AppSettings.defaults.claudeSessionApprovalMode
+    }
+
+    private static func currentClaudePersistentApprovalDestination() -> ClaudePersistentApprovalDestination {
+        let raw = UserDefaults.standard.string(forKey: "claudePersistentApprovalDestination")
+        return raw.flatMap(ClaudePersistentApprovalDestination.init(rawValue:)) ?? AppSettings.defaults.claudePersistentApprovalDestination
+    }
+
+    private static func currentBridgeTransport() -> HookIPCTransport {
+        let transportRaw = UserDefaults.standard.string(forKey: SettingsStore.DefaultsKey.bridgeTransportKind)
+        let transport = transportRaw.flatMap(BridgeTransportKind.init(rawValue:)) ?? AppSettings.defaults.bridgeTransportKind
+        switch transport {
+        case .tcpLoopback:
+            let port = UserDefaults.standard.integer(forKey: SettingsStore.DefaultsKey.bridgeTcpPort)
+            return .tcp(port: UInt16(port > 0 ? port : AppSettings.defaults.bridgeTcpPort))
+        case .unixDomainSocket:
+            let socketPath = UserDefaults.standard.string(forKey: SettingsStore.DefaultsKey.bridgeSocketPath)
+            let path = socketPath.flatMap { $0.isEmpty ? nil : $0 } ?? AppSettings.defaults.bridgeSocketPath
+            return .unix(path: path)
         }
     }
 
@@ -321,7 +496,27 @@ class AppState: ObservableObject {
     }
 
     func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
-        guard let data = message.data(using: .utf8) else { return }
+        guard let rawData = message.data(using: .utf8) else { return }
+
+        // Detect IPC protocol v1 envelope vs raw JSON.
+        // Raw JSON always starts with '{' (0x7B); the HookSocketServer strips the
+        // length-prefix before delivering framed payloads here as plain JSON strings.
+        let parsedJSON: [String: Any]?
+        let requestId: String?
+        if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData),
+           envelope.protocol == IPCEnvelope.protocolName {
+            guard BridgeTokenManager.shared.validate(envelope.token) else {
+                print("[DevIsland] IPC token validation failed – denying request")
+                responseHandler("{\"response\": \"denied\"}")
+                return
+            }
+            // Convert AnyJSON payload to [String: Any] directly — avoids encode+decode roundtrip.
+            parsedJSON = envelope.payload.mapValues { $0.rawValue } as [String: Any]
+            requestId = envelope.requestId
+        } else {
+            parsedJSON = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any]
+            requestId = nil
+        }
 
         var event     = "Unknown"
         var toolName  = ""
@@ -339,9 +534,10 @@ class AppState: ObservableObject {
         var notificationType = ""
         var isPlanAction = false
         var displayToolName = ""
+        var workspaceRoot: String?
+        var isReplayPayload = false
 
-        do {
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if let json = parsedJSON {
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
                 toolName  = json["tool_name"] as? String ?? ""
                 sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
@@ -354,7 +550,9 @@ class AppState: ObservableObject {
                 terminalTmuxPane = json["terminal_tmux_pane"] as? String ?? ""
                 terminalTmuxSocket = json["terminal_tmux_socket"] as? String ?? ""
                 terminalTmuxClient = json["terminal_tmux_client"] as? String ?? ""
+                workspaceRoot = json["cwd"] as? String
                 notificationType = json["notification_type"] as? String ?? ""
+                isReplayPayload = json["replay_origin_event_id"] != nil
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
                 if Self.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
                     let label = URL(fileURLWithPath: cwd).lastPathComponent
@@ -379,21 +577,47 @@ class AppState: ObservableObject {
                     json: json,
                     eventName: event
                 )
-            }
-        } catch {
-            print("JSON parse error: \(error)")
-            displayMsg = message
         }
 
-        if displayToolName.isEmpty { displayToolName = toolName }
-        let normalizedEvent = normalizedHookEventName(event)
+        // PTY output events are handled before hook_events recording to avoid polluting the replay log.
+        if event == "PTYOutput" {
+            handlePTYOutputEvent(
+                sessionId: sessionId,
+                provider: providerKind(for: agentKind),
+                content: (parsedJSON?["content"] as? String) ?? "",
+                responseHandler: responseHandler
+            )
+            return
+        }
+
+        let normalizedEvent = HookEventNormalizer.normalizedName(event)
+        let hookEventId = recordReplayHookEvent(
+            requestId: requestId,
+            provider: providerKind(for: agentKind),
+            sessionId: sessionId,
+            eventName: event,
+            toolName: toolName,
+            payload: parsedJSON
+        )
+        if displayToolName.isEmpty {
+            if normalizedEvent == "elicitation" {
+                if let serverName = parsedJSON?["mcp_server_name"] as? String, !serverName.isEmpty {
+                    displayToolName = "Elicitation (\(serverName))"
+                } else {
+                    displayToolName = "Elicitation"
+                }
+            } else if normalizedEvent == "userpromptsubmit" {
+                displayToolName = "User Prompt"
+            } else {
+                displayToolName = toolName
+            }
+        }
         let stopEvents = ["exit", "shutdown", "sessionend"]
         let notificationEvents = [
             "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
             "startup", "init", "afteragent"
         ]
-        let normalizedToolName = normalizedHookEventName(toolName)
-        let isUserQuestionTool = Self.userQuestionTools.contains(normalizedToolName)
+        let isUserQuestionTool = HookEventNormalizer.isUserQuestionTool(toolName)
         // approval:
         // - Claude/Codex: PermissionRequest only
         // - Gemini: BeforeTool only
@@ -401,16 +625,41 @@ class AppState: ObservableObject {
         let isStop = stopEvents.contains(normalizedEvent)
         let isApproval = Self.isApprovalEvent(normalizedEvent, for: agentKind) && !isUserQuestionTool
         let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
+        let replayToolName = toolName.isEmpty ? displayToolName : toolName
 
         if isStop {
             guard !sessionId.isEmpty else {
-                responseHandler("{\"response\": \"approved\"}")
+                respondWithReplay(
+                    "{\"response\": \"approved\"}",
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .allow,
+                    source: .automatic,
+                    reason: "stop event"
+                )
                 return
             }
             let fullSessionId = sessionId
             DispatchQueue.main.async {
                 let removedRequests = self.pendingQueue.filter { $0.sessionId == fullSessionId }
-                removedRequests.forEach { $0.responseHandler("{\"response\": \"denied\"}") }
+                removedRequests.forEach {
+                    self.respondWithReplay(
+                        "{\"response\": \"denied\"}",
+                        responseHandler: $0.responseHandler,
+                        hookEventId: $0.hookEventId,
+                        agentKind: $0.agentKind,
+                        sessionId: $0.sessionId,
+                        toolName: $0.rawToolName.isEmpty ? $0.toolName : $0.rawToolName,
+                        workspaceRoot: $0.workspaceRoot,
+                        action: .deny,
+                        source: .automatic,
+                        reason: "session stopped"
+                    )
+                }
                 self.pendingQueue.removeAll { $0.sessionId == fullSessionId }
                 self.pendingItems.removeAll { $0.sessionId == fullSessionId }
                 self.pendingCount = self.pendingQueue.count
@@ -440,19 +689,91 @@ class AppState: ObservableObject {
                     self.showNextRequest()
                 }
             }
-            responseHandler("{\"response\": \"approved\"}")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "stop event"
+            )
+            return
+        }
+
+        if normalizedEvent == "userpromptsubmit", agentKind == .claudeCode,
+           let prompt = parsedJSON?["prompt"] as? String,
+           let denialReason = ClaudePromptPolicy.denialReason(for: prompt) {
+            print("[DevIsland] Claude UserPromptSubmit blocked by prompt policy")
+            let responsePayload: [String: Any] = [
+                "response": "denied",
+                "reason": denialReason
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: responsePayload),
+               let payload = String(data: data, encoding: .utf8) {
+                respondWithReplay(
+                    payload,
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .deny,
+                    source: .automatic,
+                    reason: denialReason
+                )
+            } else {
+                respondWithReplay(
+                    "{\"response\":\"denied\"}",
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .deny,
+                    source: .automatic,
+                    reason: denialReason
+                )
+            }
             return
         }
 
         if isNotification {
             print("[DevIsland] notification event: \(event) for \(toolName) → auto-approved")
             guard !sessionId.isEmpty else {
-                responseHandler("{\"response\": \"approved\"}")
+                respondWithReplay(
+                    "{\"response\": \"approved\"}",
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .allow,
+                    source: .automatic,
+                    reason: "notification"
+                )
                 return
             }
             if normalizedEvent == "notification",
                notificationType == "permission_prompt" || displayMsg.lowercased().contains("needs your permission") {
-                responseHandler("{\"response\": \"approved\"}")
+                respondWithReplay(
+                    "{\"response\": \"approved\"}",
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .allow,
+                    source: .automatic,
+                    reason: "permission prompt notification"
+                )
                 return
             }
             let fullSessionId = sessionId
@@ -531,27 +852,66 @@ class AppState: ObservableObject {
                 }
             }
 
-            responseHandler("{\"response\": \"approved\"}")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "notification"
+            )
             return
         }
 
-        guard isApproval else {
-            print("[DevIsland] ignoring non-approval event: \(event)")
-            responseHandler("{\"response\": \"approved\"}")
+        let isGeminiNormalMode = agentKind == .gemini && !emulateGeminiInteractiveMode
+        
+        guard isApproval && !isGeminiNormalMode else {
+            print("[DevIsland] ignoring non-approval event (or Gemini normal mode): \(event)")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: isGeminiNormalMode ? "Gemini normal mode notification" : "non-approval event"
+            )
             return
         }
 
         guard !toolName.isEmpty || !displayMsg.isEmpty else {
             print("[DevIsland] ignoring empty approval request")
-            responseHandler("{\"response\": \"approved\"}")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "empty approval request"
+            )
             return
         }
 
         let request = PendingRequest(
+            hookEventId: hookEventId,
             sessionId: sessionId,
             agentKind: agentKind,
             eventName: event,
             toolName: displayToolName,
+            rawToolName: toolName,
+            workspaceRoot: workspaceRoot,
+            isReplay: isReplayPayload,
             message: displayMsg,
             responseHandler: responseHandler,
             receivedAt: Date()
@@ -599,24 +959,70 @@ class AppState: ObservableObject {
             }
         }
 
+        if agentKind == .codex,
+           let policyDecision = codexPolicyDecision(
+               hookEventId: hookEventId,
+               sessionId: sessionId,
+               toolName: toolName,
+               workspaceRoot: workspaceRoot
+           ) {
+            print("[DevIsland] [POLICY] Codex \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
+            request.responseHandler(responsePayload(approved: policyDecision.action == .allow))
+            DispatchQueue.main.async { [weak self] in
+                self?.updateActiveSession(
+                    sessionId: sessionId,
+                    terminalTitle: terminalTitle,
+                    agentKind: agentKind,
+                    terminalApp: terminalApp,
+                    terminalTTY: terminalTTY,
+                    terminalWindowId: terminalWindowId,
+                    terminalTabIndex: terminalTabIndex,
+                    terminalTmuxPane: terminalTmuxPane,
+                    terminalTmuxSocket: terminalTmuxSocket,
+                    terminalTmuxClient: terminalTmuxClient,
+                    toolName: displayToolName,
+                    eventName: event,
+                    message: "Policy \(policyDecision.action.rawValue): \(displayToolName)",
+                    isPending: false,
+                    preserveMessage: true,
+                    isLifecycleTracked: true,
+                    status: .policyApproved(Date())
+                )
+            }
+            return
+        }
+
         if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
             print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
-            request.responseHandler("{\"response\": \"approved\"}")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: request.responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "auto-approved"
+            )
             
             // 터미널 입력이 필요한 Interactive 툴인 경우 노치를 펼쳐 사용자에게 알림(Notification) 표시
             // 단, 터미널이 이미 포커스 상태라면 알림 불필요
             if isInteractive {
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    guard !self.frontmostCheck(
-                        terminalApp,
-                        terminalTTY,
-                        terminalWindowId,
-                        terminalTabIndex,
-                        terminalTmuxPane,
-                        terminalTmuxSocket,
-                        terminalTmuxClient
-                    ) else { return }
+                    if !isReplayPayload {
+                        guard !self.frontmostCheck(
+                            terminalApp,
+                            terminalTTY,
+                            terminalWindowId,
+                            terminalTabIndex,
+                            terminalTmuxPane,
+                            terminalTmuxSocket,
+                            terminalTmuxClient
+                        ) else { return }
+                    }
                     self.isNotchExpanded = true
                     self.isExpandingFromRequest = true
                     self.currentSessionId = sessionId
@@ -687,19 +1093,30 @@ class AppState: ObservableObject {
         // NSAppleScript는 메인 스레드에서만 안전하게 실행 가능 (Apple 문서)
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            let isFrontmost = self.frontmostCheck(
-                terminalApp,
-                terminalTTY,
-                terminalWindowId,
-                terminalTabIndex,
-                terminalTmuxPane,
-                terminalTmuxSocket,
-                terminalTmuxClient
-            )
+            let isFrontmost = !isReplayPayload && self.frontmostCheck(
+                    terminalApp,
+                    terminalTTY,
+                    terminalWindowId,
+                    terminalTabIndex,
+                    terminalTmuxPane,
+                    terminalTmuxSocket,
+                    terminalTmuxClient
+                )
 
             if isFrontmost {
                 print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
-                request.responseHandler("{\"response\": \"pass\"}")
+                self.respondWithReplay(
+                    "{\"response\": \"pass\"}",
+                    responseHandler: request.responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .prompt,
+                    source: .automatic,
+                    reason: "terminal focused"
+                )
                 if !sessionId.isEmpty {
                     self.updateActiveSession(
                         sessionId: sessionId,
@@ -770,19 +1187,17 @@ class AppState: ObservableObject {
         }
     }
 
-    func normalizedHookEventName(_ event: String) -> String {
-        event
-            .lowercased()
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: "-", with: "")
-    }
-
     private static func isApprovalEvent(_ normalizedEvent: String, for agentKind: BuddyKind) -> Bool {
-        approvalEventsByAgent[agentKind]?.contains(normalizedEvent) == true
+        HookEventNormalizer.isApprovalEvent(normalizedEvent, for: agentKind)
     }
 
     private func displayMessage(for toolName: String, toolInput: [String: Any]?, json: [String: Any], eventName: String) -> String {
-        if normalizedHookEventName(eventName) == "posttooluse" {
+        if HookEventNormalizer.normalizedName(eventName) == "userpromptsubmit",
+           let prompt = json["prompt"] as? String {
+            return prompt
+        }
+
+        if HookEventNormalizer.normalizedName(eventName) == "posttooluse" {
             return postToolMessage(from: json["tool_response"] as? [String: Any])
         }
 
@@ -938,41 +1353,7 @@ class AppState: ObservableObject {
     }
 
     static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
-        // 1. cli_source 필드가 명시적으로 있으면 최우선 적용
-        if let explicitSource = json["cli_source"] as? String, !explicitSource.isEmpty {
-            switch explicitSource {
-            case "gemini": return .gemini
-            case "codex":  return .codex
-            case "claude": return .claudeCode
-            default: break
-            }
-        }
-
-        // 2. hook_event_name 또는 event로 CLI 종류를 추측
-        let event = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? ""
-        let normalizedEvent = event
-            .lowercased()
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: "-", with: "")
-        switch normalizedEvent {
-        case "beforetool":                 return .gemini
-        case "pretooluse":                 return .codex
-        case "permissionrequest":
-            if json["tool_name"] != nil { return .codex }
-            if json["permission_type"] != nil { return .claudeCode }
-            return .claudeCode // 폴백
-        default: break
-        }
-        
-        // 3. 필드 구조나 타이틀로 추측 (폴백)
-        let candidateKeys = [
-            "agent", "agent_name", "agentName", "source", "client",
-            "app", "application", "cli", "model", "model_name"
-        ]
-        let candidates = candidateKeys.compactMap { json[$0] as? String } + [terminalTitle]
-        let joined = candidates.joined(separator: " ")
-
-        return BuddyKind(from: joined)
+        HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)
     }
 
     private func updateActiveSession(
@@ -1130,6 +1511,10 @@ class AppState: ObservableObject {
             timeoutProgress = 1.0
             currentEventName = ""
             currentToolName = ""
+            currentRawToolName = ""
+            currentAgentKind = nil
+            currentWorkspaceRoot = nil
+            currentHookEventId = nil
             currentMessage = ""
             currentSessionId = ""
             selectedSessionId = nil
@@ -1147,10 +1532,14 @@ class AppState: ObservableObject {
         // showNextRequest()는 항상 메인 스레드에서 호출되므로 동기 호출로 충분
         let isFrontmost = isTerminalFrontmost(for: session)
 
-        if isFrontmost {
+        if isFrontmost && !next.isReplay {
             print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
             currentResponseHandler = next.responseHandler
             currentSessionId = next.sessionId
+            currentRawToolName = next.rawToolName
+            currentAgentKind = next.agentKind
+            currentWorkspaceRoot = next.workspaceRoot
+            currentHookEventId = next.hookEventId
             sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
             return
         }
@@ -1159,6 +1548,10 @@ class AppState: ObservableObject {
         currentResponseHandler = next.responseHandler
         currentEventName  = next.eventName
         currentToolName   = next.toolName
+        currentRawToolName = next.rawToolName
+        currentAgentKind  = next.agentKind
+        currentWorkspaceRoot = next.workspaceRoot
+        currentHookEventId = next.hookEventId
         currentMessage    = next.message
         currentSessionId  = next.sessionId
 
@@ -1189,8 +1582,348 @@ class AppState: ObservableObject {
     }
 
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
-        return Self.isApprovalEvent(normalizedHookEventName(request.eventName), for: request.agentKind)
+        return Self.isApprovalEvent(HookEventNormalizer.normalizedName(request.eventName), for: request.agentKind)
             && (!request.toolName.isEmpty || !request.message.isEmpty)
+    }
+
+    private func recordReplayHookEvent(
+        requestId: String?,
+        provider: ProviderKind,
+        sessionId: String,
+        eventName: String,
+        toolName: String,
+        payload: [String: Any]?
+    ) -> Int64? {
+        guard let approvalProxy else { return nil }
+        let payloadJSON = payload.map { Self.replayPayloadString(from: $0) } ?? "{}"
+        var eventId: Int64?
+        approvalPersistenceQueue.sync {
+            do {
+                eventId = try approvalProxy.recordHookEvent(
+                    requestId: requestId,
+                    provider: provider,
+                    sessionId: sessionId,
+                    eventName: eventName,
+                    toolName: toolName,
+                    payloadJSON: payloadJSON
+                )
+            } catch {
+                print("[DevIsland] [REPLAY] Failed to record hook event: \(error)")
+            }
+        }
+        return eventId
+    }
+
+    private func recordReplayDecision(
+        hookEventId: Int64?,
+        agentKind: BuddyKind?,
+        sessionId: String,
+        toolName: String,
+        workspaceRoot: String?,
+        action: RuleAction,
+        source: ApprovalPolicyDecision.Source,
+        reason: String?
+    ) {
+        guard let approvalProxy,
+              let agentKind,
+              !sessionId.isEmpty,
+              !toolName.isEmpty else {
+            return
+        }
+        let request = ApprovalPolicyRequest(
+            provider: providerKind(for: agentKind),
+            sessionId: sessionId,
+            toolName: toolName,
+            workspaceRoot: workspaceRoot
+        )
+        let decision = ApprovalPolicyDecision(action: action, source: source, ruleId: nil)
+        approvalPersistenceQueue.sync {
+            do {
+                try approvalProxy.recordDecision(
+                    hookEventId: hookEventId,
+                    request: request,
+                    decision: decision,
+                    reason: reason
+                )
+            } catch {
+                print("[DevIsland] [REPLAY] Failed to record decision: \(error)")
+            }
+        }
+    }
+
+    private func respondWithReplay(
+        _ payload: String,
+        responseHandler: (String) -> Void,
+        hookEventId: Int64?,
+        agentKind: BuddyKind,
+        sessionId: String,
+        toolName: String,
+        workspaceRoot: String?,
+        action: RuleAction,
+        source: ApprovalPolicyDecision.Source,
+        reason: String? = nil
+    ) {
+        responseHandler(payload)
+        recordReplayDecision(
+            hookEventId: hookEventId,
+            agentKind: agentKind,
+            sessionId: sessionId,
+            toolName: toolName,
+            workspaceRoot: workspaceRoot,
+            action: action,
+            source: source,
+            reason: reason
+        )
+    }
+
+    private static func replayPayloadString(from payload: [String: Any]) -> String {
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+              let string = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return string
+    }
+
+    private func providerKind(for agentKind: BuddyKind) -> ProviderKind {
+        switch agentKind {
+        case .claudeCode:
+            return .claude
+        case .codex:
+            return .codex
+        case .gemini:
+            return .gemini
+        case .island:
+            return .any
+        }
+    }
+
+    private func codexPolicyDecision(
+        hookEventId: Int64?,
+        sessionId: String,
+        toolName: String,
+        workspaceRoot: String?
+    ) -> ApprovalPolicyDecision? {
+        guard let approvalProxy, !sessionId.isEmpty, !toolName.isEmpty else { return nil }
+        do {
+            let request = ApprovalPolicyRequest(
+                provider: .codex,
+                sessionId: sessionId,
+                toolName: toolName,
+                workspaceRoot: workspaceRoot
+            )
+            let decision = try approvalProxy.evaluate(request)
+            guard decision.action != .prompt else { return nil }
+            try approvalProxy.recordDecision(
+                hookEventId: hookEventId,
+                request: request,
+                decision: decision,
+                reason: "matched \(decision.source.rawValue)"
+            )
+            return decision
+        } catch {
+            print("[DevIsland] [POLICY] Codex policy evaluation failed: \(error)")
+            return nil
+        }
+    }
+
+    private func responsePayload(approved: Bool) -> String {
+        approved ? "{\"response\":\"approved\"}" : "{\"response\":\"denied\"}"
+    }
+
+    func codexPersistentRules() throws -> [ApprovalRule] {
+        guard let approvalProxy else { return [] }
+        return try approvalProxy.store.rules(provider: .codex, scope: .persistent)
+    }
+
+    func replayLogEntries(limit: Int = 200) throws -> [ReplayLogEntry] {
+        guard let approvalProxy else { return [] }
+        return try approvalProxy.replayLog(limit: limit)
+    }
+
+    func addPersistentRule(from entry: ReplayLogEntry, action: RuleAction) throws {
+        guard let approvalProxy else { return }
+        let toolName = entry.toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !toolName.isEmpty else { return }
+        try approvalProxy.store.insertRule(ApprovalRule(
+            id: SQLiteApprovalStore.deterministicRuleID(
+                provider: entry.provider,
+                toolName: toolName,
+                scope: .persistent,
+                workspaceRoot: nil
+            ),
+            provider: entry.provider,
+            toolName: toolName,
+            action: action,
+            scope: .persistent
+        ))
+    }
+
+    func replayHookEvent(_ entry: ReplayLogEntry) throws {
+        guard let data = entry.payloadJSON.data(using: .utf8),
+              var payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw NSError(
+                domain: "ReplayLog",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Replay payload is not valid JSON."]
+            )
+        }
+
+        let hasHookEventName = (payload["hook_event_name"] as? String).map { !$0.isEmpty } ?? false
+        let hasEventName = (payload["event"] as? String).map { !$0.isEmpty } ?? false
+        let hasToolName = (payload["tool_name"] as? String).map { !$0.isEmpty } ?? false
+        let hasSessionId = (payload["session_id"] as? String).map { !$0.isEmpty } ?? false
+        let hasSessionIdAlias = (payload["sessionId"] as? String).map { !$0.isEmpty } ?? false
+        let hasCLISource = (payload["cli_source"] as? String).map { !$0.isEmpty } ?? false
+
+        if !hasHookEventName && !hasEventName {
+            payload["hook_event_name"] = entry.eventName
+        }
+        if !hasToolName {
+            payload["tool_name"] = entry.toolName
+        }
+        if !hasSessionId && !hasSessionIdAlias {
+            payload["session_id"] = entry.sessionId
+        }
+        if !hasCLISource {
+            payload["cli_source"] = entry.provider.rawValue
+        }
+        payload["terminal_title"] = "Replay Log"
+        payload["terminal_app"] = Self.replayTerminalApp
+        payload["terminal_tty"] = ""
+        payload["terminal_window_id"] = ""
+        payload["terminal_tab_index"] = ""
+        payload["terminal_tmux_pane"] = ""
+        payload["terminal_tmux_socket"] = ""
+        payload["terminal_tmux_client"] = ""
+        payload["replay_origin_event_id"] = entry.id
+        payload["replay_origin_received_at"] = Self.replayTimestampFormatter.string(from: entry.receivedAt)
+
+        guard JSONSerialization.isValidJSONObject(payload),
+              let replayData = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+              let replayMessage = String(data: replayData, encoding: .utf8) else {
+            throw NSError(
+                domain: "ReplayLog",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Replay payload could not be serialized."]
+            )
+        }
+
+        handleMessage(replayMessage) { response in
+            print("[DevIsland] [REPLAY] Replayed event \(entry.id) completed with response: \(response)")
+        }
+    }
+
+    func addCodexPersistentRule(toolName: String, action: RuleAction) throws {
+        guard let approvalProxy else { return }
+        let trimmed = toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        try approvalProxy.store.insertRule(ApprovalRule(
+            id: SQLiteApprovalStore.deterministicRuleID(
+                provider: .codex,
+                toolName: trimmed,
+                scope: .persistent,
+                workspaceRoot: nil
+            ),
+            provider: .codex,
+            toolName: trimmed,
+            action: action,
+            scope: .persistent
+        ))
+    }
+
+    func deleteCodexPersistentRule(_ rule: ApprovalRule) throws {
+        guard let approvalProxy else { return }
+        try approvalProxy.store.deleteRule(id: rule.id)
+    }
+
+    func syncCodexPersistentRules() throws -> CodexRuleSyncResult {
+        try codexRuleSyncAdapter.sync(rules: codexPersistentRules(), generatedAt: Date())
+    }
+
+    func flushApprovalPersistenceForTesting() {
+        approvalPersistenceQueue.sync {}
+    }
+
+    func ptyMessages(sessionId: String? = nil, limit: Int = 500) throws -> [PTYMessage] {
+        guard let approvalProxy else { return [] }
+        return try approvalProxy.ptyMessages(sessionId: sessionId, limit: limit)
+    }
+
+    private func handlePTYOutputEvent(
+        sessionId: String,
+        provider: ProviderKind,
+        content: String,
+        responseHandler: (String) -> Void
+    ) {
+        guard Self.currentPTYEnabled(), !content.isEmpty else {
+            responseHandler("{\"response\":\"approved\"}")
+            return
+        }
+        // Sliding window buffer: keep the last 1 KB per session so patterns that
+        // span multiple os.read chunks (e.g. "Password:" split across two reads)
+        // are still matched correctly.
+        ptyBufferLock.lock()
+        let combined = (ptyOutputBuffers[sessionId] ?? "") + content
+        let window = combined.count > 1024 ? String(combined.suffix(1024)) : combined
+        ptyOutputBuffers[sessionId] = window
+        ptyBufferLock.unlock()
+
+        let patterns = Self.currentPTYAutoInjectPatterns()
+        let lowerWindow = window.lowercased()
+        let matched = patterns.first { lowerWindow.contains($0.pattern.lowercased()) }
+        let injectionText = matched?.response
+
+        // Clear the buffer on match to prevent the same pattern from re-firing.
+        if injectionText != nil {
+            ptyBufferLock.lock()
+            ptyOutputBuffers[sessionId] = ""
+            ptyBufferLock.unlock()
+        }
+
+        approvalPersistenceQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                try self.approvalProxy?.recordPTYMessage(
+                    sessionId: sessionId,
+                    provider: provider,
+                    direction: .output,
+                    content: content
+                )
+                if let injection = injectionText {
+                    try self.approvalProxy?.recordPTYMessage(
+                        sessionId: sessionId,
+                        provider: provider,
+                        direction: .input,
+                        content: injection
+                    )
+                }
+            } catch {
+                print("[DevIsland] [PTY] Failed to record PTY message: \(error)")
+            }
+        }
+
+        if let injection = injectionText {
+            let resp: [String: Any] = ["response": "approved", "injection": injection]
+            if let data = try? JSONSerialization.data(withJSONObject: resp),
+               let str = String(data: data, encoding: .utf8) {
+                responseHandler(str)
+                return
+            }
+        }
+        responseHandler("{\"response\":\"approved\"}")
+    }
+
+    private static func currentPTYEnabled() -> Bool {
+        UserDefaults.standard.bool(forKey: SettingsStore.DefaultsKey.ptyEnabled)
+    }
+
+    private static func currentPTYAutoInjectPatterns() -> [PTYAutoInjectPattern] {
+        guard let data = UserDefaults.standard.data(forKey: SettingsStore.DefaultsKey.ptyAutoInjectPatterns),
+              let patterns = try? JSONDecoder().decode([PTYAutoInjectPattern].self, from: data) else {
+            return []
+        }
+        return patterns
     }
 
     private func startTimeout() {
@@ -1214,14 +1947,46 @@ class AppState: ObservableObject {
         }
     }
 
-    private func sendDecision(approved: Bool, reason: String? = nil, status: SessionStatus? = nil, passToTerminal: Bool = false) {
-        let payload = passToTerminal
-            ? "{\"response\": \"pass\"}"
-            : approved ? "{\"response\": \"approved\"}" : "{\"response\": \"denied\"}"
+    // TODO(gap-2): When claudeSessionApprovalMode is .appSessionCache or .hybrid,
+    //   Claude approvals must also be written to SQLiteApprovalStore.session_cache.
+    //   Currently only Codex approvals are persisted to the DB; Claude relies solely on
+    //   updatedPermissions in the hook response (native mode) and has no DB record.
+    //   Fix: after building providerOutput for Claude, insert into session_cache here
+    //   so replay log and policy engine see a consistent history across providers.
+    //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
+    private func sendDecision(
+        approved: Bool,
+        reason: String? = nil,
+        status: SessionStatus? = nil,
+        passToTerminal: Bool = false,
+        approvalScope: RuleScope? = nil
+    ) {
+        let response = passToTerminal ? "pass" : approved ? "approved" : "denied"
+        var responsePayload: [String: Any] = ["response": response]
+        if let reason {
+            responsePayload["reason"] = reason
+        }
+        if let approvalScope {
+            responsePayload["approval_scope"] = approvalScope.rawValue
+        }
+        let data = try? JSONSerialization.data(withJSONObject: responsePayload)
+        let payload = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"response\":\"\(response)\"}"
         print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
         currentResponseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
+        recordReplayDecision(
+            hookEventId: currentHookEventId,
+            agentKind: currentAgentKind,
+            sessionId: currentSessionId,
+            toolName: currentRawToolName.isEmpty ? currentToolName : currentRawToolName,
+            workspaceRoot: currentWorkspaceRoot,
+            action: passToTerminal ? .prompt : approved ? .allow : .deny,
+            source: reason == nil ? .user : .automatic,
+            reason: reason
+        )
+        persistCodexApprovalScope(approved: approved, approvalScope: approvalScope)
         currentResponseHandler = nil
+        currentHookEventId = nil
         isShowingRequest = false
         showingRequestId = nil
         timeoutTimer?.invalidate()
@@ -1267,14 +2032,77 @@ class AppState: ObservableObject {
         }
     }
 
+    private func persistCodexApprovalScope(approved: Bool, approvalScope: RuleScope?) {
+        guard approved,
+              currentAgentKind == .codex,
+              let approvalScope,
+              let approvalProxy,
+              !currentSessionId.isEmpty,
+              !currentRawToolName.isEmpty else {
+            return
+        }
+
+        let sessionId = currentSessionId
+        let toolName = currentRawToolName
+        let workspaceRoot = currentWorkspaceRoot
+        approvalPersistenceQueue.sync {
+            persistCodexApprovalScopeOnPersistenceQueue(
+                approvalProxy: approvalProxy,
+                approvalScope: approvalScope,
+                sessionId: sessionId,
+                toolName: toolName,
+                workspaceRoot: workspaceRoot
+            )
+        }
+    }
+
+    private func persistCodexApprovalScopeOnPersistenceQueue(
+        approvalProxy: ApprovalProxyController,
+        approvalScope: RuleScope,
+        sessionId: String,
+        toolName: String,
+        workspaceRoot: String?
+    ) {
+        do {
+            switch approvalScope {
+            case .session:
+                try approvalProxy.store.upsertSessionApproval(
+                    provider: .codex,
+                    sessionId: sessionId,
+                    toolName: toolName,
+                    action: .allow,
+                    expiresAt: nil
+                )
+            case .persistent:
+                try approvalProxy.store.insertRule(ApprovalRule(
+                    id: SQLiteApprovalStore.deterministicRuleID(
+                        provider: .codex,
+                        toolName: toolName,
+                        scope: .persistent,
+                        workspaceRoot: workspaceRoot
+                    ),
+                    provider: .codex,
+                    toolName: toolName,
+                    action: .allow,
+                    scope: .persistent,
+                    workspaceRoot: workspaceRoot
+                ))
+            case .once:
+                break
+            }
+        } catch {
+            print("[DevIsland] [POLICY] Failed to persist Codex approval scope: \(error)")
+        }
+    }
+
     func approve(globalAlways: Bool = false, sessionAlways: Bool = false) {
-        let tool = currentToolName
+        let tool = currentRawToolName.isEmpty ? currentToolName : currentRawToolName
         let sId = currentSessionId
         
-        if globalAlways && !tool.isEmpty {
+        if globalAlways && !tool.isEmpty && currentAgentKind != .codex {
             globalAutoApproveTypes.insert(tool)
         }
-        if sessionAlways && !tool.isEmpty && !sId.isEmpty {
+        if sessionAlways && !tool.isEmpty && !sId.isEmpty && currentAgentKind != .codex {
             if sessionAutoApproveTypes[sId] == nil {
                 sessionAutoApproveTypes[sId] = []
             }
@@ -1291,7 +2119,8 @@ class AppState: ObservableObject {
             }
         }
         
-        sendDecision(approved: true)
+        let approvalScope: RuleScope? = sessionAlways ? .session : globalAlways ? .persistent : nil
+        sendDecision(approved: true, approvalScope: approvalScope)
     }
 
     func deny() {

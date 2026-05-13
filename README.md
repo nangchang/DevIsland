@@ -15,6 +15,30 @@
 - **인터랙티브 알림**: 터미널 입력이 필요한 작업(`ask_user`, 쉘 명령어 등)은 승인 대기 대신 "터미널 확인" 알림을 띄워 흐름을 끊지 않습니다.
 - **자동 정리**: 종료된 세션이나 장시간 활동이 없는 세션을 자동으로 관리합니다.
 
+## 🧭 Approval Proxy 아키텍처
+
+DevIsland는 단순 승인 UI를 넘어 **정책 기반 Approval Proxy daemon**으로 동작합니다. macOS 앱 자체가 daemon + UI 역할을 하며, 별도 프로세스 없이 아래 구조로 운영됩니다.
+
+```
+CLI Hook
+  → devisland-bridge.sh  (ultra-thin: 메타데이터 수집 + IPC 전달)
+    → HookSocketServer (TCP 9090 또는 Unix domain socket)
+      → ApprovalProxyController
+          → ApprovalPolicyEngine  (8단계 우선순위 룰 평가, SQLite)
+          → ProviderAdapter       (Claude / Codex / Gemini 응답 포맷)
+          → UI decision (필요 시)
+        → IPC rich response → bridge → CLI 응답 JSON
+```
+
+**주요 설계 결정:**
+- **앱 = Proxy daemon**: Node.js/Tauri 별도 프로세스 없이 Swift macOS 앱이 모든 정책을 처리합니다.
+- **Bridge는 thin 유지**: DB 접근·정책 계산·UI 렌더링·PTY 처리를 하지 않습니다.
+- **IPC Protocol v1**: 4-byte big-endian length prefix + JSON. `IPCEnvelope` (bridge→app), `IPCRichResponse` (app→bridge).
+- **SQLite 단일 저장소**: 영구 규칙(`rules`), 세션 캐시(`session_cache`), 이벤트 로그(`hook_events`, `approval_decisions`), PTY 트랜스크립트(`pty_messages`) 모두 `~/Library/Application Support/DevIsland/approval-proxy.sqlite3`에 저장.
+- **Claude 세션 승인 3가지 모드** (Settings > Providers > Claude Code): Native (Claude 내부 rule), App cache (DevIsland SQLite), Hybrid (둘 다).
+
+아키텍처 상세 및 미구현 Gap 목록은 [AGENTS.md](AGENTS.md#approval-proxy-architecture)를 참조하세요.
+
 ## 🚀 시작하기
 
 ### 1. 앱 빌드 및 실행

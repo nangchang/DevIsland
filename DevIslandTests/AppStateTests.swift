@@ -30,12 +30,30 @@ final class AppStateTests: XCTestCase {
         guard let data = response.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
+
+    private func waitUntil(
+        timeout: TimeInterval,
+        expectation: XCTestExpectation,
+        condition: @escaping () -> Bool
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        func poll() {
+            if condition() {
+                expectation.fulfill()
+            } else if Date() < deadline {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                    poll()
+                }
+            }
+        }
+        poll()
+    }
     
     func testNormalizedHookEventName() {
-        XCTAssertEqual(appState.normalizedHookEventName("BeforeTool"), "beforetool")
-        XCTAssertEqual(appState.normalizedHookEventName("on_tool_call"), "ontoolcall")
-        XCTAssertEqual(appState.normalizedHookEventName("Pre-Tool-Use"), "pretooluse")
-        XCTAssertEqual(appState.normalizedHookEventName("SESSION_START"), "sessionstart")
+        XCTAssertEqual(HookEventNormalizer.normalizedName("BeforeTool"), "beforetool")
+        XCTAssertEqual(HookEventNormalizer.normalizedName("on_tool_call"), "ontoolcall")
+        XCTAssertEqual(HookEventNormalizer.normalizedName("Pre-Tool-Use"), "pretooluse")
+        XCTAssertEqual(HookEventNormalizer.normalizedName("SESSION_START"), "sessionstart")
     }
     
     func testAgentKindDetection() {
@@ -80,6 +98,27 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.activeSessions.contains(where: { $0.id == "test-session" }))
     }
 
+    func testClaudeUserPromptSubmitPolicyBlocksSecretPrompt() {
+        let expectation = XCTestExpectation(description: "Prompt policy response")
+        let message = """
+        {
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "test-session-prompt",
+            "cli_source": "claude",
+            "prompt": "api_key=sk-test"
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "denied")
+            XCTAssertNotNil(json?["reason"] as? String)
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 2.0)
+    }
+
     func testPendingRequestQueue() {
         let expectation = XCTestExpectation(description: "Response handler called for approval")
         let message = """
@@ -112,6 +151,132 @@ final class AppStateTests: XCTestCase {
         
         wait(for: [expectation], timeout: 2.0)
         XCTAssertEqual(appState.pendingCount, 0)
+    }
+
+    func testCodexSessionCacheAutoApprovesPermissionRequest() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateCodexPolicyTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let controller = try ApprovalProxyController(databaseURL: tempDir.appendingPathComponent("approval-proxy.sqlite3"))
+        try controller.store.upsertSessionApproval(
+            provider: .codex,
+            sessionId: "codex-session",
+            toolName: "shell",
+            action: .allow,
+            expiresAt: nil
+        )
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller
+        )
+        let expectation = XCTestExpectation(description: "Codex policy auto-approval")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "codex-session",
+            "cli_source": "codex",
+            "tool_name": "shell",
+            "tool_input": {"command": "npm test"}
+        }
+        """
+
+        state.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 2.0)
+        XCTAssertEqual(state.pendingCount, 0)
+    }
+
+    func testCodexSessionApprovalPersistsToSQLiteCache() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateCodexPolicyTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let controller = try ApprovalProxyController(databaseURL: tempDir.appendingPathComponent("approval-proxy.sqlite3"))
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller
+        )
+        let expectation = XCTestExpectation(description: "Codex manual session approval")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "codex-session",
+            "cli_source": "codex",
+            "tool_name": "shell",
+            "tool_input": {"command": "npm test"}
+        }
+        """
+
+        state.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+
+        XCTAssertEqual(state.pendingCount, 1)
+        state.approve(sessionAlways: true)
+
+        wait(for: [expectation], timeout: 2.0)
+        state.flushApprovalPersistenceForTesting()
+        let decision = try controller.store.sessionDecision(for: ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "codex-session",
+            toolName: "shell"
+        ))
+        XCTAssertEqual(decision?.action, .allow)
+        XCTAssertEqual(decision?.source, .sessionCache)
+    }
+
+    func testReplayHookEventRequeuesStoredApprovalPayload() throws {
+        appState = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in true }
+        )
+        let entry = ReplayLogEntry(
+            id: 42,
+            requestId: "request-42",
+            provider: .codex,
+            sessionId: "replay-session",
+            eventName: "PermissionRequest",
+            toolName: "shell",
+            payloadJSON: """
+            {
+              "hook_event_name": "PermissionRequest",
+              "session_id": "replay-session",
+              "cli_source": "codex",
+              "tool_name": "shell",
+              "tool_input": {"command": "npm test"}
+            }
+            """,
+            receivedAt: Date(timeIntervalSince1970: 1_000),
+            decisionAction: nil,
+            decisionSource: nil,
+            decisionReason: nil,
+            decidedAt: nil
+        )
+        try appState.replayHookEvent(entry)
+        let expectation = expectation(description: "replay enqueued")
+        waitUntil(timeout: 2.0, expectation: expectation) {
+            self.appState.pendingCount == 1
+        }
+        wait(for: [expectation], timeout: 2.0)
+
+        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertEqual(appState.pendingItems.first?.sessionId, "replay-session")
+        XCTAssertEqual(appState.pendingItems.first?.toolName, "shell")
     }
     
     func testSafeToolAutoApproval() {

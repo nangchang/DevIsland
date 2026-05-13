@@ -42,6 +42,21 @@ This script compiles assets and Swift sources, assembles the app bundle in `dist
 
 ## 🛠️ Development Conventions
 
+### Engineering Standards for AI Agents
+AI agents (Gemini CLI, etc.) working on this repository MUST strictly adhere to the following standards:
+
+1.  **Atomic Commits & No Mixed Changes**: 
+    *   Each commit must represent a single, logical unit of work.
+    *   Never mix unrelated refactorings, documentation, and logic changes in one commit.
+2.  **Commit Message Convention**: 
+    *   **Title**: Must be in English, following Conventional Commits (e.g., `feat:`, `fix:`, `docs:`).
+    *   **Body**: Must include a detailed explanation in **Korean**, focusing on the "Why" and the rationale behind the change.
+3.  **Propose & Confirm Protocol**:
+    *   Before performing any mutation (file edit, branch creation, commit), the agent MUST propose the plan and the draft commit message to the user and obtain explicit approval.
+4.  **Verification**: 
+    *   Always run `./scripts/run-tests.sh` before committing to ensure no regressions.
+5.  **Surgical Changes**: Only modify what is strictly necessary for the task. Match the surrounding style and conventions perfectly.
+
 ### Coding Style
 - **Swift**: Follow standard Swift API Design Guidelines. Use `PascalCase` for types and `camelCase` for variables/functions.
 - **Simplicity**: Prioritize surgical changes. Avoid over-engineering or speculative abstractions.
