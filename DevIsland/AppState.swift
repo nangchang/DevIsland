@@ -226,6 +226,8 @@ class AppState: ObservableObject {
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
+    private var ptyOutputBuffers: [String: String] = [:]
+    private let ptyBufferLock = NSLock()
     private let timeoutDuration: Double = 120
     private let lifecycleSessionTimeout: Double = 15 * 60
     private static let replayTerminalApp = "DevIsland Replay"
@@ -1840,10 +1842,26 @@ class AppState: ObservableObject {
             responseHandler("{\"response\":\"approved\"}")
             return
         }
+        // Sliding window buffer: keep the last 1 KB per session so patterns that
+        // span multiple os.read chunks (e.g. "Password:" split across two reads)
+        // are still matched correctly.
+        ptyBufferLock.lock()
+        let combined = (ptyOutputBuffers[sessionId] ?? "") + content
+        let window = combined.count > 1024 ? String(combined.suffix(1024)) : combined
+        ptyOutputBuffers[sessionId] = window
+        ptyBufferLock.unlock()
+
         let patterns = Self.currentPTYAutoInjectPatterns()
-        let lowerContent = content.lowercased()
-        let matched = patterns.first { lowerContent.contains($0.pattern.lowercased()) }
+        let lowerWindow = window.lowercased()
+        let matched = patterns.first { lowerWindow.contains($0.pattern.lowercased()) }
         let injectionText = matched?.response
+
+        // Clear the buffer on match to prevent the same pattern from re-firing.
+        if injectionText != nil {
+            ptyBufferLock.lock()
+            ptyOutputBuffers[sessionId] = ""
+            ptyBufferLock.unlock()
+        }
 
         approvalPersistenceQueue.async { [weak self] in
             guard let self else { return }
