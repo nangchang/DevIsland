@@ -448,7 +448,17 @@ final class SQLiteApprovalStore {
     }
 
     private func migrateToVersion2() throws {
-        try execute("ALTER TABLE pty_messages ADD COLUMN provider TEXT NOT NULL DEFAULT ''")
+        // Check before ALTER so a retry after an interrupted migration doesn't fail.
+        var stmt: OpaquePointer?
+        let checkSQL = "SELECT COUNT(*) FROM pragma_table_info('pty_messages') WHERE name='provider'"
+        guard sqlite3_prepare_v2(database, checkSQL, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(stmt) }
+        let columnExists = sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_int(stmt, 0) > 0
+        if !columnExists {
+            try execute("ALTER TABLE pty_messages ADD COLUMN provider TEXT NOT NULL DEFAULT ''")
+        }
         try execute("CREATE INDEX IF NOT EXISTS idx_pty_messages_session ON pty_messages(session_id, created_at DESC)")
     }
 
