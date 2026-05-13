@@ -626,10 +626,11 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 ### Phase 7. Replay / PTY
 
-> 상태: 📅 예정
+> 상태: 🔧 진행 중
 
-- Replay Log window 추가.
-- event replay / rule creation from event 추가.
+- [x] Replay Log window 추가.
+- [x] event audit / rule creation from event 추가.
+- [ ] event replay 실행 동작 추가.
 - PTY wrapper는 experimental로 분리해 optional 구현.
 
 ## 11. 우선 구현해야 할 설정값
