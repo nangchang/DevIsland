@@ -811,15 +811,12 @@ class AppState: ObservableObject {
                                      isUserQuestionTool ||
                                      (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode))
                 
-                // Gemini의 일반 모드(에뮬레이션 꺼짐)에서의 BeforeTool은 알림으로 처리하되, 노치를 확장하지 않음
-                let isGeminiSilentNotify = agentKind == .gemini && !self.emulateGeminiInteractiveMode && normalizedEvent == "beforetool"
-
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
                     // 터미널이 포커스되어 있지 않을 때만 확장
                     let session = self.activeSessions.first { $0.id == fullSessionId }
                     let isFrontmost = self.isTerminalFrontmost(for: session)
                     
-                    if !isFrontmost && !isGeminiSilentNotify {
+                    if !isFrontmost {
                         self.currentToolName = displayToolName
                         self.currentEventName = event
                         self.currentMessage = sessionMessage

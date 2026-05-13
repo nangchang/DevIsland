@@ -217,10 +217,10 @@ def fallback_decision() -> str:
     """Return the fallback decision when the app is unreachable.
 
     Reads approvalFallbackPolicy from bridge-config.json; defaults to "pass".
-    "deny" maps to "deny", everything else → "pass" (let the CLI handle it).
+    "denyUnknown" maps to "deny", everything else → "pass" (let the CLI handle it).
     """
     policy = load_config().get("approvalFallbackPolicy", "allowReadOnly")
-    return "deny" if policy == "deny" else "pass"
+    return "deny" if policy == "denyUnknown" else "pass"
 
 
 # ---------------------------------------------------------------------------
