@@ -851,8 +851,10 @@ class AppState: ObservableObject {
             return
         }
 
-        guard isApproval else {
-            print("[DevIsland] ignoring non-approval event: \(event)")
+        let isGeminiNormalMode = agentKind == .gemini && !emulateGeminiInteractiveMode
+        
+        guard isApproval && !isGeminiNormalMode else {
+            print("[DevIsland] ignoring non-approval event (or Gemini normal mode): \(event)")
             respondWithReplay(
                 "{\"response\": \"approved\"}",
                 responseHandler: responseHandler,
@@ -863,7 +865,7 @@ class AppState: ObservableObject {
                 workspaceRoot: workspaceRoot,
                 action: .allow,
                 source: .automatic,
-                reason: "non-approval event"
+                reason: isGeminiNormalMode ? "Gemini normal mode notification" : "non-approval event"
             )
             return
         }
