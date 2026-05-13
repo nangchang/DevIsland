@@ -127,26 +127,52 @@ def send_to_app(payload: dict[str, Any], source: str) -> tuple[str, dict[str, An
     body = json.dumps(envelope, ensure_ascii=False).encode("utf-8")
     frame = struct.pack(">I", len(body)) + body
 
+    transport = str(config.get("bridgeTransportKind", "tcpLoopback"))
+    socket_path = str(config.get("bridgeSocketPath") or str(_APP_SUPPORT / "dev-island.sock"))
+    fallback_to_tcp = bool(config.get("bridgeFallbackToTcp", True))
     port = int(config.get("bridgeTcpPort", 9090))
     connect_timeout = float(config.get("bridgeConnectTimeoutSeconds", 5))
     response_timeout = float(config.get("bridgeResponseTimeoutSeconds", 300))
 
-    with socket.create_connection(("127.0.0.1", port), timeout=connect_timeout) as sock:
-        sock.settimeout(response_timeout)
-        sock.sendall(frame)
-        # Half-close write so older HookSocketServer (EOF-based) can detect end-of-message.
-        # The framing server reads exactly `length` bytes and ignores the FIN, so this is safe.
-        sock.shutdown(socket.SHUT_WR)
-
-        response_chunks: list[bytes] = []
-        while True:
-            chunk = sock.recv(65536)
-            if not chunk:
-                break
-            response_chunks.append(chunk)
-
-    raw = b"".join(response_chunks)
+    if transport == "unixDomainSocket":
+        try:
+            raw = _send_unix_frame(socket_path, frame, connect_timeout, response_timeout)
+        except OSError as error:
+            if not fallback_to_tcp:
+                raise
+            log(f"UDS transport failed ({error}); falling back to TCP")
+            raw = _send_tcp_frame(port, frame, connect_timeout, response_timeout)
+    else:
+        raw = _send_tcp_frame(port, frame, connect_timeout, response_timeout)
     return _parse_response(raw, framed_request=True)
+
+
+def _send_tcp_frame(port: int, frame: bytes, connect_timeout: float, response_timeout: float) -> bytes:
+    with socket.create_connection(("127.0.0.1", port), timeout=connect_timeout) as sock:
+        return _send_frame(sock, frame, response_timeout)
+
+
+def _send_unix_frame(path: str, frame: bytes, connect_timeout: float, response_timeout: float) -> bytes:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(connect_timeout)
+        sock.connect(path)
+        return _send_frame(sock, frame, response_timeout)
+
+
+def _send_frame(sock: socket.socket, frame: bytes, response_timeout: float) -> bytes:
+    sock.settimeout(response_timeout)
+    sock.sendall(frame)
+    # Half-close write so EOF-based transports can detect end-of-message.
+    # Length-prefixed servers read exactly `length` bytes and ignore the FIN, so this is safe.
+    sock.shutdown(socket.SHUT_WR)
+
+    response_chunks: list[bytes] = []
+    while True:
+        chunk = sock.recv(65536)
+        if not chunk:
+            break
+        response_chunks.append(chunk)
+    return b"".join(response_chunks)
 
 
 def _parse_response(raw: bytes, *, framed_request: bool = False) -> tuple[str, dict[str, Any] | None]:

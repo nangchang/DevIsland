@@ -1,5 +1,5 @@
 #!/bin/bash
-# DevIsland bridge: stdin → TCP:9090 → Claude Code hook response
+# DevIsland bridge: stdin → DevIsland IPC → CLI hook response
 
 # -------------------------------------------------------------------
 # 인자 파싱 (CLI 소스 명시적 지정 지원)
@@ -14,11 +14,6 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 PAYLOAD=$(cat)
-
-# 앱 미실행 시 hook이 없는 것과 동일하게 기본 동작으로 통과
-if ! nc -z localhost 9090 2>/dev/null; then
-  exit 0
-fi
 
 # 현재 터미널 창/탭 타이틀 추출 (TTY로 정확한 창/탭 특정)
 TERM_TITLE="Terminal"

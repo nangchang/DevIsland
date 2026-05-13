@@ -258,8 +258,12 @@ private struct BridgeIPCSettingsPane: View {
     var body: some View {
         Form {
             Section("Transport") {
-                LabeledContent("Transport", value: BridgeTransportKind.tcpLoopback.label)
-                Text("Unix domain socket transport is planned for a later Approval Proxy phase. The installed bridge and app currently communicate over TCP loopback.")
+                Picker("Transport", selection: store.binding(\.bridgeTransportKind)) {
+                    ForEach(BridgeTransportKind.allCases) { transport in
+                        Text(transport.label).tag(transport)
+                    }
+                }
+                Text("Transport changes are written to the bridge runtime config. Restart DevIsland after switching listener transports.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -271,7 +275,8 @@ private struct BridgeIPCSettingsPane: View {
             Section("Unix domain socket") {
                 TextField("Socket path", text: store.binding(\.bridgeSocketPath))
                     .textFieldStyle(.roundedBorder)
-                    .disabled(true)
+                    .disabled(store.settings.bridgeTransportKind == .tcpLoopback)
+                Toggle("Fallback to TCP loopback", isOn: store.binding(\.bridgeFallbackToTcp))
             }
 
             Section("Timeouts") {

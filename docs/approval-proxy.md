@@ -616,13 +616,13 @@ UI main queue에는 실제 UI 갱신이 필요한 요청만 전달한다.
 
 ### Phase 6. Unix domain socket
 
-> 상태: 📅 예정
+> 상태: ✅ 완료
 
-- HookIPCServer transport abstraction.
-- UDS listener 구현.
-- bridge UDS client 구현.
-- Settings > Bridge / IPC transport 선택.
-- TCP fallback 유지.
+- [x] HookIPCServer transport abstraction.
+- [x] UDS listener 구현.
+- [x] bridge UDS client 구현.
+- [x] Settings > Bridge / IPC transport 선택.
+- [x] TCP fallback 유지.
 
 ### Phase 7. Replay / PTY
 
