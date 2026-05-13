@@ -146,3 +146,31 @@ struct ReplayLogEntry: Identifiable, Equatable {
     var decisionReason: String?
     var decidedAt: Date?
 }
+
+// MARK: - PTY
+
+enum PTYDirection: String, Codable, CaseIterable {
+    case output
+    case input
+}
+
+struct PTYMessage: Identifiable, Equatable {
+    let id: Int64
+    let sessionId: String
+    let provider: ProviderKind
+    let direction: PTYDirection
+    let content: String
+    let createdAt: Date
+}
+
+struct PTYAutoInjectPattern: Codable, Identifiable, Equatable {
+    var id: UUID
+    var pattern: String
+    var response: String
+
+    init(id: UUID = UUID(), pattern: String, response: String) {
+        self.id = id
+        self.pattern = pattern
+        self.response = response
+    }
+}

@@ -85,6 +85,9 @@ struct AppSettings: Equatable {
     var bridgeFallbackToTcp: Bool
     var approvalFallbackPolicy: ApprovalFallbackPolicy
     var replayRetentionDays: Int
+    var ptyEnabled: Bool
+    var ptyAutoInjectPatterns: [PTYAutoInjectPattern]
+    var ptyTranscriptRetentionDays: Int
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -115,7 +118,10 @@ struct AppSettings: Equatable {
         bridgeResponseTimeoutSeconds: 300,
         bridgeFallbackToTcp: true,
         approvalFallbackPolicy: .denyUnknown,
-        replayRetentionDays: 30
+        replayRetentionDays: 30,
+        ptyEnabled: false,
+        ptyAutoInjectPatterns: [],
+        ptyTranscriptRetentionDays: 7
     )
 }
 
@@ -154,6 +160,9 @@ final class SettingsStore: ObservableObject {
         static let bridgeFallbackToTcp = "bridgeFallbackToTcp"
         static let approvalFallbackPolicy = "approvalFallbackPolicy"
         static let replayRetentionDays = "replayRetentionDays"
+        static let ptyEnabled = "ptyEnabled"
+        static let ptyAutoInjectPatterns = "ptyAutoInjectPatterns"
+        static let ptyTranscriptRetentionDays = "ptyTranscriptRetentionDays"
     }
 
     private let userDefaults: UserDefaults
@@ -188,6 +197,11 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.bridgeFallbackToTcp, forKey: DefaultsKey.bridgeFallbackToTcp)
         userDefaults.set(settings.approvalFallbackPolicy.rawValue, forKey: DefaultsKey.approvalFallbackPolicy)
         userDefaults.set(settings.replayRetentionDays, forKey: DefaultsKey.replayRetentionDays)
+        userDefaults.set(settings.ptyEnabled, forKey: DefaultsKey.ptyEnabled)
+        if let data = try? JSONEncoder().encode(settings.ptyAutoInjectPatterns) {
+            userDefaults.set(data, forKey: DefaultsKey.ptyAutoInjectPatterns)
+        }
+        userDefaults.set(settings.ptyTranscriptRetentionDays, forKey: DefaultsKey.ptyTranscriptRetentionDays)
         writeBridgeConfig(settings)
     }
 
@@ -280,6 +294,23 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.replayRetentionDays,
                 from: userDefaults,
                 default: defaults.replayRetentionDays
+            ),
+            ptyEnabled: bool(
+                key: DefaultsKey.ptyEnabled,
+                from: userDefaults,
+                default: defaults.ptyEnabled
+            ),
+            ptyAutoInjectPatterns: {
+                guard let data = userDefaults.data(forKey: DefaultsKey.ptyAutoInjectPatterns),
+                      let patterns = try? JSONDecoder().decode([PTYAutoInjectPattern].self, from: data) else {
+                    return defaults.ptyAutoInjectPatterns
+                }
+                return patterns
+            }(),
+            ptyTranscriptRetentionDays: positiveInt(
+                key: DefaultsKey.ptyTranscriptRetentionDays,
+                from: userDefaults,
+                default: defaults.ptyTranscriptRetentionDays
             )
         )
     }

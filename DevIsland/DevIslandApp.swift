@@ -81,6 +81,9 @@ struct MenuBarMenu: View {
         Button("Replay Log…") {
             AppWindowRouter.showReplayLog()
         }
+        Button("PTY Transcript…") {
+            AppWindowRouter.showPTYTranscript()
+        }
 
         Divider()
 

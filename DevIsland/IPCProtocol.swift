@@ -86,6 +86,7 @@ struct IPCRichResponse: Codable {
     let status: String                      // "ok" | "error"
     let decision: String?                   // "approved" | "denied" | "pass"
     let reason: String?
+    let injection: String?                  // PTY auto-inject: written to PTY stdin by devisland_pty.py
     let providerOutput: [String: AnyJSON]?  // populated by ProviderAdapter in Phase 3
 
     init(
@@ -93,6 +94,7 @@ struct IPCRichResponse: Codable {
         status: String = "ok",
         decision: String?,
         reason: String? = nil,
+        injection: String? = nil,
         providerOutput: [String: AnyJSON]? = nil
     ) {
         self.protocol = IPCEnvelope.protocolName
@@ -101,6 +103,7 @@ struct IPCRichResponse: Codable {
         self.status = status
         self.decision = decision
         self.reason = reason
+        self.injection = injection
         self.providerOutput = providerOutput
     }
 
