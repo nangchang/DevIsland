@@ -75,11 +75,28 @@ def build_envelope(source: str, session_id: str, payload: dict, token: str | Non
     return struct.pack(">I", len(body)) + body
 
 
+def _ipc_connect(config: dict) -> socket.socket:
+    """Return a connected socket using the transport selected in bridge-config.json."""
+    transport = config.get("bridgeTransportKind", "tcpLoopback")
+    if transport == "unixDomainSocket":
+        sock_path = config.get(
+            "bridgeSocketPath",
+            str(Path.home() / "Library/Application Support/DevIsland/dev-island.sock"),
+        )
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect(sock_path)
+        return sock
+    # Default: TCP loopback
+    tcp_port = int(config.get("bridgeTcpPort", DEFAULT_TCP_PORT))
+    return socket.create_connection(("127.0.0.1", tcp_port), timeout=5)
+
+
 def send_pty_output(
     source: str,
     session_id: str,
     content: str,
-    tcp_port: int,
+    config: dict,
     token: str | None,
 ) -> str | None:
     """Send PTYOutput event; return injection string if present, else None."""
@@ -91,7 +108,7 @@ def send_pty_output(
     }
     framed = build_envelope(source, session_id, payload, token)
     try:
-        with socket.create_connection(("127.0.0.1", tcp_port), timeout=5) as sock:
+        with _ipc_connect(config) as sock:
             sock.sendall(framed)
             sock.shutdown(socket.SHUT_WR)  # half-close so server sees EOF on write side
             # Read 4-byte length prefix then body
@@ -126,7 +143,7 @@ def _recv_exactly(sock: socket.socket, n: int) -> bytes | None:
 # PTY fork + I/O loop
 # ---------------------------------------------------------------------------
 
-def run_pty(command: list[str], source: str, tcp_port: int) -> int:
+def run_pty(command: list[str], source: str, config: dict) -> int:
     session_id = str(uuid.uuid4())
     token = read_token()
 
@@ -144,7 +161,7 @@ def run_pty(command: list[str], source: str, tcp_port: int) -> int:
     # Parent — I/O proxy loop
     def dispatch_pty_output(content: str) -> None:
         """Called in a background thread; queues injection if matched."""
-        injection = send_pty_output(source, session_id, content, tcp_port, token)
+        injection = send_pty_output(source, session_id, content, config, token)
         if injection:
             with injection_lock:
                 injection_queue.append(injection.encode())
@@ -246,9 +263,8 @@ def main() -> None:
         parser.error("No command specified after --")
 
     config = load_config(args.config)
-    tcp_port = int(config.get("bridgeTcpPort", DEFAULT_TCP_PORT))
 
-    sys.exit(run_pty(command, args.source, tcp_port))
+    sys.exit(run_pty(command, args.source, config))
 
 
 if __name__ == "__main__":
