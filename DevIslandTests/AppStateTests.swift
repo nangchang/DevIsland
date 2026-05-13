@@ -30,6 +30,24 @@ final class AppStateTests: XCTestCase {
         guard let data = response.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
+
+    private func waitUntil(
+        timeout: TimeInterval,
+        expectation: XCTestExpectation,
+        condition: @escaping () -> Bool
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        func poll() {
+            if condition() {
+                expectation.fulfill()
+            } else if Date() < deadline {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                    poll()
+                }
+            }
+        }
+        poll()
+    }
     
     func testNormalizedHookEventName() {
         XCTAssertEqual(HookEventNormalizer.normalizedName("BeforeTool"), "beforetool")
@@ -219,6 +237,46 @@ final class AppStateTests: XCTestCase {
         ))
         XCTAssertEqual(decision?.action, .allow)
         XCTAssertEqual(decision?.source, .sessionCache)
+    }
+
+    func testReplayHookEventRequeuesStoredApprovalPayload() throws {
+        appState = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in true }
+        )
+        let entry = ReplayLogEntry(
+            id: 42,
+            requestId: "request-42",
+            provider: .codex,
+            sessionId: "replay-session",
+            eventName: "PermissionRequest",
+            toolName: "shell",
+            payloadJSON: """
+            {
+              "hook_event_name": "PermissionRequest",
+              "session_id": "replay-session",
+              "cli_source": "codex",
+              "tool_name": "shell",
+              "tool_input": {"command": "npm test"}
+            }
+            """,
+            receivedAt: Date(timeIntervalSince1970: 1_000),
+            decisionAction: nil,
+            decisionSource: nil,
+            decisionReason: nil,
+            decidedAt: nil
+        )
+        try appState.replayHookEvent(entry)
+        let expectation = expectation(description: "replay enqueued")
+        waitUntil(timeout: 2.0, expectation: expectation) {
+            self.appState.pendingCount == 1
+        }
+        wait(for: [expectation], timeout: 2.0)
+
+        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertEqual(appState.pendingItems.first?.sessionId, "replay-session")
+        XCTAssertEqual(appState.pendingItems.first?.toolName, "shell")
     }
     
     func testSafeToolAutoApproval() {

@@ -47,6 +47,18 @@ final class ReplayLogViewModel: ObservableObject {
             statusMessage = nil
         }
     }
+
+    func replaySelectedEvent() {
+        guard let selectedEntry else { return }
+        do {
+            try appState.replayHookEvent(selectedEntry)
+            statusMessage = "Replay queued for \(selectedEntry.provider.rawValue) \(selectedEntry.toolName)"
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            statusMessage = nil
+        }
+    }
 }
 
 struct ReplayLogWindowView: View {
@@ -101,7 +113,8 @@ struct ReplayLogWindowView: View {
 
             ReplayLogDetail(
                 entry: viewModel.selectedEntry,
-                createRule: viewModel.createRule
+                createRule: viewModel.createRule,
+                replayEvent: viewModel.replaySelectedEvent
             )
             .frame(minWidth: 420)
         }
@@ -160,6 +173,7 @@ private struct ReplayLogRow: View {
 private struct ReplayLogDetail: View {
     let entry: ReplayLogEntry?
     let createRule: (RuleAction) -> Void
+    let replayEvent: () -> Void
 
     var body: some View {
         Group {
@@ -188,6 +202,8 @@ private struct ReplayLogDetail: View {
                     .lineLimit(1)
                 Spacer()
                 HStack(spacing: 8) {
+                    Button("Replay") { replayEvent() }
+                        .disabled(entry.payloadJSON.isEmpty)
                     Button("Allow Rule") { createRule(.allow) }
                         .disabled(!canCreateRule)
                     Button("Deny Rule") { createRule(.deny) }
