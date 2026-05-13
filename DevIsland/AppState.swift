@@ -418,7 +418,8 @@ class AppState: ObservableObject {
             return .tcp(port: UInt16(port > 0 ? port : AppSettings.defaults.bridgeTcpPort))
         case .unixDomainSocket:
             let socketPath = UserDefaults.standard.string(forKey: SettingsStore.DefaultsKey.bridgeSocketPath)
-            return .unix(path: (socketPath?.isEmpty == false) ? socketPath! : AppSettings.defaults.bridgeSocketPath)
+            let path = socketPath.flatMap { $0.isEmpty ? nil : $0 } ?? AppSettings.defaults.bridgeSocketPath
+            return .unix(path: path)
         }
     }
 
