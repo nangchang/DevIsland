@@ -6,6 +6,7 @@ import AppKit
 
 struct PendingRequest: Identifiable {
     let id = UUID()
+    let hookEventId: Int64?
     let sessionId: String
     let agentKind: BuddyKind
     let eventName: String
@@ -217,6 +218,7 @@ class AppState: ObservableObject {
     private var currentAgentKind: BuddyKind?
     private var currentRawToolName: String = ""
     private var currentWorkspaceRoot: String?
+    private var currentHookEventId: Int64?
     private var isShowingRequest = false
     private var showingRequestId: UUID?
     private var timeoutTimer: Timer?
@@ -478,6 +480,7 @@ class AppState: ObservableObject {
         // Raw JSON always starts with '{' (0x7B); the HookSocketServer strips the
         // length-prefix before delivering framed payloads here as plain JSON strings.
         let parsedJSON: [String: Any]?
+        let requestId: String?
         if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData),
            envelope.protocol == IPCEnvelope.protocolName {
             guard BridgeTokenManager.shared.validate(envelope.token) else {
@@ -487,8 +490,10 @@ class AppState: ObservableObject {
             }
             // Convert AnyJSON payload to [String: Any] directly — avoids encode+decode roundtrip.
             parsedJSON = envelope.payload.mapValues { $0.rawValue } as [String: Any]
+            requestId = envelope.requestId
         } else {
             parsedJSON = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any]
+            requestId = nil
         }
 
         var event     = "Unknown"
@@ -551,6 +556,14 @@ class AppState: ObservableObject {
         }
 
         let normalizedEvent = HookEventNormalizer.normalizedName(event)
+        let hookEventId = recordReplayHookEvent(
+            requestId: requestId,
+            provider: providerKind(for: agentKind),
+            sessionId: sessionId,
+            eventName: event,
+            toolName: toolName,
+            payload: parsedJSON
+        )
         if displayToolName.isEmpty {
             if normalizedEvent == "elicitation" {
                 if let serverName = parsedJSON?["mcp_server_name"] as? String, !serverName.isEmpty {
@@ -741,6 +754,7 @@ class AppState: ObservableObject {
         }
 
         let request = PendingRequest(
+            hookEventId: hookEventId,
             sessionId: sessionId,
             agentKind: agentKind,
             eventName: event,
@@ -796,6 +810,7 @@ class AppState: ObservableObject {
 
         if agentKind == .codex,
            let policyDecision = codexPolicyDecision(
+               hookEventId: hookEventId,
                sessionId: sessionId,
                toolName: toolName,
                workspaceRoot: workspaceRoot
@@ -1324,6 +1339,7 @@ class AppState: ObservableObject {
             currentRawToolName = ""
             currentAgentKind = nil
             currentWorkspaceRoot = nil
+            currentHookEventId = nil
             currentMessage = ""
             currentSessionId = ""
             selectedSessionId = nil
@@ -1348,6 +1364,7 @@ class AppState: ObservableObject {
             currentRawToolName = next.rawToolName
             currentAgentKind = next.agentKind
             currentWorkspaceRoot = next.workspaceRoot
+            currentHookEventId = next.hookEventId
             sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
             return
         }
@@ -1359,6 +1376,7 @@ class AppState: ObservableObject {
         currentRawToolName = next.rawToolName
         currentAgentKind  = next.agentKind
         currentWorkspaceRoot = next.workspaceRoot
+        currentHookEventId = next.hookEventId
         currentMessage    = next.message
         currentSessionId  = next.sessionId
 
@@ -1393,7 +1411,94 @@ class AppState: ObservableObject {
             && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 
+    private func recordReplayHookEvent(
+        requestId: String?,
+        provider: ProviderKind,
+        sessionId: String,
+        eventName: String,
+        toolName: String,
+        payload: [String: Any]?
+    ) -> Int64? {
+        guard let approvalProxy, let payload else { return nil }
+        let payloadJSON = Self.replayPayloadString(from: payload)
+        var eventId: Int64?
+        approvalPersistenceQueue.sync {
+            do {
+                eventId = try approvalProxy.recordHookEvent(
+                    requestId: requestId,
+                    provider: provider,
+                    sessionId: sessionId,
+                    eventName: eventName,
+                    toolName: toolName,
+                    payloadJSON: payloadJSON
+                )
+            } catch {
+                print("[DevIsland] [REPLAY] Failed to record hook event: \(error)")
+            }
+        }
+        return eventId
+    }
+
+    private func recordReplayDecision(
+        hookEventId: Int64?,
+        agentKind: BuddyKind?,
+        sessionId: String,
+        toolName: String,
+        action: RuleAction,
+        source: ApprovalPolicyDecision.Source,
+        reason: String?
+    ) {
+        guard let approvalProxy,
+              let agentKind,
+              !sessionId.isEmpty,
+              !toolName.isEmpty else {
+            return
+        }
+        let request = ApprovalPolicyRequest(
+            provider: providerKind(for: agentKind),
+            sessionId: sessionId,
+            toolName: toolName,
+            workspaceRoot: currentWorkspaceRoot
+        )
+        let decision = ApprovalPolicyDecision(action: action, source: source, ruleId: nil)
+        approvalPersistenceQueue.sync {
+            do {
+                try approvalProxy.recordDecision(
+                    hookEventId: hookEventId,
+                    request: request,
+                    decision: decision,
+                    reason: reason
+                )
+            } catch {
+                print("[DevIsland] [REPLAY] Failed to record decision: \(error)")
+            }
+        }
+    }
+
+    private static func replayPayloadString(from payload: [String: Any]) -> String {
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+              let string = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return string
+    }
+
+    private func providerKind(for agentKind: BuddyKind) -> ProviderKind {
+        switch agentKind {
+        case .claudeCode:
+            return .claude
+        case .codex:
+            return .codex
+        case .gemini:
+            return .gemini
+        case .island:
+            return .any
+        }
+    }
+
     private func codexPolicyDecision(
+        hookEventId: Int64?,
         sessionId: String,
         toolName: String,
         workspaceRoot: String?
@@ -1409,7 +1514,7 @@ class AppState: ObservableObject {
             let decision = try approvalProxy.evaluate(request)
             guard decision.action != .prompt else { return nil }
             try approvalProxy.recordDecision(
-                hookEventId: nil,
+                hookEventId: hookEventId,
                 request: request,
                 decision: decision,
                 reason: "matched \(decision.source.rawValue)"
@@ -1428,6 +1533,29 @@ class AppState: ObservableObject {
     func codexPersistentRules() throws -> [ApprovalRule] {
         guard let approvalProxy else { return [] }
         return try approvalProxy.store.rules(provider: .codex, scope: .persistent)
+    }
+
+    func replayLogEntries(limit: Int = 200) throws -> [ReplayLogEntry] {
+        guard let approvalProxy else { return [] }
+        return try approvalProxy.replayLog(limit: limit)
+    }
+
+    func addPersistentRule(from entry: ReplayLogEntry, action: RuleAction) throws {
+        guard let approvalProxy else { return }
+        let toolName = entry.toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !toolName.isEmpty else { return }
+        try approvalProxy.store.insertRule(ApprovalRule(
+            id: SQLiteApprovalStore.deterministicRuleID(
+                provider: entry.provider,
+                toolName: toolName,
+                scope: .persistent,
+                workspaceRoot: nil
+            ),
+            provider: entry.provider,
+            toolName: toolName,
+            action: action,
+            scope: .persistent
+        ))
     }
 
     func addCodexPersistentRule(toolName: String, action: RuleAction) throws {
@@ -1502,8 +1630,18 @@ class AppState: ObservableObject {
         print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
         currentResponseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
+        recordReplayDecision(
+            hookEventId: currentHookEventId,
+            agentKind: currentAgentKind,
+            sessionId: currentSessionId,
+            toolName: currentRawToolName.isEmpty ? currentToolName : currentRawToolName,
+            action: passToTerminal ? .prompt : approved ? .allow : .deny,
+            source: .fallback,
+            reason: reason
+        )
         persistCodexApprovalScope(approved: approved, approvalScope: approvalScope)
         currentResponseHandler = nil
+        currentHookEventId = nil
         isShowingRequest = false
         showingRequestId = nil
         timeoutTimer?.invalidate()
