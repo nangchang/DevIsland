@@ -206,6 +206,9 @@ def _parse_response(raw: bytes, *, framed_request: bool = False) -> tuple[str, d
         obj = json.loads(raw)
         return str(obj.get("response", "pass")), None
     except Exception:
+        # Intentional: malformed response is treated as pass so the CLI can
+        # continue unblocked. DevIsland is an optional overlay — if it cannot
+        # produce a valid response, the default is to stay out of the way.
         return "pass", None
 
 
@@ -218,6 +221,13 @@ def fallback_decision() -> str:
 
     Reads approvalFallbackPolicy from bridge-config.json; defaults to "pass".
     "denyUnknown" maps to "deny", everything else → "pass" (let the CLI handle it).
+
+    Intentional design: the default fallback is pass, not deny.
+    DevIsland is an optional approval overlay. When the app is not running
+    (e.g. user hasn't launched it, it crashed, or it's not installed), the
+    bridge steps aside and lets the CLI's own permission system take over.
+    Fail-closed ("denyUnknown") is available as an opt-in policy for users
+    who want hard enforcement even when the app is absent.
     """
     policy = load_config().get("approvalFallbackPolicy", "allowReadOnly")
     return "deny" if policy == "denyUnknown" else "pass"
