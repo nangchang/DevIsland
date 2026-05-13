@@ -57,4 +57,8 @@ final class ApprovalProxyController {
             decidedAt: decidedAt
         )
     }
+
+    func replayLog(limit: Int = 200) throws -> [ReplayLogEntry] {
+        try store.replayLog(limit: limit)
+    }
 }

@@ -129,3 +129,18 @@ struct ApprovalPolicyDecision: Equatable {
 
     static let prompt = ApprovalPolicyDecision(action: .prompt, source: .fallback, ruleId: nil)
 }
+
+struct ReplayLogEntry: Identifiable, Equatable {
+    let id: Int64
+    var requestId: String?
+    var provider: ProviderKind
+    var sessionId: String
+    var eventName: String
+    var toolName: String
+    var payloadJSON: String
+    var receivedAt: Date
+    var decisionAction: RuleAction?
+    var decisionSource: ApprovalPolicyDecision.Source?
+    var decisionReason: String?
+    var decidedAt: Date?
+}

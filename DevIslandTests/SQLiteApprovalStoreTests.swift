@@ -202,4 +202,47 @@ final class SQLiteApprovalStoreTests: XCTestCase {
         XCTAssertGreaterThan(eventId, 0)
         XCTAssertGreaterThan(decisionId, 0)
     }
+
+    func testReplayLogReturnsEventsWithLatestDecision() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let eventId = try store.insertHookEvent(
+            requestId: "request-1",
+            provider: .codex,
+            sessionId: "session-1",
+            eventName: "PermissionRequest",
+            toolName: "shell",
+            payloadJSON: #"{"tool_name":"shell"}"#,
+            receivedAt: Date(timeIntervalSince1970: 1_000)
+        )
+        try store.insertDecision(
+            hookEventId: eventId,
+            provider: .codex,
+            sessionId: "session-1",
+            toolName: "shell",
+            action: .allow,
+            source: .fallback,
+            reason: "older",
+            decidedAt: Date(timeIntervalSince1970: 1_001)
+        )
+        try store.insertDecision(
+            hookEventId: eventId,
+            provider: .codex,
+            sessionId: "session-1",
+            toolName: "shell",
+            action: .deny,
+            source: .persistentRule,
+            reason: "latest",
+            decidedAt: Date(timeIntervalSince1970: 1_002)
+        )
+
+        let entries = try store.replayLog(limit: 20)
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].id, eventId)
+        XCTAssertEqual(entries[0].requestId, "request-1")
+        XCTAssertEqual(entries[0].provider, .codex)
+        XCTAssertEqual(entries[0].decisionAction, .deny)
+        XCTAssertEqual(entries[0].decisionSource, .persistentRule)
+        XCTAssertEqual(entries[0].decisionReason, "latest")
+    }
 }

@@ -217,6 +217,27 @@ final class SQLiteApprovalStore {
         )
     }
 
+    func replayLog(limit: Int = 200) throws -> [ReplayLogEntry] {
+        try fetchReplayLog(
+            sql:
+                """
+                SELECT e.id, e.request_id, e.provider, e.session_id, e.event_name, e.tool_name,
+                       e.payload_json, e.received_at,
+                       d.action, d.source, d.reason, d.decided_at
+                FROM hook_events e
+                LEFT JOIN approval_decisions d ON d.id = (
+                    SELECT id FROM approval_decisions
+                    WHERE hook_event_id = e.id
+                    ORDER BY decided_at DESC
+                    LIMIT 1
+                )
+                ORDER BY e.received_at DESC
+                LIMIT ?
+                """,
+            parameters: [max(1, limit)]
+        )
+    }
+
     func deleteRule(id: UUID) throws {
         try execute("DELETE FROM rules WHERE id = ?", [id.uuidString])
     }
@@ -487,6 +508,47 @@ final class SQLiteApprovalStore {
             ))
         }
         return rules
+    }
+
+    private func fetchReplayLog(sql: String, parameters: [Any?]) throws -> [ReplayLogEntry] {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(statement) }
+        try bind(parameters, to: statement)
+
+        var entries: [ReplayLogEntry] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard
+                let provider = columnString(statement, 2).flatMap(ProviderKind.init(rawValue:)),
+                let sessionId = columnString(statement, 3),
+                let eventName = columnString(statement, 4),
+                let toolName = columnString(statement, 5),
+                let payloadJSON = columnString(statement, 6)
+            else {
+                continue
+            }
+            let receivedAt = Date(timeIntervalSince1970: sqlite3_column_double(statement, 7))
+            let decidedAt = sqlite3_column_type(statement, 11) == SQLITE_NULL
+                ? nil
+                : Date(timeIntervalSince1970: sqlite3_column_double(statement, 11))
+            entries.append(ReplayLogEntry(
+                id: sqlite3_column_int64(statement, 0),
+                requestId: columnString(statement, 1),
+                provider: provider,
+                sessionId: sessionId,
+                eventName: eventName,
+                toolName: toolName,
+                payloadJSON: payloadJSON,
+                receivedAt: receivedAt,
+                decisionAction: columnString(statement, 8).flatMap(RuleAction.init(rawValue:)),
+                decisionSource: columnString(statement, 9).flatMap(ApprovalPolicyDecision.Source.init(rawValue:)),
+                decisionReason: columnString(statement, 10),
+                decidedAt: decidedAt
+            ))
+        }
+        return entries
     }
 
     private func columnString(_ statement: OpaquePointer?, _ index: Int32) -> String? {
