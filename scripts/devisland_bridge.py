@@ -128,7 +128,7 @@ def send_to_app(payload: dict[str, Any], source: str) -> tuple[str, dict[str, An
     frame = struct.pack(">I", len(body)) + body
 
     transport = str(config.get("bridgeTransportKind", "tcpLoopback"))
-    socket_path = str(config.get("bridgeSocketPath", _APP_SUPPORT / "dev-island.sock"))
+    socket_path = str(config.get("bridgeSocketPath") or str(_APP_SUPPORT / "dev-island.sock"))
     fallback_to_tcp = bool(config.get("bridgeFallbackToTcp", True))
     port = int(config.get("bridgeTcpPort", 9090))
     connect_timeout = float(config.get("bridgeConnectTimeoutSeconds", 5))
