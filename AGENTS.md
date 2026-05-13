@@ -329,6 +329,131 @@ Users can toggle **"Auto-approve Safe tools"** in the menu bar. When enabled, an
 
 On collapse, the frame shrinks after a 0.45 s delay (matching the SwiftUI spring animation) to avoid a jump.
 
+## Approval Proxy Architecture
+
+DevIsland acts as a policy-based **Approval Proxy daemon**: the macOS app itself is the daemon + UI, and the bridge scripts stay ultra-thin. No separate Node.js/Tauri process is needed.
+
+### Module Boundaries
+
+```
+DevIsland macOS app
+  ├─ HookSocketServer / HookIPCServer   — TCP + Unix domain socket listeners
+  ├─ ApprovalProxyController            — orchestrates policy lookup, DB writes, response
+  ├─ ProviderAdapter                    — formats decision into per-CLI hook response JSON
+  │   ├─ ClaudeAdapter                  — updatedPermissions, AskUserQuestion, Elicitation
+  │   ├─ CodexAdapter                   — session cache, persistent rules
+  │   └─ (GeminiPromptPolicy — TODO)    — Gemini-specific policy and emulation control
+  ├─ HookEventNormalizer                — normalises event names across CLI dialects
+  ├─ ApprovalPolicyEngine               — 8-priority rule evaluation against SQLite
+  ├─ SQLiteApprovalStore                — rules, session_cache, hook_events, decisions, pty_messages
+  ├─ AppSettings / SettingsStore        — UserDefaults-backed settings with Codable structs
+  └─ SwiftUI windows                    — Settings, Approval Rules, Replay Log, PTY Transcript
+```
+
+Bridge responsibilities (keep thin):
+- Receive stdin payload from the CLI
+- Add terminal metadata and `cli_source`
+- Send IPC envelope to the app
+- Write app response to stdout in the CLI-specific format
+
+Bridge must NOT: touch the DB, render UI, compute policy, or run long background tasks.
+
+### IPC Protocol v1
+
+All bridge↔app communication uses **length-prefixed JSON framing** over TCP `127.0.0.1:9090` (or Unix domain socket `~/Library/Application Support/DevIsland/dev-island.sock`).
+
+```
+[4-byte big-endian length][UTF-8 JSON body]
+```
+
+**Envelope (bridge → app):**
+```json
+{
+  "protocol": "dev-island-hook-ipc",
+  "version": 1,
+  "requestId": "<uuid>",
+  "sentAt": "2026-05-09T12:34:56Z",
+  "token": "<bridge-token or null>",
+  "source": "claude",
+  "payload": { "hook_event_name": "PermissionRequest", "session_id": "...", ... }
+}
+```
+
+**Rich response (app → bridge):**
+```json
+{
+  "protocol": "dev-island-hook-ipc",
+  "version": 1,
+  "requestId": "<same uuid>",
+  "status": "ok",
+  "decision": "approved",
+  "reason": "matched session rule",
+  "injection": null,
+  "providerOutput": { "hookSpecificOutput": { "hookEventName": "PermissionRequest", "decision": { "behavior": "allow" } } }
+}
+```
+
+If `providerOutput` is present, the bridge writes it to stdout verbatim. Otherwise it falls back to legacy `response`-field conversion.
+
+**Transport failure fallback** (when app is unreachable):
+
+| Risk level | Default action |
+|---|---|
+| safe / read-only | pass or allow |
+| low / medium | deny (cannot prompt) |
+| high / write | deny |
+| critical / shell / destructive | deny |
+| unknown | deny (user-overridable in settings) |
+
+### Claude-Specific Hook Handling
+
+- **`PermissionRequest`**: primary approval event. Response may include `updatedPermissions` to update Claude's internal permission state for the session (native mode) or rely on DevIsland `session_cache` (app/hybrid mode).
+- **`PreToolUse`**: handles `AskUserQuestion` (collects answers → `updatedInput.answers`) and `ExitPlanMode` (plan approval UI).
+- **`Elicitation`**: MCP server input requests.
+- **`UserPromptSubmit`**: prompt policy — can rewrite or block the user's input before it reaches the model.
+- **`PostToolUse`**: audit/replay log only; no approval needed.
+
+**Claude session approval modes** (Settings > Providers > Claude Code):
+- **Native** (default): DevIsland returns `updatedPermissions` with `destination: session`; Claude manages the rule internally.
+- **App cache**: DevIsland stores the rule in `session_cache` and auto-allows on future requests without touching Claude's permission state.
+- **Hybrid**: both; app cache is the fallback when native payload generation fails.
+
+### Codex-Specific Hook Handling
+
+Codex has no native session-permission mutation. DevIsland manages all session and persistent rules in SQLite. Session approval inserts a row into `session_cache`; persistent approval inserts into `rules`.
+
+### SQLite Storage
+
+DB path: `~/Library/Application Support/DevIsland/approval-proxy.sqlite3`  
+PRAGMAs: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`
+
+| Table | Purpose |
+|---|---|
+| `rules` | persistent allow/deny rules per provider/tool/pattern |
+| `session_cache` | in-session auto-allow entries (expire with session) |
+| `hook_events` | append-only audit log of every received hook event |
+| `approval_decisions` | decision record linked to `hook_events` (replay source of truth) |
+| `pty_messages` | PTY transcript per session (provider, direction, content, timestamp) |
+
+### PTY Wrapper (Experimental)
+
+`scripts/devisland_pty.py` forks a child process under a PTY, forwards all I/O, and dispatches `PTYOutput` IPC events to the app so auto-inject patterns can fire. Key design points:
+
+- Incremental UTF-8 decoder preserves multi-byte sequences across chunk boundaries.
+- IPC calls are dispatched to a `ThreadPoolExecutor(max_workers=4)` to cap concurrency during burst output.
+- Per-session 1 KB sliding window buffer in AppState resolves patterns split across chunk boundaries.
+- `injection` field in `IPCRichResponse` carries text to write back to the PTY stdin.
+
+### Known Gaps (see `docs/approval-proxy-gap-analysis.md`)
+
+| # | Location | Description |
+|---|---|---|
+| 1 | `ApprovalPolicyEngine.swift` | Only exact tool-name matching; Glob/Regex/Prefix modes not yet implemented |
+| 2 | `AppState.sendDecision` | Claude approvals not written to `session_cache` when mode is hybrid/app |
+| 3 | `AppState.globalAutoApproveTypes` | Claude/Gemini approvals use in-memory Set instead of SQLite rules table |
+| 4 | `ProviderAdapter.swift` | `GeminiPromptPolicy.swift` does not exist; Gemini logic is minimal hardcoded formatter |
+| 5 | `AppState.swift` | 93 KB class handles too many concerns; `QuestionBroker` and `GeminiSessionState` not yet extracted |
+
 ## 📝 Commit Guidelines
 
 To maintain a clean and maintainable history, all AI agents must follow these commit rules:

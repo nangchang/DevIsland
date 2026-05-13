@@ -108,6 +108,15 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 
 // MARK: - App State
 
+// AppState is the central hub: owns the IPC server, session list, pending approval queue,
+// and decision dispatch. It also holds Gemini-specific UX state (auto-edit mode, emulation).
+//
+// TODO(gap-5): AppState (~93 KB) handles too many responsibilities. Planned decomposition:
+//   - Hook parsing/normalization → ApprovalProxyController / HookEventNormalizer (partially done)
+//   - AskUserQuestion / ExitPlanMode flow → QuestionBroker (new type)
+//   - Gemini UX logic → GeminiSessionState or GeminiPromptPolicy
+//   Splitting reduces test surface and makes each concern independently testable.
+//   See docs/approval-proxy-gap-analysis.md §2.5 and approval-proxy.md §2 (module boundary).
 class AppState: ObservableObject {
     static let shared = AppState(
         startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1",
@@ -201,6 +210,13 @@ class AppState: ObservableObject {
         }
     }
     
+    // TODO(gap-3): globalAutoApproveTypes and sessionAutoApproveTypes are in-memory Sets
+    //   (globalAutoApproveTypes persisted to UserDefaults only). Claude and Gemini approvals
+    //   currently write here instead of SQLiteApprovalStore. Consequence: rules vanish on restart
+    //   and are invisible to the Approval Rules UI.
+    //   Target: route Claude/Gemini approve() through ApprovalProxyController.store.insertRule()
+    //   so all providers share a single SQLite source of truth (rules + session_cache tables).
+    //   See docs/approval-proxy-gap-analysis.md §2.3 and approval-proxy.md §6 (Policy Engine).
     @Published var globalAutoApproveTypes: Set<String> = [] {
         didSet {
             userDefaults.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
@@ -1931,6 +1947,13 @@ class AppState: ObservableObject {
         }
     }
 
+    // TODO(gap-2): When claudeSessionApprovalMode is .appSessionCache or .hybrid,
+    //   Claude approvals must also be written to SQLiteApprovalStore.session_cache.
+    //   Currently only Codex approvals are persisted to the DB; Claude relies solely on
+    //   updatedPermissions in the hook response (native mode) and has no DB record.
+    //   Fix: after building providerOutput for Claude, insert into session_cache here
+    //   so replay log and policy engine see a consistent history across providers.
+    //   See docs/approval-proxy-gap-analysis.md §2.2 and approval-proxy.md §4.2 (Option B/C).
     private func sendDecision(
         approved: Bool,
         reason: String? = nil,

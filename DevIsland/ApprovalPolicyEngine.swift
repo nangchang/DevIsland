@@ -1,5 +1,19 @@
 import Foundation
 
+// Policy Engine evaluates approval requests against stored rules in priority order:
+// 1. explicit persistent deny  2. explicit session deny
+// 3. explicit persistent allow  4. explicit session allow
+// 5. project/workspace rule  6. heuristic policy  7. fallback policy
+//
+// Rules are stored in SQLiteApprovalStore (rules + session_cache tables).
+// Current implementation performs only exact tool-name matching against stored rules.
+//
+// TODO(gap-1): Add Glob and Regex matching modes for ApprovalRule.matchKind.
+//   Design: ApprovalRule.matchKind: MatchKind { exact, glob, regex, commandPrefix, pathPrefix }
+//   - Glob/commandPrefix/pathPrefix: expose in default UI.
+//   - Regex: advanced mode only; apply max-length limit, catastrophic-backtracking
+//     pattern block, and compile-time validation before storing.
+//   See docs/approval-proxy-gap-analysis.md §2.1 and approval-proxy.md §6.2–6.3.
 struct ApprovalPolicyEngine {
     let store: SQLiteApprovalStore
 

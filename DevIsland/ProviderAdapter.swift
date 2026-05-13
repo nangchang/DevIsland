@@ -1,5 +1,17 @@
 import Foundation
 
+// ProviderAdapter formats approval decisions into the per-CLI hook response JSON
+// expected by Claude Code, Codex, and Gemini CLI.
+//
+// Claude-specific output is handled by helpers below (claudePreToolUseOutput,
+// claudeUserPromptSubmitOutput, etc.) and ClaudeAdapter in the same file.
+//
+// TODO(gap-4): Extract Gemini-specific prompt/policy logic into GeminiPromptPolicy.swift.
+//   Currently the Gemini branch is a minimal allow/deny formatter with no policy
+//   customization. GeminiPromptPolicy should mirror ClaudePromptPolicy in structure
+//   and expose Gemini-specific BeforeTool control (e.g., auto-edit emulation policy,
+//   plan-mode detection, interactive emulation rules).
+//   See docs/approval-proxy-gap-analysis.md §2.4 and approval-proxy.md §3 (Gemini adapter).
 struct ProviderAdapter {
     static let denialMessage = "DevIsland에서 거절되었습니다."
 
