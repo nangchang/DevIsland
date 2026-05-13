@@ -275,6 +275,7 @@ private struct BridgeIPCSettingsPane: View {
             Section("Unix domain socket") {
                 TextField("Socket path", text: store.binding(\.bridgeSocketPath))
                     .textFieldStyle(.roundedBorder)
+                    .disabled(store.settings.bridgeTransportKind == .tcpLoopback)
                 Toggle("Fallback to TCP loopback", isOn: store.binding(\.bridgeFallbackToTcp))
             }
 
