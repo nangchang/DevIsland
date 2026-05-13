@@ -52,7 +52,7 @@ final class ReplayLogViewModel: ObservableObject {
         guard let selectedEntry else { return }
         do {
             try appState.replayHookEvent(selectedEntry)
-            statusMessage = "Replayed \(selectedEntry.provider.rawValue) \(selectedEntry.toolName)"
+            statusMessage = "Replay queued for \(selectedEntry.provider.rawValue) \(selectedEntry.toolName)"
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -203,6 +203,7 @@ private struct ReplayLogDetail: View {
                 Spacer()
                 HStack(spacing: 8) {
                     Button("Replay") { replayEvent() }
+                        .disabled(entry.payloadJSON.isEmpty)
                     Button("Allow Rule") { createRule(.allow) }
                         .disabled(!canCreateRule)
                     Button("Deny Rule") { createRule(.deny) }
