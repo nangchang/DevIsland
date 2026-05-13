@@ -264,6 +264,8 @@ class HookSocketServer {
                 } else if sent < 0, errno == EINTR {
                     continue
                 } else {
+                    let err = String(cString: strerror(errno))
+                    NSLog("[HookSocketServer] sendAll failed on fd %d: %@ (errno %d)", fd, err, errno)
                     return
                 }
             }
