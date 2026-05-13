@@ -15,6 +15,7 @@ Options:
 """
 
 import argparse
+import codecs
 import json
 import os
 import pty
@@ -145,6 +146,10 @@ def run_pty(command: list[str], source: str, tcp_port: int) -> int:
             with injection_lock:
                 injection_queue.append(injection.encode())
 
+    # Stateful incremental UTF-8 decoder — preserves incomplete multi-byte
+    # sequences across chunk boundaries instead of replacing them with '?'.
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+
     # IPC calls are dispatched to a bounded thread pool to cap resource usage
     # even when the child produces bursts of output (e.g. find, cat).
     executor = ThreadPoolExecutor(max_workers=_IPC_MAX_WORKERS)
@@ -168,7 +173,7 @@ def run_pty(command: list[str], source: str, tcp_port: int) -> int:
                         readable = []
                         break
                     os.write(sys.stdout.fileno(), data)
-                    text = data.decode(errors="replace")
+                    text = decoder.decode(data)
                     if text:
                         executor.submit(dispatch_pty_output, text)
 
@@ -207,6 +212,7 @@ def run_pty(command: list[str], source: str, tcp_port: int) -> int:
 
     finally:
         executor.shutdown(wait=False)
+        decoder.decode(b"", final=True)  # flush any bytes held by the decoder
         try:
             os.close(master_fd)
         except OSError:
