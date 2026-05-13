@@ -226,6 +226,8 @@ class AppState: ObservableObject {
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
+    private var ptyOutputBuffers: [String: String] = [:]
+    private let ptyBufferLock = NSLock()
     private let timeoutDuration: Double = 120
     private let lifecycleSessionTimeout: Double = 15 * 60
     private static let replayTerminalApp = "DevIsland Replay"
@@ -346,7 +348,8 @@ class AppState: ObservableObject {
         } else {
             providerOutput = nil
         }
-        let rich = IPCRichResponse(requestId: requestId, decision: decision, providerOutput: providerOutput)
+        let injection = parsed?["injection"] as? String
+        let rich = IPCRichResponse(requestId: requestId, decision: decision, injection: injection, providerOutput: providerOutput)
         if let richData = try? JSONEncoder().encode(rich),
            let richString = String(data: richData, encoding: .utf8) {
             return richString
@@ -558,6 +561,17 @@ class AppState: ObservableObject {
                     json: json,
                     eventName: event
                 )
+        }
+
+        // PTY output events are handled before hook_events recording to avoid polluting the replay log.
+        if event == "PTYOutput" {
+            handlePTYOutputEvent(
+                sessionId: sessionId,
+                provider: providerKind(for: agentKind),
+                content: (parsedJSON?["content"] as? String) ?? "",
+                responseHandler: responseHandler
+            )
+            return
         }
 
         let normalizedEvent = HookEventNormalizer.normalizedName(event)
@@ -1811,6 +1825,87 @@ class AppState: ObservableObject {
 
     func flushApprovalPersistenceForTesting() {
         approvalPersistenceQueue.sync {}
+    }
+
+    func ptyMessages(sessionId: String? = nil, limit: Int = 500) throws -> [PTYMessage] {
+        guard let approvalProxy else { return [] }
+        return try approvalProxy.ptyMessages(sessionId: sessionId, limit: limit)
+    }
+
+    private func handlePTYOutputEvent(
+        sessionId: String,
+        provider: ProviderKind,
+        content: String,
+        responseHandler: (String) -> Void
+    ) {
+        guard Self.currentPTYEnabled(), !content.isEmpty else {
+            responseHandler("{\"response\":\"approved\"}")
+            return
+        }
+        // Sliding window buffer: keep the last 1 KB per session so patterns that
+        // span multiple os.read chunks (e.g. "Password:" split across two reads)
+        // are still matched correctly.
+        ptyBufferLock.lock()
+        let combined = (ptyOutputBuffers[sessionId] ?? "") + content
+        let window = combined.count > 1024 ? String(combined.suffix(1024)) : combined
+        ptyOutputBuffers[sessionId] = window
+        ptyBufferLock.unlock()
+
+        let patterns = Self.currentPTYAutoInjectPatterns()
+        let lowerWindow = window.lowercased()
+        let matched = patterns.first { lowerWindow.contains($0.pattern.lowercased()) }
+        let injectionText = matched?.response
+
+        // Clear the buffer on match to prevent the same pattern from re-firing.
+        if injectionText != nil {
+            ptyBufferLock.lock()
+            ptyOutputBuffers[sessionId] = ""
+            ptyBufferLock.unlock()
+        }
+
+        approvalPersistenceQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                try self.approvalProxy?.recordPTYMessage(
+                    sessionId: sessionId,
+                    provider: provider,
+                    direction: .output,
+                    content: content
+                )
+                if let injection = injectionText {
+                    try self.approvalProxy?.recordPTYMessage(
+                        sessionId: sessionId,
+                        provider: provider,
+                        direction: .input,
+                        content: injection
+                    )
+                }
+            } catch {
+                print("[DevIsland] [PTY] Failed to record PTY message: \(error)")
+            }
+        }
+
+        if let injection = injectionText {
+            let resp: [String: Any] = ["response": "approved", "injection": injection]
+            if let data = try? JSONSerialization.data(withJSONObject: resp),
+               let str = String(data: data, encoding: .utf8) {
+                responseHandler(str)
+                return
+            }
+        }
+        responseHandler("{\"response\":\"approved\"}")
+    }
+
+    private static func currentPTYEnabled() -> Bool {
+        UserDefaults.standard.bool(forKey: SettingsStore.DefaultsKey.ptyEnabled)
+    }
+
+    private static func currentPTYAutoInjectPatterns() -> [PTYAutoInjectPattern] {
+        guard let data = UserDefaults.standard.data(forKey: SettingsStore.DefaultsKey.ptyAutoInjectPatterns),
+              let patterns = try? JSONDecoder().decode([PTYAutoInjectPattern].self, from: data) else {
+            return []
+        }
+        return patterns
     }
 
     private func startTimeout() {

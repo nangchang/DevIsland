@@ -12,7 +12,7 @@ final class SQLiteApprovalStore {
         case unsupportedSchemaVersion(Int32)
     }
 
-    static let currentSchemaVersion: Int32 = 1
+    static let currentSchemaVersion: Int32 = 2
 
     static func deterministicRuleID(
         provider: ProviderKind,
@@ -354,6 +354,7 @@ final class SQLiteApprovalStore {
             throw StoreError.unsupportedSchemaVersion(version)
         }
         try migrateToVersion1()
+        if version < 2 { try migrateToVersion2() }
         try execute("PRAGMA user_version = \(Self.currentSchemaVersion)")
     }
 
@@ -444,6 +445,73 @@ final class SQLiteApprovalStore {
         try execute("CREATE INDEX IF NOT EXISTS idx_rules_lookup ON rules(provider, scope, tool_name, pattern, enabled, expires_at)")
         try execute("CREATE INDEX IF NOT EXISTS idx_hook_events_session ON hook_events(provider, session_id, received_at)")
         try execute("CREATE INDEX IF NOT EXISTS idx_decisions_session ON approval_decisions(provider, session_id, decided_at)")
+    }
+
+    private func migrateToVersion2() throws {
+        try execute("ALTER TABLE pty_messages ADD COLUMN provider TEXT NOT NULL DEFAULT ''")
+        try execute("CREATE INDEX IF NOT EXISTS idx_pty_messages_session ON pty_messages(session_id, created_at DESC)")
+    }
+
+    // MARK: - PTY
+
+    @discardableResult
+    func insertPTYMessage(
+        sessionId: String,
+        provider: ProviderKind,
+        direction: PTYDirection,
+        content: String,
+        createdAt: Date = Date()
+    ) throws -> Int64 {
+        try execute(
+            """
+            INSERT INTO pty_messages (session_id, provider, direction, message, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [sessionId, provider.rawValue, direction.rawValue, content, createdAt.timeIntervalSince1970]
+        )
+        return sqlite3_last_insert_rowid(database)
+    }
+
+    func ptyMessages(sessionId: String? = nil, limit: Int = 500) throws -> [PTYMessage] {
+        let wherePart = sessionId != nil ? "WHERE session_id = ?" : ""
+        let sql = """
+            SELECT id, session_id, provider, direction, message, created_at
+            FROM pty_messages
+            \(wherePart)
+            ORDER BY created_at DESC
+            LIMIT ?
+            """
+        var parameters: [Any?] = []
+        if let sessionId { parameters.append(sessionId) }
+        parameters.append(limit)
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(statement) }
+        try bind(parameters, to: statement)
+
+        var messages: [PTYMessage] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard
+                let sessionIdVal = columnString(statement, 1),
+                let directionRaw = columnString(statement, 3),
+                let direction = PTYDirection(rawValue: directionRaw),
+                let content = columnString(statement, 4)
+            else { continue }
+            let providerRaw = columnString(statement, 2) ?? ""
+            let provider = ProviderKind(rawValue: providerRaw) ?? .any
+            messages.append(PTYMessage(
+                id: sqlite3_column_int64(statement, 0),
+                sessionId: sessionIdVal,
+                provider: provider,
+                direction: direction,
+                content: content,
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 5))
+            ))
+        }
+        return messages
     }
 
     private func firstDecision(

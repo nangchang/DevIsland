@@ -61,4 +61,25 @@ final class ApprovalProxyController {
     func replayLog(limit: Int = 200) throws -> [ReplayLogEntry] {
         try store.replayLog(limit: limit)
     }
+
+    @discardableResult
+    func recordPTYMessage(
+        sessionId: String,
+        provider: ProviderKind,
+        direction: PTYDirection,
+        content: String,
+        createdAt: Date = Date()
+    ) throws -> Int64 {
+        try store.insertPTYMessage(
+            sessionId: sessionId,
+            provider: provider,
+            direction: direction,
+            content: content,
+            createdAt: createdAt
+        )
+    }
+
+    func ptyMessages(sessionId: String? = nil, limit: Int = 500) throws -> [PTYMessage] {
+        try store.ptyMessages(sessionId: sessionId, limit: limit)
+    }
 }

@@ -8,6 +8,7 @@ enum AppWindowRouter {
     private static var settingsController: HostedWindowController?
     private static var approvalRulesController: HostedWindowController?
     private static var replayLogController: HostedWindowController?
+    private static var ptyTranscriptController: HostedWindowController?
 
     static func showSettings() {
         let controller = cachedController(&settingsController) {
@@ -37,6 +38,17 @@ enum AppWindowRouter {
                 title: "Replay Log",
                 size: NSSize(width: 900, height: 600),
                 rootView: AnyView(ReplayLogWindowView())
+            )
+        }
+        controller.show()
+    }
+
+    static func showPTYTranscript() {
+        let controller = cachedController(&ptyTranscriptController) {
+            HostedWindowController(
+                title: "PTY Transcript",
+                size: NSSize(width: 860, height: 560),
+                rootView: AnyView(PTYTranscriptWindowView())
             )
         }
         controller.show()
@@ -109,6 +121,7 @@ struct SettingsWindowView: View {
                 .tabItem { Label("Bridge / IPC", systemImage: "cable.connector") }
 
             ExperimentalPTYSettingsPane()
+                .environmentObject(store)
                 .tabItem { Label("Experimental", systemImage: "testtube.2") }
         }
         .padding(16)
@@ -285,11 +298,71 @@ private struct BridgeIPCSettingsPane: View {
 }
 
 private struct ExperimentalPTYSettingsPane: View {
+    @EnvironmentObject private var store: SettingsStore
+    @State private var newPattern = ""
+    @State private var newResponse = ""
+
     var body: some View {
         Form {
-            Section("PTY") {
-                Text("PTY-assisted interaction remains optional and is scheduled after replay log and policy engine work.")
-                    .foregroundStyle(.secondary)
+            Section("PTY Wrapper") {
+                Toggle("Enable PTY logging and auto-inject", isOn: $store.settings.ptyEnabled)
+                Stepper("Transcript retention: \(store.settings.ptyTranscriptRetentionDays) days",
+                        value: $store.settings.ptyTranscriptRetentionDays, in: 1...365)
+                Button("View PTY Transcript…") {
+                    AppWindowRouter.showPTYTranscript()
+                }
+            }
+
+            Section("Auto-inject patterns") {
+                if store.settings.ptyAutoInjectPatterns.isEmpty {
+                    Text("No patterns. Add one below.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(store.settings.ptyAutoInjectPatterns) { pattern in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(pattern.pattern).font(.system(.body, design: .monospaced))
+                                Text("→ \(pattern.response)").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button(role: .destructive) {
+                                store.settings.ptyAutoInjectPatterns.removeAll { $0.id == pattern.id }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+                HStack {
+                    TextField("Pattern (substring)", text: $newPattern)
+                    TextField("Response text", text: $newResponse)
+                    Button("Add") {
+                        let p = newPattern.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let r = newResponse.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !p.isEmpty, !r.isEmpty else { return }
+                        store.settings.ptyAutoInjectPatterns.append(PTYAutoInjectPattern(pattern: p, response: r))
+                        newPattern = ""
+                        newResponse = ""
+                    }
+                    .disabled(newPattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                              newResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+
+            Section("Usage") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Run a CLI agent through the PTY wrapper:")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("python3 devisland_pty.py --source claude -- claude")
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(6)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    Text("The script forwards PTYOutput hook events to the app.")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
             }
         }
         .formStyle(.grouped)
