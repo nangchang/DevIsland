@@ -13,6 +13,7 @@ struct PendingRequest: Identifiable {
     let toolName: String
     let rawToolName: String
     let workspaceRoot: String?
+    let isReplay: Bool
     let message: String
     let responseHandler: (String) -> Void
     let receivedAt: Date
@@ -227,6 +228,8 @@ class AppState: ObservableObject {
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
     private let timeoutDuration: Double = 120
     private let lifecycleSessionTimeout: Double = 15 * 60
+    private static let replayTerminalApp = "DevIsland Replay"
+    private static let replayTimestampFormatter = ISO8601DateFormatter()
 
     init(
         startServer: Bool = true,
@@ -513,6 +516,7 @@ class AppState: ObservableObject {
         var isPlanAction = false
         var displayToolName = ""
         var workspaceRoot: String?
+        var isReplayPayload = false
 
         if let json = parsedJSON {
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
@@ -529,6 +533,7 @@ class AppState: ObservableObject {
                 terminalTmuxClient = json["terminal_tmux_client"] as? String ?? ""
                 workspaceRoot = json["cwd"] as? String
                 notificationType = json["notification_type"] as? String ?? ""
+                isReplayPayload = json["replay_origin_event_id"] != nil
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
                 if Self.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
                     let label = URL(fileURLWithPath: cwd).lastPathComponent
@@ -874,6 +879,7 @@ class AppState: ObservableObject {
             toolName: displayToolName,
             rawToolName: toolName,
             workspaceRoot: workspaceRoot,
+            isReplay: isReplayPayload,
             message: displayMsg,
             responseHandler: responseHandler,
             receivedAt: Date()
@@ -974,15 +980,17 @@ class AppState: ObservableObject {
             if isInteractive {
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    guard !self.frontmostCheck(
-                        terminalApp,
-                        terminalTTY,
-                        terminalWindowId,
-                        terminalTabIndex,
-                        terminalTmuxPane,
-                        terminalTmuxSocket,
-                        terminalTmuxClient
-                    ) else { return }
+                    if !isReplayPayload {
+                        guard !self.frontmostCheck(
+                            terminalApp,
+                            terminalTTY,
+                            terminalWindowId,
+                            terminalTabIndex,
+                            terminalTmuxPane,
+                            terminalTmuxSocket,
+                            terminalTmuxClient
+                        ) else { return }
+                    }
                     self.isNotchExpanded = true
                     self.isExpandingFromRequest = true
                     self.currentSessionId = sessionId
@@ -1053,15 +1061,15 @@ class AppState: ObservableObject {
         // NSAppleScript는 메인 스레드에서만 안전하게 실행 가능 (Apple 문서)
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            let isFrontmost = self.frontmostCheck(
-                terminalApp,
-                terminalTTY,
-                terminalWindowId,
-                terminalTabIndex,
-                terminalTmuxPane,
-                terminalTmuxSocket,
-                terminalTmuxClient
-            )
+            let isFrontmost = !isReplayPayload && self.frontmostCheck(
+                    terminalApp,
+                    terminalTTY,
+                    terminalWindowId,
+                    terminalTabIndex,
+                    terminalTmuxPane,
+                    terminalTmuxSocket,
+                    terminalTmuxClient
+                )
 
             if isFrontmost {
                 print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
@@ -1492,7 +1500,7 @@ class AppState: ObservableObject {
         // showNextRequest()는 항상 메인 스레드에서 호출되므로 동기 호출로 충분
         let isFrontmost = isTerminalFrontmost(for: session)
 
-        if isFrontmost {
+        if isFrontmost && !next.isReplay {
             print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
             currentResponseHandler = next.responseHandler
             currentSessionId = next.sessionId
@@ -1729,22 +1737,27 @@ class AppState: ObservableObject {
             )
         }
 
-        if (payload["hook_event_name"] as? String)?.isEmpty != false,
-           (payload["event"] as? String)?.isEmpty != false {
+        let hasHookEventName = (payload["hook_event_name"] as? String).map { !$0.isEmpty } ?? false
+        let hasEventName = (payload["event"] as? String).map { !$0.isEmpty } ?? false
+        let hasToolName = (payload["tool_name"] as? String).map { !$0.isEmpty } ?? false
+        let hasSessionId = (payload["session_id"] as? String).map { !$0.isEmpty } ?? false
+        let hasSessionIdAlias = (payload["sessionId"] as? String).map { !$0.isEmpty } ?? false
+        let hasCLISource = (payload["cli_source"] as? String).map { !$0.isEmpty } ?? false
+
+        if !hasHookEventName && !hasEventName {
             payload["hook_event_name"] = entry.eventName
         }
-        if (payload["tool_name"] as? String)?.isEmpty != false {
+        if !hasToolName {
             payload["tool_name"] = entry.toolName
         }
-        if (payload["session_id"] as? String)?.isEmpty != false,
-           (payload["sessionId"] as? String)?.isEmpty != false {
+        if !hasSessionId && !hasSessionIdAlias {
             payload["session_id"] = entry.sessionId
         }
-        if (payload["cli_source"] as? String)?.isEmpty != false {
+        if !hasCLISource {
             payload["cli_source"] = entry.provider.rawValue
         }
         payload["terminal_title"] = "Replay Log"
-        payload["terminal_app"] = ""
+        payload["terminal_app"] = Self.replayTerminalApp
         payload["terminal_tty"] = ""
         payload["terminal_window_id"] = ""
         payload["terminal_tab_index"] = ""
@@ -1752,7 +1765,7 @@ class AppState: ObservableObject {
         payload["terminal_tmux_socket"] = ""
         payload["terminal_tmux_client"] = ""
         payload["replay_origin_event_id"] = entry.id
-        payload["replay_origin_received_at"] = ISO8601DateFormatter().string(from: entry.receivedAt)
+        payload["replay_origin_received_at"] = Self.replayTimestampFormatter.string(from: entry.receivedAt)
 
         guard JSONSerialization.isValidJSONObject(payload),
               let replayData = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
