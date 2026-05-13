@@ -102,7 +102,10 @@ def send_pty_output(
             raw_body = _recv_exactly(sock, length)
             if not raw_body:
                 return None
-            resp = json.loads(raw_body)
+            try:
+                resp = json.loads(raw_body)
+            except json.JSONDecodeError:
+                return None
             return resp.get("injection")
     except Exception as exc:
         print(f"[devisland_pty] IPC error: {exc}", file=sys.stderr)
