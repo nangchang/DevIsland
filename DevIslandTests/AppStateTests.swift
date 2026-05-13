@@ -220,6 +220,38 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(decision?.action, .allow)
         XCTAssertEqual(decision?.source, .sessionCache)
     }
+
+    func testReplayHookEventRequeuesStoredApprovalPayload() throws {
+        let entry = ReplayLogEntry(
+            id: 42,
+            requestId: "request-42",
+            provider: .codex,
+            sessionId: "replay-session",
+            eventName: "PermissionRequest",
+            toolName: "shell",
+            payloadJSON: """
+            {
+              "hook_event_name": "PermissionRequest",
+              "session_id": "replay-session",
+              "cli_source": "codex",
+              "tool_name": "shell",
+              "tool_input": {"command": "npm test"}
+            }
+            """,
+            receivedAt: Date(timeIntervalSince1970: 1_000),
+            decisionAction: nil,
+            decisionSource: nil,
+            decisionReason: nil,
+            decidedAt: nil
+        )
+
+        try appState.replayHookEvent(entry)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+
+        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertEqual(appState.pendingItems.first?.sessionId, "replay-session")
+        XCTAssertEqual(appState.pendingItems.first?.toolName, "shell")
+    }
     
     func testSafeToolAutoApproval() {
         appState.autoApproveSafeTools = true

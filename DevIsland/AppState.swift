@@ -1719,6 +1719,56 @@ class AppState: ObservableObject {
         ))
     }
 
+    func replayHookEvent(_ entry: ReplayLogEntry) throws {
+        guard let data = entry.payloadJSON.data(using: .utf8),
+              var payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw NSError(
+                domain: "ReplayLog",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Replay payload is not valid JSON."]
+            )
+        }
+
+        if (payload["hook_event_name"] as? String)?.isEmpty != false,
+           (payload["event"] as? String)?.isEmpty != false {
+            payload["hook_event_name"] = entry.eventName
+        }
+        if (payload["tool_name"] as? String)?.isEmpty != false {
+            payload["tool_name"] = entry.toolName
+        }
+        if (payload["session_id"] as? String)?.isEmpty != false,
+           (payload["sessionId"] as? String)?.isEmpty != false {
+            payload["session_id"] = entry.sessionId
+        }
+        if (payload["cli_source"] as? String)?.isEmpty != false {
+            payload["cli_source"] = entry.provider.rawValue
+        }
+        payload["terminal_title"] = "Replay Log"
+        payload["terminal_app"] = ""
+        payload["terminal_tty"] = ""
+        payload["terminal_window_id"] = ""
+        payload["terminal_tab_index"] = ""
+        payload["terminal_tmux_pane"] = ""
+        payload["terminal_tmux_socket"] = ""
+        payload["terminal_tmux_client"] = ""
+        payload["replay_origin_event_id"] = entry.id
+        payload["replay_origin_received_at"] = ISO8601DateFormatter().string(from: entry.receivedAt)
+
+        guard JSONSerialization.isValidJSONObject(payload),
+              let replayData = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+              let replayMessage = String(data: replayData, encoding: .utf8) else {
+            throw NSError(
+                domain: "ReplayLog",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Replay payload could not be serialized."]
+            )
+        }
+
+        handleMessage(replayMessage) { response in
+            print("[DevIsland] [REPLAY] Replayed event \(entry.id) completed with response: \(response)")
+        }
+    }
+
     func addCodexPersistentRule(toolName: String, action: RuleAction) throws {
         guard let approvalProxy else { return }
         let trimmed = toolName.trimmingCharacters(in: .whitespacesAndNewlines)
