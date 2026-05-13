@@ -19,6 +19,7 @@ final class ReplayLogViewModel: ObservableObject {
     }
 
     func refresh() {
+        statusMessage = nil
         do {
             entries = try appState.replayLogEntries()
             if selectedEntryID == nil || !entries.contains(where: { $0.id == selectedEntryID }) {
@@ -32,18 +33,28 @@ final class ReplayLogViewModel: ObservableObject {
 
     func createRule(action: RuleAction) {
         guard let selectedEntry else { return }
+        guard selectedEntry.provider == .codex else {
+            errorMessage = "Rule creation is currently supported for Codex replay entries only."
+            statusMessage = nil
+            return
+        }
         do {
             try appState.addPersistentRule(from: selectedEntry, action: action)
             statusMessage = "\(selectedEntry.provider.rawValue) \(selectedEntry.toolName) \(action.rawValue) rule saved"
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+            statusMessage = nil
         }
     }
 }
 
 struct ReplayLogWindowView: View {
-    @StateObject private var viewModel = ReplayLogViewModel()
+    @StateObject private var viewModel: ReplayLogViewModel
+
+    init(appState: AppState = .shared) {
+        _viewModel = StateObject(wrappedValue: ReplayLogViewModel(appState: appState))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -169,7 +180,8 @@ private struct ReplayLogDetail: View {
     }
 
     private func header(_ entry: ReplayLogEntry) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let canCreateRule = entry.provider == .codex && !entry.toolName.isEmpty
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(entry.toolName.isEmpty ? "Unknown tool" : entry.toolName)
                     .font(.title3.weight(.semibold))
@@ -177,10 +189,15 @@ private struct ReplayLogDetail: View {
                 Spacer()
                 HStack(spacing: 8) {
                     Button("Allow Rule") { createRule(.allow) }
-                        .disabled(entry.toolName.isEmpty)
+                        .disabled(!canCreateRule)
                     Button("Deny Rule") { createRule(.deny) }
-                        .disabled(entry.toolName.isEmpty)
+                        .disabled(!canCreateRule)
                 }
+            }
+            if entry.provider != .codex {
+                Label("Rule creation is currently available for Codex replay entries.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                 detailRow("Provider", entry.provider.rawValue)
