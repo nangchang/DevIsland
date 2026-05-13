@@ -35,12 +35,8 @@ enum AppWindowRouter {
         let controller = cachedController(&replayLogController) {
             HostedWindowController(
                 title: "Replay Log",
-                size: NSSize(width: 720, height: 480),
-                rootView: AnyView(PlaceholderToolWindowView(
-                    title: "Replay Log",
-                    systemImage: "clock.arrow.circlepath",
-                    message: "Hook event replay, decision audit, and rule creation from events will be implemented in a later Approval Proxy phase."
-                ))
+                size: NSSize(width: 900, height: 600),
+                rootView: AnyView(ReplayLogWindowView())
             )
         }
         controller.show()
