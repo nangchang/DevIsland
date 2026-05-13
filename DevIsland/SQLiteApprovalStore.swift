@@ -221,16 +221,21 @@ final class SQLiteApprovalStore {
         try fetchReplayLog(
             sql:
                 """
+                WITH latest_decisions AS (
+                    SELECT
+                        hook_event_id,
+                        action,
+                        source,
+                        reason,
+                        decided_at,
+                        ROW_NUMBER() OVER(PARTITION BY hook_event_id ORDER BY decided_at DESC) AS row_number
+                    FROM approval_decisions
+                )
                 SELECT e.id, e.request_id, e.provider, e.session_id, e.event_name, e.tool_name,
                        e.payload_json, e.received_at,
                        d.action, d.source, d.reason, d.decided_at
                 FROM hook_events e
-                LEFT JOIN approval_decisions d ON d.id = (
-                    SELECT id FROM approval_decisions
-                    WHERE hook_event_id = e.id
-                    ORDER BY decided_at DESC
-                    LIMIT 1
-                )
+                LEFT JOIN latest_decisions d ON d.hook_event_id = e.id AND d.row_number = 1
                 ORDER BY e.received_at DESC
                 LIMIT ?
                 """,
@@ -511,6 +516,20 @@ final class SQLiteApprovalStore {
     }
 
     private func fetchReplayLog(sql: String, parameters: [Any?]) throws -> [ReplayLogEntry] {
+        enum Column {
+            static let id: Int32 = 0
+            static let requestId: Int32 = 1
+            static let provider: Int32 = 2
+            static let sessionId: Int32 = 3
+            static let eventName: Int32 = 4
+            static let toolName: Int32 = 5
+            static let payloadJSON: Int32 = 6
+            static let receivedAt: Int32 = 7
+            static let decisionAction: Int32 = 8
+            static let decisionSource: Int32 = 9
+            static let decisionReason: Int32 = 10
+            static let decidedAt: Int32 = 11
+        }
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
             throw StoreError.prepareFailed(lastErrorMessage)
@@ -521,30 +540,30 @@ final class SQLiteApprovalStore {
         var entries: [ReplayLogEntry] = []
         while sqlite3_step(statement) == SQLITE_ROW {
             guard
-                let provider = columnString(statement, 2).flatMap(ProviderKind.init(rawValue:)),
-                let sessionId = columnString(statement, 3),
-                let eventName = columnString(statement, 4),
-                let toolName = columnString(statement, 5),
-                let payloadJSON = columnString(statement, 6)
+                let provider = columnString(statement, Column.provider).flatMap(ProviderKind.init(rawValue:)),
+                let sessionId = columnString(statement, Column.sessionId),
+                let eventName = columnString(statement, Column.eventName),
+                let toolName = columnString(statement, Column.toolName),
+                let payloadJSON = columnString(statement, Column.payloadJSON)
             else {
                 continue
             }
-            let receivedAt = Date(timeIntervalSince1970: sqlite3_column_double(statement, 7))
-            let decidedAt = sqlite3_column_type(statement, 11) == SQLITE_NULL
+            let receivedAt = Date(timeIntervalSince1970: sqlite3_column_double(statement, Column.receivedAt))
+            let decidedAt = sqlite3_column_type(statement, Column.decidedAt) == SQLITE_NULL
                 ? nil
-                : Date(timeIntervalSince1970: sqlite3_column_double(statement, 11))
+                : Date(timeIntervalSince1970: sqlite3_column_double(statement, Column.decidedAt))
             entries.append(ReplayLogEntry(
-                id: sqlite3_column_int64(statement, 0),
-                requestId: columnString(statement, 1),
+                id: sqlite3_column_int64(statement, Column.id),
+                requestId: columnString(statement, Column.requestId),
                 provider: provider,
                 sessionId: sessionId,
                 eventName: eventName,
                 toolName: toolName,
                 payloadJSON: payloadJSON,
                 receivedAt: receivedAt,
-                decisionAction: columnString(statement, 8).flatMap(RuleAction.init(rawValue:)),
-                decisionSource: columnString(statement, 9).flatMap(ApprovalPolicyDecision.Source.init(rawValue:)),
-                decisionReason: columnString(statement, 10),
+                decisionAction: columnString(statement, Column.decisionAction).flatMap(RuleAction.init(rawValue:)),
+                decisionSource: columnString(statement, Column.decisionSource).flatMap(ApprovalPolicyDecision.Source.init(rawValue:)),
+                decisionReason: columnString(statement, Column.decisionReason),
                 decidedAt: decidedAt
             ))
         }
