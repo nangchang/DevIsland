@@ -14,6 +14,7 @@ class HookSocketServer {
     private var activeConnections: [UUID: NWConnection] = [:]
     private let connectionQueue = DispatchQueue(label: "DevIsland.HookSocketServer.connections")
     private let unixQueue = DispatchQueue(label: "DevIsland.HookSocketServer.unix")
+    private let unixClientTimeoutSeconds = 300
     private var unixListenFD: Int32 = -1
     private var unixAcceptSource: DispatchSourceRead?
 
@@ -100,13 +101,16 @@ class HookSocketServer {
                 }
             }
 
+            let previousUmask = umask(mode_t(S_IRWXG | S_IRWXO))
             let bindResult = withUnsafePointer(to: &address) { pointer in
                 pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
-                    bind(fd, socketAddress, socklen_t(MemoryLayout<sa_family_t>.size + pathBytes.count + 1))
+                    bind(fd, socketAddress, socklen_t(MemoryLayout<sockaddr_un>.size))
                 }
             }
+            let bindErrno = errno
+            umask(previousUmask)
             guard bindResult == 0 else {
-                let error = POSIXError(.init(rawValue: errno) ?? .EIO)
+                let error = POSIXError(.init(rawValue: bindErrno) ?? .EIO)
                 close(fd)
                 throw error
             }
@@ -167,6 +171,7 @@ class HookSocketServer {
     }
 
     private func handleUnixClient(_ fd: Int32) {
+        configureUnixClient(fd)
         var payload = Data()
         var buffer = [UInt8](repeating: 0, count: 65_536)
         while true {
@@ -192,6 +197,7 @@ class HookSocketServer {
             return
         }
 
+        // 0x7B == "{": raw JSON from legacy clients without length-prefixed framing.
         if payload.first == 0x7B {
             deliverUnixPayload(payload, framed: false, fd: fd)
         } else {
@@ -208,6 +214,14 @@ class HookSocketServer {
         }
     }
 
+    private func configureUnixClient(_ fd: Int32) {
+        var timeout = timeval(tv_sec: unixClientTimeoutSeconds, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        var noSigpipe: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size))
+    }
+
     private func deliverUnixPayload(_ data: Data, framed: Bool, fd: Int32) {
         guard let message = String(data: data, encoding: .utf8) else {
             close(fd)
@@ -215,22 +229,43 @@ class HookSocketServer {
         }
         let requestId = framed ? extractRequestId(from: data) : nil
         DispatchQueue.main.async { [weak self] in
-            self?.onMessageReceived?(message, requestId) { response in
-                let responseData: Data
-                if framed {
-                    let responseBytes = Data(response.utf8)
-                    let length = UInt32(responseBytes.count).bigEndian
-                    var framedResponse = withUnsafeBytes(of: length) { Data($0) }
-                    framedResponse.append(responseBytes)
-                    responseData = framedResponse
+            let responseQueue = self?.unixQueue ?? DispatchQueue.global(qos: .userInitiated)
+            guard let onMessageReceived = self?.onMessageReceived else {
+                responseQueue.async { close(fd) }
+                return
+            }
+            onMessageReceived(message, requestId) { response in
+                let responseData = Self.unixResponseData(response, framed: framed)
+                responseQueue.async {
+                    Self.sendAll(responseData, to: fd)
+                    close(fd)
+                }
+            }
+        }
+    }
+
+    private static func unixResponseData(_ response: String, framed: Bool) -> Data {
+        guard framed else { return Data(response.utf8) }
+        let responseBytes = Data(response.utf8)
+        let length = UInt32(responseBytes.count).bigEndian
+        var framedResponse = withUnsafeBytes(of: length) { Data($0) }
+        framedResponse.append(responseBytes)
+        return framedResponse
+    }
+
+    private static func sendAll(_ data: Data, to fd: Int32) {
+        data.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return }
+            var offset = 0
+            while offset < rawBuffer.count {
+                let sent = send(fd, baseAddress.advanced(by: offset), rawBuffer.count - offset, 0)
+                if sent > 0 {
+                    offset += sent
+                } else if sent < 0, errno == EINTR {
+                    continue
                 } else {
-                    responseData = Data(response.utf8)
+                    return
                 }
-                responseData.withUnsafeBytes { rawBuffer in
-                    guard let baseAddress = rawBuffer.baseAddress else { return }
-                    _ = send(fd, baseAddress, rawBuffer.count, 0)
-                }
-                close(fd)
             }
         }
     }
