@@ -590,16 +590,41 @@ class AppState: ObservableObject {
         let isStop = stopEvents.contains(normalizedEvent)
         let isApproval = Self.isApprovalEvent(normalizedEvent, for: agentKind) && !isUserQuestionTool
         let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
+        let replayToolName = toolName.isEmpty ? displayToolName : toolName
 
         if isStop {
             guard !sessionId.isEmpty else {
-                responseHandler("{\"response\": \"approved\"}")
+                respondWithReplay(
+                    "{\"response\": \"approved\"}",
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .allow,
+                    source: .automatic,
+                    reason: "stop event"
+                )
                 return
             }
             let fullSessionId = sessionId
             DispatchQueue.main.async {
                 let removedRequests = self.pendingQueue.filter { $0.sessionId == fullSessionId }
-                removedRequests.forEach { $0.responseHandler("{\"response\": \"denied\"}") }
+                removedRequests.forEach {
+                    self.respondWithReplay(
+                        "{\"response\": \"denied\"}",
+                        responseHandler: $0.responseHandler,
+                        hookEventId: $0.hookEventId,
+                        agentKind: $0.agentKind,
+                        sessionId: $0.sessionId,
+                        toolName: $0.rawToolName.isEmpty ? $0.toolName : $0.rawToolName,
+                        workspaceRoot: $0.workspaceRoot,
+                        action: .deny,
+                        source: .automatic,
+                        reason: "session stopped"
+                    )
+                }
                 self.pendingQueue.removeAll { $0.sessionId == fullSessionId }
                 self.pendingItems.removeAll { $0.sessionId == fullSessionId }
                 self.pendingCount = self.pendingQueue.count
@@ -629,7 +654,18 @@ class AppState: ObservableObject {
                     self.showNextRequest()
                 }
             }
-            responseHandler("{\"response\": \"approved\"}")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "stop event"
+            )
             return
         }
 
@@ -643,9 +679,31 @@ class AppState: ObservableObject {
             ]
             if let data = try? JSONSerialization.data(withJSONObject: responsePayload),
                let payload = String(data: data, encoding: .utf8) {
-                responseHandler(payload)
+                respondWithReplay(
+                    payload,
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .deny,
+                    source: .automatic,
+                    reason: denialReason
+                )
             } else {
-                responseHandler("{\"response\":\"denied\"}")
+                respondWithReplay(
+                    "{\"response\":\"denied\"}",
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .deny,
+                    source: .automatic,
+                    reason: denialReason
+                )
             }
             return
         }
@@ -653,12 +711,34 @@ class AppState: ObservableObject {
         if isNotification {
             print("[DevIsland] notification event: \(event) for \(toolName) → auto-approved")
             guard !sessionId.isEmpty else {
-                responseHandler("{\"response\": \"approved\"}")
+                respondWithReplay(
+                    "{\"response\": \"approved\"}",
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .allow,
+                    source: .automatic,
+                    reason: "notification"
+                )
                 return
             }
             if normalizedEvent == "notification",
                notificationType == "permission_prompt" || displayMsg.lowercased().contains("needs your permission") {
-                responseHandler("{\"response\": \"approved\"}")
+                respondWithReplay(
+                    "{\"response\": \"approved\"}",
+                    responseHandler: responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .allow,
+                    source: .automatic,
+                    reason: "permission prompt notification"
+                )
                 return
             }
             let fullSessionId = sessionId
@@ -737,19 +817,52 @@ class AppState: ObservableObject {
                 }
             }
 
-            responseHandler("{\"response\": \"approved\"}")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "notification"
+            )
             return
         }
 
         guard isApproval else {
             print("[DevIsland] ignoring non-approval event: \(event)")
-            responseHandler("{\"response\": \"approved\"}")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "non-approval event"
+            )
             return
         }
 
         guard !toolName.isEmpty || !displayMsg.isEmpty else {
             print("[DevIsland] ignoring empty approval request")
-            responseHandler("{\"response\": \"approved\"}")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "empty approval request"
+            )
             return
         }
 
@@ -843,7 +956,18 @@ class AppState: ObservableObject {
 
         if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
             print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
-            request.responseHandler("{\"response\": \"approved\"}")
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: request.responseHandler,
+                hookEventId: hookEventId,
+                agentKind: agentKind,
+                sessionId: sessionId,
+                toolName: replayToolName,
+                workspaceRoot: workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "auto-approved"
+            )
             
             // 터미널 입력이 필요한 Interactive 툴인 경우 노치를 펼쳐 사용자에게 알림(Notification) 표시
             // 단, 터미널이 이미 포커스 상태라면 알림 불필요
@@ -941,7 +1065,18 @@ class AppState: ObservableObject {
 
             if isFrontmost {
                 print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
-                request.responseHandler("{\"response\": \"pass\"}")
+                self.respondWithReplay(
+                    "{\"response\": \"pass\"}",
+                    responseHandler: request.responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .prompt,
+                    source: .automatic,
+                    reason: "terminal focused"
+                )
                 if !sessionId.isEmpty {
                     self.updateActiveSession(
                         sessionId: sessionId,
@@ -1419,8 +1554,8 @@ class AppState: ObservableObject {
         toolName: String,
         payload: [String: Any]?
     ) -> Int64? {
-        guard let approvalProxy, let payload else { return nil }
-        let payloadJSON = Self.replayPayloadString(from: payload)
+        guard let approvalProxy else { return nil }
+        let payloadJSON = payload.map { Self.replayPayloadString(from: $0) } ?? "{}"
         var eventId: Int64?
         approvalPersistenceQueue.sync {
             do {
@@ -1444,6 +1579,7 @@ class AppState: ObservableObject {
         agentKind: BuddyKind?,
         sessionId: String,
         toolName: String,
+        workspaceRoot: String?,
         action: RuleAction,
         source: ApprovalPolicyDecision.Source,
         reason: String?
@@ -1458,7 +1594,7 @@ class AppState: ObservableObject {
             provider: providerKind(for: agentKind),
             sessionId: sessionId,
             toolName: toolName,
-            workspaceRoot: currentWorkspaceRoot
+            workspaceRoot: workspaceRoot
         )
         let decision = ApprovalPolicyDecision(action: action, source: source, ruleId: nil)
         approvalPersistenceQueue.sync {
@@ -1473,6 +1609,31 @@ class AppState: ObservableObject {
                 print("[DevIsland] [REPLAY] Failed to record decision: \(error)")
             }
         }
+    }
+
+    private func respondWithReplay(
+        _ payload: String,
+        responseHandler: (String) -> Void,
+        hookEventId: Int64?,
+        agentKind: BuddyKind,
+        sessionId: String,
+        toolName: String,
+        workspaceRoot: String?,
+        action: RuleAction,
+        source: ApprovalPolicyDecision.Source,
+        reason: String? = nil
+    ) {
+        responseHandler(payload)
+        recordReplayDecision(
+            hookEventId: hookEventId,
+            agentKind: agentKind,
+            sessionId: sessionId,
+            toolName: toolName,
+            workspaceRoot: workspaceRoot,
+            action: action,
+            source: source,
+            reason: reason
+        )
     }
 
     private static func replayPayloadString(from payload: [String: Any]) -> String {
@@ -1635,8 +1796,9 @@ class AppState: ObservableObject {
             agentKind: currentAgentKind,
             sessionId: currentSessionId,
             toolName: currentRawToolName.isEmpty ? currentToolName : currentRawToolName,
+            workspaceRoot: currentWorkspaceRoot,
             action: passToTerminal ? .prompt : approved ? .allow : .deny,
-            source: .fallback,
+            source: reason == nil ? .user : .automatic,
             reason: reason
         )
         persistCodexApprovalScope(approved: approved, approvalScope: approvalScope)

@@ -121,6 +121,8 @@ struct ApprovalPolicyDecision: Equatable {
         case persistentRule
         case sessionCache
         case fallback
+        case user
+        case automatic
     }
 
     var action: RuleAction
