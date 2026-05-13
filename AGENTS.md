@@ -444,7 +444,7 @@ PRAGMAs: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`
 - Per-session 1 KB sliding window buffer in AppState resolves patterns split across chunk boundaries.
 - `injection` field in `IPCRichResponse` carries text to write back to the PTY stdin.
 
-### Known Gaps (see `docs/approval-proxy-gap-analysis.md`)
+### Known Gaps
 
 | # | Location | Description |
 |---|---|---|

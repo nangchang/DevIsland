@@ -13,7 +13,7 @@ import Foundation
 //   - Glob/commandPrefix/pathPrefix: expose in default UI.
 //   - Regex: advanced mode only; apply max-length limit, catastrophic-backtracking
 //     pattern block, and compile-time validation before storing.
-//   See docs/approval-proxy-gap-analysis.md §2.1 and approval-proxy.md §6.2–6.3.
+//   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
 struct ApprovalPolicyEngine {
     let store: SQLiteApprovalStore
 

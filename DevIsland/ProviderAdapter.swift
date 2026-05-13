@@ -11,7 +11,7 @@ import Foundation
 //   customization. GeminiPromptPolicy should mirror ClaudePromptPolicy in structure
 //   and expose Gemini-specific BeforeTool control (e.g., auto-edit emulation policy,
 //   plan-mode detection, interactive emulation rules).
-//   See docs/approval-proxy-gap-analysis.md §2.4 and approval-proxy.md §3 (Gemini adapter).
+//   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
 struct ProviderAdapter {
     static let denialMessage = "DevIsland에서 거절되었습니다."
 

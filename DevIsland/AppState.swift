@@ -116,7 +116,7 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 //   - AskUserQuestion / ExitPlanMode flow → QuestionBroker (new type)
 //   - Gemini UX logic → GeminiSessionState or GeminiPromptPolicy
 //   Splitting reduces test surface and makes each concern independently testable.
-//   See docs/approval-proxy-gap-analysis.md §2.5 and approval-proxy.md §2 (module boundary).
+//   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
 class AppState: ObservableObject {
     static let shared = AppState(
         startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1",
@@ -216,7 +216,7 @@ class AppState: ObservableObject {
     //   and are invisible to the Approval Rules UI.
     //   Target: route Claude/Gemini approve() through ApprovalProxyController.store.insertRule()
     //   so all providers share a single SQLite source of truth (rules + session_cache tables).
-    //   See docs/approval-proxy-gap-analysis.md §2.3 and approval-proxy.md §6 (Policy Engine).
+    //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
     @Published var globalAutoApproveTypes: Set<String> = [] {
         didSet {
             userDefaults.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
@@ -1953,7 +1953,7 @@ class AppState: ObservableObject {
     //   updatedPermissions in the hook response (native mode) and has no DB record.
     //   Fix: after building providerOutput for Claude, insert into session_cache here
     //   so replay log and policy engine see a consistent history across providers.
-    //   See docs/approval-proxy-gap-analysis.md §2.2 and approval-proxy.md §4.2 (Option B/C).
+    //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
     private func sendDecision(
         approved: Bool,
         reason: String? = nil,

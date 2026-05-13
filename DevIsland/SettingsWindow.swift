@@ -144,7 +144,7 @@ private struct GeneralSettingsPane: View {
     var body: some View {
         Form {
             Section("Approval Proxy") {
-                Text("DevIsland is being expanded from a notch approval UI into the app-hosted Approval Proxy daemon and UI described in docs/approval-proxy.md.")
+                Text("DevIsland acts as a policy-based Approval Proxy daemon. The macOS app handles all policy decisions; the bridge scripts stay thin. See AGENTS.md for architecture details.")
                     .foregroundStyle(.secondary)
                 Button("Reset Approval Proxy Settings") {
                     store.resetToDefaults()
