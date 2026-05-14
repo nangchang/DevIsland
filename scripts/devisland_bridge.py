@@ -220,17 +220,17 @@ def fallback_decision() -> str:
     """Return the fallback decision when the app is unreachable.
 
     Reads approvalFallbackPolicy from bridge-config.json; defaults to "pass".
-    "denyUnknown" maps to "deny", everything else → "pass" (let the CLI handle it).
+    "deny" → deny, everything else → "pass" (let the CLI handle it).
 
     Intentional design: the default fallback is pass, not deny.
     DevIsland is an optional approval overlay. When the app is not running
     (e.g. user hasn't launched it, it crashed, or it's not installed), the
     bridge steps aside and lets the CLI's own permission system take over.
-    Fail-closed ("denyUnknown") is available as an opt-in policy for users
+    Fail-closed ("deny") is available as an opt-in policy for users
     who want hard enforcement even when the app is absent.
     """
-    policy = load_config().get("approvalFallbackPolicy", "allowReadOnly")
-    return "deny" if policy == "denyUnknown" else "pass"
+    policy = load_config().get("approvalFallbackPolicy", "pass")
+    return "deny" if policy == "deny" else "pass"
 
 
 # ---------------------------------------------------------------------------

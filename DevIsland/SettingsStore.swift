@@ -62,16 +62,16 @@ enum BridgeTransportKind: String, CaseIterable, Identifiable {
 }
 
 enum ApprovalFallbackPolicy: String, CaseIterable, Identifiable {
-    case denyUnknown
-    case allowReadOnly
+    case pass
+    case deny
 
     var id: String { rawValue }
 
     var label: String {
         let l = L10n.shared
         switch self {
-        case .denyUnknown:  return l.fallbackDeny
-        case .allowReadOnly: return l.fallbackAllow
+        case .pass:         return l.fallbackPass
+        case .deny:         return l.fallbackDeny
         }
     }
 }
@@ -119,7 +119,7 @@ struct AppSettings: Equatable {
         bridgeConnectTimeoutSeconds: 5,
         bridgeResponseTimeoutSeconds: 300,
         bridgeFallbackToTcp: true,
-        approvalFallbackPolicy: .denyUnknown,
+        approvalFallbackPolicy: .pass,
         replayRetentionDays: 30,
         ptyEnabled: false,
         ptyAutoInjectPatterns: [],

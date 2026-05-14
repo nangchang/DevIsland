@@ -39,7 +39,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings.bridgeConnectTimeoutSeconds, 5)
         XCTAssertEqual(store.settings.bridgeResponseTimeoutSeconds, 300)
         XCTAssertTrue(store.settings.bridgeFallbackToTcp)
-        XCTAssertEqual(store.settings.approvalFallbackPolicy, .denyUnknown)
+        XCTAssertEqual(store.settings.approvalFallbackPolicy, .pass)
         XCTAssertEqual(store.settings.replayRetentionDays, 30)
     }
 
@@ -53,7 +53,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.bridgeConnectTimeoutSeconds = 7
         store.settings.bridgeResponseTimeoutSeconds = 123
         store.settings.bridgeFallbackToTcp = false
-        store.settings.approvalFallbackPolicy = .allowReadOnly
+        store.settings.approvalFallbackPolicy = .deny
         store.settings.replayRetentionDays = 14
 
         let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
@@ -66,7 +66,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.settings.bridgeConnectTimeoutSeconds, 7)
         XCTAssertEqual(reloaded.settings.bridgeResponseTimeoutSeconds, 123)
         XCTAssertFalse(reloaded.settings.bridgeFallbackToTcp)
-        XCTAssertEqual(reloaded.settings.approvalFallbackPolicy, .allowReadOnly)
+        XCTAssertEqual(reloaded.settings.approvalFallbackPolicy, .deny)
         XCTAssertEqual(reloaded.settings.replayRetentionDays, 14)
     }
 
@@ -95,7 +95,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.bridgeConnectTimeoutSeconds = 7
         store.settings.bridgeResponseTimeoutSeconds = 123
         store.settings.bridgeFallbackToTcp = false
-        store.settings.approvalFallbackPolicy = .allowReadOnly
+        store.settings.approvalFallbackPolicy = .deny
 
         let data = try Data(contentsOf: bridgeConfigURL)
         let config = try JSONDecoder().decode(BridgeRuntimeConfig.self, from: data)
@@ -105,7 +105,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(config.bridgeConnectTimeoutSeconds, 7)
         XCTAssertEqual(config.bridgeResponseTimeoutSeconds, 123)
         XCTAssertFalse(config.bridgeFallbackToTcp)
-        XCTAssertEqual(config.approvalFallbackPolicy, "allowReadOnly")
+        XCTAssertEqual(config.approvalFallbackPolicy, "deny")
     }
 
     func testBridgeRuntimeConfigUsesRestrictedPermissions() throws {
