@@ -540,7 +540,7 @@ private struct ApprovalRulesWindowView: View {
             codexRuleError = nil
             loadCodexPersistentRules()
         } catch {
-            codexRuleError = L10n.shared.errSaveCodexRule(error.localizedDescription)
+            codexRuleError = l10n.errSaveCodexRule(error.localizedDescription)
         }
     }
 
@@ -550,7 +550,7 @@ private struct ApprovalRulesWindowView: View {
             codexRuleError = nil
             loadCodexPersistentRules()
         } catch {
-            codexRuleError = L10n.shared.errDeleteCodexRule(error.localizedDescription)
+            codexRuleError = l10n.errDeleteCodexRule(error.localizedDescription)
         }
     }
 
@@ -560,28 +560,28 @@ private struct ApprovalRulesWindowView: View {
             codexRuleError = nil
         } catch {
             codexPersistentRules = []
-            codexRuleError = L10n.shared.errLoadCodexRules(error.localizedDescription)
+            codexRuleError = l10n.errLoadCodexRules(error.localizedDescription)
         }
     }
 
     private func syncCodexPersistentRules() {
         do {
             let result = try state.syncCodexPersistentRules()
-            codexRuleSyncMessage = L10n.shared.exportedCodexRules(result.ruleCount, result.url.path)
+            codexRuleSyncMessage = l10n.exportedCodexRules(result.ruleCount, result.url.path)
             codexRuleError = nil
         } catch {
             codexRuleSyncMessage = nil
-            codexRuleError = L10n.shared.errExportCodexRules(error.localizedDescription)
+            codexRuleError = l10n.errExportCodexRules(error.localizedDescription)
         }
     }
 
     private func predefinedToolMenu(onSelect: @escaping (KnownTool) -> Void) -> some View {
-        Menu(L10n.shared.btnAddFromList) {
+        Menu(l10n.btnAddFromList) {
             ForEach(riskGroups, id: \.self) { risk in
                 let tools = ToolKnowledge.predefined.filter { $0.risk == risk }
                 if !tools.isEmpty {
                     Menu("\(risk.emoji) \(risk.rawValue)") {
-                        Button(L10n.shared.addAllRisk(risk.rawValue)) {
+                        Button(l10n.addAllRisk(risk.rawValue)) {
                             tools.forEach(onSelect)
                         }
                         Divider()

@@ -1140,12 +1140,11 @@ struct SessionRowView: View {
     @State private var timeAgo: String = ""
     private var tool: ToolInfo { toolInfo(for: session.lastToolName) }
     private var statusLabel: String? {
-        let l = L10n.shared
         switch session.status {
-        case .pending:       return l.statusPending
-        case .timeoutBypassed: return l.statusBypassed
-        case .autoApproved:  return l.statusAutoApproved
-        case .policyApproved: return l.statusPolicyApproved
+        case .pending:       return l10n.statusPending
+        case .timeoutBypassed: return l10n.statusBypassed
+        case .autoApproved:  return l10n.statusAutoApproved
+        case .policyApproved: return l10n.statusPolicyApproved
         case .idle:          return nil
         }
     }
@@ -1255,7 +1254,7 @@ struct SessionRowView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
-            .help(session.isPending ? L10n.shared.helpDismissPending : L10n.shared.helpDismissSession)
+            .help(session.isPending ? l10n.helpDismissPending : l10n.helpDismissSession)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -1446,14 +1445,14 @@ struct NotchView: View {
                     if !displayedSessionId.isEmpty {
                         HStack(spacing: 6) {
                             TagView(icon: "terminal.fill", text: String(displayedSessionId.prefix(8)))
-                            TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == displayedSessionId })?.terminalTitle ?? L10n.shared.notchUnknown)
+                            TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == displayedSessionId })?.terminalTitle ?? l10n.notchUnknown)
                             if state.pendingCount > 1 {
-                                TagView(icon: "list.bullet", text: L10n.shared.tasksQueued(state.pendingCount), color: .orange.opacity(0.2))
+                                TagView(icon: "list.bullet", text: l10n.tasksQueued(state.pendingCount), color: .orange.opacity(0.2))
                             }
                         }
                     } else if state.pendingCount > 1 {
                         HStack(spacing: 6) {
-                            TagView(icon: "list.bullet", text: L10n.shared.tasksQueued(state.pendingCount), color: .orange.opacity(0.2))
+                            TagView(icon: "list.bullet", text: l10n.tasksQueued(state.pendingCount), color: .orange.opacity(0.2))
                         }
                     }
                 }
@@ -1472,7 +1471,7 @@ struct NotchView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
-                    .help(L10n.shared.helpFocusTerminal)
+                    .help(l10n.helpFocusTerminal)
                 }
 
                 // Close Button
@@ -1576,7 +1575,7 @@ struct NotchView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
                             .buttonStyle(.plain)
-                            .help(L10n.shared.helpFocusTerminal)
+                            .help(l10n.helpFocusTerminal)
 
                             Button(action: { state.deny() }) {
                                 HStack {
@@ -1615,8 +1614,8 @@ struct NotchView: View {
                                         .foregroundColor(tool.color)
                                         
                                     Menu {
-                                        Button(L10n.shared.notchAutoApproveSession) { state.approve(globalAlways: false, sessionAlways: true) }
-                                        Button(L10n.shared.notchAlwaysAutoApprove) { state.approve(globalAlways: true, sessionAlways: false) }
+                                        Button(l10n.notchAutoApproveSession) { state.approve(globalAlways: false, sessionAlways: true) }
+                                        Button(l10n.notchAlwaysAutoApprove) { state.approve(globalAlways: true, sessionAlways: false) }
                                     } label: {
                                         // Text("")를 사용하면 크기가 0x0이 되어 클릭 히트 박스가 생성되지 않습니다.
                                         // 눈에 보이지 않지만 프레임을 꽉 채우는 투명한 도형으로 빈 껍데기를 만들어 클릭 이벤트를 낚아챕니다.
@@ -1645,7 +1644,7 @@ struct NotchView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
                             .buttonStyle(.plain)
-                            .help(L10n.shared.helpFocusTerminal)
+                            .help(l10n.helpFocusTerminal)
 
                             Button(action: { state.isNotchExpanded = false }) {
                                 HStack {

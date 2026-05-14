@@ -28,7 +28,8 @@ struct DevIslandApp: App {
 
 struct MenuBarMenu: View {
     @ObservedObject var state = AppState.shared
-    
+    @ObservedObject private var l10n = L10n.shared
+
     static let versionString: String = {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
@@ -36,7 +37,7 @@ struct MenuBarMenu: View {
     }()
 
     var body: some View {
-        let l = L10n.shared
+        let l = l10n
         if state.pendingItems.isEmpty {
             Text(l.menuNoPending)
                 .foregroundStyle(.secondary)
