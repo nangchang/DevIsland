@@ -13,7 +13,7 @@ enum AppWindowRouter {
     static func showSettings() {
         let controller = cachedController(&settingsController) {
             HostedWindowController(
-                title: "DevIsland Settings",
+                title: L10n.shared.winSettings,
                 size: NSSize(width: 760, height: 560),
                 rootView: AnyView(SettingsWindowView())
             )
@@ -24,7 +24,7 @@ enum AppWindowRouter {
     static func showApprovalRules() {
         let controller = cachedController(&approvalRulesController) {
             HostedWindowController(
-                title: "Approval Rules",
+                title: L10n.shared.winApprovalRules,
                 size: NSSize(width: 760, height: 560),
                 rootView: AnyView(ApprovalRulesWindowView())
             )
@@ -35,7 +35,7 @@ enum AppWindowRouter {
     static func showReplayLog() {
         let controller = cachedController(&replayLogController) {
             HostedWindowController(
-                title: "Replay Log",
+                title: L10n.shared.winReplayLog,
                 size: NSSize(width: 900, height: 600),
                 rootView: AnyView(ReplayLogWindowView())
             )
@@ -46,7 +46,7 @@ enum AppWindowRouter {
     static func showPTYTranscript() {
         let controller = cachedController(&ptyTranscriptController) {
             HostedWindowController(
-                title: "PTY Transcript",
+                title: L10n.shared.winPTYTranscript,
                 size: NSSize(width: 860, height: 560),
                 rootView: AnyView(PTYTranscriptWindowView())
             )
@@ -102,27 +102,28 @@ private extension NSWindow {
 struct SettingsWindowView: View {
     @StateObject private var appState = AppState.shared
     @StateObject private var store = SettingsStore.shared
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         TabView {
             GeneralSettingsPane(store: store)
-                .tabItem { Label("General", systemImage: "gearshape") }
+                .tabItem { Label(l10n.tabGeneral, systemImage: "gearshape") }
 
             DisplaySettingsPane(appState: appState)
-                .tabItem { Label("Display", systemImage: "display") }
+                .tabItem { Label(l10n.tabDisplay, systemImage: "display") }
 
             ApprovalSettingsPane(appState: appState, store: store)
-                .tabItem { Label("Approval", systemImage: "hand.raised") }
+                .tabItem { Label(l10n.tabApproval, systemImage: "hand.raised") }
 
             ProviderSettingsPane(store: store)
-                .tabItem { Label("Providers", systemImage: "person.3.sequence") }
+                .tabItem { Label(l10n.tabProviders, systemImage: "person.3.sequence") }
 
             BridgeIPCSettingsPane(store: store)
-                .tabItem { Label("Bridge / IPC", systemImage: "cable.connector") }
+                .tabItem { Label(l10n.tabBridge, systemImage: "cable.connector") }
 
             ExperimentalPTYSettingsPane()
                 .environmentObject(store)
-                .tabItem { Label("Experimental", systemImage: "testtube.2") }
+                .tabItem { Label(l10n.tabExperimental, systemImage: "testtube.2") }
         }
         .padding(16)
         .frame(minWidth: 700, minHeight: 500)
@@ -140,13 +141,23 @@ private extension SettingsStore {
 
 private struct GeneralSettingsPane: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         Form {
-            Section("Approval Proxy") {
-                Text("DevIsland acts as a policy-based Approval Proxy daemon. The macOS app handles all policy decisions; the bridge scripts stay thin. See AGENTS.md for architecture details.")
+            Section(l10n.secLanguage) {
+                Picker(l10n.lblLanguage, selection: $l10n.language) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+            }
+
+            Section(l10n.secApprovalProxy) {
+                Text(l10n.descApprovalProxy)
                     .foregroundStyle(.secondary)
-                Button("Reset Approval Proxy Settings") {
+                Button(l10n.btnResetProxy) {
                     store.resetToDefaults()
                 }
             }
@@ -157,29 +168,30 @@ private struct GeneralSettingsPane: View {
 
 private struct DisplaySettingsPane: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         Form {
-            Section("Notch") {
-                Picker("Display", selection: $appState.notchDisplayTarget) {
+            Section(l10n.secNotch) {
+                Picker(l10n.lblDisplay, selection: $appState.notchDisplayTarget) {
                     ForEach(NotchDisplayTarget.allCases) { target in
                         Text(target.label).tag(target)
                     }
                 }
 
                 if appState.notchDisplayTarget == .specific {
-                    Picker("Monitor", selection: $appState.selectedDisplayId) {
+                    Picker(l10n.lblMonitor, selection: $appState.selectedDisplayId) {
                         ForEach(NSScreen.screens, id: \.displayId) { screen in
                             Text(displayName(for: screen)).tag(screen.displayId)
                         }
                     }
                 }
 
-                Toggle("Show above full-screen apps", isOn: $appState.showInFullScreenApps)
+                Toggle(l10n.lblShowFullScreen, isOn: $appState.showInFullScreenApps)
             }
 
-            Section("Requests") {
-                Picker("Request display", selection: $appState.requestDisplayTarget) {
+            Section(l10n.secRequests) {
+                Picker(l10n.lblRequestDisplay, selection: $appState.requestDisplayTarget) {
                     ForEach(RequestDisplayTarget.allCases) { target in
                         Text(target.label).tag(target)
                     }
@@ -191,7 +203,7 @@ private struct DisplaySettingsPane: View {
 
     private func displayName(for screen: NSScreen) -> String {
         let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 1
-        let role = screen == NSScreen.main ? "Main monitor" : "Monitor \(index)"
+        let role = screen == NSScreen.main ? l10n.monitorMain() : l10n.monitorN(index)
         return "\(role) · \(Int(screen.frame.width))×\(Int(screen.frame.height))"
     }
 }
@@ -199,16 +211,17 @@ private struct DisplaySettingsPane: View {
 private struct ApprovalSettingsPane: View {
     @ObservedObject var appState: AppState
     @ObservedObject var store: SettingsStore
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         Form {
-            Section("Automatic approvals") {
-                Toggle("Auto-approve safe/read-only tools", isOn: $appState.autoApproveSafeTools)
-                Toggle("Gemini interactive emulation", isOn: $appState.emulateGeminiInteractiveMode)
+            Section(l10n.secAutoApprovals) {
+                Toggle(l10n.lblAutoSafe, isOn: $appState.autoApproveSafeTools)
+                Toggle(l10n.lblGeminiEmulate, isOn: $appState.emulateGeminiInteractiveMode)
             }
 
-            Section("Transport failure fallback") {
-                Picker("Fallback policy", selection: store.binding(\.approvalFallbackPolicy)) {
+            Section(l10n.secFallback) {
+                Picker(l10n.lblFallbackPolicy, selection: store.binding(\.approvalFallbackPolicy)) {
                     ForEach(ApprovalFallbackPolicy.allCases) { policy in
                         Text(policy.label).tag(policy)
                     }
@@ -221,11 +234,12 @@ private struct ApprovalSettingsPane: View {
 
 private struct ProviderSettingsPane: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         Form {
             Section("Claude Code") {
-                Picker("Session approval mode", selection: store.binding(\.claudeSessionApprovalMode)) {
+                Picker(l10n.lblSessionApproval, selection: store.binding(\.claudeSessionApprovalMode)) {
                     ForEach(ClaudeSessionApprovalMode.allCases) { mode in
                         Text(mode.label).tag(mode)
                     }
@@ -235,25 +249,25 @@ private struct ProviderSettingsPane: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Picker("Persistent approval destination", selection: store.binding(\.claudePersistentApprovalDestination)) {
+                Picker(l10n.lblPersistentDest, selection: store.binding(\.claudePersistentApprovalDestination)) {
                     ForEach(ClaudePersistentApprovalDestination.allCases) { destination in
                         Text(destination.label).tag(destination)
                     }
                 }
 
                 if store.settings.claudePersistentApprovalDestination == .projectSettings {
-                    Label("Project settings can be committed to the repository. Review changes before committing.", systemImage: "exclamationmark.triangle.fill")
+                    Label(l10n.warnProjectSettings, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                 }
             }
 
             Section("Codex") {
-                Text("Codex session approval will use DevIsland-managed cache and persistent SQLite rules in later phases.")
+                Text(l10n.descCodex)
                     .foregroundStyle(.secondary)
             }
 
             Section("Gemini") {
-                Text("Existing Gemini auto-edit, interactive notification, and safe-tool behavior remain compatible with Approval Proxy settings.")
+                Text(l10n.descGemini)
                     .foregroundStyle(.secondary)
             }
         }
@@ -263,34 +277,37 @@ private struct ProviderSettingsPane: View {
 
 private struct BridgeIPCSettingsPane: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         Form {
-            Section("Transport") {
-                Picker("Transport", selection: store.binding(\.bridgeTransportKind)) {
+            Section(l10n.secTransport) {
+                Picker(l10n.lblTransport, selection: store.binding(\.bridgeTransportKind)) {
                     ForEach(BridgeTransportKind.allCases) { transport in
                         Text(transport.label).tag(transport)
                     }
                 }
-                Text("Transport changes are written to the bridge runtime config. Restart DevIsland after switching listener transports.")
+                Text(l10n.descTransport)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("TCP") {
-                LabeledContent("Port", value: "\(AppSettings.defaults.bridgeTcpPort)")
+            Section(l10n.secTCP) {
+                LabeledContent(l10n.lblPort, value: "\(AppSettings.defaults.bridgeTcpPort)")
             }
 
-            Section("Unix domain socket") {
-                TextField("Socket path", text: store.binding(\.bridgeSocketPath))
+            Section(l10n.secUnixSocket) {
+                TextField(l10n.lblSocketPath, text: store.binding(\.bridgeSocketPath))
                     .textFieldStyle(.roundedBorder)
                     .disabled(store.settings.bridgeTransportKind == .tcpLoopback)
-                Toggle("Fallback to TCP loopback", isOn: store.binding(\.bridgeFallbackToTcp))
+                Toggle(l10n.lblFallbackTCP, isOn: store.binding(\.bridgeFallbackToTcp))
             }
 
-            Section("Timeouts") {
-                LabeledContent("Connect timeout", value: "\(Int(AppSettings.defaults.bridgeConnectTimeoutSeconds)) seconds")
-                LabeledContent("Response timeout", value: "\(Int(AppSettings.defaults.bridgeResponseTimeoutSeconds)) seconds")
+            Section(l10n.secTimeouts) {
+                LabeledContent(l10n.lblConnectTimeout,
+                               value: l10n.labelSeconds(Int(AppSettings.defaults.bridgeConnectTimeoutSeconds)))
+                LabeledContent(l10n.lblResponseTimeout,
+                               value: l10n.labelSeconds(Int(AppSettings.defaults.bridgeResponseTimeoutSeconds)))
             }
         }
         .formStyle(.grouped)
@@ -299,23 +316,24 @@ private struct BridgeIPCSettingsPane: View {
 
 private struct ExperimentalPTYSettingsPane: View {
     @EnvironmentObject private var store: SettingsStore
+    @ObservedObject private var l10n = L10n.shared
     @State private var newPattern = ""
     @State private var newResponse = ""
 
     var body: some View {
         Form {
-            Section("PTY Wrapper") {
-                Toggle("Enable PTY logging and auto-inject", isOn: $store.settings.ptyEnabled)
-                Stepper("Transcript retention: \(store.settings.ptyTranscriptRetentionDays) days",
+            Section(l10n.secPTYWrapper) {
+                Toggle(l10n.lblPTYEnable, isOn: $store.settings.ptyEnabled)
+                Stepper(l10n.lblRetention(store.settings.ptyTranscriptRetentionDays),
                         value: $store.settings.ptyTranscriptRetentionDays, in: 1...365)
-                Button("View PTY Transcript…") {
+                Button(l10n.btnViewPTY) {
                     AppWindowRouter.showPTYTranscript()
                 }
             }
 
-            Section("Auto-inject patterns") {
+            Section(l10n.secAutoInject) {
                 if store.settings.ptyAutoInjectPatterns.isEmpty {
-                    Text("No patterns. Add one below.")
+                    Text(l10n.lblNoPatterns)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(store.settings.ptyAutoInjectPatterns) { pattern in
@@ -335,9 +353,9 @@ private struct ExperimentalPTYSettingsPane: View {
                     }
                 }
                 HStack {
-                    TextField("Pattern (substring)", text: $newPattern)
-                    TextField("Response text", text: $newResponse)
-                    Button("Add") {
+                    TextField(l10n.phPattern, text: $newPattern)
+                    TextField(l10n.phResponse, text: $newResponse)
+                    Button(l10n.btnAdd) {
                         let p = newPattern.trimmingCharacters(in: .whitespacesAndNewlines)
                         let r = newResponse.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !p.isEmpty, !r.isEmpty else { return }
@@ -350,9 +368,9 @@ private struct ExperimentalPTYSettingsPane: View {
                 }
             }
 
-            Section("Usage") {
+            Section(l10n.secUsage) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Run a CLI agent through the PTY wrapper:")
+                    Text(l10n.descPTYUsage)
                         .font(.caption).foregroundStyle(.secondary)
                     Text("python3 devisland_pty.py --source claude -- claude")
                         .font(.system(.caption, design: .monospaced))
@@ -360,7 +378,7 @@ private struct ExperimentalPTYSettingsPane: View {
                         .padding(6)
                         .background(Color(nsColor: .textBackgroundColor))
                         .clipShape(RoundedRectangle(cornerRadius: 4))
-                    Text("The script forwards PTYOutput hook events to the app.")
+                    Text(l10n.descPTYHooks)
                         .font(.caption2).foregroundStyle(.tertiary)
                 }
             }
@@ -371,6 +389,7 @@ private struct ExperimentalPTYSettingsPane: View {
 
 private struct ApprovalRulesWindowView: View {
     @StateObject private var state = AppState.shared
+    @ObservedObject private var l10n = L10n.shared
     @State private var codexPersistentRules: [ApprovalRule] = []
     @State private var codexToolName = ""
     @State private var codexRuleAction: RuleAction = .allow
@@ -380,26 +399,26 @@ private struct ApprovalRulesWindowView: View {
 
     var body: some View {
         Form {
-            Section("Codex persistent SQLite rules") {
+            Section(l10n.secCodexRules) {
                 HStack {
-                    TextField("Tool name", text: $codexToolName)
+                    TextField(l10n.phToolName, text: $codexToolName)
                         .textFieldStyle(.roundedBorder)
-                    Picker("Action", selection: $codexRuleAction) {
-                        Text("Allow").tag(RuleAction.allow)
-                        Text("Deny").tag(RuleAction.deny)
+                    Picker(l10n.lblAction, selection: $codexRuleAction) {
+                        Text(l10n.lblAllow).tag(RuleAction.allow)
+                        Text(l10n.lblDeny).tag(RuleAction.deny)
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 160)
                     Button {
                         addCodexPersistentRule()
                     } label: {
-                        Label("Add", systemImage: "plus")
+                        Label(l10n.btnAdd, systemImage: "plus")
                     }
                     .disabled(codexToolName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button {
                         syncCodexPersistentRules()
                     } label: {
-                        Label("Export Snapshot", systemImage: "square.and.arrow.up")
+                        Label(l10n.btnExportSnapshot, systemImage: "square.and.arrow.up")
                     }
                 }
 
@@ -413,7 +432,7 @@ private struct ApprovalRulesWindowView: View {
                 }
 
                 if codexPersistentRules.isEmpty {
-                    Text("No Codex persistent SQLite rules are configured.")
+                    Text(l10n.lblNoCodexRules)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(codexPersistentRules) { rule in
@@ -434,12 +453,12 @@ private struct ApprovalRulesWindowView: View {
                 }
             }
 
-            Section("Global auto-approval tools") {
-                Text("These existing DevIsland rules are checked for every session before showing an approval prompt.")
+            Section(l10n.secGlobalRules) {
+                Text(l10n.descGlobalRules)
                     .foregroundStyle(.secondary)
 
                 HStack {
-                    Button("Add manually…") {
+                    Button(l10n.btnAddManually) {
                         state.promptToAddGlobalAutoApprove()
                     }
                     predefinedToolMenu { tool in
@@ -448,13 +467,13 @@ private struct ApprovalRulesWindowView: View {
                 }
 
                 if state.globalAutoApproveTypes.isEmpty {
-                    Text("No global auto-approval tools are configured.")
+                    Text(l10n.lblNoGlobalTools)
                         .foregroundStyle(.secondary)
                 } else {
                     Button(role: .destructive) {
                         state.globalAutoApproveTypes.removeAll()
                     } label: {
-                        Label("Remove all global tools", systemImage: "trash.fill")
+                        Label(l10n.btnRemoveAllGlobal, systemImage: "trash.fill")
                     }
 
                     ForEach(Array(state.globalAutoApproveTypes.sorted()), id: \.self) { tool in
@@ -465,19 +484,19 @@ private struct ApprovalRulesWindowView: View {
                 }
             }
 
-            Section("Session auto-approval tools") {
-                Text("Session rules remain available until the corresponding active session is removed.")
+            Section(l10n.secSessionRules) {
+                Text(l10n.descSessionRules)
                     .foregroundStyle(.secondary)
 
                 if state.activeSessions.isEmpty {
-                    Text("No active sessions.")
+                    Text(l10n.lblNoSessions)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(state.activeSessions) { session in
                         let tools = state.sessionAutoApproveTypes[session.id] ?? []
-                        DisclosureGroup("Session \(session.id.prefix(8)) (\(tools.count) tools)") {
+                        DisclosureGroup(l10n.lblSession(String(session.id.prefix(8)), tools.count)) {
                             HStack {
-                                Button("Add manually…") {
+                                Button(l10n.btnAddManually) {
                                     state.promptToAddSessionAutoApprove(for: session.id)
                                 }
                                 predefinedToolMenu { tool in
@@ -486,13 +505,13 @@ private struct ApprovalRulesWindowView: View {
                             }
 
                             if tools.isEmpty {
-                                Text("No session auto-approval tools are configured.")
+                                Text(l10n.lblNoSessionTools)
                                     .foregroundStyle(.secondary)
                             } else {
                                 Button(role: .destructive) {
                                     state.sessionAutoApproveTypes[session.id]?.removeAll()
                                 } label: {
-                                    Label("Remove all session tools", systemImage: "trash.fill")
+                                    Label(l10n.btnRemoveAllSession, systemImage: "trash.fill")
                                 }
 
                                 ForEach(Array(tools.sorted()), id: \.self) { tool in
@@ -521,7 +540,7 @@ private struct ApprovalRulesWindowView: View {
             codexRuleError = nil
             loadCodexPersistentRules()
         } catch {
-            codexRuleError = "Failed to save Codex rule: \(error.localizedDescription)"
+            codexRuleError = l10n.errSaveCodexRule(error.localizedDescription)
         }
     }
 
@@ -531,7 +550,7 @@ private struct ApprovalRulesWindowView: View {
             codexRuleError = nil
             loadCodexPersistentRules()
         } catch {
-            codexRuleError = "Failed to delete Codex rule: \(error.localizedDescription)"
+            codexRuleError = l10n.errDeleteCodexRule(error.localizedDescription)
         }
     }
 
@@ -541,28 +560,28 @@ private struct ApprovalRulesWindowView: View {
             codexRuleError = nil
         } catch {
             codexPersistentRules = []
-            codexRuleError = "Failed to load Codex rules: \(error.localizedDescription)"
+            codexRuleError = l10n.errLoadCodexRules(error.localizedDescription)
         }
     }
 
     private func syncCodexPersistentRules() {
         do {
             let result = try state.syncCodexPersistentRules()
-            codexRuleSyncMessage = "Exported \(result.ruleCount) Codex rules to \(result.url.path)"
+            codexRuleSyncMessage = l10n.exportedCodexRules(result.ruleCount, result.url.path)
             codexRuleError = nil
         } catch {
             codexRuleSyncMessage = nil
-            codexRuleError = "Failed to export Codex rules: \(error.localizedDescription)"
+            codexRuleError = l10n.errExportCodexRules(error.localizedDescription)
         }
     }
 
     private func predefinedToolMenu(onSelect: @escaping (KnownTool) -> Void) -> some View {
-        Menu("Add from list") {
+        Menu(l10n.btnAddFromList) {
             ForEach(riskGroups, id: \.self) { risk in
                 let tools = ToolKnowledge.predefined.filter { $0.risk == risk }
                 if !tools.isEmpty {
                     Menu("\(risk.emoji) \(risk.rawValue)") {
-                        Button("Add all \(risk.rawValue) tools") {
+                        Button(l10n.addAllRisk(risk.rawValue)) {
                             tools.forEach(onSelect)
                         }
                         Divider()

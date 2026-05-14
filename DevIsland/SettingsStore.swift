@@ -11,21 +11,20 @@ enum ClaudeSessionApprovalMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var label: String {
+        let l = L10n.shared
         switch self {
-        case .nativePermissions: return "Native Claude permissions"
-        case .appSessionCache: return "DevIsland-managed session cache"
-        case .hybrid: return "Hybrid"
+        case .nativePermissions: return l.modeNative
+        case .appSessionCache:   return l.modeCache
+        case .hybrid:            return l.modeHybrid
         }
     }
 
     var detail: String {
+        let l = L10n.shared
         switch self {
-        case .nativePermissions:
-            return "Recommended. DevIsland returns updatedPermissions with destination=session."
-        case .appSessionCache:
-            return "DevIsland stores session-scoped approvals and returns simple allow responses."
-        case .hybrid:
-            return "Use native Claude permissions first and keep DevIsland cache as fallback."
+        case .nativePermissions: return l.detailNative
+        case .appSessionCache:   return l.detailCache
+        case .hybrid:            return l.detailHybrid
         }
     }
 }
@@ -38,10 +37,11 @@ enum ClaudePersistentApprovalDestination: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var label: String {
+        let l = L10n.shared
         switch self {
-        case .localSettings: return "localSettings (.claude/settings.local.json)"
-        case .projectSettings: return "projectSettings (.claude/settings.json)"
-        case .userSettings: return "userSettings (~/.claude/settings.json)"
+        case .localSettings:   return l.destLocal
+        case .projectSettings: return l.destProject
+        case .userSettings:    return l.destUser
         }
     }
 }
@@ -53,9 +53,10 @@ enum BridgeTransportKind: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var label: String {
+        let l = L10n.shared
         switch self {
-        case .tcpLoopback: return "TCP loopback"
-        case .unixDomainSocket: return "Unix domain socket"
+        case .tcpLoopback:      return l.transportTCP
+        case .unixDomainSocket: return l.transportUnix
         }
     }
 }
@@ -67,9 +68,10 @@ enum ApprovalFallbackPolicy: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var label: String {
+        let l = L10n.shared
         switch self {
-        case .denyUnknown: return "Deny unknown risk"
-        case .allowReadOnly: return "Allow safe/read-only only"
+        case .denyUnknown:  return l.fallbackDeny
+        case .allowReadOnly: return l.fallbackAllow
         }
     }
 }
