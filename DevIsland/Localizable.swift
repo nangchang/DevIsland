@@ -289,8 +289,8 @@ extension L10n {
     var transportUnix: String { s("Unix domain socket",   "Unix 도메인 소켓") }
 
     // Enum labels — ApprovalFallbackPolicy
-    var fallbackDeny:  String { s("Deny unknown risk",        "알 수 없는 위험 거부") }
-    var fallbackAllow: String { s("Allow safe/read-only only","안전/읽기 전용만 허용") }
+    var fallbackPass: String { s("Pass (let CLI decide)",     "통과 (CLI에 위임)") }
+    var fallbackDeny: String { s("Deny",                      "거부") }
 
     // Notch UI
     var notchApprovalRequired: String { s("Approval Required", "승인 필요") }
