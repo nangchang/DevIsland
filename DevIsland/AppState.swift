@@ -212,13 +212,10 @@ class AppState: ObservableObject {
         }
     }
     
-    // TODO(gap-3): globalAutoApproveTypes and sessionAutoApproveTypes are in-memory Sets
-    //   (globalAutoApproveTypes persisted to UserDefaults only). Claude and Gemini approvals
-    //   currently write here instead of SQLiteApprovalStore. Consequence: rules vanish on restart
-    //   and are invisible to the Approval Rules UI.
-    //   Target: route Claude/Gemini approve() through ApprovalProxyController.store.insertRule()
-    //   so all providers share a single SQLite source of truth (rules + session_cache tables).
-    //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
+    // gap-3 (done): All providers now write to SQLiteApprovalStore via persistApprovalScope.
+    // These in-memory sets remain as a fast-path read cache for the current session only.
+    // globalAutoApproveTypes is also persisted to UserDefaults for backward compatibility
+    // with rules created before gap-3; new approvals are durable via SQLite.
     @Published var globalAutoApproveTypes: Set<String> = [] {
         didSet {
             userDefaults.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
@@ -961,14 +958,15 @@ class AppState: ObservableObject {
             }
         }
 
-        if agentKind == .codex,
-           let policyDecision = codexPolicyDecision(
-               hookEventId: hookEventId,
-               sessionId: sessionId,
-               toolName: toolName,
-               workspaceRoot: workspaceRoot
-           ) {
-            print("[DevIsland] [POLICY] Codex \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
+        let provider = providerKind(for: agentKind)
+        if let policyDecision = policyDecision(
+            provider: provider,
+            hookEventId: hookEventId,
+            sessionId: sessionId,
+            toolName: toolName,
+            workspaceRoot: workspaceRoot
+        ) {
+            print("[DevIsland] [POLICY] \(provider.rawValue) \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
             request.responseHandler(responsePayload(approved: policyDecision.action == .allow))
             DispatchQueue.main.async { [weak self] in
                 self?.updateActiveSession(
@@ -1700,7 +1698,8 @@ class AppState: ObservableObject {
         }
     }
 
-    private func codexPolicyDecision(
+    private func policyDecision(
+        provider: ProviderKind,
         hookEventId: Int64?,
         sessionId: String,
         toolName: String,
@@ -1709,7 +1708,7 @@ class AppState: ObservableObject {
         guard let approvalProxy, !sessionId.isEmpty, !toolName.isEmpty else { return nil }
         do {
             let request = ApprovalPolicyRequest(
-                provider: .codex,
+                provider: provider,
                 sessionId: sessionId,
                 toolName: toolName,
                 workspaceRoot: workspaceRoot
@@ -1724,7 +1723,7 @@ class AppState: ObservableObject {
             )
             return decision
         } catch {
-            print("[DevIsland] [POLICY] Codex policy evaluation failed: \(error)")
+            print("[DevIsland] [POLICY] \(provider.rawValue) policy evaluation failed: \(error)")
             return nil
         }
     }
@@ -1986,7 +1985,7 @@ class AppState: ObservableObject {
             source: reason == nil ? .user : .automatic,
             reason: reason
         )
-        persistCodexApprovalScope(approved: approved, approvalScope: approvalScope)
+        persistApprovalScope(approved: approved, approvalScope: approvalScope)
         currentResponseHandler = nil
         currentHookEventId = nil
         isShowingRequest = false
@@ -2034,9 +2033,9 @@ class AppState: ObservableObject {
         }
     }
 
-    private func persistCodexApprovalScope(approved: Bool, approvalScope: RuleScope?) {
+    private func persistApprovalScope(approved: Bool, approvalScope: RuleScope?) {
         guard approved,
-              currentAgentKind == .codex,
+              let agentKind = currentAgentKind,
               let approvalScope,
               let approvalProxy,
               !currentSessionId.isEmpty,
@@ -2044,12 +2043,14 @@ class AppState: ObservableObject {
             return
         }
 
+        let provider = providerKind(for: agentKind)
         let sessionId = currentSessionId
         let toolName = currentRawToolName
         let workspaceRoot = currentWorkspaceRoot
         approvalPersistenceQueue.sync {
-            persistCodexApprovalScopeOnPersistenceQueue(
+            persistApprovalScopeOnPersistenceQueue(
                 approvalProxy: approvalProxy,
+                provider: provider,
                 approvalScope: approvalScope,
                 sessionId: sessionId,
                 toolName: toolName,
@@ -2058,8 +2059,9 @@ class AppState: ObservableObject {
         }
     }
 
-    private func persistCodexApprovalScopeOnPersistenceQueue(
+    private func persistApprovalScopeOnPersistenceQueue(
         approvalProxy: ApprovalProxyController,
+        provider: ProviderKind,
         approvalScope: RuleScope,
         sessionId: String,
         toolName: String,
@@ -2069,7 +2071,7 @@ class AppState: ObservableObject {
             switch approvalScope {
             case .session:
                 try approvalProxy.store.upsertSessionApproval(
-                    provider: .codex,
+                    provider: provider,
                     sessionId: sessionId,
                     toolName: toolName,
                     action: .allow,
@@ -2078,12 +2080,12 @@ class AppState: ObservableObject {
             case .persistent:
                 try approvalProxy.store.insertRule(ApprovalRule(
                     id: SQLiteApprovalStore.deterministicRuleID(
-                        provider: .codex,
+                        provider: provider,
                         toolName: toolName,
                         scope: .persistent,
                         workspaceRoot: workspaceRoot
                     ),
-                    provider: .codex,
+                    provider: provider,
                     toolName: toolName,
                     action: .allow,
                     scope: .persistent,
@@ -2093,18 +2095,20 @@ class AppState: ObservableObject {
                 break
             }
         } catch {
-            print("[DevIsland] [POLICY] Failed to persist Codex approval scope: \(error)")
+            print("[DevIsland] [POLICY] Failed to persist approval scope for \(provider.rawValue): \(error)")
         }
     }
 
     func approve(globalAlways: Bool = false, sessionAlways: Bool = false) {
         let tool = currentRawToolName.isEmpty ? currentToolName : currentRawToolName
         let sId = currentSessionId
-        
-        if globalAlways && !tool.isEmpty && currentAgentKind != .codex {
+
+        // in-memory sets are kept as a fast-path read cache for the current session.
+        // SQLite is the durable source of truth (written via persistApprovalScope → sendDecision).
+        if globalAlways && !tool.isEmpty {
             globalAutoApproveTypes.insert(tool)
         }
-        if sessionAlways && !tool.isEmpty && !sId.isEmpty && currentAgentKind != .codex {
+        if sessionAlways && !tool.isEmpty && !sId.isEmpty {
             if sessionAutoApproveTypes[sId] == nil {
                 sessionAutoApproveTypes[sId] = []
             }
