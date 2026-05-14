@@ -36,11 +36,12 @@ struct MenuBarMenu: View {
     }()
 
     var body: some View {
+        let l = L10n.shared
         if state.pendingItems.isEmpty {
-            Text("대기 중인 요청 없음")
+            Text(l.menuNoPending)
                 .foregroundStyle(.secondary)
         } else {
-            Text("요청 대기 중: \(state.pendingItems.count)건")
+            Text("\(l.menuPending): \(state.pendingItems.count)")
                 .font(.headline)
             ForEach(state.pendingItems) { item in
                 HStack(spacing: 6) {
@@ -48,7 +49,7 @@ struct MenuBarMenu: View {
                         .foregroundStyle(toolInfo(for: item.toolName).color)
                         .frame(width: 14)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(item.toolName.isEmpty ? "Unknown" : item.toolName)
+                        Text(item.toolName.isEmpty ? l.notchUnknown : item.toolName)
                             .font(.system(size: 12, weight: .medium))
                         Text(item.message)
                             .font(.system(size: 10))
@@ -60,64 +61,64 @@ struct MenuBarMenu: View {
             Divider()
         }
 
-        Button("Focus Terminal") { state.focusTerminal() }
+        Button(l.menuFocusTerminal) { state.focusTerminal() }
             .disabled(state.pendingItems.isEmpty && state.activeSessions.isEmpty)
 
-        Button("Approve  ⌘⇧Y") { state.approve() }
+        Button(l.menuApprove) { state.approve() }
             .keyboardShortcut("y", modifiers: [.command, .shift])
             .disabled(!state.hasResponseHandler)
-        Button("Deny  ⌘⇧N") { state.deny() }
+        Button(l.menuDeny) { state.deny() }
             .keyboardShortcut("n", modifiers: [.command, .shift])
             .disabled(!state.hasResponseHandler)
 
         Divider()
 
-        Button("Settings…") {
+        Button(l.menuSettings) {
             AppWindowRouter.showSettings()
         }
-        Button("Approval Rules…") {
+        Button(l.menuApprovalRules) {
             AppWindowRouter.showApprovalRules()
         }
-        Button("Replay Log…") {
+        Button(l.menuReplayLog) {
             AppWindowRouter.showReplayLog()
         }
-        Button("PTY Transcript…") {
+        Button(l.menuPTYTranscript) {
             AppWindowRouter.showPTYTranscript()
         }
 
         Divider()
 
-        Menu("Install / Repair Hooks") {
-            Button("전부 설치 (Claude · Codex · Gemini)") {
+        Menu(l.menuInstallHooks) {
+            Button(l.menuInstallAll) {
                 BridgeInstaller.installAll()
             }
             Divider()
-            Button("Claude Code만 설치...") {
+            Button(l.menuInstallClaude) {
                 BridgeInstaller.install()
             }
-            Button("Codex CLI만 설치...") {
+            Button(l.menuInstallCodex) {
                 BridgeInstaller.installCodex()
             }
-            Button("Gemini CLI만 설치...") {
+            Button(l.menuInstallGemini) {
                 BridgeInstaller.installGemini()
             }
             Divider()
-            Button("전부 제거 (Claude · Codex · Gemini)") {
+            Button(l.menuRemoveAll) {
                 BridgeInstaller.uninstallAll()
             }
-            Button("Claude Code만 제거...") {
+            Button(l.menuRemoveClaude) {
                 BridgeInstaller.uninstall()
             }
-            Button("Codex CLI만 제거...") {
+            Button(l.menuRemoveCodex) {
                 BridgeInstaller.uninstallCodex()
             }
-            Button("Gemini CLI만 제거...") {
+            Button(l.menuRemoveGemini) {
                 BridgeInstaller.uninstallGemini()
             }
         }
 
         if !GlobalShortcutManager.shared.hasAccessibilityPermission {
-            Button("접근성 권한 요청...") {
+            Button(l.menuAccessibility) {
                 GlobalShortcutManager.shared.requestAccessibilityPermission()
             }
         }
@@ -130,7 +131,7 @@ struct MenuBarMenu: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 2)
 
-        Button("Quit DevIsland") {
+        Button(l.menuQuit) {
             NSApplication.shared.terminate(nil)
         }
     }
@@ -165,11 +166,10 @@ enum BridgeInstaller {
         do {
             try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
             try patchClaudeSettings(at: settingsURL, bridgePath: destURL.path)
-            showAlert(title: "Claude Code 설치 완료",
-                      message: "브리지가 설치되었습니다.\nClaude Code 세션을 재시작해주세요.",
-                      isError: false)
+            let l = L10n.shared
+            showAlert(title: l.alertClaudeInstalled, message: l.alertClaudeRestartMsg, isError: false)
         } catch {
-            showAlert(title: "Claude Code 설치 실패", message: error.localizedDescription, isError: true)
+            showAlert(title: L10n.shared.alertClaudeInstallFailed, message: error.localizedDescription, isError: true)
         }
     }
 
@@ -187,11 +187,10 @@ enum BridgeInstaller {
             try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
             try patchCodexHooks(at: codexHooksURL, bridgePath: destURL.path)
             ensureCodexFeatureFlag(at: codexConfigURL)
-            showAlert(title: "Codex CLI 설치 완료",
-                      message: "브리지가 설치되었습니다.\nCodex CLI 세션을 재시작해주세요.",
-                      isError: false)
+            let l = L10n.shared
+            showAlert(title: l.alertCodexInstalled, message: l.alertCodexRestartMsg, isError: false)
         } catch {
-            showAlert(title: "Codex CLI 설치 실패", message: error.localizedDescription, isError: true)
+            showAlert(title: L10n.shared.alertCodexInstallFailed, message: error.localizedDescription, isError: true)
         }
     }
 
@@ -207,11 +206,10 @@ enum BridgeInstaller {
         do {
             try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
             try patchGeminiSettings(at: geminiSettingsURL, bridgePath: destURL.path)
-            showAlert(title: "Gemini CLI 설치 완료",
-                      message: "브리지가 설치되었습니다.\nGemini CLI 세션을 재시작해주세요.",
-                      isError: false)
+            let l = L10n.shared
+            showAlert(title: l.alertGeminiInstalled, message: l.alertGeminiRestartMsg, isError: false)
         } catch {
-            showAlert(title: "Gemini CLI 설치 실패", message: error.localizedDescription, isError: true)
+            showAlert(title: L10n.shared.alertGeminiInstallFailed, message: error.localizedDescription, isError: true)
         }
     }
 
@@ -219,7 +217,8 @@ enum BridgeInstaller {
 
     private static func bridgeScriptURL() -> URL? {
         guard let url = Bundle.main.url(forResource: "devisland-bridge", withExtension: "sh") else {
-            showAlert(title: "설치 실패", message: "앱 번들에서 브리지 스크립트를 찾을 수 없습니다.", isError: true)
+            let l = L10n.shared
+            showAlert(title: l.alertInstallFailed, message: l.alertBundleNoScript, isError: true)
             return nil
         }
         return url
@@ -227,7 +226,8 @@ enum BridgeInstaller {
 
     private static func bridgeHelperURL() -> URL? {
         guard let url = Bundle.main.url(forResource: "devisland_bridge", withExtension: "py") else {
-            showAlert(title: "설치 실패", message: "앱 번들에서 브리지 helper를 찾을 수 없습니다.", isError: true)
+            let l = L10n.shared
+            showAlert(title: l.alertInstallFailed, message: l.alertBundleNoHelper, isError: true)
             return nil
         }
         return url
@@ -256,7 +256,7 @@ enum BridgeInstaller {
             let data = try Data(contentsOf: url)
             guard let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 throw NSError(domain: "BridgeInstaller", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "settings.json 파싱 실패: 유효하지 않은 JSON 형식입니다."])
+                              userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBadJSON])
             }
             settings = parsed
         } else {
@@ -479,13 +479,10 @@ enum BridgeInstaller {
             }
         }
         if errors.isEmpty {
-            showAlert(title: "전체 제거 완료",
-                      message: "모든 브리지 훅이 제거되었습니다.\n각 CLI 세션을 재시작해주세요.",
-                      isError: false)
+            let l = L10n.shared
+            showAlert(title: l.alertAllRemoved, message: l.alertAllRemovedMsg, isError: false)
         } else {
-            showAlert(title: "일부 제거 실패",
-                      message: errors.joined(separator: "\n"),
-                      isError: true)
+            showAlert(title: L10n.shared.alertSomeRemoveFailed, message: errors.joined(separator: "\n"), isError: true)
         }
     }
 
@@ -493,11 +490,10 @@ enum BridgeInstaller {
         let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/settings.json")
         do {
             try removeHooks(at: url, fileName: url.lastPathComponent)
-            showAlert(title: "Claude Code 제거 완료",
-                      message: "훅이 제거되었습니다.\nClaude Code 세션을 재시작해주세요.",
-                      isError: false)
+            let l = L10n.shared
+            showAlert(title: l.alertClaudeRemoved, message: l.alertClaudeHooksRemoved, isError: false)
         } catch {
-            showAlert(title: "Claude Code 제거 실패", message: error.localizedDescription, isError: true)
+            showAlert(title: L10n.shared.alertClaudeRemoveFailed, message: error.localizedDescription, isError: true)
         }
     }
 
@@ -505,11 +501,10 @@ enum BridgeInstaller {
         let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".codex/hooks.json")
         do {
             try removeHooks(at: url, fileName: url.lastPathComponent)
-            showAlert(title: "Codex CLI 제거 완료",
-                      message: "훅이 제거되었습니다.\nCodex CLI 세션을 재시작해주세요.",
-                      isError: false)
+            let l = L10n.shared
+            showAlert(title: l.alertCodexRemoved, message: l.alertCodexHooksRemoved, isError: false)
         } catch {
-            showAlert(title: "Codex CLI 제거 실패", message: error.localizedDescription, isError: true)
+            showAlert(title: L10n.shared.alertCodexRemoveFailed, message: error.localizedDescription, isError: true)
         }
     }
 
@@ -517,11 +512,10 @@ enum BridgeInstaller {
         let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".gemini/settings.json")
         do {
             try removeHooks(at: url, fileName: url.lastPathComponent)
-            showAlert(title: "Gemini CLI 제거 완료",
-                      message: "훅이 제거되었습니다.\nGemini CLI 세션을 재시작해주세요.",
-                      isError: false)
+            let l = L10n.shared
+            showAlert(title: l.alertGeminiRemoved, message: l.alertGeminiHooksRemoved, isError: false)
         } catch {
-            showAlert(title: "Gemini CLI 제거 실패", message: error.localizedDescription, isError: true)
+            showAlert(title: L10n.shared.alertGeminiRemoveFailed, message: error.localizedDescription, isError: true)
         }
     }
 
@@ -533,7 +527,7 @@ enum BridgeInstaller {
         let raw = try Data(contentsOf: url)
         guard var json = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else {
             throw NSError(domain: "BridgeInstaller", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "\(fileName) 파싱 실패"])
+                          userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBadFile(fileName)])
         }
         var hooks = (json["hooks"] as? [String: Any]) ?? [:]
         for key in Array(hooks.keys) {
@@ -564,7 +558,7 @@ enum BridgeInstaller {
             alert.messageText = title
             alert.informativeText = message
             alert.alertStyle = isError ? .critical : .informational
-            alert.addButton(withTitle: "확인")
+            alert.addButton(withTitle: L10n.shared.alertOK)
             alert.runModal()
         }
     }

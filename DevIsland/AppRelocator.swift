@@ -35,12 +35,13 @@ enum AppRelocator {
         }
 
         // 3. 사용자에게 이동 권유
+        let l = L10n.shared
         let alert = NSAlert()
-        alert.messageText = "응용 프로그램 폴더로 이동하시겠습니까?"
-        alert.informativeText = "DevIsland를 응용 프로그램 폴더로 이동하여 계속 사용하시겠습니까?"
+        alert.messageText = l.relocateTitle
+        alert.informativeText = l.relocateMessage
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "이동 및 다시 실행")
-        alert.addButton(withTitle: "나중에")
+        alert.addButton(withTitle: l.relocateMoveBtn)
+        alert.addButton(withTitle: l.relocateLaterBtn)
 
         if alert.runModal() == .alertFirstButtonReturn {
             relocate(to: destinationURL)
@@ -52,9 +53,10 @@ enum AppRelocator {
         let fm = FileManager.default
 
         guard fm.isWritableFile(atPath: destinationURL.deletingLastPathComponent().path) else {
+            let l = L10n.shared
             let alert = NSAlert()
-            alert.messageText = "이동 실패"
-            alert.informativeText = "응용 프로그램 폴더에 쓰기 권한이 없습니다. Finder에서 직접 이동해주세요."
+            alert.messageText = l.relocateFailTitle
+            alert.informativeText = l.relocateNoPermMsg
             alert.runModal()
             return
         }
@@ -79,9 +81,10 @@ enum AppRelocator {
                 }
             }
         } catch {
+            let l = L10n.shared
             let alert = NSAlert()
-            alert.messageText = "이동 실패"
-            alert.informativeText = "앱을 이동하는 중 오류가 발생했습니다: \(error.localizedDescription)"
+            alert.messageText = l.relocateFailTitle
+            alert.informativeText = l.relocateErrMsg(error.localizedDescription)
             alert.runModal()
         }
     }
@@ -99,11 +102,12 @@ enum AppRelocator {
                   values.volumeIsRemovable == true else { continue }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                let l = L10n.shared
                 let alert = NSAlert()
-                alert.messageText = "설치 파일을 정리하시겠습니까?"
-                alert.informativeText = "설치가 완료되었습니다. 사용 중인 설치 파일(DMG)을 꺼내고 정리하시겠습니까?"
-                alert.addButton(withTitle: "정리")
-                alert.addButton(withTitle: "아니요")
+                alert.messageText = l.dmgCleanTitle
+                alert.informativeText = l.dmgCleanMessage
+                alert.addButton(withTitle: l.dmgCleanBtn)
+                alert.addButton(withTitle: l.dmgNoBtn)
 
                 if alert.runModal() == .alertFirstButtonReturn {
                     ejectAndCleanup(volumeURL: url)
@@ -117,9 +121,10 @@ enum AppRelocator {
         do {
             try NSWorkspace.shared.unmountAndEjectDevice(at: volumeURL)
         } catch {
+            let l = L10n.shared
             let alert = NSAlert()
-            alert.messageText = "꺼내기 실패"
-            alert.informativeText = "설치 파일을 꺼내는 중 오류가 발생했습니다. Finder에서 직접 꺼내주세요.\n\(error.localizedDescription)"
+            alert.messageText = l.dmgEjectFailTitle
+            alert.informativeText = "\(l.dmgEjectFailMsg)\n\(error.localizedDescription)"
             alert.runModal()
         }
     }

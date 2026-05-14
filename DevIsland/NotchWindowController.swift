@@ -1135,21 +1135,18 @@ struct AgentRequestBadge: View {
 struct SessionRowView: View {
     let session: ActiveSession
     let isCurrent: Bool
-    
+
+    @ObservedObject private var l10n = L10n.shared
     @State private var timeAgo: String = ""
     private var tool: ToolInfo { toolInfo(for: session.lastToolName) }
     private var statusLabel: String? {
+        let l = L10n.shared
         switch session.status {
-        case .pending:
-            return "Pending"
-        case .timeoutBypassed:
-            return "Bypassed"
-        case .autoApproved:
-            return "Auto-Approved"
-        case .policyApproved:
-            return "Policy-Approved"
-        case .idle:
-            return nil
+        case .pending:       return l.statusPending
+        case .timeoutBypassed: return l.statusBypassed
+        case .autoApproved:  return l.statusAutoApproved
+        case .policyApproved: return l.statusPolicyApproved
+        case .idle:          return nil
         }
     }
     private var statusColor: Color {
@@ -1227,7 +1224,7 @@ struct SessionRowView: View {
                             }
 
                             if session.isAutoEditActive {
-                                Text("Auto-Edit")
+                                Text(l10n.statusAutoEdit)
                                     .font(.system(size: 8, weight: .black))
                                     .foregroundColor(Color(red: 1.0, green: 0.7, blue: 0.2))
                                     .lineLimit(1)
@@ -1258,7 +1255,7 @@ struct SessionRowView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
-            .help(session.isPending ? "Dismiss session and pass pending request to terminal" : "Dismiss session")
+            .help(session.isPending ? L10n.shared.helpDismissPending : L10n.shared.helpDismissSession)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -1276,9 +1273,10 @@ struct SessionRowView: View {
 
     private func updateTimeAgo() {
         let diff = Int(Date().timeIntervalSince(session.lastActiveAt))
-        if diff < 5 { timeAgo = "Just now" }
-        else if diff < 60 { timeAgo = "\(diff)s ago" }
-        else { timeAgo = "\(diff/60)m ago" }
+        let l = L10n.shared
+        if diff < 5 { timeAgo = l.timeJustNow() }
+        else if diff < 60 { timeAgo = l.timeSecsAgo(diff) }
+        else { timeAgo = l.timeMinsAgo(diff / 60) }
     }
 }
 
@@ -1286,6 +1284,7 @@ struct SessionRowView: View {
 
 struct NotchView: View {
     @ObservedObject var state = AppState.shared
+    @ObservedObject private var l10n = L10n.shared
     @State private var buddyPulse = false
     @State private var leftMascot: BuddyKind = .claudeCode
     @State private var rightMascot: BuddyKind = .gemini
@@ -1294,7 +1293,7 @@ struct NotchView: View {
     private var isActionAreaShowing: Bool {
         state.pendingCount > 0 || (state.isNotchExpanded && state.isExpandingFromRequest && !state.currentMessage.isEmpty)
     }
-    private var headerTitle: String { isActionAreaShowing && !state.currentToolName.isEmpty ? tool.label : "Sessions" }
+    private var headerTitle: String { isActionAreaShowing && !state.currentToolName.isEmpty ? tool.label : L10n.shared.notchSessions }
     private var displayedSessionId: String {
         state.currentSessionId.isEmpty ? (state.selectedSessionId ?? "") : state.currentSessionId
     }
@@ -1439,7 +1438,7 @@ struct NotchView: View {
                             .foregroundColor(.white)
                         
                         StatusBadge(
-                            text: state.pendingCount > 0 ? "Approval Required" : (isActionAreaShowing ? "Notification" : "Monitoring"),
+                            text: state.pendingCount > 0 ? l10n.notchApprovalRequired : (isActionAreaShowing ? l10n.notchNotification : l10n.notchMonitoring),
                             color: state.pendingCount > 0 ? .orange : (isActionAreaShowing ? .blue.opacity(0.7) : .green.opacity(0.6))
                         )
                     }
@@ -1447,14 +1446,14 @@ struct NotchView: View {
                     if !displayedSessionId.isEmpty {
                         HStack(spacing: 6) {
                             TagView(icon: "terminal.fill", text: String(displayedSessionId.prefix(8)))
-                            TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == displayedSessionId })?.terminalTitle ?? "Unknown")
+                            TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == displayedSessionId })?.terminalTitle ?? L10n.shared.notchUnknown)
                             if state.pendingCount > 1 {
-                                TagView(icon: "list.bullet", text: "\(state.pendingCount) tasks queued", color: .orange.opacity(0.2))
+                                TagView(icon: "list.bullet", text: L10n.shared.tasksQueued(state.pendingCount), color: .orange.opacity(0.2))
                             }
                         }
                     } else if state.pendingCount > 1 {
                         HStack(spacing: 6) {
-                            TagView(icon: "list.bullet", text: "\(state.pendingCount) tasks queued", color: .orange.opacity(0.2))
+                            TagView(icon: "list.bullet", text: L10n.shared.tasksQueued(state.pendingCount), color: .orange.opacity(0.2))
                         }
                     }
                 }
@@ -1473,7 +1472,7 @@ struct NotchView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
-                    .help("Focus terminal")
+                    .help(L10n.shared.helpFocusTerminal)
                 }
 
                 // Close Button
@@ -1505,7 +1504,7 @@ struct NotchView: View {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Text(state.hasResponseHandler ? "ACTIVE ACTION" : "NOTIFICATION")
+                        Text(state.hasResponseHandler ? l10n.notchActiveAction : l10n.notchNotification.uppercased())
                             .font(.system(size: 9, weight: .black))
                             .foregroundColor(.white.opacity(0.3))
                         
@@ -1568,7 +1567,7 @@ struct NotchView: View {
                             Button(action: { state.focusTerminal() }) {
                                 HStack {
                                     Image(systemName: "arrow.up.forward.app.fill")
-                                    Text("Focus")
+                                    Text(l10n.notchFocus)
                                 }
                                 .font(.system(size: 13, weight: .bold))
                                 .frame(width: 92, height: 38)
@@ -1577,12 +1576,12 @@ struct NotchView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
                             .buttonStyle(.plain)
-                            .help("Focus terminal")
+                            .help(L10n.shared.helpFocusTerminal)
 
                             Button(action: { state.deny() }) {
                                 HStack {
                                     Image(systemName: "xmark.circle.fill")
-                                    Text("Deny Request")
+                                    Text(l10n.notchDenyRequest)
                                 }
                                 .font(.system(size: 13, weight: .bold))
                                 .frame(maxWidth: .infinity, minHeight: 38)
@@ -1596,7 +1595,7 @@ struct NotchView: View {
                                 Button(action: { state.approve() }) {
                                     HStack {
                                         Image(systemName: "checkmark.circle.fill")
-                                        Text("Approve")
+                                        Text(l10n.notchApprove)
                                     }
                                     .font(.system(size: 13, weight: .bold))
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1616,8 +1615,8 @@ struct NotchView: View {
                                         .foregroundColor(tool.color)
                                         
                                     Menu {
-                                        Button("Auto-Approve for this Session") { state.approve(globalAlways: false, sessionAlways: true) }
-                                        Button("Always Auto-Approve (Global)") { state.approve(globalAlways: true, sessionAlways: false) }
+                                        Button(L10n.shared.notchAutoApproveSession) { state.approve(globalAlways: false, sessionAlways: true) }
+                                        Button(L10n.shared.notchAlwaysAutoApprove) { state.approve(globalAlways: true, sessionAlways: false) }
                                     } label: {
                                         // Text("")를 사용하면 크기가 0x0이 되어 클릭 히트 박스가 생성되지 않습니다.
                                         // 눈에 보이지 않지만 프레임을 꽉 채우는 투명한 도형으로 빈 껍데기를 만들어 클릭 이벤트를 낚아챕니다.
@@ -1637,7 +1636,7 @@ struct NotchView: View {
                             Button(action: { state.focusTerminal() }) {
                                 HStack {
                                     Image(systemName: "arrow.up.forward.app.fill")
-                                    Text("Focus Terminal")
+                                    Text(l10n.notchFocusTerminal)
                                 }
                                 .font(.system(size: 13, weight: .bold))
                                 .frame(maxWidth: .infinity, minHeight: 38)
@@ -1646,12 +1645,12 @@ struct NotchView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
                             .buttonStyle(.plain)
-                            .help("Focus terminal")
+                            .help(L10n.shared.helpFocusTerminal)
 
                             Button(action: { state.isNotchExpanded = false }) {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
-                                    Text("Dismiss")
+                                    Text(l10n.notchDismiss)
                                 }
                                 .font(.system(size: 13, weight: .bold))
                                 .frame(maxWidth: .infinity, minHeight: 38)
@@ -1683,7 +1682,7 @@ struct NotchView: View {
 
     private var sessionsContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("AGENT SESSIONS")
+            Text(l10n.notchAgentSessions)
                 .font(.system(size: 9, weight: .black))
                 .foregroundColor(.white.opacity(0.3))
                 .padding(.horizontal, 20)
@@ -1693,7 +1692,7 @@ struct NotchView: View {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.system(size: 24))
                         .foregroundColor(.white.opacity(0.1))
-                    Text("Listening for AI Agents...")
+                    Text(l10n.notchListening)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white.opacity(0.2))
                 }

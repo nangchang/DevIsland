@@ -78,10 +78,11 @@ enum RequestDisplayTarget: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var label: String {
+        let l = L10n.shared
         switch self {
-        case .notch: return "노치 화면"
-        case .focused: return "포커스 화면"
-        case .mouse: return "마우스 화면"
+        case .notch:   return l.reqNotch
+        case .focused: return l.reqFocused
+        case .mouse:   return l.reqMouse
         }
     }
 }
@@ -96,12 +97,13 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var label: String {
+        let l = L10n.shared
         switch self {
-        case .automatic: return "자동"
-        case .main: return "주 모니터"
-        case .mouse: return "마우스가 있는 모니터"
-        case .focused: return "포커스가 있는 모니터"
-        case .specific: return "선택한 모니터"
+        case .automatic: return l.notchAuto
+        case .main:      return l.notchMain
+        case .mouse:     return l.notchMouse
+        case .focused:   return l.notchFocused
+        case .specific:  return l.notchSpecific
         }
     }
 }
