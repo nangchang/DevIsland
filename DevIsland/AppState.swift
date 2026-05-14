@@ -216,11 +216,7 @@ class AppState: ObservableObject {
     // These in-memory sets remain as a fast-path read cache for the current session only.
     // globalAutoApproveTypes is also persisted to UserDefaults for backward compatibility
     // with rules created before gap-3; new approvals are durable via SQLite.
-    @Published var globalAutoApproveTypes: Set<String> = [] {
-        didSet {
-            userDefaults.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
-        }
-    }
+    @Published var globalAutoApproveTypes: Set<String> = []
     @Published var sessionAutoApproveTypes: [String: Set<String>] = [:]
 
     private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
@@ -276,8 +272,28 @@ class AppState: ObservableObject {
            let target = RequestDisplayTarget(rawValue: rawTarget) {
             requestDisplayTarget = target
         }
-        if let savedAutoApprove = userDefaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String] {
+        if let savedAutoApprove = userDefaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String], !savedAutoApprove.isEmpty {
             globalAutoApproveTypes = Set(savedAutoApprove)
+            // Migrate legacy UserDefaults rules into SQLite and remove the key.
+            if let proxy = approvalProxy {
+                for toolName in savedAutoApprove {
+                    let trimmed = toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { continue }
+                    try? proxy.store.insertRule(ApprovalRule(
+                        id: SQLiteApprovalStore.deterministicRuleID(
+                            provider: .any,
+                            toolName: trimmed,
+                            scope: .persistent,
+                            workspaceRoot: nil
+                        ),
+                        provider: .any,
+                        toolName: trimmed,
+                        action: .allow,
+                        scope: .persistent
+                    ))
+                }
+                userDefaults.removeObject(forKey: DefaultsKey.globalAutoApproveTypes)
+            }
         }
         autoApproveSafeTools = userDefaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
         emulateGeminiInteractiveMode = userDefaults.bool(forKey: DefaultsKey.emulateGeminiInteractiveMode)
