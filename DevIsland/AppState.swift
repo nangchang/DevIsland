@@ -989,141 +989,12 @@ class AppState: ObservableObject {
             }
         }
 
-        let provider = providerKind(for: agentKind)
-        if let policyDecision = policyDecision(
-            provider: provider,
-            hookEventId: hookEventId,
-            sessionId: sessionId,
-            toolName: toolName,
-            workspaceRoot: workspaceRoot
-        ) {
-            print("[DevIsland] [POLICY] \(provider.rawValue) \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
-            request.responseHandler(responsePayload(approved: policyDecision.action == .allow))
-            DispatchQueue.main.async { [weak self] in
-                self?.updateActiveSession(
-                    sessionId: sessionId,
-                    terminalTitle: terminalTitle,
-                    agentKind: agentKind,
-                    terminalApp: terminalApp,
-                    terminalTTY: terminalTTY,
-                    terminalWindowId: terminalWindowId,
-                    terminalTabIndex: terminalTabIndex,
-                    terminalTmuxPane: terminalTmuxPane,
-                    terminalTmuxSocket: terminalTmuxSocket,
-                    terminalTmuxClient: terminalTmuxClient,
-                    toolName: displayToolName,
-                    eventName: event,
-                    message: "Policy \(policyDecision.action.rawValue): \(displayToolName)",
-                    isPending: false,
-                    preserveMessage: true,
-                    isLifecycleTracked: true,
-                    status: .policyApproved(Date())
-                )
-            }
-            return
-        }
-
-        if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
-            print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
-            respondWithReplay(
-                "{\"response\": \"approved\"}",
-                responseHandler: request.responseHandler,
-                hookEventId: hookEventId,
-                agentKind: agentKind,
-                sessionId: sessionId,
-                toolName: replayToolName,
-                workspaceRoot: workspaceRoot,
-                action: .allow,
-                source: .automatic,
-                reason: "auto-approved"
-            )
-            
-            // 터미널 입력이 필요한 Interactive 툴인 경우 노치를 펼쳐 사용자에게 알림(Notification) 표시
-            // 단, 터미널이 이미 포커스 상태라면 알림 불필요
-            if isInteractive {
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    if !isReplayPayload {
-                        guard !self.frontmostCheck(
-                            terminalApp,
-                            terminalTTY,
-                            terminalWindowId,
-                            terminalTabIndex,
-                            terminalTmuxPane,
-                            terminalTmuxSocket,
-                            terminalTmuxClient
-                        ) else { return }
-                    }
-                    self.isNotchExpanded = true
-                    self.isExpandingFromRequest = true
-                    self.currentSessionId = sessionId
-                    self.currentMessage = "터미널 창을 확인해 주세요 (\(displayToolName))"
-                }
-            }
-            
-            // [상태 추적] exit_plan_mode가 호출되면, 사용자가 터미널에서 계획을 승인할 것으로 간주하고
-            // 이후의 편집 작업들을 자동화하기 위해 Auto-Edit 모드 활성화를 준비합니다.
-            if toolName == "exit_plan_mode" {
-                DispatchQueue.main.async { [weak self] in
-                    if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
-                        self?.activeSessions[index].isAutoEditActive = true
-                        print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Auto-Edit mode")
-                    }
-                }
-            }
-
-            // Auto-Edit 중에 enter_plan_mode가 자동 승인되면 아래 리셋 블록에 도달하지 못하므로 여기서 처리
-            if toolName == "enter_plan_mode" {
-                DispatchQueue.main.async { [weak self] in
-                    if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
-                        self?.activeSessions[index].isAutoEditActive = false
-                        print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
-                    }
-                }
-            }
-            
-            DispatchQueue.main.async { [weak self] in
-                if !sessionId.isEmpty {
-                    self?.updateActiveSession(
-                        sessionId: sessionId,
-                        terminalTitle: terminalTitle,
-                        agentKind: agentKind,
-                        terminalApp: terminalApp,
-                        terminalTTY: terminalTTY,
-                        terminalWindowId: terminalWindowId,
-                        terminalTabIndex: terminalTabIndex,
-                        terminalTmuxPane: terminalTmuxPane,
-                        terminalTmuxSocket: terminalTmuxSocket,
-                        terminalTmuxClient: terminalTmuxClient,
-                        toolName: displayToolName,
-                        eventName: event,
-                        // Interactive 툴인 경우 사용자에게 다음 행동 가이드를 제공
-                        message: isInteractive ? "터미널 확인 대기 중..." : "Auto-approved: \(displayToolName)",
-                        isPending: false,
-                        preserveMessage: true,
-                        isLifecycleTracked: true,
-                        status: .autoApproved(Date())
-                    )
-                }
-            }
-            return
-        }
-        
-        // [상태 추적] enter_plan_mode가 호출되면 다시 신중한 계획 수립 단계로 돌아간 것이므로
-        // 실행 단계의 자동 승인(Auto-Edit) 모드를 해제하여 다시 모든 작업을 사용자에게 확인받습니다.
-        if toolName == "enter_plan_mode" {
-            DispatchQueue.main.async { [weak self] in
-                if let index = self?.activeSessions.firstIndex(where: { $0.id == sessionId }) {
-                    self?.activeSessions[index].isAutoEditActive = false
-                    print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
-                }
-            }
-        }
-
-        // Pass through check: 터미널이 이미 활성 상태라면 'pass' 응답으로 즉시 통과
-        // NSAppleScript는 메인 스레드에서만 안전하게 실행 가능 (Apple 문서)
+        // Pass through check, policy, and auto-approve all run on main thread so that
+        // frontmostCheck (NSAppleScript) executes safely and terminal focus always wins.
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+
+            // 1. 터미널 포커스 최우선 — 사용자가 이미 터미널에 있으면 CLI가 자체 처리하도록 pass
             let isFrontmost = !isReplayPayload && self.frontmostCheck(
                     terminalApp,
                     terminalTTY,
@@ -1170,6 +1041,106 @@ class AppState: ObservableObject {
                 return
             }
 
+            // 2. SQLite policy rules (all providers)
+            let provider = self.providerKind(for: agentKind)
+            if let policyDecision = self.policyDecision(
+                provider: provider,
+                hookEventId: hookEventId,
+                sessionId: sessionId,
+                toolName: toolName,
+                workspaceRoot: workspaceRoot
+            ) {
+                print("[DevIsland] [POLICY] \(provider.rawValue) \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
+                request.responseHandler(self.responsePayload(approved: policyDecision.action == .allow))
+                self.updateActiveSession(
+                    sessionId: sessionId,
+                    terminalTitle: terminalTitle,
+                    agentKind: agentKind,
+                    terminalApp: terminalApp,
+                    terminalTTY: terminalTTY,
+                    terminalWindowId: terminalWindowId,
+                    terminalTabIndex: terminalTabIndex,
+                    terminalTmuxPane: terminalTmuxPane,
+                    terminalTmuxSocket: terminalTmuxSocket,
+                    terminalTmuxClient: terminalTmuxClient,
+                    toolName: displayToolName,
+                    eventName: event,
+                    message: "Policy \(policyDecision.action.rawValue): \(displayToolName)",
+                    isPending: false,
+                    preserveMessage: true,
+                    isLifecycleTracked: true,
+                    status: .policyApproved(Date())
+                )
+                return
+            }
+
+            // 3. In-memory auto-approve (global settings + session cache + auto-edit + safe-tool bypass)
+            if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
+                print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
+                self.respondWithReplay(
+                    "{\"response\": \"approved\"}",
+                    responseHandler: request.responseHandler,
+                    hookEventId: hookEventId,
+                    agentKind: agentKind,
+                    sessionId: sessionId,
+                    toolName: replayToolName,
+                    workspaceRoot: workspaceRoot,
+                    action: .allow,
+                    source: .automatic,
+                    reason: "auto-approved"
+                )
+
+                // Interactive 툴: 이미 포커스 체크 후 여기 도달했으므로 터미널이 비포커스 상태 → 알림 표시
+                if isInteractive && !isReplayPayload {
+                    self.isNotchExpanded = true
+                    self.isExpandingFromRequest = true
+                    self.currentSessionId = sessionId
+                    self.currentMessage = "터미널 창을 확인해 주세요 (\(displayToolName))"
+                }
+
+                if toolName == "exit_plan_mode",
+                   let index = self.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                    self.activeSessions[index].isAutoEditActive = true
+                    print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Auto-Edit mode")
+                }
+                if toolName == "enter_plan_mode",
+                   let index = self.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                    self.activeSessions[index].isAutoEditActive = false
+                    print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
+                }
+
+                if !sessionId.isEmpty {
+                    self.updateActiveSession(
+                        sessionId: sessionId,
+                        terminalTitle: terminalTitle,
+                        agentKind: agentKind,
+                        terminalApp: terminalApp,
+                        terminalTTY: terminalTTY,
+                        terminalWindowId: terminalWindowId,
+                        terminalTabIndex: terminalTabIndex,
+                        terminalTmuxPane: terminalTmuxPane,
+                        terminalTmuxSocket: terminalTmuxSocket,
+                        terminalTmuxClient: terminalTmuxClient,
+                        toolName: displayToolName,
+                        eventName: event,
+                        message: isInteractive ? "터미널 확인 대기 중..." : "Auto-approved: \(displayToolName)",
+                        isPending: false,
+                        preserveMessage: true,
+                        isLifecycleTracked: true,
+                        status: .autoApproved(Date())
+                    )
+                }
+                return
+            }
+
+            // 4. enter_plan_mode가 자동 승인 없이 UI로 넘어갈 때 Auto-Edit 해제
+            if toolName == "enter_plan_mode",
+               let index = self.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                self.activeSessions[index].isAutoEditActive = false
+                print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
+            }
+
+            // 5. 승인 대기 큐에 추가
             self.pendingQueue.append(request)
 
             let newItem = PendingItem(
@@ -1668,7 +1639,7 @@ class AppState: ObservableObject {
             workspaceRoot: workspaceRoot
         )
         let decision = ApprovalPolicyDecision(action: action, source: source, ruleId: nil)
-        approvalPersistenceQueue.sync {
+        approvalPersistenceQueue.async {
             do {
                 try approvalProxy.recordDecision(
                     hookEventId: hookEventId,
@@ -1746,12 +1717,14 @@ class AppState: ObservableObject {
             )
             let decision = try approvalProxy.evaluate(request)
             guard decision.action != .prompt else { return nil }
-            try approvalProxy.recordDecision(
-                hookEventId: hookEventId,
-                request: request,
-                decision: decision,
-                reason: "matched \(decision.source.rawValue)"
-            )
+            approvalPersistenceQueue.async {
+                try? approvalProxy.recordDecision(
+                    hookEventId: hookEventId,
+                    request: request,
+                    decision: decision,
+                    reason: "matched \(decision.source.rawValue)"
+                )
+            }
             return decision
         } catch {
             print("[DevIsland] [POLICY] \(provider.rawValue) policy evaluation failed: \(error)")
