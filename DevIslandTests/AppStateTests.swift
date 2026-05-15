@@ -302,73 +302,225 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.pendingCount, 0)
     }
     
-    func testGeminiAutoEditMode() {
-        let sessionId = "gemini-session"
-        
-        // 1. Initial tool call (Should be pending)
-        let msg1 = """
+    // MARK: - Gemini Normal Mode (emulateGeminiInteractiveMode = false)
+
+    func testGeminiNormalModePassesAllToolsThrough() {
+        // Normal mode: Gemini runs with --auto-approve/--yolo, DevIsland passes all BeforeTool through.
+        let expectation = XCTestExpectation(description: "Risky tool approved immediately in normal mode")
+        let message = """
         {
             "hook_event_name": "BeforeTool",
-            "session_id": "\(sessionId)",
+            "session_id": "gemini-normal",
             "tool_name": "write_to_file"
         }
         """
-        appState.handleMessage(msg1) { _ in }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
-        XCTAssertEqual(appState.pendingCount, 1)
-        XCTAssertEqual(appState.currentSessionId, sessionId)
-        appState.approve()
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+    }
 
-        // 2. Trigger exit_plan_mode (Simulates moving to execution phase)
-        let exitPlan = """
+    func testGeminiNormalModeSafeToolPassesThrough() {
+        let expectation = XCTestExpectation(description: "Safe tool approved in normal mode")
+        let message = """
+        {
+            "hook_event_name": "BeforeTool",
+            "session_id": "gemini-normal-safe",
+            "tool_name": "view_file"
+        }
+        """
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.pendingCount, 0)
+    }
+
+    func testGeminiNormalModeExitPlanModeDoesNotActivateAutoEdit() {
+        // In normal mode, exit_plan_mode passes through but must NOT activate auto-edit
+        // because no approval UI was shown to the user.
+        let expectation = XCTestExpectation(description: "exit_plan_mode approved in normal mode")
+        let sessionId = "gemini-normal-plan"
+        let message = """
         {
             "hook_event_name": "BeforeTool",
             "session_id": "\(sessionId)",
             "tool_name": "exit_plan_mode"
         }
         """
-        appState.handleMessage(exitPlan) { _ in }
-        
-        // Wait longer because exit_plan_mode handling involves a global queue -> main queue jump
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
-        
-        // Verify session is now in auto-edit active mode
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+        // Session may or may not appear in activeSessions, but must not be in auto-edit.
         let session = appState.activeSessions.first { $0.id == sessionId }
-        XCTAssertNotNil(session, "Session should exist in activeSessions")
-        XCTAssertTrue(session?.isAutoEditActive ?? false, "Session should be in Auto-Edit mode after exit_plan_mode")
-        
-        // 3. Subsequent tool call (Should be auto-approved)
-        let expectation = XCTestExpectation(description: "Tool auto-approved in auto-edit mode")
-        let msg2 = """
+        XCTAssertFalse(session?.isAutoEditActive ?? false, "Auto-Edit must not activate via pass-through in normal mode")
+    }
+
+    // MARK: - Gemini Emulation Mode (emulateGeminiInteractiveMode = true)
+
+    func testGeminiEmulationModeRiskyToolRequiresApproval() {
+        appState.emulateGeminiInteractiveMode = true
+        let sessionId = "gemini-emulate-risky"
+        let message = """
+        {
+            "hook_event_name": "BeforeTool",
+            "session_id": "\(sessionId)",
+            "tool_name": "write_to_file"
+        }
+        """
+        appState.handleMessage(message) { _ in }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        XCTAssertEqual(appState.pendingCount, 1, "Risky tool should enter approval queue in emulation mode")
+        XCTAssertEqual(appState.currentSessionId, sessionId)
+        XCTAssertTrue(appState.hasResponseHandler)
+    }
+
+    func testGeminiEmulationModeSafeToolRequiresApprovalByDefault() {
+        // Safe tools in emulation mode still go to pending unless autoApproveSafeTools is enabled.
+        // The emulation block only skips the isAutoApprovedGlobal reset for safe tools;
+        // it does not set autoApproval itself — that requires the separate autoApproveSafeTools setting.
+        appState.emulateGeminiInteractiveMode = true
+        let message = """
+        {
+            "hook_event_name": "BeforeTool",
+            "session_id": "gemini-emulate-safe-default",
+            "tool_name": "view_file"
+        }
+        """
+        appState.handleMessage(message) { _ in }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        XCTAssertEqual(appState.pendingCount, 1, "Safe tool should still require approval without autoApproveSafeTools")
+        XCTAssertTrue(appState.hasResponseHandler)
+    }
+
+    func testGeminiEmulationModeSafeToolAutoApprovedWhenSettingEnabled() {
+        appState.emulateGeminiInteractiveMode = true
+        appState.autoApproveSafeTools = true
+        let expectation = XCTestExpectation(description: "Safe tool auto-approved with autoApproveSafeTools enabled")
+        let message = """
+        {
+            "hook_event_name": "BeforeTool",
+            "session_id": "gemini-emulate-safe-setting",
+            "tool_name": "view_file"
+        }
+        """
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+    }
+
+    func testGeminiEmulationModeExplicitGlobalApproveBypassesBlock() {
+        appState.emulateGeminiInteractiveMode = true
+        appState.globalAutoApproveTypes.insert("write_to_file")
+
+        let expectation = XCTestExpectation(description: "Explicitly approved tool passes through even in emulation mode")
+        let message = """
+        {
+            "hook_event_name": "BeforeTool",
+            "session_id": "gemini-emulate-global",
+            "tool_name": "write_to_file"
+        }
+        """
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.pendingCount, 0)
+    }
+
+    func testGeminiEmulationModeExplicitSessionApproveBypassesBlock() {
+        appState.emulateGeminiInteractiveMode = true
+        let sessionId = "gemini-emulate-session"
+        appState.sessionAutoApproveTypes[sessionId] = ["replace_file_content"]
+
+        let expectation = XCTestExpectation(description: "Session-approved tool passes through in emulation mode")
+        let message = """
         {
             "hook_event_name": "BeforeTool",
             "session_id": "\(sessionId)",
             "tool_name": "replace_file_content"
         }
         """
-        appState.handleMessage(msg2) { response in
+        appState.handleMessage(message) { response in
             let json = self.parseResponse(response)
             XCTAssertEqual(json?["response"] as? String, "approved")
             expectation.fulfill()
         }
-        
-        wait(for: [expectation], timeout: 2.0)
+        wait(for: [expectation], timeout: 1.0)
         XCTAssertEqual(appState.pendingCount, 0)
-        
-        // 4. Trigger enter_plan_mode (Should reset auto-edit mode)
-        let enterPlan = """
-        {
-            "hook_event_name": "BeforeTool",
-            "session_id": "\(sessionId)",
-            "tool_name": "enter_plan_mode"
-        }
-        """
-        appState.handleMessage(enterPlan) { _ in }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
-        
+    }
+
+    func testGeminiEmulationModeAutoEditCycle() {
+        // In emulation mode the emulation block forcibly resets isAutoApprovedGlobal AND
+        // isAutoEditActive for any risky/medium tool that is not explicitly approved.
+        // Risk levels: write_to_file=high, replace_file_content=high (contains "replace"),
+        //              exit_plan_mode=medium, enter_plan_mode=medium (no matching heuristic keyword).
+        // Consequence: auto-edit state is set but has no effect on risky tools in emulation mode —
+        // every risky tool always requires manual approval.
+        appState.emulateGeminiInteractiveMode = true
+        let sessionId = "gemini-emulate-autoedit"
+
+        // Step 1: risky tool → pending queue
+        appState.handleMessage("""
+        {"hook_event_name":"BeforeTool","session_id":"\(sessionId)","tool_name":"write_to_file"}
+        """) { _ in }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        XCTAssertEqual(appState.pendingCount, 1, "Risky tool must be pending in emulation mode")
+        appState.approve()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+
+        // Step 2: exit_plan_mode → also pending (risk=medium, emulation blocks isAutoApprovedGlobal)
+        appState.handleMessage("""
+        {"hook_event_name":"BeforeTool","session_id":"\(sessionId)","tool_name":"exit_plan_mode"}
+        """) { _ in }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        XCTAssertEqual(appState.pendingCount, 1, "exit_plan_mode must be pending in emulation mode (risk=medium)")
+
+        // User manually approves exit_plan_mode → isAutoEditActive becomes true
+        appState.approve()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        let session = appState.activeSessions.first { $0.id == sessionId }
+        XCTAssertNotNil(session, "Session should exist after exit_plan_mode approval")
+        XCTAssertTrue(session?.isAutoEditActive ?? false, "isAutoEditActive set after manual approval of exit_plan_mode")
+
+        // Step 3: subsequent risky tool → still pending despite auto-edit being active,
+        // because emulation resets isAutoEditActive=false for risky tools.
+        appState.handleMessage("""
+        {"hook_event_name":"BeforeTool","session_id":"\(sessionId)","tool_name":"replace_file_content"}
+        """) { _ in }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        XCTAssertEqual(appState.pendingCount, 1, "Risky tool must still be pending in emulation mode even with auto-edit active")
+        appState.approve()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+
+        // Step 4: enter_plan_mode → pending (risk=medium), manual approval resets isAutoEditActive
+        appState.handleMessage("""
+        {"hook_event_name":"BeforeTool","session_id":"\(sessionId)","tool_name":"enter_plan_mode"}
+        """) { _ in }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        XCTAssertEqual(appState.pendingCount, 1, "enter_plan_mode must be pending in emulation mode")
+        appState.approve()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
         let resetSession = appState.activeSessions.first { $0.id == sessionId }
-        XCTAssertFalse(resetSession?.isAutoEditActive ?? true, "Session should not be in Auto-Edit mode after enter_plan_mode")
+        XCTAssertFalse(resetSession?.isAutoEditActive ?? true, "Auto-Edit should be reset after enter_plan_mode approval")
     }
     
     func testGeminiInteractiveToolAutoApproval() {
