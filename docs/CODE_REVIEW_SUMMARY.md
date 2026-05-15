@@ -47,3 +47,11 @@
 *   **리뷰 반영**: `NSAppleScript`를 background thread에서 실행하지 않도록 제거하고, `/usr/bin/osascript`를 `Process`로 실행하도록 변경했습니다. timeout 시 child process를 `terminate()`하고 필요 시 `SIGKILL`로 정리합니다. `frontmostCheck` 접근은 `isTerminalFrontmostAsync` helper로 통일했고, `AppState` 들여쓰기 지적도 정리했습니다. 커밋: `be9c4c5`.
 *   **검증**: `swiftc -parse DevIsland/TerminalFocuser.swift DevIsland/AppState.swift`, `git diff --check`, `./scripts/run-tests.sh` 통과. 테스트 중 CoreSimulator out-of-date 경고가 출력됐지만 macOS unit test는 정상 완료됐습니다.
 *   **남은 작업**: PR review thread는 일부 GitHub상 unresolved로 남아 있으나, 주요 코멘트는 최신 커밋에서 outdated 처리되거나 코드로 반영되었습니다. 다음 우선순위는 P1(DB `.sync` 제거/최소화)입니다.
+
+### 2026-05-16 — P1 시작 (`fix/p1-async-approval-persistence`)
+*   **승인 scope 저장 비동기화**: `persistApprovalScope`의 `approvalPersistenceQueue.sync`를 `async`로 변경했습니다. `sendDecision`에서 decision 기록 작업이 먼저 enqueue되고 approval scope 저장이 같은 serial queue에 뒤따르므로 저장 순서는 유지하면서 버튼 응답 경로는 DB 쓰기를 기다리지 않습니다.
+*   **Replay event 기록 비동기화**: `recordReplayHookEvent`가 DB autoincrement id를 기다리지 않도록 앱에서 음수 hook event id를 예약한 뒤 hook event insert를 비동기로 enqueue합니다. decision insert는 같은 serial queue에 뒤따르므로 event-decision ordering과 FK 연결을 유지합니다.
+*   **Fallback 보강**: hook event insert 실패 등으로 decision FK 기록이 실패하면 hook event 없이 decision만 재기록하도록 fallback을 추가했습니다.
+*   **테스트 보강**: `SQLiteApprovalStoreTests`에 예약 음수 id로 hook event와 decision이 replay log에서 연결되는 케이스를 추가했습니다.
+*   **테스트 출력 정리**: `scripts/run-tests.sh`에서 host architecture를 명시해 중복 macOS destination 경고를 제거하고, macOS 테스트와 무관한 Xcode/CoreSimulator version-mismatch 잡음만 필터링하도록 변경했습니다.
+*   **검증**: `./scripts/run-tests.sh` 통과. CoreSimulator out-of-date 경고 없이 macOS unit test가 정상 완료됐습니다.

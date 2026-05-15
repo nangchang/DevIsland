@@ -15,6 +15,7 @@ final class ApprovalProxyController {
 
     @discardableResult
     func recordHookEvent(
+        id: Int64? = nil,
         requestId: String?,
         provider: ProviderKind,
         sessionId: String,
@@ -24,6 +25,7 @@ final class ApprovalProxyController {
         receivedAt: Date = Date()
     ) throws -> Int64 {
         try store.insertHookEvent(
+            id: id,
             requestId: requestId,
             provider: provider,
             sessionId: sessionId,

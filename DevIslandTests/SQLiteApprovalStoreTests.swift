@@ -203,6 +203,37 @@ final class SQLiteApprovalStoreTests: XCTestCase {
         XCTAssertGreaterThan(decisionId, 0)
     }
 
+    func testHookEventCanUseReservedNegativeId() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let reservedEventId: Int64 = -42
+
+        let eventId = try store.insertHookEvent(
+            id: reservedEventId,
+            requestId: "request-1",
+            provider: .claude,
+            sessionId: "session-1",
+            eventName: "PermissionRequest",
+            toolName: "Bash",
+            payloadJSON: #"{"hook_event_name":"PermissionRequest"}"#
+        )
+        let decisionId = try store.insertDecision(
+            hookEventId: reservedEventId,
+            provider: .claude,
+            sessionId: "session-1",
+            toolName: "Bash",
+            action: .allow,
+            source: .user,
+            reason: "reserved id"
+        )
+        let entries = try store.replayLog(limit: 20)
+
+        XCTAssertEqual(eventId, reservedEventId)
+        XCTAssertGreaterThan(decisionId, 0)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].id, reservedEventId)
+        XCTAssertEqual(entries[0].decisionAction, .allow)
+    }
+
     func testReplayLogReturnsEventsWithLatestDecision() throws {
         let store = try SQLiteApprovalStore(databaseURL: databaseURL)
         let eventId = try store.insertHookEvent(

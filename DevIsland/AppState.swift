@@ -243,6 +243,10 @@ class AppState: ObservableObject {
     private let lifecycleSessionTimeout: Double = 15 * 60
     private static let replayTerminalApp = "DevIsland Replay"
     private static let replayTimestampFormatter = ISO8601DateFormatter()
+    private static let replayEventIdLock = NSLock()
+    // Negative IDs are reserved by the app before enqueueing SQLite writes.
+    // SQLite AUTOINCREMENT uses positive IDs, and replay ordering uses received_at.
+    private static var nextReplayEventId: Int64 = -Int64(Date().timeIntervalSince1970 * 1_000_000)
 
     init(
         startServer: Bool = true,
@@ -1618,10 +1622,11 @@ class AppState: ObservableObject {
     ) -> Int64? {
         guard let approvalProxy else { return nil }
         let payloadJSON = payload.map { Self.replayPayloadString(from: $0) } ?? "{}"
-        var eventId: Int64?
-        approvalPersistenceQueue.sync {
+        let eventId = Self.makeReplayHookEventId()
+        approvalPersistenceQueue.async {
             do {
-                eventId = try approvalProxy.recordHookEvent(
+                try approvalProxy.recordHookEvent(
+                    id: eventId,
                     requestId: requestId,
                     provider: provider,
                     sessionId: sessionId,
@@ -1634,6 +1639,14 @@ class AppState: ObservableObject {
             }
         }
         return eventId
+    }
+
+    private static func makeReplayHookEventId() -> Int64 {
+        replayEventIdLock.lock()
+        defer { replayEventIdLock.unlock() }
+        let id = nextReplayEventId
+        nextReplayEventId -= 1
+        return id
     }
 
     private func recordReplayDecision(
@@ -1669,6 +1682,19 @@ class AppState: ObservableObject {
                 )
             } catch {
                 print("[DevIsland] [REPLAY] Failed to record decision: \(error)")
+                // Retry without a hook_event FK only when the first attempt tried to link one.
+                if hookEventId != nil {
+                    do {
+                        try approvalProxy.recordDecision(
+                            hookEventId: nil,
+                            request: request,
+                            decision: decision,
+                            reason: reason
+                        )
+                    } catch {
+                        print("[DevIsland] [REPLAY] Failed to record decision without hook event: \(error)")
+                    }
+                }
             }
         }
     }
@@ -1738,12 +1764,16 @@ class AppState: ObservableObject {
             let decision = try approvalProxy.evaluate(request)
             guard decision.action != .prompt else { return nil }
             approvalPersistenceQueue.async {
-                try? approvalProxy.recordDecision(
-                    hookEventId: hookEventId,
-                    request: request,
-                    decision: decision,
-                    reason: "matched \(decision.source.rawValue)"
-                )
+                do {
+                    try approvalProxy.recordDecision(
+                        hookEventId: hookEventId,
+                        request: request,
+                        decision: decision,
+                        reason: "matched \(decision.source.rawValue)"
+                    )
+                } catch {
+                    print("[DevIsland] [REPLAY] Failed to record policy decision: \(error)")
+                }
             }
             return decision
         } catch {
@@ -2071,8 +2101,8 @@ class AppState: ObservableObject {
         let sessionId = currentSessionId
         let toolName = currentRawToolName
         let workspaceRoot = currentWorkspaceRoot
-        approvalPersistenceQueue.sync {
-            persistApprovalScopeOnPersistenceQueue(
+        approvalPersistenceQueue.async { [weak self] in
+            self?.persistApprovalScopeOnPersistenceQueue(
                 approvalProxy: approvalProxy,
                 provider: provider,
                 approvalScope: approvalScope,
