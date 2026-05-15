@@ -212,18 +212,11 @@ class AppState: ObservableObject {
         }
     }
     
-    // TODO(gap-3): globalAutoApproveTypes and sessionAutoApproveTypes are in-memory Sets
-    //   (globalAutoApproveTypes persisted to UserDefaults only). Claude and Gemini approvals
-    //   currently write here instead of SQLiteApprovalStore. Consequence: rules vanish on restart
-    //   and are invisible to the Approval Rules UI.
-    //   Target: route Claude/Gemini approve() through ApprovalProxyController.store.insertRule()
-    //   so all providers share a single SQLite source of truth (rules + session_cache tables).
-    //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
-    @Published var globalAutoApproveTypes: Set<String> = [] {
-        didSet {
-            userDefaults.set(Array(globalAutoApproveTypes), forKey: DefaultsKey.globalAutoApproveTypes)
-        }
-    }
+    // gap-3 (done): All providers now write to SQLiteApprovalStore via persistApprovalScope.
+    // These in-memory sets remain as a fast-path read cache for the current session only.
+    // globalAutoApproveTypes is also persisted to UserDefaults for backward compatibility
+    // with rules created before gap-3; new approvals are durable via SQLite.
+    @Published var globalAutoApproveTypes: Set<String> = []
     @Published var sessionAutoApproveTypes: [String: Set<String>] = [:]
 
     private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
@@ -279,8 +272,43 @@ class AppState: ObservableObject {
            let target = RequestDisplayTarget(rawValue: rawTarget) {
             requestDisplayTarget = target
         }
-        if let savedAutoApprove = userDefaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String] {
+        if let savedAutoApprove = userDefaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String], !savedAutoApprove.isEmpty {
             globalAutoApproveTypes = Set(savedAutoApprove)
+            // Migrate legacy UserDefaults rules into SQLite; only remove keys that succeeded.
+            if let proxy = approvalProxy {
+                var migratedTools: [String] = []
+                for toolName in savedAutoApprove {
+                    let trimmed = toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { continue }
+                    do {
+                        try proxy.store.insertRule(ApprovalRule(
+                            id: SQLiteApprovalStore.deterministicRuleID(
+                                provider: .any,
+                                toolName: trimmed,
+                                scope: .persistent,
+                                workspaceRoot: nil
+                            ),
+                            provider: .any,
+                            toolName: trimmed,
+                            action: .allow,
+                            scope: .persistent
+                        ))
+                        migratedTools.append(toolName)
+                    } catch {
+                        print("[DevIsland] [MIGRATE] Failed to migrate rule '\(trimmed)': \(error)")
+                    }
+                }
+                if migratedTools.count == savedAutoApprove.filter({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }).count {
+                    userDefaults.removeObject(forKey: DefaultsKey.globalAutoApproveTypes)
+                } else {
+                    let remaining = Set(savedAutoApprove).subtracting(migratedTools)
+                    userDefaults.set(Array(remaining), forKey: DefaultsKey.globalAutoApproveTypes)
+                }
+            }
+        } else if let proxy = approvalProxy,
+                  let rules = try? proxy.store.rules(provider: .any, scope: .persistent) {
+            // Warm the in-memory cache from SQLite on startup (no legacy UserDefaults key).
+            globalAutoApproveTypes = Set(rules.map(\.toolName))
         }
         autoApproveSafeTools = userDefaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
         emulateGeminiInteractiveMode = userDefaults.bool(forKey: DefaultsKey.emulateGeminiInteractiveMode)
@@ -1013,15 +1041,16 @@ class AppState: ObservableObject {
                 return
             }
 
-            // 2. SQLite policy rules (Codex only; other providers via in-memory sets below)
-            if agentKind == .codex,
-               let policyDecision = self.codexPolicyDecision(
-                   hookEventId: hookEventId,
-                   sessionId: sessionId,
-                   toolName: toolName,
-                   workspaceRoot: workspaceRoot
-               ) {
-                print("[DevIsland] [POLICY] Codex \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
+            // 2. SQLite policy rules (all providers)
+            let provider = self.providerKind(for: agentKind)
+            if let policyDecision = self.policyDecision(
+                provider: provider,
+                hookEventId: hookEventId,
+                sessionId: sessionId,
+                toolName: toolName,
+                workspaceRoot: workspaceRoot
+            ) {
+                print("[DevIsland] [POLICY] \(provider.rawValue) \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
                 request.responseHandler(self.responsePayload(approved: policyDecision.action == .allow))
                 self.updateActiveSession(
                     sessionId: sessionId,
@@ -1671,7 +1700,8 @@ class AppState: ObservableObject {
         }
     }
 
-    private func codexPolicyDecision(
+    private func policyDecision(
+        provider: ProviderKind,
         hookEventId: Int64?,
         sessionId: String,
         toolName: String,
@@ -1680,7 +1710,7 @@ class AppState: ObservableObject {
         guard let approvalProxy, !sessionId.isEmpty, !toolName.isEmpty else { return nil }
         do {
             let request = ApprovalPolicyRequest(
-                provider: .codex,
+                provider: provider,
                 sessionId: sessionId,
                 toolName: toolName,
                 workspaceRoot: workspaceRoot
@@ -1697,7 +1727,7 @@ class AppState: ObservableObject {
             }
             return decision
         } catch {
-            print("[DevIsland] [POLICY] Codex policy evaluation failed: \(error)")
+            print("[DevIsland] [POLICY] \(provider.rawValue) policy evaluation failed: \(error)")
             return nil
         }
     }
@@ -1959,7 +1989,7 @@ class AppState: ObservableObject {
             source: reason == nil ? .user : .automatic,
             reason: reason
         )
-        persistCodexApprovalScope(approved: approved, approvalScope: approvalScope)
+        persistApprovalScope(approved: approved, approvalScope: approvalScope)
         currentResponseHandler = nil
         currentHookEventId = nil
         isShowingRequest = false
@@ -2007,9 +2037,9 @@ class AppState: ObservableObject {
         }
     }
 
-    private func persistCodexApprovalScope(approved: Bool, approvalScope: RuleScope?) {
+    private func persistApprovalScope(approved: Bool, approvalScope: RuleScope?) {
         guard approved,
-              currentAgentKind == .codex,
+              let agentKind = currentAgentKind,
               let approvalScope,
               let approvalProxy,
               !currentSessionId.isEmpty,
@@ -2017,12 +2047,14 @@ class AppState: ObservableObject {
             return
         }
 
+        let provider = providerKind(for: agentKind)
         let sessionId = currentSessionId
         let toolName = currentRawToolName
         let workspaceRoot = currentWorkspaceRoot
         approvalPersistenceQueue.sync {
-            persistCodexApprovalScopeOnPersistenceQueue(
+            persistApprovalScopeOnPersistenceQueue(
                 approvalProxy: approvalProxy,
+                provider: provider,
                 approvalScope: approvalScope,
                 sessionId: sessionId,
                 toolName: toolName,
@@ -2031,8 +2063,9 @@ class AppState: ObservableObject {
         }
     }
 
-    private func persistCodexApprovalScopeOnPersistenceQueue(
+    private func persistApprovalScopeOnPersistenceQueue(
         approvalProxy: ApprovalProxyController,
+        provider: ProviderKind,
         approvalScope: RuleScope,
         sessionId: String,
         toolName: String,
@@ -2042,7 +2075,7 @@ class AppState: ObservableObject {
             switch approvalScope {
             case .session:
                 try approvalProxy.store.upsertSessionApproval(
-                    provider: .codex,
+                    provider: provider,
                     sessionId: sessionId,
                     toolName: toolName,
                     action: .allow,
@@ -2051,12 +2084,12 @@ class AppState: ObservableObject {
             case .persistent:
                 try approvalProxy.store.insertRule(ApprovalRule(
                     id: SQLiteApprovalStore.deterministicRuleID(
-                        provider: .codex,
+                        provider: provider,
                         toolName: toolName,
                         scope: .persistent,
                         workspaceRoot: workspaceRoot
                     ),
-                    provider: .codex,
+                    provider: provider,
                     toolName: toolName,
                     action: .allow,
                     scope: .persistent,
@@ -2066,18 +2099,20 @@ class AppState: ObservableObject {
                 break
             }
         } catch {
-            print("[DevIsland] [POLICY] Failed to persist Codex approval scope: \(error)")
+            print("[DevIsland] [POLICY] Failed to persist approval scope for \(provider.rawValue): \(error)")
         }
     }
 
     func approve(globalAlways: Bool = false, sessionAlways: Bool = false) {
         let tool = currentRawToolName.isEmpty ? currentToolName : currentRawToolName
         let sId = currentSessionId
-        
-        if globalAlways && !tool.isEmpty && currentAgentKind != .codex {
+
+        // in-memory sets are kept as a fast-path read cache for the current session.
+        // SQLite is the durable source of truth (written via persistApprovalScope → sendDecision).
+        if globalAlways && !tool.isEmpty {
             globalAutoApproveTypes.insert(tool)
         }
-        if sessionAlways && !tool.isEmpty && !sId.isEmpty && currentAgentKind != .codex {
+        if sessionAlways && !tool.isEmpty && !sId.isEmpty {
             if sessionAutoApproveTypes[sId] == nil {
                 sessionAutoApproveTypes[sId] = []
             }
@@ -2103,6 +2138,63 @@ class AppState: ObservableObject {
         sendDecision(approved: false)
     }
 
+    func insertGlobalPersistentRule(_ toolName: String) {
+        let trimmed = toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        globalAutoApproveTypes.insert(trimmed)
+        guard let proxy = approvalProxy else { return }
+        approvalPersistenceQueue.async { [weak self] in
+            do {
+                try proxy.store.insertRule(ApprovalRule(
+                    id: SQLiteApprovalStore.deterministicRuleID(
+                        provider: .any,
+                        toolName: trimmed,
+                        scope: .persistent,
+                        workspaceRoot: nil
+                    ),
+                    provider: .any,
+                    toolName: trimmed,
+                    action: .allow,
+                    scope: .persistent
+                ))
+            } catch {
+                print("[DevIsland] [POLICY] Failed to insert global persistent rule '\(trimmed)': \(error)")
+                DispatchQueue.main.async { self?.globalAutoApproveTypes.remove(trimmed) }
+            }
+        }
+    }
+
+    func removeGlobalPersistentRule(_ toolName: String) {
+        globalAutoApproveTypes.remove(toolName)
+        guard let proxy = approvalProxy else { return }
+        let ruleID = SQLiteApprovalStore.deterministicRuleID(
+            provider: .any,
+            toolName: toolName,
+            scope: .persistent,
+            workspaceRoot: nil
+        )
+        approvalPersistenceQueue.async {
+            try? proxy.store.deleteRule(id: ruleID)
+        }
+    }
+
+    func removeAllGlobalPersistentRules() {
+        let tools = globalAutoApproveTypes
+        globalAutoApproveTypes.removeAll()
+        guard let proxy = approvalProxy else { return }
+        approvalPersistenceQueue.async {
+            for toolName in tools {
+                let ruleID = SQLiteApprovalStore.deterministicRuleID(
+                    provider: .any,
+                    toolName: toolName,
+                    scope: .persistent,
+                    workspaceRoot: nil
+                )
+                try? proxy.store.deleteRule(id: ruleID)
+            }
+        }
+    }
+
     func promptToAddGlobalAutoApprove() {
         DispatchQueue.main.async {
             let alert = NSAlert()
@@ -2118,7 +2210,7 @@ class AppState: ObservableObject {
             if alert.runModal() == .alertFirstButtonReturn {
                 let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !toolName.isEmpty {
-                    self.globalAutoApproveTypes.insert(toolName)
+                    self.insertGlobalPersistentRule(toolName)
                 }
             }
         }
