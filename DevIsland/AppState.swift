@@ -860,9 +860,9 @@ class AppState: ObservableObject {
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
                     // 터미널이 포커스되어 있지 않을 때만 확장
                     let session = self.activeSessions.first { $0.id == fullSessionId }
-                    let isFrontmost = self.isTerminalFrontmost(for: session)
-                    
-                    if !isFrontmost {
+                    self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
+                        guard let self else { return }
+                        guard !isFrontmost, self.currentResponseHandler == nil else { return }
                         self.currentToolName = displayToolName
                         self.currentEventName = event
                         self.currentMessage = sessionMessage
@@ -989,22 +989,23 @@ class AppState: ObservableObject {
             }
         }
 
-        // Pass through check, policy, and auto-approve all run on main thread so that
-        // frontmostCheck (NSAppleScript) executes safely and terminal focus always wins.
-        DispatchQueue.main.async { [weak self] in
+        // Check terminal focus off the main thread before continuing with UI/policy state.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
+            let isFrontmost = !isReplayPayload && self.frontmostCheck(
+                terminalApp,
+                terminalTTY,
+                terminalWindowId,
+                terminalTabIndex,
+                terminalTmuxPane,
+                terminalTmuxSocket,
+                terminalTmuxClient
+            )
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
 
             // 1. 터미널 포커스 최우선 — 사용자가 이미 터미널에 있으면 CLI가 자체 처리하도록 pass
-            let isFrontmost = !isReplayPayload && self.frontmostCheck(
-                    terminalApp,
-                    terminalTTY,
-                    terminalWindowId,
-                    terminalTabIndex,
-                    terminalTmuxPane,
-                    terminalTmuxSocket,
-                    terminalTmuxClient
-                )
-
             if isFrontmost {
                 print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
                 self.respondWithReplay(
@@ -1185,6 +1186,7 @@ class AppState: ObservableObject {
                 self.showNextRequest()
             } else {
                 self.syncDisplayToSelectedSession()
+            }
             }
         }
     }
@@ -1529,37 +1531,37 @@ class AppState: ObservableObject {
         showingRequestId = next.id
 
         let session = activeSessions.first { $0.id == next.sessionId }
+        isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
+            guard let self else { return }
+            guard self.showingRequestId == next.id else { return }
 
-        // NSAppleScript는 메인 스레드에서만 안전하게 실행 가능 (Apple 문서)
-        // showNextRequest()는 항상 메인 스레드에서 호출되므로 동기 호출로 충분
-        let isFrontmost = isTerminalFrontmost(for: session)
+            if isFrontmost && !next.isReplay {
+                print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
+                self.currentResponseHandler = next.responseHandler
+                self.currentSessionId = next.sessionId
+                self.currentRawToolName = next.rawToolName
+                self.currentAgentKind = next.agentKind
+                self.currentWorkspaceRoot = next.workspaceRoot
+                self.currentHookEventId = next.hookEventId
+                self.sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
+                return
+            }
 
-        if isFrontmost && !next.isReplay {
-            print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
-            currentResponseHandler = next.responseHandler
-            currentSessionId = next.sessionId
-            currentRawToolName = next.rawToolName
-            currentAgentKind = next.agentKind
-            currentWorkspaceRoot = next.workspaceRoot
-            currentHookEventId = next.hookEventId
-            sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
-            return
+            print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
+            self.currentResponseHandler = next.responseHandler
+            self.currentEventName  = next.eventName
+            self.currentToolName   = next.toolName
+            self.currentRawToolName = next.rawToolName
+            self.currentAgentKind  = next.agentKind
+            self.currentWorkspaceRoot = next.workspaceRoot
+            self.currentHookEventId = next.hookEventId
+            self.currentMessage    = next.message
+            self.currentSessionId  = next.sessionId
+
+            self.isExpandingFromRequest = true
+            self.isNotchExpanded = true
+            self.startTimeout()
         }
-
-        print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
-        currentResponseHandler = next.responseHandler
-        currentEventName  = next.eventName
-        currentToolName   = next.toolName
-        currentRawToolName = next.rawToolName
-        currentAgentKind  = next.agentKind
-        currentWorkspaceRoot = next.workspaceRoot
-        currentHookEventId = next.hookEventId
-        currentMessage    = next.message
-        currentSessionId  = next.sessionId
-
-        isExpandingFromRequest = true
-        isNotchExpanded = true
-        startTimeout()
     }
 
     private func isTerminalFrontmost(for session: ActiveSession?) -> Bool {
@@ -1572,6 +1574,32 @@ class AppState: ObservableObject {
             session?.terminalTmuxSocket,
             session?.terminalTmuxClient
         )
+    }
+
+    private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
+        let frontmostCheck = self.frontmostCheck
+        let terminalApp = session?.terminalApp
+        let terminalTTY = session?.terminalTTY
+        let terminalWindowId = session?.terminalWindowId
+        let terminalTabIndex = session?.terminalTabIndex
+        let terminalTmuxPane = session?.terminalTmuxPane
+        let terminalTmuxSocket = session?.terminalTmuxSocket
+        let terminalTmuxClient = session?.terminalTmuxClient
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let isFrontmost = frontmostCheck(
+                terminalApp,
+                terminalTTY,
+                terminalWindowId,
+                terminalTabIndex,
+                terminalTmuxPane,
+                terminalTmuxSocket,
+                terminalTmuxClient
+            )
+            DispatchQueue.main.async {
+                completion(isFrontmost)
+            }
+        }
     }
 
     private func discardInvalidPendingRequests() {

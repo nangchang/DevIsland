@@ -2,6 +2,7 @@ import AppKit
 
 class TerminalFocuser {
     private static let tmuxCommandTimeout: TimeInterval = 1.0
+    private static let appleScriptTimeout: TimeInterval = 1.5
 
     private static let candidates: [(bundleId: String, name: String)] = [
         ("com.mitchellh.ghostty",   "Ghostty"),
@@ -74,17 +75,34 @@ class TerminalFocuser {
     }
 
     private static func executeAppleScript(_ source: String) -> (String, NSDictionary?) {
-        if Thread.isMainThread {
-            return executeAppleScriptOnCurrentThread(source)
-        }
-
-        var output = ""
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var output = "nil"
         var scriptError: NSDictionary?
-        DispatchQueue.main.sync {
+
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
             let result = executeAppleScriptOnCurrentThread(source)
+            lock.lock()
             output = result.0
             scriptError = result.1
+            lock.unlock()
+            group.leave()
         }
+
+        let waitResult = group.wait(timeout: .now() + appleScriptTimeout)
+        guard waitResult == .success else {
+            print("[DevIsland] AppleScript timed out after \(appleScriptTimeout)s")
+            return (
+                "nil",
+                [
+                    "NSLocalizedDescription": "AppleScript timed out after \(appleScriptTimeout)s"
+                ] as NSDictionary
+            )
+        }
+
+        lock.lock()
+        defer { lock.unlock() }
         return (output, scriptError)
     }
 
@@ -317,17 +335,15 @@ class TerminalFocuser {
         guard let match else { return }
 
         let name = match.name
-        DispatchQueue.main.async {
+        DispatchQueue.global(qos: .userInitiated).async {
             let (_, error) = executeAppleScript(focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))
             if let error {
                 print("[DevIsland] terminal focus AppleScript error: \(error)")
             }
             if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
-                DispatchQueue.global(qos: .userInitiated).async {
-                    print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
-                    if !switchTmuxClient(socket: tmuxSocket, client: tmuxClient, pane: tmuxPane) {
-                        print("[DevIsland] tmux switch failed for pane=\(tmuxPane)")
-                    }
+                print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
+                if !switchTmuxClient(socket: tmuxSocket, client: tmuxClient, pane: tmuxPane) {
+                    print("[DevIsland] tmux switch failed for pane=\(tmuxPane)")
                 }
             }
         }
