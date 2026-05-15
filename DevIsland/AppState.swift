@@ -1610,7 +1610,7 @@ class AppState: ObservableObject {
             workspaceRoot: workspaceRoot
         )
         let decision = ApprovalPolicyDecision(action: action, source: source, ruleId: nil)
-        approvalPersistenceQueue.sync {
+        approvalPersistenceQueue.async {
             do {
                 try approvalProxy.recordDecision(
                     hookEventId: hookEventId,
@@ -1687,12 +1687,14 @@ class AppState: ObservableObject {
             )
             let decision = try approvalProxy.evaluate(request)
             guard decision.action != .prompt else { return nil }
-            try approvalProxy.recordDecision(
-                hookEventId: hookEventId,
-                request: request,
-                decision: decision,
-                reason: "matched \(decision.source.rawValue)"
-            )
+            approvalPersistenceQueue.async {
+                try? approvalProxy.recordDecision(
+                    hookEventId: hookEventId,
+                    request: request,
+                    decision: decision,
+                    reason: "matched \(decision.source.rawValue)"
+                )
+            }
             return decision
         } catch {
             print("[DevIsland] [POLICY] Codex policy evaluation failed: \(error)")
