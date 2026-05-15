@@ -462,7 +462,7 @@ private struct ApprovalRulesWindowView: View {
                         state.promptToAddGlobalAutoApprove()
                     }
                     predefinedToolMenu { tool in
-                        state.globalAutoApproveTypes.insert(tool.id)
+                        state.insertGlobalPersistentRule(tool.id)
                     }
                 }
 
@@ -471,14 +471,14 @@ private struct ApprovalRulesWindowView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Button(role: .destructive) {
-                        state.globalAutoApproveTypes.removeAll()
+                        state.removeAllGlobalPersistentRules()
                     } label: {
                         Label(l10n.btnRemoveAllGlobal, systemImage: "trash.fill")
                     }
 
                     ForEach(Array(state.globalAutoApproveTypes.sorted()), id: \.self) { tool in
                         ruleRow(tool: tool) {
-                            state.globalAutoApproveTypes.remove(tool)
+                            state.removeGlobalPersistentRule(tool)
                         }
                     }
                 }

@@ -274,26 +274,41 @@ class AppState: ObservableObject {
         }
         if let savedAutoApprove = userDefaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String], !savedAutoApprove.isEmpty {
             globalAutoApproveTypes = Set(savedAutoApprove)
-            // Migrate legacy UserDefaults rules into SQLite and remove the key.
+            // Migrate legacy UserDefaults rules into SQLite; only remove keys that succeeded.
             if let proxy = approvalProxy {
+                var migratedTools: [String] = []
                 for toolName in savedAutoApprove {
                     let trimmed = toolName.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { continue }
-                    try? proxy.store.insertRule(ApprovalRule(
-                        id: SQLiteApprovalStore.deterministicRuleID(
+                    do {
+                        try proxy.store.insertRule(ApprovalRule(
+                            id: SQLiteApprovalStore.deterministicRuleID(
+                                provider: .any,
+                                toolName: trimmed,
+                                scope: .persistent,
+                                workspaceRoot: nil
+                            ),
                             provider: .any,
                             toolName: trimmed,
-                            scope: .persistent,
-                            workspaceRoot: nil
-                        ),
-                        provider: .any,
-                        toolName: trimmed,
-                        action: .allow,
-                        scope: .persistent
-                    ))
+                            action: .allow,
+                            scope: .persistent
+                        ))
+                        migratedTools.append(toolName)
+                    } catch {
+                        print("[DevIsland] [MIGRATE] Failed to migrate rule '\(trimmed)': \(error)")
+                    }
                 }
-                userDefaults.removeObject(forKey: DefaultsKey.globalAutoApproveTypes)
+                if migratedTools.count == savedAutoApprove.filter({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }).count {
+                    userDefaults.removeObject(forKey: DefaultsKey.globalAutoApproveTypes)
+                } else {
+                    let remaining = Set(savedAutoApprove).subtracting(migratedTools)
+                    userDefaults.set(Array(remaining), forKey: DefaultsKey.globalAutoApproveTypes)
+                }
             }
+        } else if let proxy = approvalProxy,
+                  let rules = try? proxy.store.rules(provider: .any, scope: .persistent) {
+            // Warm the in-memory cache from SQLite on startup (no legacy UserDefaults key).
+            globalAutoApproveTypes = Set(rules.map(\.toolName))
         }
         autoApproveSafeTools = userDefaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
         emulateGeminiInteractiveMode = userDefaults.bool(forKey: DefaultsKey.emulateGeminiInteractiveMode)
@@ -2150,6 +2165,63 @@ class AppState: ObservableObject {
         sendDecision(approved: false)
     }
 
+    func insertGlobalPersistentRule(_ toolName: String) {
+        let trimmed = toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        globalAutoApproveTypes.insert(trimmed)
+        guard let proxy = approvalProxy else { return }
+        approvalPersistenceQueue.async { [weak self] in
+            do {
+                try proxy.store.insertRule(ApprovalRule(
+                    id: SQLiteApprovalStore.deterministicRuleID(
+                        provider: .any,
+                        toolName: trimmed,
+                        scope: .persistent,
+                        workspaceRoot: nil
+                    ),
+                    provider: .any,
+                    toolName: trimmed,
+                    action: .allow,
+                    scope: .persistent
+                ))
+            } catch {
+                print("[DevIsland] [POLICY] Failed to insert global persistent rule '\(trimmed)': \(error)")
+                DispatchQueue.main.async { self?.globalAutoApproveTypes.remove(trimmed) }
+            }
+        }
+    }
+
+    func removeGlobalPersistentRule(_ toolName: String) {
+        globalAutoApproveTypes.remove(toolName)
+        guard let proxy = approvalProxy else { return }
+        let ruleID = SQLiteApprovalStore.deterministicRuleID(
+            provider: .any,
+            toolName: toolName,
+            scope: .persistent,
+            workspaceRoot: nil
+        )
+        approvalPersistenceQueue.async {
+            try? proxy.store.deleteRule(id: ruleID)
+        }
+    }
+
+    func removeAllGlobalPersistentRules() {
+        let tools = globalAutoApproveTypes
+        globalAutoApproveTypes.removeAll()
+        guard let proxy = approvalProxy else { return }
+        approvalPersistenceQueue.async {
+            for toolName in tools {
+                let ruleID = SQLiteApprovalStore.deterministicRuleID(
+                    provider: .any,
+                    toolName: toolName,
+                    scope: .persistent,
+                    workspaceRoot: nil
+                )
+                try? proxy.store.deleteRule(id: ruleID)
+            }
+        }
+    }
+
     func promptToAddGlobalAutoApprove() {
         DispatchQueue.main.async {
             let alert = NSAlert()
@@ -2165,7 +2237,7 @@ class AppState: ObservableObject {
             if alert.runModal() == .alertFirstButtonReturn {
                 let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !toolName.isEmpty {
-                    self.globalAutoApproveTypes.insert(toolName)
+                    self.insertGlobalPersistentRule(toolName)
                 }
             }
         }
