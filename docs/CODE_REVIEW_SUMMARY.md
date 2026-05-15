@@ -36,3 +36,14 @@
 
 ## 3. 검토 의견 종합 결과
 본 검토는 코드에서 발견된 실제 `TODO` 주석과 구조적 병목 지점을 근거로 작성되었습니다. 특히 **P0/P1에 해당하는 동기 작업의 비동기화**가 앱의 사용자 경험(UX) 안정성에 가장 큰 기여를 할 것으로 판단됩니다. 단, DB 비동기화는 replay log의 event-decision 연결성과 ordering을 보존하는 방식으로 설계해야 하며, AppleScript 기반 포커스 확인/복귀는 실패해도 승인 응답 흐름을 막지 않는 best-effort 경로로 다루는 것이 바람직합니다.
+
+---
+
+## 4. 진행 기록
+
+### 2026-05-16 — PR #91 (`fix/p0-terminal-focuser`)
+*   **문서화 완료**: 본 코드 리뷰 요약과 P0~P4 우선순위 action plan을 추가했습니다. 커밋: `dcfccd4`.
+*   **P0 1차 구현**: `AppState`의 승인/알림/큐 표시 경로에서 터미널 포커스 체크를 비동기화하고, `TerminalFocuser`의 AppleScript timeout/fallback 처리를 추가했습니다. 커밋: `2c1197d`.
+*   **리뷰 반영**: `NSAppleScript`를 background thread에서 실행하지 않도록 제거하고, `/usr/bin/osascript`를 `Process`로 실행하도록 변경했습니다. timeout 시 child process를 `terminate()`하고 필요 시 `SIGKILL`로 정리합니다. `frontmostCheck` 접근은 `isTerminalFrontmostAsync` helper로 통일했고, `AppState` 들여쓰기 지적도 정리했습니다. 커밋: `be9c4c5`.
+*   **검증**: `swiftc -parse DevIsland/TerminalFocuser.swift DevIsland/AppState.swift`, `git diff --check`, `./scripts/run-tests.sh` 통과. 테스트 중 CoreSimulator out-of-date 경고가 출력됐지만 macOS unit test는 정상 완료됐습니다.
+*   **남은 작업**: PR review thread는 일부 GitHub상 unresolved로 남아 있으나, 주요 코멘트는 최신 커밋에서 outdated 처리되거나 코드로 반영되었습니다. 다음 우선순위는 P1(DB `.sync` 제거/최소화)입니다.
