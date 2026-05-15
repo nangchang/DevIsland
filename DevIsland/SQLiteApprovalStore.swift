@@ -75,6 +75,7 @@ final class SQLiteApprovalStore {
 
     @discardableResult
     func insertHookEvent(
+        id: Int64? = nil,
         requestId: String?,
         provider: ProviderKind,
         sessionId: String,
@@ -83,23 +84,34 @@ final class SQLiteApprovalStore {
         payloadJSON: String,
         receivedAt: Date = Date()
     ) throws -> Int64 {
-        try execute(
-            """
-            INSERT INTO hook_events
-                (request_id, provider, session_id, event_name, tool_name, payload_json, received_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                requestId,
-                provider.rawValue,
-                sessionId,
-                eventName,
-                toolName,
-                payloadJSON,
-                receivedAt.timeIntervalSince1970
-            ]
-        )
-        return sqlite3_last_insert_rowid(database)
+        let sql: String
+        var parameters: [Any?] = [
+            requestId,
+            provider.rawValue,
+            sessionId,
+            eventName,
+            toolName,
+            payloadJSON,
+            receivedAt.timeIntervalSince1970
+        ]
+
+        if let id {
+            sql = """
+                INSERT INTO hook_events
+                    (id, request_id, provider, session_id, event_name, tool_name, payload_json, received_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """
+            parameters.insert(id, at: 0)
+        } else {
+            sql = """
+                INSERT INTO hook_events
+                    (request_id, provider, session_id, event_name, tool_name, payload_json, received_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """
+        }
+
+        try execute(sql, parameters)
+        return id ?? sqlite3_last_insert_rowid(database)
     }
 
     @discardableResult
