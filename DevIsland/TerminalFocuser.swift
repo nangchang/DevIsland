@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 
 class TerminalFocuser {
     private static let tmuxCommandTimeout: TimeInterval = 1.0
@@ -75,23 +76,37 @@ class TerminalFocuser {
     }
 
     private static func executeAppleScript(_ source: String) -> (String, NSDictionary?) {
-        let group = DispatchGroup()
-        let lock = NSLock()
-        var output = "nil"
-        var scriptError: NSDictionary?
+        let process = Process()
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
 
-        group.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = executeAppleScriptOnCurrentThread(source)
-            lock.lock()
-            output = result.0
-            scriptError = result.1
-            lock.unlock()
-            group.leave()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", source]
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        do {
+            try process.run()
+        } catch {
+            return (
+                "nil",
+                [
+                    "NSLocalizedDescription": "Failed to run osascript: \(error.localizedDescription)"
+                ] as NSDictionary
+            )
         }
 
-        let waitResult = group.wait(timeout: .now() + appleScriptTimeout)
-        guard waitResult == .success else {
+        let completed = waitForProcess(process, timeout: appleScriptTimeout)
+        let output = String(
+            data: outputPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "nil"
+        let errorOutput = String(
+            data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        guard completed else {
             print("[DevIsland] AppleScript timed out after \(appleScriptTimeout)s")
             return (
                 "nil",
@@ -101,20 +116,40 @@ class TerminalFocuser {
             )
         }
 
-        lock.lock()
-        defer { lock.unlock() }
-        return (output, scriptError)
-    }
-
-    private static func executeAppleScriptOnCurrentThread(_ source: String) -> (String, NSDictionary?) {
-        var error: NSDictionary?
-        guard let scriptObject = NSAppleScript(source: source) else {
-            print("[DevIsland] Failed to create NSAppleScript object")
-            return ("nil", nil)
+        guard process.terminationStatus == 0 else {
+            return (
+                output.isEmpty ? "nil" : output,
+                [
+                    "NSLocalizedDescription": errorOutput.isEmpty ? "osascript exited with status \(process.terminationStatus)" : errorOutput,
+                    "terminationStatus": process.terminationStatus
+                ] as NSDictionary
+            )
         }
 
-        let result = scriptObject.executeAndReturnError(&error)
-        return (result.stringValue ?? "nil", error)
+        return (output.isEmpty ? "nil" : output, nil)
+    }
+
+    private static func waitForProcess(_ process: Process, timeout: TimeInterval) -> Bool {
+        let group = DispatchGroup()
+
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            process.waitUntilExit()
+            group.leave()
+        }
+
+        guard group.wait(timeout: .now() + timeout) == .success else {
+            if process.isRunning {
+                process.terminate()
+            }
+            if group.wait(timeout: .now() + 0.5) != .success, process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+                _ = group.wait(timeout: .now() + 1.0)
+            }
+            return false
+        }
+
+        return true
     }
 
     private static func frontmostCheckScript(appName: String, tty: String?, windowId: String?, tabIndex: String?) -> String {

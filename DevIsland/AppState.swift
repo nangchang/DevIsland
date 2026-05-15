@@ -492,20 +492,15 @@ class AppState: ObservableObject {
         
         let session = activeSessions.first { $0.id == currentSessionId }
         
-        // 백그라운드에서 포커스 여부 확인 (UI 지연 방지)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let isFrontmost = self?.isTerminalFrontmost(for: session) ?? false
-            if isFrontmost {
-                DispatchQueue.main.async {
-                    if self?.currentResponseHandler != nil {
-                        print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
-                        self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
-                    } else {
-                        print("[DevIsland] [AUTO] User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "")")
-                        self?.isNotchExpanded = false
-                        self?.isExpandingFromRequest = false
-                    }
-                }
+        isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
+            guard isFrontmost else { return }
+            if self?.currentResponseHandler != nil {
+                print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
+                self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
+            } else {
+                print("[DevIsland] [AUTO] User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "")")
+                self?.isNotchExpanded = false
+                self?.isExpandingFromRequest = false
             }
         }
     }
@@ -989,24 +984,19 @@ class AppState: ObservableObject {
             }
         }
 
-        // Check terminal focus off the main thread before continuing with UI/policy state.
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        isTerminalFrontmostAsync(
+            appName: terminalApp,
+            tty: terminalTTY,
+            windowId: terminalWindowId,
+            tabIndex: terminalTabIndex,
+            tmuxPane: terminalTmuxPane,
+            tmuxSocket: terminalTmuxSocket,
+            tmuxClient: terminalTmuxClient
+        ) { [weak self] isFrontmost in
             guard let self = self else { return }
-            let isFrontmost = !isReplayPayload && self.frontmostCheck(
-                terminalApp,
-                terminalTTY,
-                terminalWindowId,
-                terminalTabIndex,
-                terminalTmuxPane,
-                terminalTmuxSocket,
-                terminalTmuxClient
-            )
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
 
             // 1. 터미널 포커스 최우선 — 사용자가 이미 터미널에 있으면 CLI가 자체 처리하도록 pass
-            if isFrontmost {
+            if !isReplayPayload && isFrontmost {
                 print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
                 self.respondWithReplay(
                     "{\"response\": \"pass\"}",
@@ -1186,7 +1176,6 @@ class AppState: ObservableObject {
                 self.showNextRequest()
             } else {
                 self.syncDisplayToSelectedSession()
-            }
             }
         }
     }
@@ -1564,37 +1553,40 @@ class AppState: ObservableObject {
         }
     }
 
-    private func isTerminalFrontmost(for session: ActiveSession?) -> Bool {
-        self.frontmostCheck(
-            session?.terminalApp,
-            session?.terminalTTY,
-            session?.terminalWindowId,
-            session?.terminalTabIndex,
-            session?.terminalTmuxPane,
-            session?.terminalTmuxSocket,
-            session?.terminalTmuxClient
+    private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
+        isTerminalFrontmostAsync(
+            appName: session?.terminalApp,
+            tty: session?.terminalTTY,
+            windowId: session?.terminalWindowId,
+            tabIndex: session?.terminalTabIndex,
+            tmuxPane: session?.terminalTmuxPane,
+            tmuxSocket: session?.terminalTmuxSocket,
+            tmuxClient: session?.terminalTmuxClient,
+            completion: completion
         )
     }
 
-    private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
+    private func isTerminalFrontmostAsync(
+        appName: String?,
+        tty: String?,
+        windowId: String?,
+        tabIndex: String?,
+        tmuxPane: String?,
+        tmuxSocket: String?,
+        tmuxClient: String?,
+        completion: @escaping (Bool) -> Void
+    ) {
         let frontmostCheck = self.frontmostCheck
-        let terminalApp = session?.terminalApp
-        let terminalTTY = session?.terminalTTY
-        let terminalWindowId = session?.terminalWindowId
-        let terminalTabIndex = session?.terminalTabIndex
-        let terminalTmuxPane = session?.terminalTmuxPane
-        let terminalTmuxSocket = session?.terminalTmuxSocket
-        let terminalTmuxClient = session?.terminalTmuxClient
 
         DispatchQueue.global(qos: .userInitiated).async {
             let isFrontmost = frontmostCheck(
-                terminalApp,
-                terminalTTY,
-                terminalWindowId,
-                terminalTabIndex,
-                terminalTmuxPane,
-                terminalTmuxSocket,
-                terminalTmuxClient
+                appName,
+                tty,
+                windowId,
+                tabIndex,
+                tmuxPane,
+                tmuxSocket,
+                tmuxClient
             )
             DispatchQueue.main.async {
                 completion(isFrontmost)
