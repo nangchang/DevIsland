@@ -79,8 +79,7 @@ enum CESPEventMapper {
         // Negative lookbehind excludes negated phrases ("no errors", "no timeout").
         // s? covers plurals ("errors", "exceptions").
         // Note: \b treats _ as a word char, so snake_case ("error_code") and camelCase
-        // ("NullPointerException") are not matched here — those are caught by payload
-        // key inspection in containsFailure(in:).
+        // ("NullPointerException") are not matched here.
         let pattern = #"(?<!no\s)\b(error|failed|exception|timeout)s?\b"#
         return lower.range(of: pattern, options: .regularExpression) != nil
     }

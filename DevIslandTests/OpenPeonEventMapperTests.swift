@@ -71,7 +71,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
         XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "All tests passed"))
         XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: ""))
         // \b treats _ as a word char: snake_case and camelCase are not matched at the
-        // message level — covered by payload key inspection instead.
+        // message level.
         XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "error_code"))
         XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "timeout_error"))
         XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "NullPointerException"))
