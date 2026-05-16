@@ -394,6 +394,7 @@ private struct ExperimentalPTYSettingsPane: View {
 
 private struct ApprovalRulesWindowView: View {
     @StateObject private var state = AppState.shared
+    @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var l10n = L10n.shared
     @State private var codexPersistentRules: [ApprovalRule] = []
     @State private var codexToolName = ""
@@ -493,12 +494,12 @@ private struct ApprovalRulesWindowView: View {
                 Text(l10n.descSessionRules)
                     .foregroundStyle(.secondary)
 
-                if state.activeSessions.isEmpty {
+                if sessionStore.activeSessions.isEmpty {
                     Text(l10n.lblNoSessions)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(state.activeSessions) { session in
-                        let tools = state.sessionAutoApproveTypes[session.id] ?? []
+                    ForEach(sessionStore.activeSessions) { session in
+                        let tools = sessionStore.sessionAutoApproveTypes[session.id] ?? []
                         DisclosureGroup(l10n.lblSession(String(session.id.prefix(8)), tools.count)) {
                             HStack {
                                 Button(l10n.btnAddManually) {
@@ -514,14 +515,14 @@ private struct ApprovalRulesWindowView: View {
                                     .foregroundStyle(.secondary)
                             } else {
                                 Button(role: .destructive) {
-                                    state.sessionAutoApproveTypes[session.id]?.removeAll()
+                                    sessionStore.sessionAutoApproveTypes[session.id]?.removeAll()
                                 } label: {
                                     Label(l10n.btnRemoveAllSession, systemImage: "trash.fill")
                                 }
 
                                 ForEach(Array(tools.sorted()), id: \.self) { tool in
                                     ruleRow(tool: tool) {
-                                        state.sessionAutoApproveTypes[session.id]?.remove(tool)
+                                        sessionStore.sessionAutoApproveTypes[session.id]?.remove(tool)
                                     }
                                 }
                             }
@@ -614,10 +615,10 @@ private struct ApprovalRulesWindowView: View {
     }
 
     private func addSessionTool(_ tool: String, to sessionId: String) {
-        if state.sessionAutoApproveTypes[sessionId] == nil {
-            state.sessionAutoApproveTypes[sessionId] = []
+        if sessionStore.sessionAutoApproveTypes[sessionId] == nil {
+            sessionStore.sessionAutoApproveTypes[sessionId] = []
         }
-        state.sessionAutoApproveTypes[sessionId]?.insert(tool)
+        sessionStore.sessionAutoApproveTypes[sessionId]?.insert(tool)
     }
 }
 

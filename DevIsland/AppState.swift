@@ -183,23 +183,11 @@ class AppState: ObservableObject {
             userDefaults.set(requestDisplayTarget.rawValue, forKey: DefaultsKey.requestDisplayTarget)
         }
     }
-    @Published var selectedSessionId: String?
     @Published var currentMessage: String = ""
     @Published var currentSessionId: String = ""
     @Published var currentToolName: String = ""
     @Published var currentEventName: String = ""
     @Published var timeoutProgress: Double = 1.0
-    @Published var pendingCount: Int = 0
-    @Published var pendingItems: [PendingItem] = []
-    @Published var activeSessions: [ActiveSession] = [] {
-        didSet {
-            // 선택된 세션이 더 이상 존재하지 않으면 초기화
-            if let selected = selectedSessionId, !activeSessions.contains(where: { $0.id == selected }) {
-                selectedSessionId = activeSessions.first?.id
-            }
-        }
-    }
-    
     @Published var autoApproveSafeTools = false {
         didSet {
             userDefaults.set(autoApproveSafeTools, forKey: DefaultsKey.autoApproveSafeTools)
@@ -217,14 +205,13 @@ class AppState: ObservableObject {
     // globalAutoApproveTypes is also persisted to UserDefaults for backward compatibility
     // with rules created before gap-3; new approvals are durable via SQLite.
     @Published var globalAutoApproveTypes: Set<String> = []
-    @Published var sessionAutoApproveTypes: [String: Set<String>] = [:]
 
-    private static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
     private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
+
+    let sessionStore: SessionStore
 
     private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
-    private var pendingQueue: [PendingRequest] = []
     private var currentResponseHandler: ((String) -> Void)?
     var hasResponseHandler: Bool { currentResponseHandler != nil }
     private var currentAgentKind: BuddyKind?
@@ -239,7 +226,6 @@ class AppState: ObservableObject {
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
     private let ptyBuffer = PTYSessionBuffer()
     private let timeoutDuration: Double = 120
-    private let lifecycleSessionTimeout: Double = 15 * 60
     private static let replayTerminalApp = "DevIsland Replay"
     private static let replayTimestampFormatter = ISO8601DateFormatter()
     private let replayRecorder: ReplayRecorder
@@ -255,6 +241,7 @@ class AppState: ObservableObject {
         self.frontmostCheck = frontmostCheck
         self.approvalProxy = approvalProxy
         self.codexRuleSyncAdapter = codexRuleSyncAdapter
+        self.sessionStore = SessionStore()
         self.replayRecorder = ReplayRecorder(proxy: approvalProxy, queue: approvalPersistenceQueue)
         
         if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
@@ -372,7 +359,11 @@ class AppState: ObservableObject {
             
             // Prune inactive sessions every 10 seconds
             sessionPruningTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-                self?.pruneInactiveSessions()
+                guard let self else { return }
+                let prunedIds = self.sessionStore.pruneInactiveSessions()
+                for id in prunedIds {
+                    self.clearPTYOutputBuffer(sessionId: id)
+                }
             }
         }
     }
@@ -505,8 +496,8 @@ class AppState: ObservableObject {
         // 승인 대기 중이거나 정보성 알림이 표시 중일 때만 동작
         guard currentResponseHandler != nil || (isNotchExpanded && isExpandingFromRequest) else { return }
         
-        let session = activeSessions.first { $0.id == currentSessionId }
-        
+        let session = sessionStore.activeSessions.first { $0.id == currentSessionId }
+
         isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
             guard isFrontmost else { return }
             if self?.currentResponseHandler != nil {
@@ -523,9 +514,9 @@ class AppState: ObservableObject {
     /// 현재 화면에 표시할 데이터를 선택된 세션 정보로 업데이트
     func syncDisplayToSelectedSession() {
         guard currentResponseHandler == nil else { return }
-        let sessionId = selectedSessionId ?? currentSessionId
-        
-        if let session = activeSessions.first(where: { $0.id == sessionId }) {
+        let sessionId = sessionStore.selectedSessionId ?? currentSessionId
+
+        if let session = sessionStore.activeSessions.first(where: { $0.id == sessionId }) {
             DispatchQueue.main.async {
                 guard self.currentResponseHandler == nil else { return }
                 self.currentToolName = session.lastToolName
@@ -594,7 +585,7 @@ class AppState: ObservableObject {
                 notificationType = json["notification_type"] as? String ?? ""
                 isReplayPayload = json["replay_origin_event_id"] != nil
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
-                if Self.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
+                if SessionStore.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
                     let label = URL(fileURLWithPath: cwd).lastPathComponent
                     if !label.isEmpty && label != "/" { terminalTitle = label }
                 }
@@ -685,7 +676,7 @@ class AppState: ObservableObject {
             }
             let fullSessionId = sessionId
             DispatchQueue.main.async {
-                let removedRequests = self.pendingQueue.filter { $0.sessionId == fullSessionId }
+                let removedRequests = self.sessionStore.removeAllPending(sessionId: fullSessionId)
                 removedRequests.forEach {
                     self.respondWithReplay(
                         "{\"response\": \"denied\"}",
@@ -700,11 +691,7 @@ class AppState: ObservableObject {
                         reason: "session stopped"
                     )
                 }
-                self.pendingQueue.removeAll { $0.sessionId == fullSessionId }
-                self.pendingItems.removeAll { $0.sessionId == fullSessionId }
-                self.pendingCount = self.pendingQueue.count
-                self.activeSessions.removeAll { $0.id == fullSessionId }
-                self.sessionAutoApproveTypes.removeValue(forKey: fullSessionId)
+                self.sessionStore.removeSession(id: fullSessionId)
                 self.clearPTYOutputBuffer(sessionId: fullSessionId)
 
                 if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
@@ -719,11 +706,7 @@ class AppState: ObservableObject {
                     self.currentMessage = ""
                 }
 
-                if self.selectedSessionId == fullSessionId {
-                    self.selectedSessionId = self.activeSessions.first?.id
-                }
-
-                if self.pendingQueue.isEmpty {
+                if self.sessionStore.pendingQueue.isEmpty {
                     self.isNotchExpanded = false
                     self.syncDisplayToSelectedSession()
                 } else if self.currentResponseHandler == nil {
@@ -818,16 +801,15 @@ class AppState: ObservableObject {
                 return
             }
             let fullSessionId = sessionId
-            let hasPendingForSession = self.pendingQueue.contains { $0.sessionId == fullSessionId }
             let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "startup" || normalizedEvent == "init")
-            
+
             // [UX] 에이전트 작업 완료 대기 상태(Idle Prompt) 판별 로직
             // - Claude Code: notification 훅에 idle_prompt 또는 input_required 타입으로 전달됨
             // - Gemini CLI: afteragent, aftermodel 등 턴 종료 시 발생하는 훅을 대기 상태로 간주
             // - Codex CLI: posttooluse를 쓰면 툴 연속 자동 실행 시 스팸 알림이 생기므로 제외함. 대신 stop 이벤트를 통해 완료됨을 알림
             let isIdlePrompt = (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
                                normalizedEvent == "afteragent"
-            
+
             let sessionMessage: String
             if isStartEvent {
                 sessionMessage = "Session Started"
@@ -838,39 +820,41 @@ class AppState: ObservableObject {
             } else {
                 sessionMessage = displayMsg
             }
-            
-            self.updateActiveSession(
-                sessionId: fullSessionId,
-                terminalTitle: terminalTitle,
-                agentKind: agentKind,
-                terminalApp: terminalApp,
-                terminalTTY: terminalTTY,
-                terminalWindowId: terminalWindowId,
-                terminalTabIndex: terminalTabIndex,
-                terminalTmuxPane: terminalTmuxPane,
-                terminalTmuxSocket: terminalTmuxSocket,
-                terminalTmuxClient: terminalTmuxClient,
-                toolName: displayToolName,
-                eventName: event,
-                message: sessionMessage,
-                isPending: hasPendingForSession,
-                preserveMessage: (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse") || sessionMessage.isEmpty,
-                isLifecycleTracked: isStartEvent || agentKind != .claudeCode // Codex/Gemini는 기본적으로 추적 유지
-            )
 
             DispatchQueue.main.async {
-                if isStartEvent || (self.selectedSessionId == nil) {
-                    self.selectedSessionId = fullSessionId
+                // sessionStore 뮤테이션은 항상 메인 스레드에서 수행 (@Published → SwiftUI 업데이트)
+                let hasPendingForSession = self.sessionStore.pendingQueue.contains { $0.sessionId == fullSessionId }
+                self.sessionStore.updateActiveSession(
+                    sessionId: fullSessionId,
+                    terminalTitle: terminalTitle,
+                    agentKind: agentKind,
+                    terminalApp: terminalApp,
+                    terminalTTY: terminalTTY,
+                    terminalWindowId: terminalWindowId,
+                    terminalTabIndex: terminalTabIndex,
+                    terminalTmuxPane: terminalTmuxPane,
+                    terminalTmuxSocket: terminalTmuxSocket,
+                    terminalTmuxClient: terminalTmuxClient,
+                    toolName: displayToolName,
+                    eventName: event,
+                    message: sessionMessage,
+                    isPending: hasPendingForSession,
+                    preserveMessage: (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse") || sessionMessage.isEmpty,
+                    isLifecycleTracked: isStartEvent || agentKind != .claudeCode // Codex/Gemini는 기본적으로 추적 유지
+                )
+
+                if isStartEvent || (self.sessionStore.selectedSessionId == nil) {
+                    self.sessionStore.selectedSessionId = fullSessionId
                 }
-                
+
                 // 알림 확장 로직 (질문이나 작업 완료 시)
                 let isInformational = (normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
                                      isUserQuestionTool ||
                                      (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode))
-                
+
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
                     // 터미널이 포커스되어 있지 않을 때만 확장
-                    let session = self.activeSessions.first { $0.id == fullSessionId }
+                    let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
                     self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
                         guard let self else { return }
                         guard !isFrontmost, self.currentResponseHandler == nil else { return }
@@ -975,10 +959,10 @@ class AppState: ObservableObject {
         
         // 자동 승인 여부 판단 (전역 설정 + 세션별 툴 등록 + 현재가 자동 편집 모드인지 + Safe 등급 툴 자동 승인 옵션)
         var isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName) || isInteractive
-        let isAutoApprovedSession = sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
-        
+        let isAutoApprovedSession = sessionStore.sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
+
         var isAutoEditActive = false
-        if let session = activeSessions.first(where: { $0.id == sessionId }) {
+        if let session = sessionStore.activeSessions.first(where: { $0.id == sessionId }) {
             isAutoEditActive = session.isAutoEditActive
         }
 
@@ -990,7 +974,7 @@ class AppState: ObservableObject {
         // DevIsland가 'Interactive 모드'처럼 위험한 툴을 선별해서 승인 창을 띄웁니다.
         if emulateGeminiInteractiveMode && agentKind == .gemini {
             // 사용자가 명시적으로 추가한 글로벌/세션 자동 승인 툴은 에뮬레이션 모드라도 존중하여 패스시킵니다.
-            let isExplicitlyApproved = globalAutoApproveTypes.contains(toolName) || isAutoApprovedSession
+            let isExplicitlyApproved = globalAutoApproveTypes.contains(toolName) || isAutoApprovedSession  // isAutoApprovedSession already uses sessionStore
             
             // 위험한 툴이면서 사용자가 명시적으로 승인하지 않은 경우에만 자동 통과를 막고 승인을 강제합니다.
             if ToolKnowledge.risk(for: toolName) != .safe && !isExplicitlyApproved {
@@ -1027,7 +1011,7 @@ class AppState: ObservableObject {
                     reason: "terminal focused"
                 )
                 if !sessionId.isEmpty {
-                    self.updateActiveSession(
+                    self.sessionStore.updateActiveSession(
                         sessionId: sessionId,
                         terminalTitle: terminalTitle,
                         agentKind: agentKind,
@@ -1059,7 +1043,7 @@ class AppState: ObservableObject {
             ) {
                 print("[DevIsland] [POLICY] \(provider.rawValue) \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
                 request.responseHandler(self.responsePayload(approved: policyDecision.action == .allow))
-                self.updateActiveSession(
+                self.sessionStore.updateActiveSession(
                     sessionId: sessionId,
                     terminalTitle: terminalTitle,
                     agentKind: agentKind,
@@ -1106,18 +1090,18 @@ class AppState: ObservableObject {
                 }
 
                 if toolName == "exit_plan_mode",
-                   let index = self.activeSessions.firstIndex(where: { $0.id == sessionId }) {
-                    self.activeSessions[index].isAutoEditActive = true
+                   let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                    self.sessionStore.activeSessions[index].isAutoEditActive = true
                     print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Auto-Edit mode")
                 }
                 if toolName == "enter_plan_mode",
-                   let index = self.activeSessions.firstIndex(where: { $0.id == sessionId }) {
-                    self.activeSessions[index].isAutoEditActive = false
+                   let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                    self.sessionStore.activeSessions[index].isAutoEditActive = false
                     print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
                 }
 
                 if !sessionId.isEmpty {
-                    self.updateActiveSession(
+                    self.sessionStore.updateActiveSession(
                         sessionId: sessionId,
                         terminalTitle: terminalTitle,
                         agentKind: agentKind,
@@ -1142,14 +1126,12 @@ class AppState: ObservableObject {
 
             // 4. enter_plan_mode가 자동 승인 없이 UI로 넘어갈 때 Auto-Edit 해제
             if toolName == "enter_plan_mode",
-               let index = self.activeSessions.firstIndex(where: { $0.id == sessionId }) {
-                self.activeSessions[index].isAutoEditActive = false
+               let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                self.sessionStore.activeSessions[index].isAutoEditActive = false
                 print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
             }
 
             // 5. 승인 대기 큐에 추가
-            self.pendingQueue.append(request)
-
             let newItem = PendingItem(
                 id: request.id,
                 toolName: request.toolName,
@@ -1163,11 +1145,10 @@ class AppState: ObservableObject {
                 terminalTmuxClient: terminalTmuxClient,
                 receivedAt: request.receivedAt
             )
-            self.pendingItems.append(newItem)
-            self.pendingCount = self.pendingQueue.count
+            self.sessionStore.appendPending(request: request, item: newItem)
 
             if !request.sessionId.isEmpty {
-                self.updateActiveSession(
+                self.sessionStore.updateActiveSession(
                     sessionId: request.sessionId,
                     terminalTitle: terminalTitle,
                     agentKind: agentKind,
@@ -1185,7 +1166,7 @@ class AppState: ObservableObject {
                     isLifecycleTracked: agentKind != .claudeCode
                 )
 
-                self.selectedSessionId = request.sessionId
+                self.sessionStore.selectedSessionId = request.sessionId
             }
 
             if self.currentResponseHandler == nil {
@@ -1365,122 +1346,13 @@ class AppState: ObservableObject {
         HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)
     }
 
-    private func updateActiveSession(
-        sessionId: String,
-        terminalTitle: String,
-        agentKind: BuddyKind,
-        terminalApp: String,
-        terminalTTY: String,
-        terminalWindowId: String,
-        terminalTabIndex: String,
-        terminalTmuxPane: String,
-        terminalTmuxSocket: String,
-        terminalTmuxClient: String,
-        toolName: String,
-        eventName: String,
-        message: String,
-        isPending: Bool,
-        preserveMessage: Bool = false,
-        isLifecycleTracked: Bool = false,
-        status: SessionStatus? = nil
-    ) {
-        if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) {
-            let shouldUpdateTitle = !Self.genericTitles.contains(terminalTitle)
-                || Self.genericTitles.contains(activeSessions[index].terminalTitle)
-            if shouldUpdateTitle {
-                activeSessions[index].terminalTitle = terminalTitle
-            }
-            activeSessions[index].agentKind = agentKind
-            if !terminalApp.isEmpty {
-                activeSessions[index].terminalApp = terminalApp
-            }
-            if !terminalTTY.isEmpty {
-                activeSessions[index].terminalTTY = terminalTTY
-            }
-            if !terminalWindowId.isEmpty {
-                activeSessions[index].terminalWindowId = terminalWindowId
-            }
-            if !terminalTabIndex.isEmpty {
-                activeSessions[index].terminalTabIndex = terminalTabIndex
-            }
-            if !terminalTmuxPane.isEmpty {
-                activeSessions[index].terminalTmuxPane = terminalTmuxPane
-            }
-            if !terminalTmuxSocket.isEmpty {
-                activeSessions[index].terminalTmuxSocket = terminalTmuxSocket
-            }
-            if !terminalTmuxClient.isEmpty {
-                activeSessions[index].terminalTmuxClient = terminalTmuxClient
-            }
-            activeSessions[index].lastToolName = toolName
-            activeSessions[index].lastEventName = eventName
-            if !preserveMessage {
-                activeSessions[index].lastMessage = message
-            }
-            activeSessions[index].lastActiveAt = Date()
-            activeSessions[index].isPending = isPending
-            activeSessions[index].status = status ?? (isPending ? .pending : .idle)
-            if isLifecycleTracked {
-                activeSessions[index].isLifecycleTracked = true
-            }
-        } else {
-            let session = ActiveSession(
-                id: sessionId,
-                terminalTitle: terminalTitle,
-                agentKind: agentKind,
-                terminalApp: terminalApp,
-                terminalTTY: terminalTTY,
-                terminalWindowId: terminalWindowId,
-                terminalTabIndex: terminalTabIndex,
-                terminalTmuxPane: terminalTmuxPane,
-                terminalTmuxSocket: terminalTmuxSocket,
-                terminalTmuxClient: terminalTmuxClient,
-                lastToolName: toolName,
-                lastEventName: eventName,
-                lastMessage: message,
-                startTime: Date(),
-                lastActiveAt: Date(),
-                isPending: isPending,
-                isLifecycleTracked: isLifecycleTracked,
-                isAutoEditActive: false,
-                status: status ?? (isPending ? .pending : .idle)
-            )
-            activeSessions.insert(session, at: 0)
-        }
-    }
-
-    private func pruneInactiveSessions() {
-        let now = Date()
-        let threshold: TimeInterval = self.timeoutDuration
-        
-        DispatchQueue.main.async {
-            let sessionsToPrune = self.activeSessions.filter { session in
-                let inactiveFor = now.timeIntervalSince(session.lastActiveAt)
-                let maxInactiveDuration = session.isLifecycleTracked ? self.lifecycleSessionTimeout : threshold
-                return !session.isPending && inactiveFor > maxInactiveDuration
-            }
-            
-            for session in sessionsToPrune {
-                self.sessionAutoApproveTypes.removeValue(forKey: session.id)
-                self.clearPTYOutputBuffer(sessionId: session.id)
-            }
-            
-            self.activeSessions.removeAll { session in
-                sessionsToPrune.contains(where: { $0.id == session.id })
-            }
-        }
-    }
 
     func dismissSession(_ sessionId: String) {
         DispatchQueue.main.async {
-            let removedRequests = self.pendingQueue.filter { $0.sessionId == sessionId }
+            let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
-            self.pendingQueue.removeAll { $0.sessionId == sessionId }
-            self.pendingItems.removeAll { $0.sessionId == sessionId }
-            self.pendingCount = self.pendingQueue.count
-            self.sessionAutoApproveTypes.removeValue(forKey: sessionId)
+            self.sessionStore.removeSession(id: sessionId)
             self.clearPTYOutputBuffer(sessionId: sessionId)
-            self.activeSessions.removeAll { $0.id == sessionId }
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                 self.currentResponseHandler?("{\"response\": \"pass\"}")
@@ -1495,14 +1367,10 @@ class AppState: ObservableObject {
                 self.currentMessage = ""
             }
 
-            if self.selectedSessionId == sessionId {
-                self.selectedSessionId = self.activeSessions.first?.id
-            }
-
-            if self.pendingQueue.isEmpty {
-                if self.activeSessions.isEmpty {
+            if self.sessionStore.pendingQueue.isEmpty {
+                if self.sessionStore.activeSessions.isEmpty {
                     self.isNotchExpanded = false
-                    self.selectedSessionId = nil
+                    self.sessionStore.selectedSessionId = nil
                 }
                 self.syncDisplayToSelectedSession()
             } else if self.currentResponseHandler == nil {
@@ -1514,7 +1382,7 @@ class AppState: ObservableObject {
     private func showNextRequest() {
         discardInvalidPendingRequests()
 
-        guard let next = pendingQueue.first else {
+        guard let next = sessionStore.pendingQueue.first else {
             currentResponseHandler = nil
             isShowingRequest = false
             showingRequestId = nil
@@ -1528,7 +1396,7 @@ class AppState: ObservableObject {
             currentHookEventId = nil
             currentMessage = ""
             currentSessionId = ""
-            selectedSessionId = nil
+            sessionStore.selectedSessionId = nil
             isNotchExpanded = false
             return
         }
@@ -1537,7 +1405,7 @@ class AppState: ObservableObject {
         isShowingRequest = true
         showingRequestId = next.id
 
-        let session = activeSessions.first { $0.id == next.sessionId }
+        let session = sessionStore.activeSessions.first { $0.id == next.sessionId }
         isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
             guard let self else { return }
             guard self.showingRequestId == next.id else { return }
@@ -1613,12 +1481,11 @@ class AppState: ObservableObject {
     }
 
     private func discardInvalidPendingRequests() {
-        while let next = pendingQueue.first, !isValidApprovalRequest(next) {
-            let removed = pendingQueue.removeFirst()
-            pendingItems.removeAll { $0.id == removed.id }
-            removed.responseHandler("{\"response\": \"approved\"}")
+        while let next = sessionStore.pendingQueue.first, !isValidApprovalRequest(next) {
+            if let removed = sessionStore.removeFirstPending() {
+                removed.responseHandler("{\"response\": \"approved\"}")
+            }
         }
-        pendingCount = pendingQueue.count
     }
 
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
@@ -1993,39 +1860,31 @@ class AppState: ObservableObject {
         DispatchQueue.main.async {
             self.timeoutProgress = 1.0
             var completedSessionId: String?
-            if !self.pendingQueue.isEmpty {
-                let removed = self.pendingQueue.removeFirst()
+            if let removed = self.sessionStore.removeFirstPending() {
                 completedSessionId = removed.sessionId
-                
-                if !self.pendingItems.isEmpty { self.pendingItems.removeFirst() }
-                self.pendingCount = self.pendingQueue.count
-                
+
                 // Update session state to not pending
-                if !removed.sessionId.isEmpty, let index = self.activeSessions.firstIndex(where: { $0.id == removed.sessionId }) {
-                    // Check if there are other pending items for this session
-                    let stillPending = self.pendingQueue.contains { $0.sessionId == removed.sessionId }
+                if !removed.sessionId.isEmpty, let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == removed.sessionId }) {
+                    let stillPending = self.sessionStore.pendingQueue.contains { $0.sessionId == removed.sessionId }
                     if stillPending {
-                        self.activeSessions[index].isPending = true
-                        self.activeSessions[index].status = .pending
+                        self.sessionStore.activeSessions[index].isPending = true
+                        self.sessionStore.activeSessions[index].status = .pending
                     } else if status?.isTimeoutBypassed == true {
-                        self.activeSessions[index].isPending = false
-                        self.activeSessions[index].status = status ?? .idle
-                        self.activeSessions[index].lastActiveAt = Date()
-                    } else if !self.activeSessions[index].isLifecycleTracked {
-                        self.activeSessions.remove(at: index)
-                        if self.selectedSessionId == removed.sessionId {
-                            self.selectedSessionId = nil
-                        }
+                        self.sessionStore.activeSessions[index].isPending = false
+                        self.sessionStore.activeSessions[index].status = status ?? .idle
+                        self.sessionStore.activeSessions[index].lastActiveAt = Date()
+                    } else if !self.sessionStore.activeSessions[index].isLifecycleTracked {
+                        self.sessionStore.activeSessions.remove(at: index)
                     } else {
-                        self.activeSessions[index].isPending = false
-                        self.activeSessions[index].status = status ?? .idle
-                        self.activeSessions[index].lastActiveAt = Date()
+                        self.sessionStore.activeSessions[index].isPending = false
+                        self.sessionStore.activeSessions[index].status = status ?? .idle
+                        self.sessionStore.activeSessions[index].lastActiveAt = Date()
                     }
                 }
             }
             self.showNextRequest()
-            if status?.isTimeoutBypassed == true, self.pendingQueue.isEmpty, let completedSessionId {
-                self.selectedSessionId = completedSessionId
+            if status?.isTimeoutBypassed == true, self.sessionStore.pendingQueue.isEmpty, let completedSessionId {
+                self.sessionStore.selectedSessionId = completedSessionId
                 self.isNotchExpanded = false
             }
         }
@@ -2107,18 +1966,18 @@ class AppState: ObservableObject {
             globalAutoApproveTypes.insert(tool)
         }
         if sessionAlways && !tool.isEmpty && !sId.isEmpty {
-            if sessionAutoApproveTypes[sId] == nil {
-                sessionAutoApproveTypes[sId] = []
+            if sessionStore.sessionAutoApproveTypes[sId] == nil {
+                sessionStore.sessionAutoApproveTypes[sId] = []
             }
-            sessionAutoApproveTypes[sId]?.insert(tool)
+            sessionStore.sessionAutoApproveTypes[sId]?.insert(tool)
         }
 
         print("[DevIsland] approve() called, handler=\(currentResponseHandler != nil ? "SET" : "NIL")")
-        
+
         // exit_plan_mode를 수동으로 승인했을 때도 Auto-Edit 모드 활성화
         if tool == "exit_plan_mode" {
-            if let index = activeSessions.firstIndex(where: { $0.id == sId }) {
-                activeSessions[index].isAutoEditActive = true
+            if let index = sessionStore.activeSessions.firstIndex(where: { $0.id == sId }) {
+                sessionStore.activeSessions[index].isAutoEditActive = true
                 print("[DevIsland] [MODE] Session \(sId.prefix(8)) switched to Auto-Edit mode via manual approval")
             }
         }
@@ -2225,10 +2084,10 @@ class AppState: ObservableObject {
             if alert.runModal() == .alertFirstButtonReturn {
                 let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !toolName.isEmpty {
-                    if self.sessionAutoApproveTypes[sessionId] == nil {
-                        self.sessionAutoApproveTypes[sessionId] = []
+                    if self.sessionStore.sessionAutoApproveTypes[sessionId] == nil {
+                        self.sessionStore.sessionAutoApproveTypes[sessionId] = []
                     }
-                    self.sessionAutoApproveTypes[sessionId]?.insert(toolName)
+                    self.sessionStore.sessionAutoApproveTypes[sessionId]?.insert(toolName)
                 }
             }
         }
@@ -2245,9 +2104,9 @@ class AppState: ObservableObject {
     }
 
     func focusTerminal(for sessionId: String? = nil) {
-        let targetId = sessionId ?? (currentSessionId.isEmpty ? selectedSessionId : currentSessionId)
+        let targetId = sessionId ?? (currentSessionId.isEmpty ? sessionStore.selectedSessionId : currentSessionId)
         let session = targetId.flatMap { id in
-            activeSessions.first { $0.id == id }
+            sessionStore.activeSessions.first { $0.id == id }
         }
         TerminalFocuser.focusTerminal(
             appName: session?.terminalApp,

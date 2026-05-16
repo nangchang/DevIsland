@@ -4,6 +4,7 @@ import SwiftUI
 struct DevIslandApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject private var state = AppState.shared
+    @ObservedObject private var sessionStore = AppState.shared.sessionStore
 
     init() {
         _ = SettingsStore.shared
@@ -15,8 +16,8 @@ struct DevIslandApp: App {
         } label: {
             HStack(spacing: 3) {
                 Image("StatusBarIcon")
-                if state.pendingCount > 0 {
-                    Text("\(state.pendingCount)")
+                if sessionStore.pendingCount > 0 {
+                    Text("\(sessionStore.pendingCount)")
                         .font(.system(size: 10, weight: .bold))
                 }
             }
@@ -28,6 +29,7 @@ struct DevIslandApp: App {
 
 struct MenuBarMenu: View {
     @ObservedObject var state = AppState.shared
+    @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var l10n = L10n.shared
 
     static let versionString: String = {
@@ -38,13 +40,13 @@ struct MenuBarMenu: View {
 
     var body: some View {
         let l = l10n
-        if state.pendingItems.isEmpty {
+        if sessionStore.pendingItems.isEmpty {
             Text(l.menuNoPending)
                 .foregroundStyle(.secondary)
         } else {
-            Text("\(l.menuPending): \(state.pendingItems.count)")
+            Text("\(l.menuPending): \(sessionStore.pendingItems.count)")
                 .font(.headline)
-            ForEach(state.pendingItems) { item in
+            ForEach(sessionStore.pendingItems) { item in
                 HStack(spacing: 6) {
                     Image(systemName: toolInfo(for: item.toolName).icon)
                         .foregroundStyle(toolInfo(for: item.toolName).color)
@@ -63,7 +65,7 @@ struct MenuBarMenu: View {
         }
 
         Button(l.menuFocusTerminal) { state.focusTerminal() }
-            .disabled(state.pendingItems.isEmpty && state.activeSessions.isEmpty)
+            .disabled(sessionStore.pendingItems.isEmpty && sessionStore.activeSessions.isEmpty)
 
         Button(l.menuApprove) { state.approve() }
             .keyboardShortcut("y", modifiers: [.command, .shift])

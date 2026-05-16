@@ -95,7 +95,7 @@ final class AppStateTests: XCTestCase {
         wait(for: [expectation], timeout: 2.0)
         
         // Verify session was added
-        XCTAssertTrue(appState.activeSessions.contains(where: { $0.id == "test-session" }))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "test-session" }))
     }
 
     func testClaudeUserPromptSubmitPolicyBlocksSecretPrompt() {
@@ -140,7 +140,7 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
         
         // Should be pending
-        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         XCTAssertTrue(appState.hasResponseHandler)
         
         // Approve manually
@@ -150,7 +150,7 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         
         wait(for: [expectation], timeout: 2.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
     }
 
     func testCodexSessionCacheAutoApprovesPermissionRequest() throws {
@@ -191,7 +191,7 @@ final class AppStateTests: XCTestCase {
         }
 
         wait(for: [expectation], timeout: 2.0)
-        XCTAssertEqual(state.pendingCount, 0)
+        XCTAssertEqual(state.sessionStore.pendingCount, 0)
     }
 
     func testCodexSessionApprovalPersistsToSQLiteCache() throws {
@@ -225,7 +225,7 @@ final class AppStateTests: XCTestCase {
         }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
 
-        XCTAssertEqual(state.pendingCount, 1)
+        XCTAssertEqual(state.sessionStore.pendingCount, 1)
         state.approve(sessionAlways: true)
 
         wait(for: [expectation], timeout: 2.0)
@@ -270,7 +270,7 @@ final class AppStateTests: XCTestCase {
         }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
 
-        XCTAssertEqual(state.pendingCount, 1)
+        XCTAssertEqual(state.sessionStore.pendingCount, 1)
         state.approve(sessionAlways: true)
 
         wait(for: [expectation], timeout: 2.0)
@@ -316,7 +316,7 @@ final class AppStateTests: XCTestCase {
         }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
 
-        XCTAssertEqual(state.pendingCount, 1)
+        XCTAssertEqual(state.sessionStore.pendingCount, 1)
         state.approve(globalAlways: true)
 
         wait(for: [expectation], timeout: 2.0)
@@ -362,13 +362,13 @@ final class AppStateTests: XCTestCase {
         try appState.replayHookEvent(entry)
         let expectation = expectation(description: "replay enqueued")
         waitUntil(timeout: 2.0, expectation: expectation) {
-            self.appState.pendingCount == 1
+            self.appState.sessionStore.pendingCount == 1
         }
         wait(for: [expectation], timeout: 2.0)
 
-        XCTAssertEqual(appState.pendingCount, 1)
-        XCTAssertEqual(appState.pendingItems.first?.sessionId, "replay-session")
-        XCTAssertEqual(appState.pendingItems.first?.toolName, "shell")
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertEqual(appState.sessionStore.pendingItems.first?.sessionId, "replay-session")
+        XCTAssertEqual(appState.sessionStore.pendingItems.first?.toolName, "shell")
     }
     
     func testSafeToolAutoApproval() {
@@ -391,7 +391,7 @@ final class AppStateTests: XCTestCase {
         }
         
         wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
     }
     
     // MARK: - Gemini Normal Mode (emulateGeminiInteractiveMode = false)
@@ -412,7 +412,7 @@ final class AppStateTests: XCTestCase {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
     }
 
@@ -431,7 +431,7 @@ final class AppStateTests: XCTestCase {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
     }
 
     func testGeminiNormalModeExitPlanModeDoesNotActivateAutoEdit() {
@@ -453,7 +453,7 @@ final class AppStateTests: XCTestCase {
         }
         wait(for: [expectation], timeout: 1.0)
         // Session may or may not appear in activeSessions, but must not be in auto-edit.
-        let session = appState.activeSessions.first { $0.id == sessionId }
+        let session = appState.sessionStore.activeSessions.first { $0.id == sessionId }
         XCTAssertFalse(session?.isAutoEditActive ?? false, "Auto-Edit must not activate via pass-through in normal mode")
     }
 
@@ -472,7 +472,7 @@ final class AppStateTests: XCTestCase {
         appState.handleMessage(message) { _ in }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
 
-        XCTAssertEqual(appState.pendingCount, 1, "Risky tool should enter approval queue in emulation mode")
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1, "Risky tool should enter approval queue in emulation mode")
         XCTAssertEqual(appState.currentSessionId, sessionId)
         XCTAssertTrue(appState.hasResponseHandler)
     }
@@ -491,7 +491,7 @@ final class AppStateTests: XCTestCase {
         """
         appState.handleMessage(message) { _ in }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
-        XCTAssertEqual(appState.pendingCount, 1, "Safe tool should still require approval without autoApproveSafeTools")
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1, "Safe tool should still require approval without autoApproveSafeTools")
         XCTAssertTrue(appState.hasResponseHandler)
     }
 
@@ -512,7 +512,7 @@ final class AppStateTests: XCTestCase {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
     }
 
@@ -534,13 +534,13 @@ final class AppStateTests: XCTestCase {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
     }
 
     func testGeminiEmulationModeExplicitSessionApproveBypassesBlock() {
         appState.emulateGeminiInteractiveMode = true
         let sessionId = "gemini-emulate-session"
-        appState.sessionAutoApproveTypes[sessionId] = ["replace_file_content"]
+        appState.sessionStore.sessionAutoApproveTypes[sessionId] = ["replace_file_content"]
 
         let expectation = XCTestExpectation(description: "Session-approved tool passes through in emulation mode")
         let message = """
@@ -556,7 +556,7 @@ final class AppStateTests: XCTestCase {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
     }
 
     func testGeminiEmulationModeAutoEditCycle() {
@@ -574,7 +574,7 @@ final class AppStateTests: XCTestCase {
         {"hook_event_name":"BeforeTool","session_id":"\(sessionId)","tool_name":"write_to_file"}
         """) { _ in }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
-        XCTAssertEqual(appState.pendingCount, 1, "Risky tool must be pending in emulation mode")
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1, "Risky tool must be pending in emulation mode")
         appState.approve()
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
 
@@ -583,12 +583,12 @@ final class AppStateTests: XCTestCase {
         {"hook_event_name":"BeforeTool","session_id":"\(sessionId)","tool_name":"exit_plan_mode"}
         """) { _ in }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
-        XCTAssertEqual(appState.pendingCount, 1, "exit_plan_mode must be pending in emulation mode (risk=medium)")
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1, "exit_plan_mode must be pending in emulation mode (risk=medium)")
 
         // User manually approves exit_plan_mode → isAutoEditActive becomes true
         appState.approve()
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
-        let session = appState.activeSessions.first { $0.id == sessionId }
+        let session = appState.sessionStore.activeSessions.first { $0.id == sessionId }
         XCTAssertNotNil(session, "Session should exist after exit_plan_mode approval")
         XCTAssertTrue(session?.isAutoEditActive ?? false, "isAutoEditActive set after manual approval of exit_plan_mode")
 
@@ -598,7 +598,7 @@ final class AppStateTests: XCTestCase {
         {"hook_event_name":"BeforeTool","session_id":"\(sessionId)","tool_name":"replace_file_content"}
         """) { _ in }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
-        XCTAssertEqual(appState.pendingCount, 1, "Risky tool must still be pending in emulation mode even with auto-edit active")
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1, "Risky tool must still be pending in emulation mode even with auto-edit active")
         appState.approve()
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
 
@@ -607,11 +607,11 @@ final class AppStateTests: XCTestCase {
         {"hook_event_name":"BeforeTool","session_id":"\(sessionId)","tool_name":"enter_plan_mode"}
         """) { _ in }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
-        XCTAssertEqual(appState.pendingCount, 1, "enter_plan_mode must be pending in emulation mode")
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1, "enter_plan_mode must be pending in emulation mode")
         appState.approve()
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
 
-        let resetSession = appState.activeSessions.first { $0.id == sessionId }
+        let resetSession = appState.sessionStore.activeSessions.first { $0.id == sessionId }
         XCTAssertFalse(resetSession?.isAutoEditActive ?? true, "Auto-Edit should be reset after enter_plan_mode approval")
     }
     
@@ -636,7 +636,7 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
         
         wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
         XCTAssertTrue(appState.isNotchExpanded)
         XCTAssertTrue(appState.currentMessage.contains("how are you?"))
@@ -695,7 +695,7 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
 
         wait(for: [codexPreToolExpectation, claudeBeforeToolExpectation, geminiPreToolExpectation], timeout: 1.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
     }
 
@@ -736,9 +736,9 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
 
         wait(for: [preToolExpectation, postToolExpectation], timeout: 1.0)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
-        XCTAssertTrue(appState.activeSessions.contains(where: { $0.id == "claude-lifecycle" }))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "claude-lifecycle" }))
     }
     
     func testMultipleSessions() {
@@ -766,8 +766,8 @@ final class AppStateTests: XCTestCase {
         // Wait for main thread async blocks in handleMessage (including frontmost check background block)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.0))
         
-        XCTAssertEqual(appState.pendingCount, 2)
-        XCTAssertEqual(appState.activeSessions.count, 2)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 2)
+        XCTAssertEqual(appState.sessionStore.activeSessions.count, 2)
         XCTAssertEqual(appState.currentSessionId, "session-1")
         XCTAssertEqual(callCount1, 0, "Response handler 1 should not be called yet")
         
@@ -776,7 +776,7 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
         
         XCTAssertEqual(callCount1, 1, "Response handler 1 should be called exactly once")
-        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         XCTAssertEqual(appState.currentSessionId, "session-2")
         XCTAssertEqual(callCount2, 0, "Response handler 2 should not be called yet")
 
@@ -785,7 +785,7 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
         
         XCTAssertEqual(callCount2, 1, "Response handler 2 should be called exactly once")
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
     }
 
     func testStopEventClearsShowingRequestLock() {
@@ -829,7 +829,7 @@ final class AppStateTests: XCTestCase {
 
         wait(for: [stopExpectation], timeout: 1.0)
         XCTAssertEqual(self.parseResponse(deniedResponse ?? "")?["response"] as? String, "denied")
-        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         XCTAssertEqual(appState.currentSessionId, "session-next")
         XCTAssertEqual(secondCallCount, 0)
 
@@ -837,7 +837,7 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
 
         XCTAssertEqual(secondCallCount, 1)
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
     }
 
     func testDismissSessionRemovesPendingRequestAndPassesToTerminal() {
@@ -859,18 +859,18 @@ final class AppStateTests: XCTestCase {
         }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
 
-        XCTAssertEqual(appState.pendingCount, 1)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         XCTAssertTrue(appState.hasResponseHandler)
-        XCTAssertTrue(appState.activeSessions.contains(where: { $0.id == "dismiss-session" }))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "dismiss-session" }))
 
         appState.dismissSession("dismiss-session")
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
 
         wait(for: [expectation], timeout: 1.0)
         XCTAssertEqual(self.parseResponse(receivedResponse ?? "")?["response"] as? String, "pass")
-        XCTAssertEqual(appState.pendingCount, 0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
-        XCTAssertFalse(appState.activeSessions.contains(where: { $0.id == "dismiss-session" }))
+        XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "dismiss-session" }))
     }
 
     func testDismissSessionClearsPTYOutputBuffer() throws {
@@ -1030,7 +1030,7 @@ final class AppStateTests: XCTestCase {
 
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
 
-        let sessions = appState.activeSessions.filter { $0.id == "meta-session" }
+        let sessions = appState.sessionStore.activeSessions.filter { $0.id == "meta-session" }
         XCTAssertEqual(sessions.count, 1, "Same session_id must not create duplicate session rows")
         XCTAssertEqual(sessions.first?.lastToolName, "Bash", "Second event must update lastToolName")
     }
@@ -1054,8 +1054,8 @@ final class AppStateTests: XCTestCase {
         wait(for: [exp2], timeout: 1.0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
 
-        XCTAssertEqual(appState.activeSessions.count, 2)
-        appState.selectedSessionId = "session-a"
+        XCTAssertEqual(appState.sessionStore.activeSessions.count, 2)
+        appState.sessionStore.selectedSessionId = "session-a"
 
         // Stop session-a
         let stopExp = XCTestExpectation(description: "session-a stopped")
@@ -1067,9 +1067,9 @@ final class AppStateTests: XCTestCase {
         wait(for: [stopExp], timeout: 1.0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
 
-        XCTAssertFalse(appState.activeSessions.contains(where: { $0.id == "session-a" }), "Stopped session must be removed")
-        XCTAssertNotEqual(appState.selectedSessionId, "session-a", "selectedSessionId must switch away from stopped session")
-        XCTAssertEqual(appState.selectedSessionId, "session-b", "selectedSessionId must fall back to remaining session")
+        XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "session-a" }), "Stopped session must be removed")
+        XCTAssertNotEqual(appState.sessionStore.selectedSessionId, "session-a", "selectedSessionId must switch away from stopped session")
+        XCTAssertEqual(appState.sessionStore.selectedSessionId, "session-b", "selectedSessionId must fall back to remaining session")
     }
 
     // MARK: - ReplayRecorder
