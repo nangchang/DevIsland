@@ -118,6 +118,14 @@ PRAGMAs: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`
 
 `scripts/devisland_pty.py` forks a child under a PTY, forwards I/O, and dispatches `PTYOutput` IPC events. It uses an incremental UTF-8 decoder, a bounded worker pool, and per-session sliding buffers so auto-inject patterns can match output split across chunks.
 
+## Log Files
+
+| File | Written by | Content |
+|---|---|---|
+| `/tmp/DevIsland.bridge.log` | Bridge script | Per-event IPC send/receive trace |
+| `/tmp/DevIsland.log` | App (LaunchAgent mode) | General app stdout |
+| `/tmp/DevIsland.error.log` | App (LaunchAgent mode) | App stderr and crash output |
+
 ## Known Gaps
 
 | # | Location | Description |
