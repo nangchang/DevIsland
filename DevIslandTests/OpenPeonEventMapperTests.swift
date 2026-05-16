@@ -59,11 +59,8 @@ final class OpenPeonEventMapperTests: XCTestCase {
         XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "errors found"))
         XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "2 errors found"))
         XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "Build failed."))
-        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "NullPointerException"))
         XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "request timeout"))
         XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "error:"))
-        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "error_code"))
-        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "timeout_error"))
     }
 
     func testNonFailureKeywordsDoNotMatch() {
@@ -73,6 +70,11 @@ final class OpenPeonEventMapperTests: XCTestCase {
         XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "terror"))
         XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "All tests passed"))
         XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: ""))
+        // \b treats _ as a word char: snake_case and camelCase are not matched at the
+        // message level — covered by payload key inspection instead.
+        XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "error_code"))
+        XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "timeout_error"))
+        XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "NullPointerException"))
     }
 
     private func map(_ event: String) -> CESPCategory? {

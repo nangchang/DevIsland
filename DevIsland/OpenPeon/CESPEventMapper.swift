@@ -77,8 +77,10 @@ enum CESPEventMapper {
     private static func containsFailureKeyword(_ text: String) -> Bool {
         let lower = text.lowercased()
         // Negative lookbehind excludes negated phrases ("no errors", "no timeout").
-        // s? covers plurals ("errors", "exceptions"). Underscore is not a \b boundary,
-        // so snake_case tokens like "error_code" or "timeout_error" are still matched.
+        // s? covers plurals ("errors", "exceptions").
+        // Note: \b treats _ as a word char, so snake_case ("error_code") and camelCase
+        // ("NullPointerException") are not matched here — those are caught by payload
+        // key inspection in containsFailure(in:).
         let pattern = #"(?<!no\s)\b(error|failed|exception|timeout)s?\b"#
         return lower.range(of: pattern, options: .regularExpression) != nil
     }
