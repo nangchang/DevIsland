@@ -60,6 +60,54 @@ final class OpenPeonEventMapperTests: XCTestCase {
         )
     }
 
+    func testClaudeNotificationWithMessageDescribingErrorIsNotTaskError() {
+        XCTAssertNil(
+            CESPEventMapper.category(
+                event: "Notification",
+                normalizedEvent: "notification",
+                agentKind: .claudeCode,
+                toolName: "",
+                notificationType: "info",
+                message: "I will fix the syntax error.",
+                payload: nil
+            ),
+            "Descriptive messages about errors should not trigger taskError sound for Claude"
+        )
+    }
+
+    func testClaudeNotificationWithActualErrorTypeIsTaskError() {
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "Notification",
+                normalizedEvent: "notification",
+                agentKind: .claudeCode,
+                toolName: "",
+                notificationType: "error",
+                message: "Fatal error occurred",
+                payload: nil
+            ),
+            .taskError,
+            "Actual error notification type should trigger taskError"
+        )
+    }
+
+    func testClaudeNotificationWithMachineReadableErrorInPayloadIsTaskError() {
+        let payload: [String: Any] = ["error": "System crash"]
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "Notification",
+                normalizedEvent: "notification",
+                agentKind: .claudeCode,
+                toolName: "",
+                notificationType: "info",
+                message: "Just checking in...",
+                payload: payload
+            ),
+            .taskError,
+            "Machine-readable failure in payload should trigger taskError even if type is generic"
+        )
+    }
+
     // MARK: - containsFailureKeyword policy
 
     func testFailureKeywordsMatch() {

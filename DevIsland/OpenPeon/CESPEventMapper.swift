@@ -46,7 +46,18 @@ enum CESPEventMapper {
             if type == "input_required" || type == "permission_prompt" {
                 return .inputRequired
             }
-            return isFailurePayload(payload, message: message) ? .taskError : nil
+            // For Claude notifications, only treat as error if the type is explicitly error-related.
+            // Generic 'message' matching is avoided here because Claude often mentions 'error'
+            // in non-failure conversational contexts.
+            if type.contains("error") || type.contains("fatal") || type.contains("fail") {
+                return .taskError
+            }
+            // Fall back to checking the machine-readable payload for failure signals,
+            // but ignore the descriptive 'message'.
+            if let payload, containsFailure(in: payload) {
+                return .taskError
+            }
+            return nil
         default:
             return isFailurePayload(payload, message: message) ? .taskError : nil
         }
