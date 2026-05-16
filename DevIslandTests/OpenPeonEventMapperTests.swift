@@ -52,6 +52,29 @@ final class OpenPeonEventMapperTests: XCTestCase {
         )
     }
 
+    // MARK: - containsFailureKeyword policy
+
+    func testFailureKeywordsMatch() {
+        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "error"))
+        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "errors found"))
+        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "2 errors found"))
+        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "Build failed."))
+        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "NullPointerException"))
+        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "request timeout"))
+        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "error:"))
+        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "error_code"))
+        XCTAssertTrue(CESPEventMapper.isFailurePayload(nil, message: "timeout_error"))
+    }
+
+    func testNonFailureKeywordsDoNotMatch() {
+        XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "No errors found"))
+        XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "no error"))
+        XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "no timeout"))
+        XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "terror"))
+        XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "All tests passed"))
+        XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: ""))
+    }
+
     private func map(_ event: String) -> CESPCategory? {
         CESPEventMapper.category(
             event: event,
