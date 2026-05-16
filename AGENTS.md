@@ -46,7 +46,7 @@ For environments without Xcode (e.g. CI, Codex), use the shell build script:
 ./scripts/build_and_run.sh --no-kill --no-run
 ```
 
-This compiles all `DevIsland/*.swift` sources with `swiftc`, assembles an app bundle under `dist/DevIsland.app`, and launches it. Pass `--verify` to assert the process started. Use `--no-kill --no-run` to verify compilation without interrupting your live environment.
+This compiles all Swift sources under `DevIsland/` with `swiftc`, assembles an app bundle under `dist/DevIsland.app`, and launches it. Pass `--verify` to assert the process started. Use `--no-kill --no-run` to verify compilation without interrupting your live environment.
 
 ## Multi-CLI Support
 
@@ -275,6 +275,7 @@ CLI Agent (hook event)
 | `NotchWindowController.swift` | `NSPanel` positioned at the top-center of the main screen; hosts all SwiftUI views including `NotchView`, `SessionRowView`, `CodexBuddyView`, and `toolInfo()` |
 | `GlobalShortcutManager.swift` | Global `NSEvent` monitor for ⌘⇧Y / ⌘⇧N (requires Accessibility permission) |
 | `TerminalFocuser.swift` | `NSAppleScript` activation of the first detected terminal app after a decision |
+| `OpenPeon/` | CESP manifest models, pack scan/validation, hook-event category mapping, and audio playback |
 | `scripts/devisland-bridge.sh` | Bash hook entrypoint; collects terminal metadata and delegates payload handling to the Python bridge helper |
 | `scripts/devisland_bridge.py` | JSON payload enrichment, TCP forwarding, and per-CLI hook response formatting |
 | `scripts/install-bridge.sh` | Registers hooks in Claude / Codex / Gemini config files |
@@ -293,6 +294,30 @@ Events are classified into three buckets:
 1. **Stop events** (`stop`, `exit`, `shutdown`, `sessionend`, …) — remove the session from `activeSessions`, respond `approved` immediately.
 2. **Notification events** (`sessionstart`, `notification`, `posttooluse`, `precompact`, `subagentstop`, …) — update session state, respond `approved` immediately (no user action needed).
 3. **Approval events** (`permissionrequest`, `pretooluse`, `beforetool`, …) — added to `pendingQueue` and shown in the UI for user decision.
+
+### OpenPeon CESP Sound Packs
+
+OpenPeon support lives entirely inside the macOS app. The bridge scripts must stay thin: they collect stdin payloads, add terminal metadata, forward IPC, and print provider-specific responses only. Do not move CESP pack loading, event mapping, validation, settings, or audio playback into the bridge.
+
+Runtime modules:
+
+| Module | Responsibility |
+|---|---|
+| `CESPModels.swift` | `openpeon.json` manifest, categories, sounds, validation result, and runtime pack model |
+| `CESPPackStore.swift` | Reloads `~/.openpeon/packs` or the configured directory, scans packs off the UI thread, publishes the latest valid results |
+| `CESPPackValidator.swift` | Validates manifest version/name/version/category shape, safe relative paths, root containment, file existence, extension, per-file size, and pack size |
+| `CESPEventMapper.swift` | Maps normalized hook events and failure/resource heuristics to CESP categories |
+| `CESPAudioPlayer.swift` | Selects playable sounds, applies category mute/debounce/volume, and plays through `AVAudioPlayer` |
+
+Important implementation constraints:
+
+- `AppState.handleMessage()` computes the CESP category after `event`, `normalizedEvent`, `agentKind`, `toolName`, `notificationType`, `displayMsg`, and `parsedJSON` are available.
+- Playback is best-effort and must never delay or change hook approval responses.
+- Pack scanning and validation must stay off the main thread; only publish `@Published` state from `MainActor`.
+- `CESPAudioPlayer` mutable state (`lastPlayedAt`, `lastSoundPathByCategory`, retained `AVAudioPlayer`s) must stay in one isolation domain. Keep playback and delegate cleanup on `MainActor` unless there is a stronger synchronization design.
+- CESP validation accepts `.wav`, `.mp3`, and `.ogg`; MVP playback only plays `.wav` and `.mp3` because macOS `AVAudioPlayer` does not reliably support OGG.
+- Preserve AppState lifecycle semantics when adding sound categories. In particular, `stop` currently maps to `task.complete` for sound feedback without changing stop/session pruning behavior.
+- Use category debounce and default-muted progress-like categories (`task.acknowledge`, `task.progress`, `session.end`, `user.spam`) to avoid sound spam.
 
 ### Gemini-Specific UX Optimizations
 
@@ -336,6 +361,7 @@ DevIsland is a mission-critical monitoring tool. It must never interfere with th
 1.  **Non-blocking UI**: All heavy operations (AppleScript execution, SQLite writes, network I/O) MUST be performed asynchronously.
     -   **AppleScript**: Use `Process` with `/usr/bin/osascript` and a timeout; never use `NSAppleScript` on the main thread.
     -   **Database**: SQLite writes must be performed on the serial `approvalPersistenceQueue`. Use `.async` to avoid blocking the UI or the socket processing loop.
+    -   **OpenPeon packs**: Directory scans, manifest reads, and pack validation must run outside the main thread. Audio playback itself may run on `MainActor` because `AVAudioPlayer` expects a thread with a run loop.
 2.  **Resource Management**:
     -   **PTY Buffers**: Always call `ptyBuffer.remove(sessionId:)` when a session ends or is pruned to prevent memory accumulation.
     -   **Log Retention**: SQLite logs are automatically pruned after 30 days (default) to maintain database performance and minimize disk usage.

@@ -13,6 +13,7 @@
   - **자동 편집 모드 감지**: Gemini CLI의 계획(Plan) 승인 후 이어지는 반복적인 파일 수정은 자동으로 통과시킵니다.
   - **Safe 툴 자동 승인**: 파일 읽기 등 위험도가 낮은 조회성 작업은 승인 없이 통과하도록 설정 가능합니다.
 - **인터랙티브 알림**: 터미널 입력이 필요한 작업(`ask_user`, 쉘 명령어 등)은 승인 대기 대신 "터미널 확인" 알림을 띄워 흐름을 끊지 않습니다.
+- **OpenPeon CESP 사운드팩**: 승인 요청, 작업 완료, 오류, 리소스 제한 같은 hook 이벤트를 표준 CESP 카테고리에 매핑해 오디오 피드백을 재생할 수 있습니다.
 - **자동 정리**: 종료된 세션이나 장시간 활동이 없는 세션을 자동으로 관리합니다.
 
 ## 🧭 Approval Proxy 아키텍처
@@ -135,7 +136,49 @@ Gemini CLI 사용자라면 다음 설정을 통해 가장 쾌적한 환경을 �
 1.  **일반 모드 에뮬레이션**: Gemini CLI를 `--yolo` 또는 `--auto-approve` 모드로 실행하여 터미널 프롬프트를 끄고, DevIsland 메뉴에서 **"Gemini 일반 모드 에뮬레이션"**을 켜세요. 통제권이 DevIsland GUI로 넘어옵니다.
 2.  **Safe 툴 자동 승인**: 메뉴에서 이 옵션을 켜면 파일 읽기 등 단순 조회 작업 시 노치가 방해하지 않습니다.
 
-### 7. 문제 해결 (Troubleshooting)
+### 7. OpenPeon CESP 사운드팩
+
+DevIsland는 [OpenPeon CESP](https://openpeon.com/spec) v1.0 형식의 사운드팩을 읽어 hook 이벤트에 오디오 피드백을 추가할 수 있습니다. 기본 pack 경로는 `~/.openpeon/packs`이며, Settings > OpenPeon에서 기능 활성화, active pack, 볼륨, 전체 mute, category별 mute, debounce 값을 조정할 수 있습니다.
+
+사운드팩은 각 하위 폴더에 `openpeon.json` manifest를 둡니다.
+
+```text
+~/.openpeon/packs/
+  sample-pack/
+    openpeon.json
+    sounds/
+      approval.mp3
+      done.wav
+```
+
+최소 manifest 예시는 다음과 같습니다.
+
+```json
+{
+  "cesp_version": "1.0",
+  "name": "sample-pack",
+  "display_name": "Sample Pack",
+  "version": "1.0.0",
+  "categories": {
+    "input.required": {
+      "sounds": [
+        { "file": "sounds/approval.mp3", "label": "Approval needed" }
+      ]
+    },
+    "task.complete": {
+      "sounds": [
+        { "file": "sounds/done.wav", "label": "Done" }
+      ]
+    }
+  }
+}
+```
+
+지원되는 주요 카테고리는 `session.start`, `task.acknowledge`, `task.complete`, `task.error`, `input.required`, `resource.limit`, `session.end`, `task.progress`, `user.spam`입니다. 기본적으로 `task.acknowledge`, `task.progress`, `session.end`, `user.spam`은 소리 스팸을 줄이기 위해 mute 상태입니다.
+
+MVP 플레이어는 manifest에서 `.wav`, `.mp3`, `.ogg` 파일을 인식하지만 실제 재생은 macOS `AVAudioPlayer`가 안정적으로 지원하는 `.wav`와 `.mp3`부터 처리합니다. `.ogg`는 validation warning으로 표시됩니다.
+
+### 8. 문제 해결 (Troubleshooting)
 
 **Claude Code의 `auto` 모드에서 요청이 거부되는 경우**
 - **현상**: `auto` 모드 사용 시 LaunchAgent 등록이나 특정 파일 생성이 "Denied by auto-mode classifier"와 함께 즉시 거부되며, DevIsland 노치에 승인 창이 뜨지 않습니다.

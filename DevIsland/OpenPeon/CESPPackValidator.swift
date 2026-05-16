@@ -86,6 +86,8 @@ enum CESPPackValidator {
                     continue
                 }
                 if ext == "ogg" || !playbackSupportedExtensions.contains(ext) {
+                    // CESP permits OGG, but the MVP player is AVAudioPlayer-backed and
+                    // only promises WAV/MP3 playback on stock macOS.
                     result.warnings.append("\(path) is recognized by CESP but not playable by the macOS MVP player.")
                 }
                 guard fileManager.fileExists(atPath: url.path) else {
