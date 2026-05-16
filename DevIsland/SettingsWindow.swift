@@ -391,6 +391,7 @@ private struct OpenPeonSettingsPane: View {
 
             Section(l10n.secOpenPeonCategories) {
                 ForEach(CESPCategory.allCases) { category in
+                    let hasSound = packStore.hasSounds(for: category, settings: store.settings)
                     HStack {
                         Toggle(isOn: categoryBinding(category)) {
                             HStack {
@@ -405,14 +406,13 @@ private struct OpenPeonSettingsPane: View {
                         Button {
                             CESPAudioPlayer.shared.play(category: category, bypassChecks: true)
                         } label: {
-                            let hasSound = packStore.hasSounds(for: category, settings: store.settings)
                             Image(systemName: hasSound ? "speaker.wave.2.circle.fill" : "speaker.slash.circle.fill")
                                 .font(.title3)
                                 .foregroundStyle(hasSound ? .blue : .gray)
                         }
                         .buttonStyle(.plain)
-                        .help(packStore.hasSounds(for: category, settings: store.settings) ? l10n.btnPlayPreview : l10n.lblOpenPeonNoSoundFile)
-                        .disabled(!packStore.hasSounds(for: category, settings: store.settings))
+                        .help(hasSound ? l10n.btnPlayPreview : l10n.lblOpenPeonNoSoundFile)
+                        .disabled(!hasSound)
                     }
                 }
             }

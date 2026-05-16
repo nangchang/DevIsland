@@ -67,7 +67,7 @@ final class CESPPackStore: ObservableObject {
             return false
         }
         return categoryManifest.sounds.contains { sound in
-            ["wav", "mp3"].contains(URL(fileURLWithPath: sound.file).pathExtension.lowercased())
+            CESPCategory.supportedExtensions.contains(URL(fileURLWithPath: sound.file).pathExtension.lowercased())
         }
     }
 }

@@ -28,8 +28,9 @@ enum CESPCategory: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// 원본 CESP 이벤트 키 (예: session.start)
     var cespKey: String { rawValue }
+
+    static let supportedExtensions: Set<String> = ["wav", "mp3"]
 }
 
 struct CESPManifest: Codable, Equatable {

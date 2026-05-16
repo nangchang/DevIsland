@@ -22,12 +22,6 @@ final class CESPAudioPlayer: NSObject, @preconcurrency AVAudioPlayerDelegate {
             guard shouldPlay(category: category, pack: pack, settings: settings, now: now) else {
                 return
             }
-        } else {
-            // Even in preview/bypass mode, we need a pack and the category must exist in it.
-            guard let pack,
-                  pack.manifest.categories[category.rawValue] != nil else {
-                return
-            }
         }
 
         guard let pack,
@@ -37,7 +31,7 @@ final class CESPAudioPlayer: NSObject, @preconcurrency AVAudioPlayerDelegate {
         }
 
         let url = pack.rootURL.appendingPathComponent(sound.file).standardizedFileURL
-        guard ["wav", "mp3"].contains(url.pathExtension.lowercased()) else { return }
+        guard CESPCategory.supportedExtensions.contains(url.pathExtension.lowercased()) else { return }
 
         lastPlayedAt[category] = now
         lastSoundPathByCategory[category] = sound.file
@@ -75,7 +69,7 @@ final class CESPAudioPlayer: NSObject, @preconcurrency AVAudioPlayerDelegate {
 
     func selectSound(for category: CESPCategory, sounds: [CESPSoundManifest]) -> CESPSoundManifest? {
         let playable = sounds.filter {
-            ["wav", "mp3"].contains(URL(fileURLWithPath: $0.file).pathExtension.lowercased())
+            CESPCategory.supportedExtensions.contains(URL(fileURLWithPath: $0.file).pathExtension.lowercased())
         }
         guard !playable.isEmpty else { return nil }
         guard playable.count > 1, let previous = lastSoundPathByCategory[category] else {
