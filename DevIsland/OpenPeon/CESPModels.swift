@@ -27,6 +27,9 @@ enum CESPCategory: String, CaseIterable, Identifiable, Codable {
         case .taskProgress: return l.cespTaskProgress
         }
     }
+
+    /// 원본 CESP 이벤트 키 (예: session.start)
+    var cespKey: String { rawValue }
 }
 
 struct CESPManifest: Codable, Equatable {

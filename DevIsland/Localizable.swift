@@ -229,7 +229,7 @@ extension L10n {
 
     // OpenPeon CESP category labels
     var cespSessionStart:     String { s("Session start",      "세션 시작") }
-    var cespTaskAcknowledge:  String { s("Task acknowledge",   "작업 수락") }
+    var cespTaskAcknowledge:  String { s("Task acknowledge",   "작업 인지") }
     var cespTaskComplete:     String { s("Task complete",      "작업 완료") }
     var cespTaskError:        String { s("Task error",         "작업 오류") }
     var cespInputRequired:    String { s("Input required",     "입력 필요") }

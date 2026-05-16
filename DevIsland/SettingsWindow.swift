@@ -391,7 +391,15 @@ private struct OpenPeonSettingsPane: View {
 
             Section(l10n.secOpenPeonCategories) {
                 ForEach(CESPCategory.allCases) { category in
-                    Toggle(category.label, isOn: categoryBinding(category))
+                    Toggle(isOn: categoryBinding(category)) {
+                        HStack {
+                            Text(category.label)
+                            Spacer()
+                            Text(category.cespKey)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
 
