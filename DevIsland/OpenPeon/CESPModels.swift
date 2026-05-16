@@ -14,16 +14,17 @@ enum CESPCategory: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 
     var label: String {
+        let l = L10n.shared
         switch self {
-        case .sessionStart: return "Session start"
-        case .taskAcknowledge: return "Task acknowledge"
-        case .taskComplete: return "Task complete"
-        case .taskError: return "Task error"
-        case .inputRequired: return "Input required"
-        case .resourceLimit: return "Resource limit"
-        case .userSpam: return "User spam"
-        case .sessionEnd: return "Session end"
-        case .taskProgress: return "Task progress"
+        case .sessionStart: return l.cespSessionStart
+        case .taskAcknowledge: return l.cespTaskAcknowledge
+        case .taskComplete: return l.cespTaskComplete
+        case .taskError: return l.cespTaskError
+        case .inputRequired: return l.cespInputRequired
+        case .resourceLimit: return l.cespResourceLimit
+        case .userSpam: return l.cespUserSpam
+        case .sessionEnd: return l.cespSessionEnd
+        case .taskProgress: return l.cespTaskProgress
         }
     }
 }

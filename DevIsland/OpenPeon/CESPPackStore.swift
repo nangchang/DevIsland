@@ -6,7 +6,7 @@ final class CESPPackStore: ObservableObject {
     static let shared = CESPPackStore()
 
     @Published private(set) var packs: [CESPPack] = []
-    @Published private(set) var lastReloadError: String?
+    @Published private(set) var lastReloadErrorPath: String?
     private var reloadID = UUID()
 
     func reload(settings: AppSettings) {
@@ -25,10 +25,10 @@ final class CESPPackStore: ObservableObject {
                 switch result {
                 case .success(let packs):
                     self.packs = packs
-                    self.lastReloadError = nil
+                    self.lastReloadErrorPath = nil
                 case .failure:
                     self.packs = []
-                    self.lastReloadError = "Could not read \(directory.path)"
+                    self.lastReloadErrorPath = directory.path
                 }
             }
         }

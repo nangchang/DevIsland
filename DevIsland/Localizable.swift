@@ -154,6 +154,7 @@ extension L10n {
     var tabApproval:         String { s("Approval",     "승인") }
     var tabProviders:        String { s("Providers",    "공급자") }
     var tabBridge:           String { s("Bridge / IPC", "브리지 / IPC") }
+    var tabOpenPeon:         String { s("OpenPeon",     "OpenPeon") }
     var tabExperimental:     String { s("Experimental", "실험적") }
 
     // General tab
@@ -205,6 +206,37 @@ extension L10n {
     var lblConnectTimeout:   String { s("Connect timeout",               "연결 타임아웃") }
     var lblResponseTimeout:  String { s("Response timeout",              "응답 타임아웃") }
     func labelSeconds(_ n: Int) -> String { s("\(n) seconds", "\(n)초") }
+
+    // OpenPeon tab
+    var secOpenPeonSoundPacks:       String { s("Sound packs",                   "사운드팩") }
+    var lblOpenPeonEnable:           String { s("Enable OpenPeon sounds",        "OpenPeon 사운드 활성화") }
+    var lblOpenPeonMuteAll:          String { s("Mute all OpenPeon sounds",      "모든 OpenPeon 사운드 음소거") }
+    var phOpenPeonPacksFolder:       String { s("Packs folder",                  "팩 폴더") }
+    var btnReload:                   String { s("Reload",                        "다시 불러오기") }
+    var btnOpen:                     String { s("Open",                          "열기") }
+    var lblOpenPeonActivePack:       String { s("Active pack",                   "활성 팩") }
+    var lblOpenPeonFirstValidPack:   String { s("First valid pack",              "첫 번째 유효한 팩") }
+    var lblOpenPeonNoPacks:          String { s("No OpenPeon packs found.",      "OpenPeon 팩을 찾을 수 없습니다.") }
+    var secOpenPeonPlayback:         String { s("Playback",                      "재생") }
+    var lblOpenPeonMasterVolume:     String { s("Master volume",                 "마스터 볼륨") }
+    func lblOpenPeonDebounce(_ ms: Int) -> String { s("Debounce: \(ms) ms", "디바운스: \(ms)ms") }
+    var secOpenPeonCategories:       String { s("Categories",                    "카테고리") }
+    var secOpenPeonValidation:       String { s("Validation",                    "검증") }
+    var lblOpenPeonValid:            String { s("Valid",                         "유효함") }
+    func errOpenPeonReadPacks(_ path: String) -> String {
+        s("Could not read \(path)", "\(path)를 읽을 수 없습니다.")
+    }
+
+    // OpenPeon CESP category labels
+    var cespSessionStart:     String { s("Session start",      "세션 시작") }
+    var cespTaskAcknowledge:  String { s("Task acknowledge",   "작업 수락") }
+    var cespTaskComplete:     String { s("Task complete",      "작업 완료") }
+    var cespTaskError:        String { s("Task error",         "작업 오류") }
+    var cespInputRequired:    String { s("Input required",     "입력 필요") }
+    var cespResourceLimit:    String { s("Resource limit",     "리소스 제한") }
+    var cespUserSpam:         String { s("User spam",          "사용자 반복 입력") }
+    var cespSessionEnd:       String { s("Session end",        "세션 종료") }
+    var cespTaskProgress:     String { s("Task progress",      "작업 진행") }
 
     // Experimental tab
     var secPTYWrapper:       String { s("PTY Wrapper",                   "PTY 래퍼") }
