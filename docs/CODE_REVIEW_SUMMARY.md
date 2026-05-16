@@ -25,11 +25,11 @@
 
 ### 🏗️ 아키텍처 (Architecture)
 *   **God Object (`AppState`)**: 2,300줄에 달하는 `AppState`가 UI, IPC, 정책, 영속성 등 모든 책임을 지고 있습니다. 이는 변경 비용을 높이고 사이드 이펙트 위험을 키우는 구조적 부채입니다. 단번에 대규모 분해하기보다 `ReplayRecorder`(hook/decision/PTY DB 기록), `PTYSessionBuffer`(sliding window와 injection match), `SessionStore`(active/pending session 상태)처럼 독립도가 높은 단위부터 단계적으로 추출하는 것이 현실적입니다.
-*   **데이터 일관성 결함**: 승인 decision 자체는 provider와 무관하게 replay log에 기록되지만, Claude의 session/persistent approval scope가 SQLite `session_cache`/rules와 일관되게 동기화되지 않는 gap-2가 남아 있습니다. 이로 인해 provider별 정책 엔진과 replay 기반 진단의 신뢰도가 달라질 수 있습니다.
+*   **데이터 일관성 결함**: 승인 decision 자체는 provider와 무관하게 replay log에 기록됩니다. 이전 gap-2는 Claude의 session/persistent approval scope가 SQLite `session_cache`/rules와 일관되게 동기화되는지 검증이 부족한 상태였고, P3에서 Claude session/persistent 저장 테스트를 추가해 provider별 정책 엔진과 replay 기반 진단의 신뢰도를 보강했습니다.
 
 ### 🛠️ 구현 및 UX (Implementation & UX)
 *   **Private API 리스크**: 노치 영역 감지를 위한 `auxiliaryTopLeftArea` 접근은 실용적이나, 비공개 KVC 접근이므로 macOS 업데이트 시 예고 없이 동작이 깨질 수 있습니다. 현재 직접 배포(dmg) 구조에서는 감수 가능한 선택이고 값이 없을 때는 화면 중앙으로 fallback하지만, KVC 접근 자체의 동작 변경 가능성에 대비해 macOS 버전별 검증과 graceful degradation 테스트가 필요합니다.
-*   **PTY 자원 관리**: PTY sliding window 버퍼는 세션별 1KB로 제한되어 실질적 메모리 영향은 작습니다. 다만 injection 패턴 매치 시 빈 문자열(`""`)로 초기화하는 처리와 별개로, 세션 종료/pruning 경로에서 딕셔너리 키 자체를 `removeValue(forKey:)`로 제거하는 것이 더 명확한 자원 관리입니다.
+*   **PTY 자원 관리**: PTY sliding window 버퍼는 세션별 1KB로 제한되어 실질적 메모리 영향은 작습니다. P3에서 injection 패턴 매치 시 빈 문자열(`""`)로 초기화하는 처리와 별개로, 세션 종료/pruning/dismiss 경로에서 딕셔너리 키 자체를 `removeValue(forKey:)`로 제거하도록 보강했습니다.
 *   **서버 실패 대응**: `NWListener`가 `.failed` 상태로 들어가면 앱은 `onServerFailed`를 호출해 alert 후 종료합니다. 그러나 `startTCP`의 리스너 생성 `catch` 블록에는 `onServerFailed` 호출이 누락되어 있습니다(`startUnix`의 `catch`는 정상 호출). 이 경우 앱은 실행 중이지만 소켓이 열리지 않아 어떤 훅 이벤트도 받지 못하는 **무음 장애(Silent Failure)** 상태가 됩니다. TCP `catch` 경로의 콜백 누락 버그 수정과 함께, 재시도 로직이나 포트 점유 안내 등 UX 개선이 필요합니다. transport fallback은 앱 단독 변경으로 끝나지 않고 bridge 설정 및 설치 스크립트와 함께 검토해야 합니다.
 
 ---
@@ -63,3 +63,10 @@
 *   **Settings UI**: Approval 탭에 "Log retention" 섹션을 추가해 `replayRetentionDays` Stepper를 노출했습니다(`ptyTranscriptRetentionDays`는 기존 Experimental 탭에 이미 있음).
 *   **테스트 2개**: 오래된 hook/decision 행 삭제, 오래된 PTY 메시지 삭제를 각각 검증합니다.
 *   **검증**: `./scripts/run-tests.sh` 통과. 커밋: `9fa5b36`.
+
+### 2026-05-16 — P3 시작 (`fix/p3-clear-pty-buffers`)
+*   **PTY 버퍼 정리**: 세션 종료 이벤트, 비활성 세션 pruning, 사용자의 세션 dismiss 경로에서 `ptyOutputBuffers.removeValue(forKey:)`를 호출해 세션별 sliding window 키를 명시적으로 제거합니다.
+*   **Approval scope 검증 보강**: `sendDecision`의 provider 공통 `persistApprovalScope` 경로가 Claude에도 동일하게 적용됨을 검증하기 위해 Claude session approval → `session_cache`, Claude persistent approval → `rules` 저장 테스트를 추가했습니다.
+*   **Stale TODO 정리**: 이미 공통 persistence 경로로 처리되는 gap-2 TODO를 제거해 현재 구현 상태와 문서가 어긋나지 않도록 정리했습니다.
+*   **테스트 보강**: dismiss 후 이전 PTY 조각(`pass`)이 다음 출력(`word:`)과 합쳐져 auto-inject를 트리거하지 않는 회귀 테스트를 추가했습니다.
+*   **검증**: `git diff --check`, `swiftc -parse DevIsland/AppState.swift DevIslandTests/AppStateTests.swift`, `./scripts/run-tests.sh` 통과.

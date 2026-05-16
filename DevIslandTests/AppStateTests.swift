@@ -239,6 +239,98 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(decision?.source, .sessionCache)
     }
 
+    func testClaudeSessionApprovalPersistsToSQLiteCache() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateClaudePolicyTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let controller = try ApprovalProxyController(databaseURL: tempDir.appendingPathComponent("approval-proxy.sqlite3"))
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller
+        )
+        let expectation = XCTestExpectation(description: "Claude manual session approval")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "claude-session",
+            "cli_source": "claude",
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm test"}
+        }
+        """
+
+        state.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+
+        XCTAssertEqual(state.pendingCount, 1)
+        state.approve(sessionAlways: true)
+
+        wait(for: [expectation], timeout: 2.0)
+        state.flushApprovalPersistenceForTesting()
+        let decision = try controller.store.sessionDecision(for: ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "claude-session",
+            toolName: "Bash"
+        ))
+        XCTAssertEqual(decision?.action, .allow)
+        XCTAssertEqual(decision?.source, .sessionCache)
+    }
+
+    func testClaudePersistentApprovalPersistsToSQLiteRules() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateClaudePolicyTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let controller = try ApprovalProxyController(databaseURL: tempDir.appendingPathComponent("approval-proxy.sqlite3"))
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller
+        )
+        let expectation = XCTestExpectation(description: "Claude manual persistent approval")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "claude-session",
+            "cli_source": "claude",
+            "tool_name": "Bash",
+            "cwd": "/tmp/project",
+            "tool_input": {"command": "npm test"}
+        }
+        """
+
+        state.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+
+        XCTAssertEqual(state.pendingCount, 1)
+        state.approve(globalAlways: true)
+
+        wait(for: [expectation], timeout: 2.0)
+        state.flushApprovalPersistenceForTesting()
+        let decision = try controller.store.persistentDecision(for: ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "claude-session",
+            toolName: "Bash",
+            workspaceRoot: "/tmp/project"
+        ))
+        XCTAssertEqual(decision?.action, .allow)
+        XCTAssertEqual(decision?.source, .persistentRule)
+    }
+
     func testReplayHookEventRequeuesStoredApprovalPayload() throws {
         appState = AppState(
             startServer: false,
@@ -779,5 +871,48 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
         XCTAssertFalse(appState.activeSessions.contains(where: { $0.id == "dismiss-session" }))
+    }
+
+    func testDismissSessionClearsPTYOutputBuffer() throws {
+        let patterns = [PTYAutoInjectPattern(pattern: "password:", response: "secret\n")]
+        let data = try JSONEncoder().encode(patterns)
+        mockDefaults.set(true, forKey: SettingsStore.DefaultsKey.ptyEnabled)
+        mockDefaults.set(data, forKey: SettingsStore.DefaultsKey.ptyAutoInjectPatterns)
+
+        var firstResponse: String?
+        appState.handleMessage(
+            """
+            {
+                "hook_event_name": "PTYOutput",
+                "cli_source": "claude",
+                "session_id": "pty-dismiss",
+                "content": "pass"
+            }
+            """
+        ) { response in
+            firstResponse = response
+        }
+        XCTAssertNil(parseResponse(firstResponse ?? "")?["injection"])
+
+        appState.dismissSession("pty-dismiss")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        var secondResponse: String?
+        appState.handleMessage(
+            """
+            {
+                "hook_event_name": "PTYOutput",
+                "cli_source": "claude",
+                "session_id": "pty-dismiss",
+                "content": "word:"
+            }
+            """
+        ) { response in
+            secondResponse = response
+        }
+
+        let json = parseResponse(secondResponse ?? "")
+        XCTAssertEqual(json?["response"] as? String, "approved")
+        XCTAssertNil(json?["injection"])
     }
 }

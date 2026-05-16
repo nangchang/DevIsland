@@ -449,7 +449,7 @@ PRAGMAs: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`
 | # | Location | Description |
 |---|---|---|
 | 1 | `ApprovalPolicyEngine.swift` | Only exact tool-name matching; Glob/Regex/Prefix modes not yet implemented |
-| 2 | `AppState.sendDecision` | Claude approvals not written to `session_cache` when mode is hybrid/app |
+| 2 | `AppState.sendDecision` | ✅ Fixed: approval scope persistence now uses the shared provider path, with Claude session/persistent coverage in tests |
 | 3 | `AppState.globalAutoApproveTypes` | ✅ Fixed: all providers now write to SQLite via `persistApprovalScope`; in-memory sets remain as a fast-path cache |
 | 4 | `ProviderAdapter.swift` | `GeminiPromptPolicy.swift` does not exist; Gemini logic is minimal hardcoded formatter |
 | 5 | `AppState.swift` | 93 KB class handles too many concerns; `QuestionBroker` and `GeminiSessionState` not yet extracted |

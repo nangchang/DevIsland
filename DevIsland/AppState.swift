@@ -708,6 +708,7 @@ class AppState: ObservableObject {
                 self.pendingCount = self.pendingQueue.count
                 self.activeSessions.removeAll { $0.id == fullSessionId }
                 self.sessionAutoApproveTypes.removeValue(forKey: fullSessionId)
+                self.clearPTYOutputBuffer(sessionId: fullSessionId)
 
                 if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                     self.currentResponseHandler = nil
@@ -1464,6 +1465,7 @@ class AppState: ObservableObject {
             
             for session in sessionsToPrune {
                 self.sessionAutoApproveTypes.removeValue(forKey: session.id)
+                self.clearPTYOutputBuffer(sessionId: session.id)
             }
             
             self.activeSessions.removeAll { session in
@@ -1480,6 +1482,7 @@ class AppState: ObservableObject {
             self.pendingItems.removeAll { $0.sessionId == sessionId }
             self.pendingCount = self.pendingQueue.count
             self.sessionAutoApproveTypes.removeValue(forKey: sessionId)
+            self.clearPTYOutputBuffer(sessionId: sessionId)
             self.activeSessions.removeAll { $0.id == sessionId }
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
@@ -1925,20 +1928,23 @@ class AppState: ObservableObject {
         content: String,
         responseHandler: (String) -> Void
     ) {
-        guard Self.currentPTYEnabled(), !content.isEmpty else {
+        guard currentPTYEnabled(), !content.isEmpty else {
             responseHandler("{\"response\":\"approved\"}")
             return
         }
         // Sliding window buffer: keep the last 1 KB per session so patterns that
         // span multiple os.read chunks (e.g. "Password:" split across two reads)
         // are still matched correctly.
-        ptyBufferLock.lock()
-        let combined = (ptyOutputBuffers[sessionId] ?? "") + content
-        let window = combined.count > 1024 ? String(combined.suffix(1024)) : combined
-        ptyOutputBuffers[sessionId] = window
-        ptyBufferLock.unlock()
+        let window: String
+        do {
+            ptyBufferLock.lock()
+            defer { ptyBufferLock.unlock() }
+            let combined = (ptyOutputBuffers[sessionId] ?? "") + content
+            window = combined.count > 1024 ? String(combined.suffix(1024)) : combined
+            ptyOutputBuffers[sessionId] = window
+        }
 
-        let patterns = Self.currentPTYAutoInjectPatterns()
+        let patterns = currentPTYAutoInjectPatterns()
         let lowerWindow = window.lowercased()
         let matched = patterns.first { lowerWindow.contains($0.pattern.lowercased()) }
         let injectionText = matched?.response
@@ -1946,8 +1952,8 @@ class AppState: ObservableObject {
         // Clear the buffer on match to prevent the same pattern from re-firing.
         if injectionText != nil {
             ptyBufferLock.lock()
+            defer { ptyBufferLock.unlock() }
             ptyOutputBuffers[sessionId] = ""
-            ptyBufferLock.unlock()
         }
 
         approvalPersistenceQueue.async { [weak self] in
@@ -1983,12 +1989,18 @@ class AppState: ObservableObject {
         responseHandler("{\"response\":\"approved\"}")
     }
 
-    private static func currentPTYEnabled() -> Bool {
-        UserDefaults.standard.bool(forKey: SettingsStore.DefaultsKey.ptyEnabled)
+    private func clearPTYOutputBuffer(sessionId: String) {
+        ptyBufferLock.lock()
+        defer { ptyBufferLock.unlock() }
+        ptyOutputBuffers.removeValue(forKey: sessionId)
     }
 
-    private static func currentPTYAutoInjectPatterns() -> [PTYAutoInjectPattern] {
-        guard let data = UserDefaults.standard.data(forKey: SettingsStore.DefaultsKey.ptyAutoInjectPatterns),
+    private func currentPTYEnabled() -> Bool {
+        userDefaults.bool(forKey: SettingsStore.DefaultsKey.ptyEnabled)
+    }
+
+    private func currentPTYAutoInjectPatterns() -> [PTYAutoInjectPattern] {
+        guard let data = userDefaults.data(forKey: SettingsStore.DefaultsKey.ptyAutoInjectPatterns),
               let patterns = try? JSONDecoder().decode([PTYAutoInjectPattern].self, from: data) else {
             return []
         }
@@ -2016,13 +2028,6 @@ class AppState: ObservableObject {
         }
     }
 
-    // TODO(gap-2): When claudeSessionApprovalMode is .appSessionCache or .hybrid,
-    //   Claude approvals must also be written to SQLiteApprovalStore.session_cache.
-    //   Currently only Codex approvals are persisted to the DB; Claude relies solely on
-    //   updatedPermissions in the hook response (native mode) and has no DB record.
-    //   Fix: after building providerOutput for Claude, insert into session_cache here
-    //   so replay log and policy engine see a consistent history across providers.
-    //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
     private func sendDecision(
         approved: Bool,
         reason: String? = nil,
