@@ -3,22 +3,24 @@ import XCTest
 
 final class OpenPeonEventMapperTests: XCTestCase {
     func testApprovalEventsMapToInputRequired() {
-        XCTAssertEqual(map("PermissionRequest"), .inputRequired)
-        XCTAssertEqual(map("AfterAgent"), .inputRequired)
-        XCTAssertEqual(map("Elicitation"), .inputRequired)
+        XCTAssertEqual(map("PermissionRequest", for: .claudeCode), .inputRequired)
+        XCTAssertEqual(map("Elicitation", for: .claudeCode), .inputRequired)
+        XCTAssertEqual(map("AfterAgent", for: .gemini), .inputRequired)
+        XCTAssertEqual(map("PermissionRequest", for: .codex), .inputRequired)
     }
 
     func testAcknowledgeEventsMapToTaskAcknowledge() {
-        XCTAssertEqual(map("PreToolUse"), .taskAcknowledge)
-        XCTAssertEqual(map("BeforeTool"), .taskAcknowledge)
+        XCTAssertEqual(map("PreToolUse", for: .codex), .taskAcknowledge)
+        XCTAssertEqual(map("BeforeTool", for: .gemini), .taskAcknowledge)
     }
 
     func testCompletionEventsMapToTaskComplete() {
-        XCTAssertEqual(map("Stop"), .taskComplete)
+        XCTAssertEqual(map("Stop", for: .gemini), .taskComplete)
+        XCTAssertEqual(map("PostToolUse", for: .codex), .taskComplete)
     }
 
     func testPreCompactMapsToResourceLimit() {
-        XCTAssertEqual(map("PreCompact"), .resourceLimit)
+        XCTAssertEqual(map("PreCompact", for: .gemini), .resourceLimit)
     }
 
     func testFailurePostToolUseMapsToTaskError() {
@@ -31,7 +33,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
             CESPEventMapper.category(
                 event: "PostToolUse",
                 normalizedEvent: "posttooluse",
-                agentKind: .claudeCode,
+                agentKind: .codex,
                 toolName: "Bash",
                 notificationType: "",
                 message: "",
@@ -81,11 +83,11 @@ final class OpenPeonEventMapperTests: XCTestCase {
         XCTAssertFalse(CESPEventMapper.isFailurePayload(nil, message: "NullPointerException"))
     }
 
-    private func map(_ event: String) -> CESPCategory? {
+    private func map(_ event: String, for agent: BuddyKind = .claudeCode) -> CESPCategory? {
         CESPEventMapper.category(
             event: event,
             normalizedEvent: HookEventNormalizer.normalizedName(event),
-            agentKind: .claudeCode,
+            agentKind: agent,
             toolName: "",
             notificationType: "",
             message: "",

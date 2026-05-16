@@ -10,28 +10,59 @@ enum CESPEventMapper {
         message: String,
         payload: [String: Any]?
     ) -> CESPCategory? {
+        switch agentKind {
+        case .claudeCode:
+            return claudeCategory(normalizedEvent: normalizedEvent, notificationType: notificationType, message: message, payload: payload)
+        case .gemini:
+            return geminiCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
+        case .codex:
+            return codexCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
+        default:
+            return commonCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
+        }
+    }
+
+    private static func claudeCategory(
+        normalizedEvent: String,
+        notificationType: String,
+        message: String,
+        payload: [String: Any]?
+    ) -> CESPCategory? {
         switch normalizedEvent {
-        case "sessionstart", "startup", "init":
+        case "sessionstart":
             return .sessionStart
-        case "permissionrequest", "elicitation", "afteragent":
+        case "permissionrequest", "elicitation":
             return .inputRequired
-        case "pretooluse", "beforetool":
-            return .taskAcknowledge
-        case "posttooluse":
-            return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
-        case "stop":
-            // Sound feedback treats Stop as task completion without changing AppState's
-            // lifecycle/pruning rules for provider sessions.
-            return .taskComplete
         case "sessionend", "exit", "shutdown":
             return .sessionEnd
-        case "precompact":
-            return .resourceLimit
         case "notification":
             let type = notificationType.lowercased()
             if type == "input_required" || type == "permission_prompt" {
                 return .inputRequired
             }
+            return isFailurePayload(payload, message: message) ? .taskError : nil
+        default:
+            return isFailurePayload(payload, message: message) ? .taskError : nil
+        }
+    }
+
+    private static func geminiCategory(
+        normalizedEvent: String,
+        message: String,
+        payload: [String: Any]?
+    ) -> CESPCategory? {
+        switch normalizedEvent {
+        case "startup", "init":
+            return .sessionStart
+        case "afteragent":
+            return .inputRequired
+        case "beforetool":
+            return .taskAcknowledge
+        case "stop":
+            return .taskComplete
+        case "precompact":
+            return .resourceLimit
+        case "notification":
             if containsResourceLimitKeyword(message) {
                 return .resourceLimit
             }
@@ -40,6 +71,50 @@ enum CESPEventMapper {
             return isFailurePayload(payload, message: message) ? .taskError : nil
         }
     }
+
+    private static func codexCategory(
+        normalizedEvent: String,
+        message: String,
+        payload: [String: Any]?
+    ) -> CESPCategory? {
+        switch normalizedEvent {
+        case "sessionstart":
+            return .sessionStart
+        case "permissionrequest":
+            return .inputRequired
+        case "pretooluse":
+            return .taskAcknowledge
+        case "posttooluse":
+            return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
+        case "sessionend":
+            return .sessionEnd
+        default:
+            return isFailurePayload(payload, message: message) ? .taskError : nil
+        }
+    }
+
+    private static func commonCategory(
+        normalizedEvent: String,
+        message: String,
+        payload: [String: Any]?
+    ) -> CESPCategory? {
+        switch normalizedEvent {
+        case "sessionstart", "startup", "init":
+            return .sessionStart
+        case "permissionrequest", "elicitation", "beforetool", "afteragent":
+            return .inputRequired
+        case "pretooluse":
+            return .taskAcknowledge
+        case "posttooluse", "stop":
+            return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
+        case "sessionend", "exit", "shutdown":
+            return .sessionEnd
+        default:
+            return isFailurePayload(payload, message: message) ? .taskError : nil
+        }
+    }
+
+    // MARK: - Helpers
 
     static func isFailurePayload(_ payload: [String: Any]?, message: String) -> Bool {
         if containsFailureKeyword(message) {
@@ -50,8 +125,6 @@ enum CESPEventMapper {
     }
 
     private static func containsFailure(in value: Any) -> Bool {
-        // This intentionally catches only clear machine-readable or textual failures.
-        // User-denied approvals are handled by the approval flow, not as task errors.
         if let dict = value as? [String: Any] {
             for (key, nested) in dict {
                 let lowerKey = key.lowercased()
@@ -80,10 +153,6 @@ enum CESPEventMapper {
 
     private static func containsFailureKeyword(_ text: String) -> Bool {
         let lower = text.lowercased()
-        // Negative lookbehind excludes negated phrases ("no errors", "no timeout").
-        // s? covers plurals ("errors", "exceptions").
-        // Note: \b treats _ as a word char, so snake_case ("error_code") and camelCase
-        // ("NullPointerException") are not matched here.
         let pattern = #"(?<!no\s)\b(error|failed|exception|timeout)s?\b"#
         return lower.range(of: pattern, options: .regularExpression) != nil
     }
