@@ -11,6 +11,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
 
     func testAcknowledgeEventsMapToTaskAcknowledge() {
         XCTAssertEqual(map("PreToolUse", for: .codex), .taskAcknowledge)
+        XCTAssertEqual(map("PreToolUse", for: .claudeCode), .taskAcknowledge)
         XCTAssertEqual(map("BeforeTool", for: .gemini), .taskAcknowledge)
     }
 
