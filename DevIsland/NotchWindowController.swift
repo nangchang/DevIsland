@@ -146,7 +146,8 @@ class NotchWindowController: NSWindowController {
             }
             .store(in: &cancellables)
 
-        AppState.shared.$pendingCount
+        AppState.shared.sessionStore.$pendingItems
+            .map(\.count)
             .removeDuplicates()
             .dropFirst()
             .receive(on: RunLoop.main)
@@ -164,7 +165,7 @@ class NotchWindowController: NSWindowController {
         self.mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
             guard let self = self else { return }
             let state = AppState.shared
-            let isRequestShowing = state.isNotchExpanded && !state.pendingItems.isEmpty
+            let isRequestShowing = state.isNotchExpanded && !state.sessionStore.pendingItems.isEmpty
             
             let isTargetFocused = isRequestShowing ? (state.requestDisplayTarget == .focused) : (state.notchDisplayTarget == .focused)
             let isTargetMouse = isRequestShowing ? (state.requestDisplayTarget == .mouse) : (state.notchDisplayTarget == .mouse)
@@ -210,7 +211,7 @@ class NotchWindowController: NSWindowController {
                 updateWindowFrame(animate: false, targetScreenOverride: override)
                 
                 // 실제 승인 요청인 경우에만 즉시 해제 (알림은 메시지 표시를 위해 유지)
-                if AppState.shared.pendingCount > 0 {
+                if AppState.shared.sessionStore.pendingCount > 0 {
                     AppState.shared.isExpandingFromRequest = false
                 }
             }
@@ -322,7 +323,7 @@ class NotchWindowController: NSWindowController {
         let state = AppState.shared
 
         // 만약 요청 표시 중(확장 상태 + 대기 아이템 존재)이라면 requestDisplayTarget 설정을 먼저 확인
-        if state.isNotchExpanded && !state.pendingItems.isEmpty {
+        if state.isNotchExpanded && !AppState.shared.sessionStore.pendingItems.isEmpty {
             if let requestScreen = Self.requestTargetScreen() {
                 return requestScreen
             }
@@ -1167,7 +1168,7 @@ struct SessionRowView: View {
     
     var body: some View {
         HStack(spacing: 8) {
-            Button(action: { AppState.shared.selectedSessionId = session.id }) {
+            Button(action: { AppState.shared.sessionStore.selectedSessionId = session.id }) {
                 HStack(spacing: 12) {
                     ZStack(alignment: .topTrailing) {
                         AgentRequestBadge(
@@ -1283,6 +1284,7 @@ struct SessionRowView: View {
 
 struct NotchView: View {
     @ObservedObject var state = AppState.shared
+    @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var l10n = L10n.shared
     @State private var buddyPulse = false
     @State private var leftMascot: BuddyKind = .claudeCode
@@ -1290,20 +1292,20 @@ struct NotchView: View {
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
-        state.pendingCount > 0 || (state.isNotchExpanded && state.isExpandingFromRequest && !state.currentMessage.isEmpty)
+        sessionStore.pendingCount > 0 || (state.isNotchExpanded && state.isExpandingFromRequest && !state.currentMessage.isEmpty)
     }
     private var headerTitle: String { isActionAreaShowing && !state.currentToolName.isEmpty ? tool.label : L10n.shared.notchSessions }
     private var displayedSessionId: String {
-        state.currentSessionId.isEmpty ? (state.selectedSessionId ?? "") : state.currentSessionId
+        state.currentSessionId.isEmpty ? (sessionStore.selectedSessionId ?? "") : state.currentSessionId
     }
     private var notchSize: NSSize {
         state.isNotchExpanded ? expandedNotchSize : collapsedNotchSize
     }
 
     private var currentBuddyKind: BuddyKind {
-        let session = state.activeSessions.first { $0.id == state.currentSessionId }
-            ?? state.activeSessions.first { $0.id == state.selectedSessionId }
-            ?? state.activeSessions.first
+        let session = sessionStore.activeSessions.first { $0.id == state.currentSessionId }
+            ?? sessionStore.activeSessions.first { $0.id == sessionStore.selectedSessionId }
+            ?? sessionStore.activeSessions.first
         return session?.agentKind ?? BuddyKind(from: "")
     }
 
@@ -1437,22 +1439,22 @@ struct NotchView: View {
                             .foregroundColor(.white)
                         
                         StatusBadge(
-                            text: state.pendingCount > 0 ? l10n.notchApprovalRequired : (isActionAreaShowing ? l10n.notchNotification : l10n.notchMonitoring),
-                            color: state.pendingCount > 0 ? .orange : (isActionAreaShowing ? .blue.opacity(0.7) : .green.opacity(0.6))
+                            text: sessionStore.pendingCount > 0 ? l10n.notchApprovalRequired : (isActionAreaShowing ? l10n.notchNotification : l10n.notchMonitoring),
+                            color: sessionStore.pendingCount > 0 ? .orange : (isActionAreaShowing ? .blue.opacity(0.7) : .green.opacity(0.6))
                         )
                     }
                     
                     if !displayedSessionId.isEmpty {
                         HStack(spacing: 6) {
                             TagView(icon: "terminal.fill", text: String(displayedSessionId.prefix(8)))
-                            TagView(icon: "macwindow", text: state.activeSessions.first(where: { $0.id == displayedSessionId })?.terminalTitle ?? l10n.notchUnknown)
-                            if state.pendingCount > 1 {
-                                TagView(icon: "list.bullet", text: l10n.tasksQueued(state.pendingCount), color: .orange.opacity(0.2))
+                            TagView(icon: "macwindow", text: sessionStore.activeSessions.first(where: { $0.id == displayedSessionId })?.terminalTitle ?? l10n.notchUnknown)
+                            if sessionStore.pendingCount > 1 {
+                                TagView(icon: "list.bullet", text: l10n.tasksQueued(sessionStore.pendingCount), color: .orange.opacity(0.2))
                             }
                         }
-                    } else if state.pendingCount > 1 {
+                    } else if sessionStore.pendingCount > 1 {
                         HStack(spacing: 6) {
-                            TagView(icon: "list.bullet", text: l10n.tasksQueued(state.pendingCount), color: .orange.opacity(0.2))
+                            TagView(icon: "list.bullet", text: l10n.tasksQueued(sessionStore.pendingCount), color: .orange.opacity(0.2))
                         }
                     }
                 }
@@ -1664,9 +1666,9 @@ struct NotchView: View {
                 }
                 .padding(.bottom, 20)
             }
-            .frame(width: state.activeSessions.isEmpty ? 680 : 420)
-            
-            if !state.activeSessions.isEmpty {
+            .frame(width: sessionStore.activeSessions.isEmpty ? 680 : 420)
+
+            if !sessionStore.activeSessions.isEmpty {
                 Rectangle()
                     .fill(Color.white.opacity(0.06))
                     .frame(width: 1)
@@ -1686,7 +1688,7 @@ struct NotchView: View {
                 .foregroundColor(.white.opacity(0.3))
                 .padding(.horizontal, 20)
             
-            if state.activeSessions.isEmpty {
+            if sessionStore.activeSessions.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.system(size: 24))
@@ -1707,7 +1709,7 @@ struct NotchView: View {
     private var sessionList: some View {
         ScrollView {
             VStack(spacing: 8) {
-                ForEach(state.activeSessions) { session in
+                ForEach(sessionStore.activeSessions) { session in
                     SessionRowView(
                         session: session,
                         isCurrent: session.id == displayedSessionId
