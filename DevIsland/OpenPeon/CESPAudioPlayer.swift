@@ -11,15 +11,26 @@ final class CESPAudioPlayer: NSObject, @preconcurrency AVAudioPlayerDelegate {
     private var lastSoundPathByCategory: [CESPCategory: String] = [:]
     private var players: [AVAudioPlayer] = []
 
-    func play(category: CESPCategory) {
+    func play(category: CESPCategory, bypassChecks: Bool = false) {
         let settings = SettingsStore.shared.settings
         let pack = CESPPackStore.shared.activePack(settings: settings)
-        play(category: category, pack: pack, settings: settings)
+        play(category: category, pack: pack, settings: settings, bypassChecks: bypassChecks)
     }
 
-    func play(category: CESPCategory, pack: CESPPack?, settings: AppSettings, now: Date = Date()) {
-        guard shouldPlay(category: category, pack: pack, settings: settings, now: now),
-              let pack,
+    func play(category: CESPCategory, pack: CESPPack?, settings: AppSettings, now: Date = Date(), bypassChecks: Bool = false) {
+        if !bypassChecks {
+            guard shouldPlay(category: category, pack: pack, settings: settings, now: now) else {
+                return
+            }
+        } else {
+            // Even in preview/bypass mode, we need a pack and the category must exist in it.
+            guard let pack,
+                  pack.manifest.categories[category.rawValue] != nil else {
+                return
+            }
+        }
+
+        guard let pack,
               let categoryManifest = pack.manifest.categories[category.rawValue],
               let sound = selectSound(for: category, sounds: categoryManifest.sounds) else {
             return
