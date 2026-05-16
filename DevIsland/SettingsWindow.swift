@@ -403,14 +403,16 @@ private struct OpenPeonSettingsPane: View {
                         }
                         
                         Button {
-                            CESPAudioPlayer.shared.play(category: category)
+                            CESPAudioPlayer.shared.play(category: category, bypassChecks: true)
                         } label: {
-                            Image(systemName: "speaker.wave.2.circle.fill")
+                            let hasSound = packStore.hasSounds(for: category, settings: store.settings)
+                            Image(systemName: hasSound ? "speaker.wave.2.circle.fill" : "speaker.slash.circle.fill")
                                 .font(.title3)
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(hasSound ? .blue : .gray)
                         }
                         .buttonStyle(.plain)
-                        .help(l10n.btnPlayPreview)
+                        .help(packStore.hasSounds(for: category, settings: store.settings) ? l10n.btnPlayPreview : l10n.lblOpenPeonNoSoundFile)
+                        .disabled(!packStore.hasSounds(for: category, settings: store.settings))
                     }
                 }
             }

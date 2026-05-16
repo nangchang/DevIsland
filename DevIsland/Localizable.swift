@@ -218,6 +218,7 @@ extension L10n {
     var lblOpenPeonActivePack:       String { s("Active pack",                   "활성 팩") }
     var lblOpenPeonFirstValidPack:   String { s("First valid pack",              "첫 번째 유효한 팩") }
     var lblOpenPeonNoPacks:          String { s("No OpenPeon packs found.",      "OpenPeon 팩을 찾을 수 없습니다.") }
+    var lblOpenPeonNoSoundFile:      String { s("No sound file for this event",  "이 이벤트에 대한 사운드 파일이 없습니다") }
     var secOpenPeonPlayback:         String { s("Playback",                      "재생") }
     var lblOpenPeonMasterVolume:     String { s("Master volume",                 "마스터 볼륨") }
     func lblOpenPeonDebounce(_ ms: Int) -> String { s("Debounce: \(ms) ms", "디바운스: \(ms)ms") }
