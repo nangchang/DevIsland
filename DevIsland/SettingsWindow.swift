@@ -363,8 +363,8 @@ private struct OpenPeonSettingsPane: View {
                 }
                 .disabled(packStore.packs.filter { $0.validation.isValid }.isEmpty)
 
-                if let error = packStore.lastReloadError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                if let errorPath = packStore.lastReloadErrorPath {
+                    Label(l10n.errOpenPeonReadPacks(errorPath), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                 }
                 if packStore.packs.isEmpty {
