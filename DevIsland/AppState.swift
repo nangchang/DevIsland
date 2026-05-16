@@ -237,12 +237,12 @@ class AppState: ObservableObject {
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
-    private var ptyBuffer = PTYSessionBuffer()
+    private let ptyBuffer = PTYSessionBuffer()
     private let timeoutDuration: Double = 120
     private let lifecycleSessionTimeout: Double = 15 * 60
     private static let replayTerminalApp = "DevIsland Replay"
     private static let replayTimestampFormatter = ISO8601DateFormatter()
-    private var replayRecorder: ReplayRecorder!
+    private let replayRecorder: ReplayRecorder
 
     init(
         startServer: Bool = true,
