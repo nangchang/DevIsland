@@ -33,6 +33,10 @@ enum CESPEventMapper {
             return .sessionStart
         case "permissionrequest", "elicitation":
             return .inputRequired
+        case "stop":
+            // Sound feedback treats Stop as task completion without changing AppState's
+            // lifecycle/pruning rules for provider sessions.
+            return .taskComplete
         case "sessionend", "exit", "shutdown":
             return .sessionEnd
         case "notification":
@@ -52,7 +56,7 @@ enum CESPEventMapper {
         payload: [String: Any]?
     ) -> CESPCategory? {
         switch normalizedEvent {
-        case "startup", "init":
+        case "sessionstart", "startup", "init":
             return .sessionStart
         case "afteragent":
             return .inputRequired
@@ -103,11 +107,11 @@ enum CESPEventMapper {
         switch normalizedEvent {
         case "sessionstart", "startup", "init":
             return .sessionStart
-        case "permissionrequest", "elicitation", "beforetool", "afteragent":
+        case "permissionrequest", "elicitation", "beforetool":
             return .inputRequired
         case "pretooluse":
             return .taskAcknowledge
-        case "posttooluse", "stop":
+        case "posttooluse", "stop", "afteragent":
             return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
         case "sessionend", "exit", "shutdown":
             return .sessionEnd

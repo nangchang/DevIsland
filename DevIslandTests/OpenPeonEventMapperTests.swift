@@ -16,6 +16,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
 
     func testCompletionEventsMapToTaskComplete() {
         XCTAssertEqual(map("Stop", for: .gemini), .taskComplete)
+        XCTAssertEqual(map("Stop", for: .claudeCode), .taskComplete)
         XCTAssertEqual(map("PostToolUse", for: .codex), .taskComplete)
     }
 
