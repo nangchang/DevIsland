@@ -122,7 +122,7 @@ struct SettingsWindowView: View {
                 .tabItem { Label(l10n.tabBridge, systemImage: "cable.connector") }
 
             OpenPeonSettingsPane(store: store)
-                .tabItem { Label("OpenPeon", systemImage: "speaker.wave.2") }
+                .tabItem { Label(l10n.tabOpenPeon, systemImage: "speaker.wave.2") }
 
             ExperimentalPTYSettingsPane()
                 .environmentObject(store)
@@ -325,6 +325,7 @@ private struct BridgeIPCSettingsPane: View {
 private struct OpenPeonSettingsPane: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject private var packStore = CESPPackStore.shared
+    @ObservedObject private var l10n = L10n.shared
 
     private var activePackSelection: Binding<String> {
         Binding(
@@ -335,27 +336,27 @@ private struct OpenPeonSettingsPane: View {
 
     var body: some View {
         Form {
-            Section("Sound packs") {
-                Toggle("Enable OpenPeon sounds", isOn: $store.settings.openPeonEnabled)
-                Toggle("Mute all OpenPeon sounds", isOn: $store.settings.openPeonGlobalMuted)
+            Section(l10n.secOpenPeonSoundPacks) {
+                Toggle(l10n.lblOpenPeonEnable, isOn: $store.settings.openPeonEnabled)
+                Toggle(l10n.lblOpenPeonMuteAll, isOn: $store.settings.openPeonGlobalMuted)
 
                 HStack {
-                    TextField("Packs folder", text: $store.settings.openPeonPacksDirectory)
+                    TextField(l10n.phOpenPeonPacksFolder, text: $store.settings.openPeonPacksDirectory)
                         .textFieldStyle(.roundedBorder)
                     Button {
                         CESPPackStore.shared.reload(settings: store.settings)
                     } label: {
-                        Label("Reload", systemImage: "arrow.clockwise")
+                        Label(l10n.btnReload, systemImage: "arrow.clockwise")
                     }
                     Button {
                         openPacksFolder()
                     } label: {
-                        Label("Open", systemImage: "folder")
+                        Label(l10n.btnOpen, systemImage: "folder")
                     }
                 }
 
-                Picker("Active pack", selection: activePackSelection) {
-                    Text("First valid pack").tag("")
+                Picker(l10n.lblOpenPeonActivePack, selection: activePackSelection) {
+                    Text(l10n.lblOpenPeonFirstValidPack).tag("")
                     ForEach(packStore.packs.filter { $0.validation.isValid }) { pack in
                         Text(pack.displayName).tag(pack.manifest.name)
                     }
@@ -367,38 +368,38 @@ private struct OpenPeonSettingsPane: View {
                         .foregroundStyle(.orange)
                 }
                 if packStore.packs.isEmpty {
-                    Text("No OpenPeon packs found.")
+                    Text(l10n.lblOpenPeonNoPacks)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Playback") {
+            Section(l10n.secOpenPeonPlayback) {
                 Slider(value: $store.settings.openPeonMasterVolume, in: 0...1) {
-                    Text("Master volume")
+                    Text(l10n.lblOpenPeonMasterVolume)
                 } minimumValueLabel: {
                     Image(systemName: "speaker")
                 } maximumValueLabel: {
                     Image(systemName: "speaker.wave.3")
                 }
                 Stepper(
-                    "Debounce: \(store.settings.openPeonDebounceMilliseconds) ms",
+                    l10n.lblOpenPeonDebounce(store.settings.openPeonDebounceMilliseconds),
                     value: $store.settings.openPeonDebounceMilliseconds,
                     in: 0...10_000,
                     step: 100
                 )
             }
 
-            Section("Categories") {
+            Section(l10n.secOpenPeonCategories) {
                 ForEach(CESPCategory.allCases) { category in
                     Toggle(category.label, isOn: categoryBinding(category))
                 }
             }
 
-            Section("Validation") {
+            Section(l10n.secOpenPeonValidation) {
                 ForEach(packStore.packs) { pack in
                     DisclosureGroup(pack.displayName) {
                         if pack.validation.isValid {
-                            Label("Valid", systemImage: "checkmark.circle.fill")
+                            Label(l10n.lblOpenPeonValid, systemImage: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
                         }
                         ForEach(pack.validation.errors, id: \.self) { error in

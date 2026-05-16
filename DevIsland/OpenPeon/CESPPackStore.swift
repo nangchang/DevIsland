@@ -28,7 +28,7 @@ final class CESPPackStore: ObservableObject {
                     self.lastReloadError = nil
                 case .failure:
                     self.packs = []
-                    self.lastReloadError = "Could not read \(directory.path)"
+                    self.lastReloadError = L10n.shared.errOpenPeonReadPacks(directory.path)
                 }
             }
         }
