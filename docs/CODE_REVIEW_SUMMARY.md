@@ -55,3 +55,11 @@
 *   **테스트 보강**: `SQLiteApprovalStoreTests`에 예약 음수 id로 hook event와 decision이 replay log에서 연결되는 케이스를 추가했습니다.
 *   **테스트 출력 정리**: `scripts/run-tests.sh`에서 host architecture를 명시해 중복 macOS destination 경고를 제거하고, macOS 테스트와 무관한 Xcode/CoreSimulator version-mismatch 잡음만 필터링하도록 변경했습니다.
 *   **검증**: `./scripts/run-tests.sh` 통과. CoreSimulator out-of-date 경고 없이 macOS unit test가 정상 완료됐습니다.
+
+### 2026-05-16 — P2 시작 (`fix/p2-log-pruning`)
+*   **`SQLiteApprovalStore.pruneOldLogs`**: `hook_events`와 연결된 `approval_decisions`를 `received_at` 기준으로, `pty_messages`를 `created_at` 기준으로 삭제하는 메서드를 추가했습니다. FK 제약(`FOREIGN KEY … REFERENCES hook_events(id)`)을 고려해 decisions → hook_events 순으로 삭제합니다.
+*   **`ApprovalProxyController.pruneOldLogs`**: store 메서드 래퍼 추가.
+*   **`AppState.init`**: 앱 시작 시 `approvalPersistenceQueue.async`로 pruning을 호출합니다. `SettingsStore`(`@MainActor`)를 직접 참조하지 않고 주입된 `userDefaults`에서 키를 읽어 actor 격리 오류를 회피했습니다.
+*   **Settings UI**: Approval 탭에 "Log retention" 섹션을 추가해 `replayRetentionDays` Stepper를 노출했습니다(`ptyTranscriptRetentionDays`는 기존 Experimental 탭에 이미 있음).
+*   **테스트 2개**: 오래된 hook/decision 행 삭제, 오래된 PTY 메시지 삭제를 각각 검증합니다.
+*   **검증**: `./scripts/run-tests.sh` 통과. 커밋: `9fa5b36`.
