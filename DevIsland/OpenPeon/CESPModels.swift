@@ -27,6 +27,10 @@ enum CESPCategory: String, CaseIterable, Identifiable, Codable {
         case .taskProgress: return l.cespTaskProgress
         }
     }
+
+    var cespKey: String { rawValue }
+
+    static let supportedExtensions: Set<String> = ["wav", "mp3"]
 }
 
 struct CESPManifest: Codable, Equatable {

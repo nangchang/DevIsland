@@ -214,9 +214,11 @@ extension L10n {
     var phOpenPeonPacksFolder:       String { s("Packs folder",                  "팩 폴더") }
     var btnReload:                   String { s("Reload",                        "다시 불러오기") }
     var btnOpen:                     String { s("Open",                          "열기") }
+    var btnPlayPreview:              String { s("Play preview",                  "미리듣기 재생") }
     var lblOpenPeonActivePack:       String { s("Active pack",                   "활성 팩") }
     var lblOpenPeonFirstValidPack:   String { s("First valid pack",              "첫 번째 유효한 팩") }
     var lblOpenPeonNoPacks:          String { s("No OpenPeon packs found.",      "OpenPeon 팩을 찾을 수 없습니다.") }
+    var lblOpenPeonNoSoundFile:      String { s("No sound file for this event",  "이 이벤트에 대한 사운드 파일이 없습니다") }
     var secOpenPeonPlayback:         String { s("Playback",                      "재생") }
     var lblOpenPeonMasterVolume:     String { s("Master volume",                 "마스터 볼륨") }
     func lblOpenPeonDebounce(_ ms: Int) -> String { s("Debounce: \(ms) ms", "디바운스: \(ms)ms") }
@@ -229,7 +231,7 @@ extension L10n {
 
     // OpenPeon CESP category labels
     var cespSessionStart:     String { s("Session start",      "세션 시작") }
-    var cespTaskAcknowledge:  String { s("Task acknowledge",   "작업 수락") }
+    var cespTaskAcknowledge:  String { s("Task acknowledge",   "작업 인지") }
     var cespTaskComplete:     String { s("Task complete",      "작업 완료") }
     var cespTaskError:        String { s("Task error",         "작업 오류") }
     var cespInputRequired:    String { s("Input required",     "입력 필요") }

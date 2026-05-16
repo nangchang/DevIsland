@@ -60,4 +60,14 @@ final class CESPPackStore: ObservableObject {
         }
         return validPacks.first
     }
+
+    func hasSounds(for category: CESPCategory, settings: AppSettings) -> Bool {
+        guard let pack = activePack(settings: settings),
+              let categoryManifest = pack.manifest.categories[category.rawValue] else {
+            return false
+        }
+        return categoryManifest.sounds.contains { sound in
+            CESPCategory.supportedExtensions.contains(URL(fileURLWithPath: sound.file).pathExtension.lowercased())
+        }
+    }
 }
