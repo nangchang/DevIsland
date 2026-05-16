@@ -8,6 +8,7 @@ struct DevIslandApp: App {
 
     init() {
         _ = SettingsStore.shared
+        CESPPackStore.shared.reload(settings: SettingsStore.shared.settings)
     }
 
     var body: some Scene {
