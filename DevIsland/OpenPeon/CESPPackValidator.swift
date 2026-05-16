@@ -5,8 +5,8 @@ enum CESPPackValidator {
     private static let semverPattern = #"^[0-9]+(\.[0-9]+){0,2}([+-][0-9A-Za-z.-]+)?$"#
     private static let supportedExtensions: Set<String> = ["wav", "mp3", "ogg"]
     private static let playbackSupportedExtensions: Set<String> = ["wav", "mp3"]
-    private static let maxAudioFileSize = 1_000_000
-    private static let maxPackSize = 50_000_000
+    private static let maxAudioFileSize: Int64 = 1_000_000
+    private static let maxPackSize: Int64 = 50_000_000
 
     static func loadPack(at rootURL: URL, fileManager: FileManager = .default) -> CESPPack? {
         let manifestURL = rootURL.appendingPathComponent("openpeon.json")
@@ -42,17 +42,18 @@ enum CESPPackValidator {
         }
 
         let rootPath = rootURL.standardizedFileURL.path
-        var totalSize = 0
+        var totalSize: Int64 = 0
 
         if let enumerator = fileManager.enumerator(at: rootURL, includingPropertiesForKeys: [.fileSizeKey]) {
             for case let fileURL as URL in enumerator {
                 guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
                       let size = values.fileSize else { continue }
-                totalSize += size
+                totalSize += Int64(size)
+                if totalSize > maxPackSize {
+                    result.errors.append("Pack exceeds 50 MB.")
+                    break
+                }
             }
-        }
-        if totalSize > maxPackSize {
-            result.errors.append("Pack exceeds 50 MB.")
         }
 
         for (categoryName, category) in manifest.categories {
@@ -93,7 +94,7 @@ enum CESPPackValidator {
                 }
                 if let attrs = try? fileManager.attributesOfItem(atPath: url.path),
                    let size = attrs[.size] as? NSNumber,
-                   size.intValue > maxAudioFileSize {
+                   size.int64Value > maxAudioFileSize {
                     result.errors.append("\(path) exceeds 1 MB.")
                 }
             }
