@@ -225,7 +225,9 @@ private struct ApprovalSettingsPane: View {
 
             Section(l10n.secPermissionTimeout) {
                 Stepper(l10n.lblPermissionTimeout(Int(store.settings.permissionTimeoutSeconds)),
-                        value: $store.settings.permissionTimeoutSeconds, in: 10...3600, step: 10)
+                        value: $store.settings.permissionTimeoutSeconds,
+                        in: 10...max(10, store.settings.bridgeResponseTimeoutSeconds - 10),
+                        step: 10)
             }
 
             Section(l10n.secReplayRetention) {

@@ -40,6 +40,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings.bridgeResponseTimeoutSeconds, 300)
         XCTAssertTrue(store.settings.bridgeFallbackToTcp)
         XCTAssertEqual(store.settings.approvalFallbackPolicy, .pass)
+        XCTAssertEqual(store.settings.permissionTimeoutSeconds, 120)
         XCTAssertEqual(store.settings.replayRetentionDays, 30)
         XCTAssertFalse(store.settings.openPeonEnabled)
         XCTAssertEqual(store.settings.openPeonPacksDirectory, AppSettings.defaultOpenPeonPacksDirectory)
@@ -61,6 +62,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.bridgeResponseTimeoutSeconds = 123
         store.settings.bridgeFallbackToTcp = false
         store.settings.approvalFallbackPolicy = .deny
+        store.settings.permissionTimeoutSeconds = 60
         store.settings.replayRetentionDays = 14
         store.settings.openPeonEnabled = true
         store.settings.openPeonPacksDirectory = "/tmp/openpeon-packs"
@@ -81,6 +83,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.settings.bridgeResponseTimeoutSeconds, 123)
         XCTAssertFalse(reloaded.settings.bridgeFallbackToTcp)
         XCTAssertEqual(reloaded.settings.approvalFallbackPolicy, .deny)
+        XCTAssertEqual(reloaded.settings.permissionTimeoutSeconds, 60)
         XCTAssertEqual(reloaded.settings.replayRetentionDays, 14)
         XCTAssertTrue(reloaded.settings.openPeonEnabled)
         XCTAssertEqual(reloaded.settings.openPeonPacksDirectory, "/tmp/openpeon-packs")
@@ -100,6 +103,7 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set(0, forKey: SettingsStore.DefaultsKey.bridgeConnectTimeoutSeconds)
         defaults.set(-10, forKey: SettingsStore.DefaultsKey.bridgeResponseTimeoutSeconds)
         defaults.set("bad-policy", forKey: SettingsStore.DefaultsKey.approvalFallbackPolicy)
+        defaults.set(-1, forKey: SettingsStore.DefaultsKey.permissionTimeoutSeconds)
         defaults.set(0, forKey: SettingsStore.DefaultsKey.replayRetentionDays)
         defaults.set("", forKey: SettingsStore.DefaultsKey.openPeonPacksDirectory)
         defaults.set(2.0, forKey: SettingsStore.DefaultsKey.openPeonMasterVolume)
