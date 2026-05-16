@@ -273,6 +273,8 @@ class NotchWindowController: NSWindowController {
     }
 
     private static func notchCenterX(on screen: NSScreen) -> CGFloat {
+        // TODO: auxiliaryTopLeftArea is a private KVC key. Using it poses a risk for App Store submission
+        // and may break in future macOS updates. Ensure a robust fallback to screen center exists.
         // macOS 15+ has private/new APIs for auxiliary areas.
         // We check for them safely to avoid crashes on older versions.
         let leftValue = (screen as NSObject).value(forKey: "auxiliaryTopLeftArea") as? NSValue

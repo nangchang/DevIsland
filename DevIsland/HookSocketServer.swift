@@ -64,6 +64,8 @@ class HookSocketServer {
             listener?.start(queue: .global())
         } catch {
             print("Failed to start server: \(error)")
+            // TODO: Call onServerFailed() here to avoid silent failure when port is occupied
+            // or other initialization errors occur.
         }
     }
 
