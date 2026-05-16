@@ -237,16 +237,12 @@ class AppState: ObservableObject {
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
-    private var ptyOutputBuffers: [String: String] = [:]
-    private let ptyBufferLock = NSLock()
+    private let ptyBuffer = PTYSessionBuffer()
     private let timeoutDuration: Double = 120
     private let lifecycleSessionTimeout: Double = 15 * 60
     private static let replayTerminalApp = "DevIsland Replay"
     private static let replayTimestampFormatter = ISO8601DateFormatter()
-    private static let replayEventIdLock = NSLock()
-    // Negative IDs are reserved by the app before enqueueing SQLite writes.
-    // SQLite AUTOINCREMENT uses positive IDs, and replay ordering uses received_at.
-    private static var nextReplayEventId: Int64 = -Int64(Date().timeIntervalSince1970 * 1_000_000)
+    private let replayRecorder: ReplayRecorder
 
     init(
         startServer: Bool = true,
@@ -259,6 +255,7 @@ class AppState: ObservableObject {
         self.frontmostCheck = frontmostCheck
         self.approvalProxy = approvalProxy
         self.codexRuleSyncAdapter = codexRuleSyncAdapter
+        self.replayRecorder = ReplayRecorder(proxy: approvalProxy, queue: approvalPersistenceQueue)
         
         if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
            let target = NotchDisplayTarget(rawValue: rawTarget) {
@@ -1637,33 +1634,14 @@ class AppState: ObservableObject {
         toolName: String,
         payload: [String: Any]?
     ) -> Int64? {
-        guard let approvalProxy else { return nil }
-        let payloadJSON = payload.map { Self.replayPayloadString(from: $0) } ?? "{}"
-        let eventId = Self.makeReplayHookEventId()
-        approvalPersistenceQueue.async {
-            do {
-                try approvalProxy.recordHookEvent(
-                    id: eventId,
-                    requestId: requestId,
-                    provider: provider,
-                    sessionId: sessionId,
-                    eventName: eventName,
-                    toolName: toolName,
-                    payloadJSON: payloadJSON
-                )
-            } catch {
-                print("[DevIsland] [REPLAY] Failed to record hook event: \(error)")
-            }
-        }
-        return eventId
-    }
-
-    private static func makeReplayHookEventId() -> Int64 {
-        replayEventIdLock.lock()
-        defer { replayEventIdLock.unlock() }
-        let id = nextReplayEventId
-        nextReplayEventId -= 1
-        return id
+        replayRecorder.recordHookEvent(
+            requestId: requestId,
+            provider: provider,
+            sessionId: sessionId,
+            eventName: eventName,
+            toolName: toolName,
+            payload: payload
+        )
     }
 
     private func recordReplayDecision(
@@ -1676,44 +1654,17 @@ class AppState: ObservableObject {
         source: ApprovalPolicyDecision.Source,
         reason: String?
     ) {
-        guard let approvalProxy,
-              let agentKind,
-              !sessionId.isEmpty,
-              !toolName.isEmpty else {
-            return
-        }
-        let request = ApprovalPolicyRequest(
+        guard let agentKind else { return }
+        replayRecorder.recordDecision(
+            hookEventId: hookEventId,
             provider: providerKind(for: agentKind),
             sessionId: sessionId,
             toolName: toolName,
-            workspaceRoot: workspaceRoot
+            workspaceRoot: workspaceRoot,
+            action: action,
+            source: source,
+            reason: reason
         )
-        let decision = ApprovalPolicyDecision(action: action, source: source, ruleId: nil)
-        approvalPersistenceQueue.async {
-            do {
-                try approvalProxy.recordDecision(
-                    hookEventId: hookEventId,
-                    request: request,
-                    decision: decision,
-                    reason: reason
-                )
-            } catch {
-                print("[DevIsland] [REPLAY] Failed to record decision: \(error)")
-                // Retry without a hook_event FK only when the first attempt tried to link one.
-                if hookEventId != nil {
-                    do {
-                        try approvalProxy.recordDecision(
-                            hookEventId: nil,
-                            request: request,
-                            decision: decision,
-                            reason: reason
-                        )
-                    } catch {
-                        print("[DevIsland] [REPLAY] Failed to record decision without hook event: \(error)")
-                    }
-                }
-            }
-        }
     }
 
     private func respondWithReplay(
@@ -1739,15 +1690,6 @@ class AppState: ObservableObject {
             source: source,
             reason: reason
         )
-    }
-
-    private static func replayPayloadString(from payload: [String: Any]) -> String {
-        guard JSONSerialization.isValidJSONObject(payload),
-              let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
-              let string = String(data: data, encoding: .utf8) else {
-            return "{}"
-        }
-        return string
     }
 
     private func providerKind(for agentKind: BuddyKind) -> ProviderKind {
@@ -1932,28 +1874,13 @@ class AppState: ObservableObject {
             responseHandler("{\"response\":\"approved\"}")
             return
         }
-        // Sliding window buffer: keep the last 1 KB per session so patterns that
-        // span multiple os.read chunks (e.g. "Password:" split across two reads)
-        // are still matched correctly.
-        let window: String
-        do {
-            ptyBufferLock.lock()
-            defer { ptyBufferLock.unlock() }
-            let combined = (ptyOutputBuffers[sessionId] ?? "") + content
-            window = combined.count > 1024 ? String(combined.suffix(1024)) : combined
-            ptyOutputBuffers[sessionId] = window
-        }
-
+        let window = ptyBuffer.appendAndWindow(sessionId: sessionId, content: content)
         let patterns = currentPTYAutoInjectPatterns()
-        let lowerWindow = window.lowercased()
-        let matched = patterns.first { lowerWindow.contains($0.pattern.lowercased()) }
+        let matched = patterns.first { window.lowercased().contains($0.pattern.lowercased()) }
         let injectionText = matched?.response
 
-        // Clear the buffer on match to prevent the same pattern from re-firing.
         if injectionText != nil {
-            ptyBufferLock.lock()
-            defer { ptyBufferLock.unlock() }
-            ptyOutputBuffers[sessionId] = ""
+            ptyBuffer.clearOnMatch(sessionId: sessionId)
         }
 
         approvalPersistenceQueue.async { [weak self] in
@@ -1990,9 +1917,7 @@ class AppState: ObservableObject {
     }
 
     private func clearPTYOutputBuffer(sessionId: String) {
-        ptyBufferLock.lock()
-        defer { ptyBufferLock.unlock() }
-        ptyOutputBuffers.removeValue(forKey: sessionId)
+        ptyBuffer.remove(sessionId: sessionId)
     }
 
     private func currentPTYEnabled() -> Bool {
