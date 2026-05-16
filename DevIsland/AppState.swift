@@ -1194,7 +1194,9 @@ class AppState: ObservableObject {
 
     private func playOpenPeonSound(_ category: CESPCategory?) {
         guard let category else { return }
-        CESPAudioPlayer.shared.play(category: category)
+        Task { @MainActor in
+            CESPAudioPlayer.shared.play(category: category)
+        }
     }
 
     private func displayMessage(for toolName: String, toolInput: [String: Any]?, json: [String: Any], eventName: String) -> String {

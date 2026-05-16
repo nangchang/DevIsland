@@ -1,6 +1,7 @@
 import XCTest
 @testable import DevIsland
 
+@MainActor
 final class OpenPeonAudioSelectionTests: XCTestCase {
     func testMutedCategorySuppressesPlayback() {
         var settings = AppSettings.defaults

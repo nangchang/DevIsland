@@ -1,20 +1,18 @@
 import AVFoundation
 import Foundation
 
-final class CESPAudioPlayer: NSObject, AVAudioPlayerDelegate {
+@MainActor
+final class CESPAudioPlayer: NSObject, @preconcurrency AVAudioPlayerDelegate {
     static let shared = CESPAudioPlayer()
 
-    private let queue = DispatchQueue(label: "kr.or.nes.DevIsland.openpeon.audio")
     private var lastPlayedAt: [CESPCategory: Date] = [:]
     private var lastSoundPathByCategory: [CESPCategory: String] = [:]
     private var players: [AVAudioPlayer] = []
 
     func play(category: CESPCategory) {
-        Task { @MainActor in
-            let settings = SettingsStore.shared.settings
-            let pack = CESPPackStore.shared.activePack(settings: settings)
-            play(category: category, pack: pack, settings: settings)
-        }
+        let settings = SettingsStore.shared.settings
+        let pack = CESPPackStore.shared.activePack(settings: settings)
+        play(category: category, pack: pack, settings: settings)
     }
 
     func play(category: CESPCategory, pack: CESPPack?, settings: AppSettings, now: Date = Date()) {
@@ -28,20 +26,19 @@ final class CESPAudioPlayer: NSObject, AVAudioPlayerDelegate {
         let url = pack.rootURL.appendingPathComponent(sound.file).standardizedFileURL
         guard ["wav", "mp3"].contains(url.pathExtension.lowercased()) else { return }
 
-        queue.async { [weak self] in
-            guard let self else { return }
-            do {
-                let player = try AVAudioPlayer(contentsOf: url)
-                player.volume = Float(settings.openPeonMasterVolume)
-                player.delegate = self
-                player.prepareToPlay()
-                player.play()
-                self.players.append(player)
-                self.lastPlayedAt[category] = now
-                self.lastSoundPathByCategory[category] = sound.file
-            } catch {
-                print("[DevIsland] OpenPeon playback failed for \(url.path): \(error)")
+        lastPlayedAt[category] = now
+        lastSoundPathByCategory[category] = sound.file
+
+        do {
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.volume = Float(settings.openPeonMasterVolume)
+            player.delegate = self
+            player.prepareToPlay()
+            if player.play() {
+                players.append(player)
             }
+        } catch {
+            print("[DevIsland] OpenPeon playback failed for \(url.path): \(error)")
         }
     }
 
@@ -75,9 +72,6 @@ final class CESPAudioPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        queue.async { [weak self, weak player] in
-            guard let player else { return }
-            self?.players.removeAll { $0 === player }
-        }
+        players.removeAll { $0 === player }
     }
 }
