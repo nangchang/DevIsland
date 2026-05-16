@@ -803,7 +803,7 @@ struct CLIBuddyView: View {
             PixelCell(72, 64, 8, 8, ink)
         ]
 
-        return cells
+        return mirroredHorizontally(cells)
     }
 
     private func claudeBodyCells() -> [PixelCell] {
@@ -1032,6 +1032,12 @@ PixelCell(64, 80, 8, 4, c0),
             PixelCell(56, 104, 8, 8, Color.green.opacity(0.82)),
             PixelCell(72, 112, 32, 8, text.opacity(0.36))
         ]
+    }
+
+    private func mirroredHorizontally(_ cells: [PixelCell]) -> [PixelCell] {
+        cells.map { cell in
+            PixelCell(128 - cell.x - cell.width, cell.y, cell.width, cell.height, cell.color)
+        }
     }
 
     private func pixelGrid(size: CGFloat, cells: [PixelCell]) -> some View {
