@@ -29,7 +29,7 @@ enum CESPEventMapper {
         payload: [String: Any]?
     ) -> CESPCategory? {
         switch normalizedEvent {
-        case "sessionstart":
+        case "sessionstart", "startup", "init":
             return .sessionStart
         case "permissionrequest", "elicitation":
             return .inputRequired
@@ -59,6 +59,8 @@ enum CESPEventMapper {
         case "beforetool":
             return .taskAcknowledge
         case "stop":
+            // Sound feedback treats Stop as task completion without changing AppState's
+            // lifecycle/pruning rules for provider sessions.
             return .taskComplete
         case "precompact":
             return .resourceLimit
@@ -78,7 +80,7 @@ enum CESPEventMapper {
         payload: [String: Any]?
     ) -> CESPCategory? {
         switch normalizedEvent {
-        case "sessionstart":
+        case "sessionstart", "startup", "init":
             return .sessionStart
         case "permissionrequest":
             return .inputRequired
@@ -86,7 +88,7 @@ enum CESPEventMapper {
             return .taskAcknowledge
         case "posttooluse":
             return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
-        case "sessionend":
+        case "sessionend", "exit", "shutdown":
             return .sessionEnd
         default:
             return isFailurePayload(payload, message: message) ? .taskError : nil
@@ -125,6 +127,8 @@ enum CESPEventMapper {
     }
 
     private static func containsFailure(in value: Any) -> Bool {
+        // This intentionally catches only clear machine-readable or textual failures.
+        // User-denied approvals are handled by the approval flow, not as task errors.
         if let dict = value as? [String: Any] {
             for (key, nested) in dict {
                 let lowerKey = key.lowercased()
@@ -153,6 +157,10 @@ enum CESPEventMapper {
 
     private static func containsFailureKeyword(_ text: String) -> Bool {
         let lower = text.lowercased()
+        // Negative lookbehind excludes negated phrases ("no errors", "no timeout").
+        // s? covers plurals ("errors", "exceptions").
+        // Note: \b treats _ as a word char, so snake_case ("error_code") and camelCase
+        // ("NullPointerException") are not matched here.
         let pattern = #"(?<!no\s)\b(error|failed|exception|timeout)s?\b"#
         return lower.range(of: pattern, options: .regularExpression) != nil
     }
