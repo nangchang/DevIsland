@@ -587,15 +587,16 @@ func toolInfo(for name: String) -> ToolInfo {
 
 // MARK: - Buddy Mascot
 
-enum BuddyKind: CaseIterable {
+enum BuddyKind: String, CaseIterable, Identifiable {
     case gemini
     case codex
     case claudeCode
     case island
 
-    static var allCases: [BuddyKind] {
-        return [.gemini, .codex, .claudeCode]
-    }
+    var id: String { rawValue }
+
+    static let defaultRandomCases: [BuddyKind] = [.gemini, .codex, .claudeCode]
+    static let selectableCases: [BuddyKind] = [.gemini, .codex, .claudeCode, .island]
 
     init(from text: String) {
         let lower = text.lowercased()
@@ -627,6 +628,8 @@ enum BuddyKind: CaseIterable {
         case .island:     return "DevIsland"
         }
     }
+
+    var label: String { accessibilityName }
 }
 
 private struct PixelCell {
@@ -1287,6 +1290,7 @@ struct SessionRowView: View {
 struct NotchView: View {
     @ObservedObject var state = AppState.shared
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
+    @ObservedObject private var settingsStore = SettingsStore.shared
     @ObservedObject private var l10n = L10n.shared
     @State private var buddyPulse = false
     @State private var leftMascot: BuddyKind = .claudeCode
@@ -1378,16 +1382,39 @@ struct NotchView: View {
             withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
                 buddyPulse = true
             }
-            
-            // Randomly select 2 mascots
-            if let randomLeft = BuddyKind.allCases.randomElement() {
-                leftMascot = randomLeft
-            }
-            if let randomRight = BuddyKind.allCases.randomElement() {
-                rightMascot = randomRight
-            }
+            refreshMascots(settings: settingsStore.settings)
             
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
+        }
+        .onReceive(settingsStore.$settings) { settings in
+            refreshMascots(settings: settings)
+        }
+    }
+
+    private func refreshMascots(settings: AppSettings) {
+        leftMascot = resolvedMascot(
+            mode: settings.notchLeftCharacterMode,
+            specific: settings.notchLeftCharacterKind,
+            randomCandidates: settings.notchLeftRandomCharacterKinds
+        )
+        rightMascot = resolvedMascot(
+            mode: settings.notchRightCharacterMode,
+            specific: settings.notchRightCharacterKind,
+            randomCandidates: settings.notchRightRandomCharacterKinds
+        )
+    }
+
+    private func resolvedMascot(
+        mode: NotchCharacterMode,
+        specific: BuddyKind,
+        randomCandidates: Set<BuddyKind>
+    ) -> BuddyKind {
+        switch mode {
+        case .specific:
+            return specific
+        case .random:
+            let candidates = randomCandidates.isEmpty ? Set(BuddyKind.defaultRandomCases) : randomCandidates
+            return candidates.randomElement() ?? .claudeCode
         }
     }
 

@@ -49,6 +49,12 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.settings.openPeonGlobalMuted)
         XCTAssertTrue(store.settings.openPeonMutedCategories.contains(CESPCategory.taskAcknowledge.rawValue))
         XCTAssertEqual(store.settings.openPeonDebounceMilliseconds, 1500)
+        XCTAssertEqual(store.settings.notchLeftCharacterMode, .random)
+        XCTAssertEqual(store.settings.notchLeftCharacterKind, .claudeCode)
+        XCTAssertEqual(store.settings.notchLeftRandomCharacterKinds, Set(BuddyKind.defaultRandomCases))
+        XCTAssertEqual(store.settings.notchRightCharacterMode, .random)
+        XCTAssertEqual(store.settings.notchRightCharacterKind, .gemini)
+        XCTAssertEqual(store.settings.notchRightRandomCharacterKinds, Set(BuddyKind.defaultRandomCases))
     }
 
     func testSettingsPersistAndReload() {
@@ -71,6 +77,12 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.openPeonGlobalMuted = true
         store.settings.openPeonMutedCategories = [CESPCategory.inputRequired.rawValue]
         store.settings.openPeonDebounceMilliseconds = 500
+        store.settings.notchLeftCharacterMode = .specific
+        store.settings.notchLeftCharacterKind = .codex
+        store.settings.notchLeftRandomCharacterKinds = [.codex, .island]
+        store.settings.notchRightCharacterMode = .random
+        store.settings.notchRightCharacterKind = .claudeCode
+        store.settings.notchRightRandomCharacterKinds = [.gemini]
 
         let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
@@ -92,6 +104,12 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.settings.openPeonGlobalMuted)
         XCTAssertEqual(reloaded.settings.openPeonMutedCategories, Set([CESPCategory.inputRequired.rawValue]))
         XCTAssertEqual(reloaded.settings.openPeonDebounceMilliseconds, 500)
+        XCTAssertEqual(reloaded.settings.notchLeftCharacterMode, .specific)
+        XCTAssertEqual(reloaded.settings.notchLeftCharacterKind, .codex)
+        XCTAssertEqual(reloaded.settings.notchLeftRandomCharacterKinds, [.codex, .island])
+        XCTAssertEqual(reloaded.settings.notchRightCharacterMode, .random)
+        XCTAssertEqual(reloaded.settings.notchRightCharacterKind, .claudeCode)
+        XCTAssertEqual(reloaded.settings.notchRightRandomCharacterKinds, [.gemini])
     }
 
     func testInvalidPersistedValuesFallBackToDefaults() {
@@ -108,6 +126,12 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set("", forKey: SettingsStore.DefaultsKey.openPeonPacksDirectory)
         defaults.set(2.0, forKey: SettingsStore.DefaultsKey.openPeonMasterVolume)
         defaults.set(0, forKey: SettingsStore.DefaultsKey.openPeonDebounceMilliseconds)
+        defaults.set("bad-mode", forKey: SettingsStore.DefaultsKey.notchLeftCharacterMode)
+        defaults.set("bad-kind", forKey: SettingsStore.DefaultsKey.notchLeftCharacterKind)
+        defaults.set(["bad-kind"], forKey: SettingsStore.DefaultsKey.notchLeftRandomCharacterKinds)
+        defaults.set("bad-mode", forKey: SettingsStore.DefaultsKey.notchRightCharacterMode)
+        defaults.set("bad-kind", forKey: SettingsStore.DefaultsKey.notchRightCharacterKind)
+        defaults.set([], forKey: SettingsStore.DefaultsKey.notchRightRandomCharacterKinds)
 
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 

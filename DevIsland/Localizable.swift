@@ -170,6 +170,11 @@ extension L10n {
     var lblDisplay:          String { s("Display",                       "표시") }
     var lblMonitor:          String { s("Monitor",                       "모니터") }
     var lblShowFullScreen:   String { s("Show above full-screen apps",   "전체화면 앱 위에 표시") }
+    var secNotchCharacters:  String { s("Notch characters",              "노치 캐릭터") }
+    var lblLeftCharacter:    String { s("Left character",                "왼쪽 캐릭터") }
+    var lblRightCharacter:   String { s("Right character",               "오른쪽 캐릭터") }
+    var lblCharacter:        String { s("Character",                     "캐릭터") }
+    var lblRandomIncludes:   String { s("Random includes",               "랜덤 포함 캐릭터") }
     var secRequests:         String { s("Requests",                      "요청") }
     var lblRequestDisplay:   String { s("Request display",               "요청 표시") }
 
@@ -300,6 +305,8 @@ extension L10n {
     var notchMouse:    String { s("Monitor with mouse",      "마우스가 있는 모니터") }
     var notchFocused:  String { s("Monitor with focus",      "포커스가 있는 모니터") }
     var notchSpecific: String { s("Selected monitor",        "선택한 모니터") }
+    var notchCharacterRandom:   String { s("Random",         "랜덤") }
+    var notchCharacterSpecific: String { s("Specific",       "지정") }
 
     // Enum labels — RequestDisplayTarget
     var reqNotch:   String { s("Notch display",  "노치 화면") }
