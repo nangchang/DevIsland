@@ -696,15 +696,15 @@ struct CLIBuddyView: View {
             case .claudeCode:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .claudeCode))
                 pixelGrid(size: size, cells: claudeBodyCells())
-                    .scaleEffect(x: isFlipped ? 1 : -1)
+                    .scaleEffect(x: isFlipped ? -1 : 1)
             case .gemini:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .gemini))
                 pixelGrid(size: size, cells: geminiBodyCells())
-                    .scaleEffect(x: isFlipped ? 1 : -1)
+                    .scaleEffect(x: isFlipped ? -1 : 1)
             case .codex:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .codex))
                 pixelGrid(size: size, cells: codexBodyCells())
-                    .scaleEffect(x: isFlipped ? 1 : -1)
+                    .scaleEffect(x: isFlipped ? -1 : 1)
             case .island:
                 pixelGrid(size: size, cells: islandBodyCells())
             }
