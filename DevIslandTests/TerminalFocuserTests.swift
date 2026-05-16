@@ -9,6 +9,7 @@ final class TerminalFocuserTests: XCTestCase {
         XCTAssertEqual(TerminalFocuser.normalizedAppName("apple terminal"), "Terminal")
         XCTAssertEqual(TerminalFocuser.normalizedAppName("ghostty"), "Ghostty")
         XCTAssertEqual(TerminalFocuser.normalizedAppName("warp"), "Warp")
+        XCTAssertEqual(TerminalFocuser.normalizedAppName("cmux"), "cmux")
         XCTAssertNil(TerminalFocuser.normalizedAppName("UnknownApp"))
         XCTAssertNil(TerminalFocuser.normalizedAppName(nil))
     }

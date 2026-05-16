@@ -149,6 +149,22 @@ ASEOF
   fi
 fi
 
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ -n "$CMUX_WORKSPACE_ID" ] || [ -n "$CMUX_SURFACE_ID" ]; }; then
+  _CMUX_BIN="${CMUX_CLAUDE_HOOK_CMUX_BIN:-}"
+  if [ -z "$_CMUX_BIN" ]; then
+    for _p in "/Applications/cmux.app/Contents/Resources/bin/cmux" "$HOME/.local/bin/cmux"; do
+      [ -x "$_p" ] && _CMUX_BIN="$_p" && break
+    done
+  fi
+  if [ -n "$_CMUX_BIN" ] && osascript -e 'return (application "cmux" is running)' 2>/dev/null | grep -q "true"; then
+    TERM_APP="cmux"
+    _CMUX_WS=$("$_CMUX_BIN" current-workspace 2>/dev/null | head -1 | tr -d '[:space:]')
+    TERM_TITLE="${_CMUX_WS:-${CMUX_WORKSPACE_ID:-cmux}}"
+    TERM_WINDOW_ID="${CMUX_WORKSPACE_ID:-}"
+    TERM_TAB_INDEX="${CMUX_SURFACE_ID:-}"
+  fi
+fi
+
 if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ -n "$GHOSTTY_BIN_DIR" ]; then
   if osascript -e 'return (application "Ghostty" is running)' 2>/dev/null | grep -q "true"; then
     TERM_APP="Ghostty"

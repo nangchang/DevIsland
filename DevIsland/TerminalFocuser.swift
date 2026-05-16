@@ -6,6 +6,7 @@ class TerminalFocuser {
     private static let appleScriptTimeout: TimeInterval = 1.5
 
     private static let candidates: [(bundleId: String, name: String)] = [
+        ("com.cmuxterm.app",        "cmux"),
         ("com.mitchellh.ghostty",   "Ghostty"),
         ("com.googlecode.iterm2",   "iTerm"),
         ("dev.warp.Warp-Stable",    "Warp"),
@@ -204,6 +205,23 @@ class TerminalFocuser {
               end try
             end tell
             """
+        case "cmux":
+            return """
+            tell application "cmux"
+              try
+                set wantedTabId to \(windowIdLiteral)
+                set wantedTermId to \(tabIndexLiteral)
+                set fw to front window
+                set selTab to selected tab of fw
+                if wantedTabId is "" or (id of selTab) is wantedTabId then
+                  if wantedTermId is "" then return "true"
+                  set focTerm to focused terminal of selTab
+                  if (id of focTerm) is wantedTermId then return "true"
+                end if
+              end try
+              return "false"
+            end tell
+            """
         default:
             // Ghostty, Warp 등 탭 특정이 불가능한 앱 — 앱 레벨 포커스는 호출 전에 이미 확인됨
             return "return \"true\""
@@ -394,6 +412,8 @@ class TerminalFocuser {
             return "Ghostty"
         case "warp", "warpterminal":
             return "Warp"
+        case "cmux":
+            return "cmux"
         default:
             return nil
         }
@@ -489,6 +509,34 @@ class TerminalFocuser {
                 end repeat
               end repeat
               activate
+            end tell
+            """
+        case "cmux":
+            if (windowId ?? "").isEmpty {
+                return "tell application \"cmux\" to activate"
+            }
+            return """
+            tell application "cmux"
+              activate
+              set wantedTabId to \(windowIdLiteral)
+              set wantedTermId to \(tabIndexLiteral)
+              repeat with aWindow in windows
+                repeat with aTab in tabs of aWindow
+                  if (id of aTab) is wantedTabId then
+                    activate window aWindow
+                    select tab aTab
+                    if wantedTermId is not "" then
+                      repeat with aTerm in terminals of aTab
+                        if (id of aTerm) is wantedTermId then
+                          focus aTerm
+                          return
+                        end if
+                      end repeat
+                    end if
+                    return
+                  end if
+                end repeat
+              end repeat
             end tell
             """
         default:
