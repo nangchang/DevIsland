@@ -38,7 +38,7 @@ CLI Hook
 - **SQLite 단일 저장소**: 영구 규칙(`rules`), 세션 캐시(`session_cache`), 이벤트 로그(`hook_events`, `approval_decisions`), PTY 트랜스크립트(`pty_messages`) 모두 `~/Library/Application Support/DevIsland/approval-proxy.sqlite3`에 저장.
 - **Claude 세션 승인 3가지 모드** (Settings > Providers > Claude Code): Native (Claude 내부 rule), App cache (DevIsland SQLite), Hybrid (둘 다).
 
-아키텍처 상세 및 미구현 Gap 목록은 [AGENTS.md](AGENTS.md#approval-proxy-architecture)를 참조하세요.
+아키텍처 상세 및 미구현 Gap 목록은 [docs/agent/approval-proxy.md](docs/agent/approval-proxy.md)를 참조하세요.
 
 ## 🚀 시작하기
 
