@@ -801,16 +801,15 @@ class AppState: ObservableObject {
                 return
             }
             let fullSessionId = sessionId
-            let hasPendingForSession = self.sessionStore.pendingQueue.contains { $0.sessionId == fullSessionId }
             let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "startup" || normalizedEvent == "init")
-            
+
             // [UX] 에이전트 작업 완료 대기 상태(Idle Prompt) 판별 로직
             // - Claude Code: notification 훅에 idle_prompt 또는 input_required 타입으로 전달됨
             // - Gemini CLI: afteragent, aftermodel 등 턴 종료 시 발생하는 훅을 대기 상태로 간주
             // - Codex CLI: posttooluse를 쓰면 툴 연속 자동 실행 시 스팸 알림이 생기므로 제외함. 대신 stop 이벤트를 통해 완료됨을 알림
             let isIdlePrompt = (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
                                normalizedEvent == "afteragent"
-            
+
             let sessionMessage: String
             if isStartEvent {
                 sessionMessage = "Session Started"
@@ -821,36 +820,38 @@ class AppState: ObservableObject {
             } else {
                 sessionMessage = displayMsg
             }
-            
-            self.sessionStore.updateActiveSession(
-                sessionId: fullSessionId,
-                terminalTitle: terminalTitle,
-                agentKind: agentKind,
-                terminalApp: terminalApp,
-                terminalTTY: terminalTTY,
-                terminalWindowId: terminalWindowId,
-                terminalTabIndex: terminalTabIndex,
-                terminalTmuxPane: terminalTmuxPane,
-                terminalTmuxSocket: terminalTmuxSocket,
-                terminalTmuxClient: terminalTmuxClient,
-                toolName: displayToolName,
-                eventName: event,
-                message: sessionMessage,
-                isPending: hasPendingForSession,
-                preserveMessage: (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse") || sessionMessage.isEmpty,
-                isLifecycleTracked: isStartEvent || agentKind != .claudeCode // Codex/Gemini는 기본적으로 추적 유지
-            )
 
             DispatchQueue.main.async {
+                // sessionStore 뮤테이션은 항상 메인 스레드에서 수행 (@Published → SwiftUI 업데이트)
+                let hasPendingForSession = self.sessionStore.pendingQueue.contains { $0.sessionId == fullSessionId }
+                self.sessionStore.updateActiveSession(
+                    sessionId: fullSessionId,
+                    terminalTitle: terminalTitle,
+                    agentKind: agentKind,
+                    terminalApp: terminalApp,
+                    terminalTTY: terminalTTY,
+                    terminalWindowId: terminalWindowId,
+                    terminalTabIndex: terminalTabIndex,
+                    terminalTmuxPane: terminalTmuxPane,
+                    terminalTmuxSocket: terminalTmuxSocket,
+                    terminalTmuxClient: terminalTmuxClient,
+                    toolName: displayToolName,
+                    eventName: event,
+                    message: sessionMessage,
+                    isPending: hasPendingForSession,
+                    preserveMessage: (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse") || sessionMessage.isEmpty,
+                    isLifecycleTracked: isStartEvent || agentKind != .claudeCode // Codex/Gemini는 기본적으로 추적 유지
+                )
+
                 if isStartEvent || (self.sessionStore.selectedSessionId == nil) {
                     self.sessionStore.selectedSessionId = fullSessionId
                 }
-                
+
                 // 알림 확장 로직 (질문이나 작업 완료 시)
                 let isInformational = (normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
                                      isUserQuestionTool ||
                                      (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode))
-                
+
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
                     // 터미널이 포커스되어 있지 않을 때만 확장
                     let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
