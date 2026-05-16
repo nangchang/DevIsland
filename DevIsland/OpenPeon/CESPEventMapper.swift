@@ -10,28 +10,67 @@ enum CESPEventMapper {
         message: String,
         payload: [String: Any]?
     ) -> CESPCategory? {
+        switch agentKind {
+        case .claudeCode:
+            return claudeCategory(normalizedEvent: normalizedEvent, notificationType: notificationType, message: message, payload: payload)
+        case .gemini:
+            return geminiCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
+        case .codex:
+            return codexCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
+        default:
+            return commonCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
+        }
+    }
+
+    private static func claudeCategory(
+        normalizedEvent: String,
+        notificationType: String,
+        message: String,
+        payload: [String: Any]?
+    ) -> CESPCategory? {
         switch normalizedEvent {
         case "sessionstart", "startup", "init":
             return .sessionStart
-        case "permissionrequest", "beforetool", "elicitation":
+        case "permissionrequest", "elicitation":
             return .inputRequired
         case "pretooluse":
             return .taskAcknowledge
-        case "posttooluse":
-            return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
-        case "stop", "afteragent":
+        case "stop":
             // Sound feedback treats Stop as task completion without changing AppState's
             // lifecycle/pruning rules for provider sessions.
             return .taskComplete
         case "sessionend", "exit", "shutdown":
             return .sessionEnd
-        case "precompact":
-            return .resourceLimit
         case "notification":
             let type = notificationType.lowercased()
             if type == "input_required" || type == "permission_prompt" {
                 return .inputRequired
             }
+            return isFailurePayload(payload, message: message) ? .taskError : nil
+        default:
+            return isFailurePayload(payload, message: message) ? .taskError : nil
+        }
+    }
+
+    private static func geminiCategory(
+        normalizedEvent: String,
+        message: String,
+        payload: [String: Any]?
+    ) -> CESPCategory? {
+        switch normalizedEvent {
+        case "sessionstart", "startup", "init":
+            return .sessionStart
+        case "afteragent":
+            return .inputRequired
+        case "beforetool":
+            return .taskAcknowledge
+        case "stop":
+            // Sound feedback treats Stop as task completion without changing AppState's
+            // lifecycle/pruning rules for provider sessions.
+            return .taskComplete
+        case "precompact":
+            return .resourceLimit
+        case "notification":
             if containsResourceLimitKeyword(message) {
                 return .resourceLimit
             }
@@ -40,6 +79,50 @@ enum CESPEventMapper {
             return isFailurePayload(payload, message: message) ? .taskError : nil
         }
     }
+
+    private static func codexCategory(
+        normalizedEvent: String,
+        message: String,
+        payload: [String: Any]?
+    ) -> CESPCategory? {
+        switch normalizedEvent {
+        case "sessionstart", "startup", "init":
+            return .sessionStart
+        case "permissionrequest":
+            return .inputRequired
+        case "pretooluse":
+            return .taskAcknowledge
+        case "posttooluse":
+            return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
+        case "sessionend", "exit", "shutdown":
+            return .sessionEnd
+        default:
+            return isFailurePayload(payload, message: message) ? .taskError : nil
+        }
+    }
+
+    private static func commonCategory(
+        normalizedEvent: String,
+        message: String,
+        payload: [String: Any]?
+    ) -> CESPCategory? {
+        switch normalizedEvent {
+        case "sessionstart", "startup", "init":
+            return .sessionStart
+        case "permissionrequest", "elicitation", "beforetool":
+            return .inputRequired
+        case "pretooluse":
+            return .taskAcknowledge
+        case "posttooluse", "stop", "afteragent":
+            return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
+        case "sessionend", "exit", "shutdown":
+            return .sessionEnd
+        default:
+            return isFailurePayload(payload, message: message) ? .taskError : nil
+        }
+    }
+
+    // MARK: - Helpers
 
     static func isFailurePayload(_ payload: [String: Any]?, message: String) -> Bool {
         if containsFailureKeyword(message) {
