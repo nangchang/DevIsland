@@ -20,6 +20,8 @@ enum CESPEventMapper {
         case "posttooluse":
             return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
         case "stop", "afteragent":
+            // Sound feedback treats Stop as task completion without changing AppState's
+            // lifecycle/pruning rules for provider sessions.
             return .taskComplete
         case "sessionend", "exit", "shutdown":
             return .sessionEnd
@@ -48,6 +50,8 @@ enum CESPEventMapper {
     }
 
     private static func containsFailure(in value: Any) -> Bool {
+        // This intentionally catches only clear machine-readable or textual failures.
+        // User-denied approvals are handled by the approval flow, not as task errors.
         if let dict = value as? [String: Any] {
             for (key, nested) in dict {
                 let lowerKey = key.lowercased()

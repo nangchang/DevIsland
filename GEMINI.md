@@ -1,97 +1,39 @@
-# 🏝️ DevIsland Project Instructions
+# 🏝️ DevIsland: Gemini CLI Instructions
 
-This document provides essential context and instructions for AI agents working on the DevIsland project. DevIsland is a macOS application that provides a "Dynamic Island" style dashboard for monitoring and controlling AI agents (like Claude Code).
+This document is the primary entry point for the Gemini CLI when working on the DevIsland project.
 
 ## 🏗️ Project Overview
 
-- **Core Purpose**: Real-time monitoring and control of AI agent activities via a notch-integrated UI.
-- **Technology Stack**:
-  - **Language**: Swift 5.10+
-  - **Frameworks**: SwiftUI, Combine, AppKit (NSPanel), Network.framework (TCP Sockets).
-  - **Platform**: macOS 14.0+ (Sonoma and later).
-- **Key Architecture**:
-  - **MVVM-like**: `AppState` (singleton `@ObservableObject`) manages the core logic and state.
-  - **Communication**: A bash bridge (`devisland-bridge.sh`) sends JSON payloads over TCP (port 9090) to the app.
-  - **UI**: `NotchWindowController` manages a specialized `NSPanel` (non-activating, borderless, floating) that hosts SwiftUI views.
+DevIsland is a macOS application providing a "Dynamic Island" style dashboard for real-time monitoring and control of AI agents (Claude, Gemini, Codex).
 
-## 🚀 Building and Running
+- **Architecture**: Swift (SwiftUI/AppKit) app with a TCP Socket server (port 9090).
+- **Bridge**: A bash/python bridge forwards CLI hook events to the app.
+- **Protocol**: JSON payloads over TCP or Unix domain sockets.
 
-### Building with XcodeGen (Recommended for Development)
+## 🛠️ Mandatory Standards (The 5 Commandments)
 
-This project uses **XcodeGen**. Do not commit the `.xcodeproj` file.
+Gemini CLI는 이 저장소에서 작업할 때 다음 규칙을 **반드시** 준수해야 합니다.
 
-```bash
-# 1. Install XcodeGen if you haven't
-brew install xcodegen
+1. **Propose & Confirm First**: 모든 파일 수정, 브랜치 생성, 커밋 전에 반드시 계획과 커밋 메시지를 제안하고 승인을 받으십시오.
+2. **Korean Commit Body**: 커밋 메시지의 **Body(본문)는 반드시 한국어**로 작성하십시오. "무엇을" 했는지보다 **"왜(Rationale)"** 그렇게 했는지에 집중하십시오. (Title은 영어 Conventional Commits 준수)
+3. **Atomic & Surgical**: 하나의 커밋에는 하나의 논리적 단위만 포함하십시오. 관련 없는 코드 정리나 스타일 수정은 금지하며, 요청된 작업에 꼭 필요한 부분만 수정하십시오.
+4. **Pre-Commit Verification**: 커밋 승인을 요청하기 전에 반드시 테스트를 통과해야 합니다.
+   - 실행: `./scripts/run-tests.sh`
+5. **Update Docs After Changes**: 작업을 완료할 때 코드, 동작, 설정, 명령어, 아키텍처 설명과 문서가 어긋나지 않는지 확인하십시오. 필요한 문서는 같은 논리적 변경 안에서 함께 업데이트하고, 문서 변경이 필요 없다면 그 이유를 명시하십시오.
+6. **No Project File Commits**: `.xcodeproj` 파일은 절대 커밋하지 마십시오. `project.yml` 수정 후 `xcodegen generate`를 실행하십시오.
 
-# 2. Generate the project file (re-run if project.yml changes)
-xcodegen generate
+## 🚦 Documentation Reference
 
-# 3. Open and build in Xcode
-open DevIsland.xcodeproj
-```
+상세한 구현 사양이나 빌드 방법은 아래의 모듈화된 문서를 참조하십시오.
 
-### Quick Build & Run (CLI only)
+- **[AGENTS.md](AGENTS.md)**: 전체 에이전트 공통 가이드.
+- **[docs/agent/build-and-test.md](docs/agent/build-and-test.md)**: 빌드 및 테스트 상세 가이드.
+- **[docs/agent/hook-providers.md](docs/agent/hook-providers.md)**: Hook 이벤트 상세 (Gemini 전용 컨텍스트 포함).
+- **[docs/agent/approval-proxy.md](docs/agent/approval-proxy.md)**: IPC 및 내부 로직 사양.
+- **[docs/agent/stability-standards.md](docs/agent/stability-standards.md)**: 성능 및 안정성 규칙.
 
-For a quick build without generating an Xcode project:
+## 📝 Gemini-Specific Context
 
-```bash
-bash scripts/build_and_run.sh
-```
-This script compiles assets and Swift sources, assembles the app bundle in `dist/`, and launches it.
-
-## 🛠️ Development Conventions
-
-### Engineering Standards for AI Agents
-AI agents (Gemini CLI, etc.) working on this repository MUST strictly adhere to the following standards:
-
-1.  **Atomic Commits & No Mixed Changes**: 
-    *   Each commit must represent a single, logical unit of work.
-    *   Never mix unrelated refactorings, documentation, and logic changes in one commit.
-2.  **Commit Message Convention**: 
-    *   **Title**: Must be in English, following Conventional Commits (e.g., `feat:`, `fix:`, `docs:`).
-    *   **Body**: Must include a detailed explanation in **Korean**, focusing on the "Why" and the rationale behind the change.
-3.  **Propose & Confirm Protocol**:
-    *   Before performing any mutation (file edit, branch creation, commit), the agent MUST propose the plan and the draft commit message to the user and obtain explicit approval.
-4.  **Verification**: 
-    *   Always run `./scripts/run-tests.sh` before committing to ensure no regressions.
-5.  **Surgical Changes**: Only modify what is strictly necessary for the task. Match the surrounding style and conventions perfectly.
-
-### Coding Style
-- **Swift**: Follow standard Swift API Design Guidelines. Use `PascalCase` for types and `camelCase` for variables/functions.
-- **Simplicity**: Prioritize surgical changes. Avoid over-engineering or speculative abstractions.
-- **State Management**: Use `AppState.shared` for global app state and session management.
-
-### Communication & CLI Support
-- **Hook Events**: The app receives events via `HookSocketServer` on port 9090.
-- **Supported CLIs**:
-  - **Claude Code**: Uses `PermissionRequest` for approvals.
-  - **Gemini CLI**: Uses `BeforeTool` for approvals; other lifecycle events (`SessionStart`, etc.) are also tracked.
-  - **Codex CLI**: Uses `PreToolUse` for approvals.
-- **Bridge**: `scripts/devisland-bridge.sh` is the interface between CLI agents and the app. It auto-detects the source CLI based on event names.
-- **Installation**: `scripts/install-bridge.sh` configures the respective settings files (e.g., `~/.gemini/settings.json`).
-
-### Key Components
-| File | Responsibility |
-|---|---|
-| `DevIslandApp.swift` | App entry, MenuBar UI, and `AppDelegate` initialization. |
-| `AppState.swift` | Logic for socket messages, session pruning, and pending request queue. |
-| `NotchWindowController.swift` | Management of the `NSPanel` and its display logic (positioning, expanding/collapsing). |
-| `HookSocketServer.swift` | TCP server implementation using `NWListener`. |
-| `GlobalShortcutManager.swift` | Handling global hotkeys (⌘⇧Y / ⌘⇧N). |
-| `TerminalFocuser.swift` | AppleScript logic to focus the terminal after an action. |
-
-## 📝 Critical Notes
-
-- **Permissions**: The app requires **Accessibility** (for global shortcuts) and **Automation/Apple Events** (to focus the terminal) permissions.
-- **LSUIElement**: The app is a "UI Element" (`LSUIElement = true`), meaning it has no Dock icon and primarily lives in the Menu Bar and the Notch.
-- **Window Level**: The notch window sits at `.mainMenu + 1` level to appear over most other windows, including full-screen apps (if configured).
-- **Logging**:
-  - Bridge logs: `/tmp/DevIsland.bridge.log`
-  - App logs: `/tmp/DevIsland.log` and `/tmp/DevIsland.error.log` (when run via LaunchAgent).
-
-## 🤝 Contribution Guidelines
-
-- Always run `xcodegen generate` after modifying `project.yml`.
-- Ensure changes to the UI account for both collapsed and expanded states in `NotchWindowController`.
-- Maintain the surgical change policy: only modify what is necessary for the task at hand.
+- **Approval Events**: Gemini는 `BeforeTool` 이벤트를 사용하여 승인을 요청합니다.
+- **Auto-Edit Mode**: `exit_plan_mode` 도구 실행 시 앱에서 Auto-Edit 상태가 활성화됩니다.
+- **Integration**: `scripts/install-bridge.sh`를 통해 `~/.gemini/settings.json` 설정이 관리됩니다.

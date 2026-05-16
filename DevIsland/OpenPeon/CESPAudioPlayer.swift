@@ -1,6 +1,8 @@
 import AVFoundation
 import Foundation
 
+// Keep debounce state, retained players, and delegate cleanup in one actor.
+// AVAudioPlayer is also safest when created and played on a run-loop thread.
 @MainActor
 final class CESPAudioPlayer: NSObject, @preconcurrency AVAudioPlayerDelegate {
     static let shared = CESPAudioPlayer()
