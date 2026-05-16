@@ -44,8 +44,13 @@ xcrun actool "$ROOT_DIR/DevIsland/Assets.xcassets" \
 rm "$DIST_DIR/Assets-Partial.plist" # Clean up unused partial plist
 
 # Compile Swift sources
+SWIFT_SOURCES=()
+while IFS= read -r -d '' source; do
+  SWIFT_SOURCES+=("$source")
+done < <(find DevIsland -name "*.swift" -print0 | sort -z)
+
 swiftc \
-  DevIsland/*.swift \
+  "${SWIFT_SOURCES[@]}" \
   -target "$(uname -m)-apple-macos14.0" \
   -o "$EXECUTABLE"
 

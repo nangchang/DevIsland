@@ -90,6 +90,13 @@ struct AppSettings: Equatable {
     var ptyEnabled: Bool
     var ptyAutoInjectPatterns: [PTYAutoInjectPattern]
     var ptyTranscriptRetentionDays: Int
+    var openPeonEnabled: Bool
+    var openPeonPacksDirectory: String
+    var openPeonActivePackName: String?
+    var openPeonMasterVolume: Double
+    var openPeonGlobalMuted: Bool
+    var openPeonMutedCategories: Set<String>
+    var openPeonDebounceMilliseconds: Int
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -110,6 +117,13 @@ struct AppSettings: Equatable {
             .appendingPathComponent("bridge-config.json")
     }()
 
+    static let defaultOpenPeonPacksDirectory: String = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".openpeon", isDirectory: true)
+            .appendingPathComponent("packs", isDirectory: true)
+            .path
+    }()
+
     static let defaults = AppSettings(
         claudeSessionApprovalMode: .nativePermissions,
         claudePersistentApprovalDestination: .userSettings,
@@ -123,7 +137,19 @@ struct AppSettings: Equatable {
         replayRetentionDays: 30,
         ptyEnabled: false,
         ptyAutoInjectPatterns: [],
-        ptyTranscriptRetentionDays: 7
+        ptyTranscriptRetentionDays: 7,
+        openPeonEnabled: false,
+        openPeonPacksDirectory: defaultOpenPeonPacksDirectory,
+        openPeonActivePackName: nil,
+        openPeonMasterVolume: 0.7,
+        openPeonGlobalMuted: false,
+        openPeonMutedCategories: [
+            CESPCategory.taskAcknowledge.rawValue,
+            CESPCategory.taskProgress.rawValue,
+            CESPCategory.sessionEnd.rawValue,
+            CESPCategory.userSpam.rawValue
+        ],
+        openPeonDebounceMilliseconds: 1500
     )
 }
 
@@ -165,6 +191,13 @@ final class SettingsStore: ObservableObject {
         static let ptyEnabled = "ptyEnabled"
         static let ptyAutoInjectPatterns = "ptyAutoInjectPatterns"
         static let ptyTranscriptRetentionDays = "ptyTranscriptRetentionDays"
+        static let openPeonEnabled = "openPeonEnabled"
+        static let openPeonPacksDirectory = "openPeonPacksDirectory"
+        static let openPeonActivePackName = "openPeonActivePackName"
+        static let openPeonMasterVolume = "openPeonMasterVolume"
+        static let openPeonGlobalMuted = "openPeonGlobalMuted"
+        static let openPeonMutedCategories = "openPeonMutedCategories"
+        static let openPeonDebounceMilliseconds = "openPeonDebounceMilliseconds"
     }
 
     private let userDefaults: UserDefaults
@@ -204,6 +237,13 @@ final class SettingsStore: ObservableObject {
             userDefaults.set(data, forKey: DefaultsKey.ptyAutoInjectPatterns)
         }
         userDefaults.set(settings.ptyTranscriptRetentionDays, forKey: DefaultsKey.ptyTranscriptRetentionDays)
+        userDefaults.set(settings.openPeonEnabled, forKey: DefaultsKey.openPeonEnabled)
+        userDefaults.set(settings.openPeonPacksDirectory, forKey: DefaultsKey.openPeonPacksDirectory)
+        userDefaults.set(settings.openPeonActivePackName, forKey: DefaultsKey.openPeonActivePackName)
+        userDefaults.set(settings.openPeonMasterVolume, forKey: DefaultsKey.openPeonMasterVolume)
+        userDefaults.set(settings.openPeonGlobalMuted, forKey: DefaultsKey.openPeonGlobalMuted)
+        userDefaults.set(Array(settings.openPeonMutedCategories).sorted(), forKey: DefaultsKey.openPeonMutedCategories)
+        userDefaults.set(settings.openPeonDebounceMilliseconds, forKey: DefaultsKey.openPeonDebounceMilliseconds)
         writeBridgeConfig(settings)
     }
 
@@ -313,6 +353,39 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.ptyTranscriptRetentionDays,
                 from: userDefaults,
                 default: defaults.ptyTranscriptRetentionDays
+            ),
+            openPeonEnabled: bool(
+                key: DefaultsKey.openPeonEnabled,
+                from: userDefaults,
+                default: defaults.openPeonEnabled
+            ),
+            openPeonPacksDirectory: nonEmptyString(
+                key: DefaultsKey.openPeonPacksDirectory,
+                from: userDefaults,
+                default: defaults.openPeonPacksDirectory
+            ),
+            openPeonActivePackName: userDefaults.string(forKey: DefaultsKey.openPeonActivePackName),
+            openPeonMasterVolume: boundedDouble(
+                key: DefaultsKey.openPeonMasterVolume,
+                from: userDefaults,
+                default: defaults.openPeonMasterVolume,
+                range: 0...1
+            ),
+            openPeonGlobalMuted: bool(
+                key: DefaultsKey.openPeonGlobalMuted,
+                from: userDefaults,
+                default: defaults.openPeonGlobalMuted
+            ),
+            openPeonMutedCategories: {
+                guard let values = userDefaults.stringArray(forKey: DefaultsKey.openPeonMutedCategories) else {
+                    return defaults.openPeonMutedCategories
+                }
+                return Set(values)
+            }(),
+            openPeonDebounceMilliseconds: positiveInt(
+                key: DefaultsKey.openPeonDebounceMilliseconds,
+                from: userDefaults,
+                default: defaults.openPeonDebounceMilliseconds
             )
         )
     }
@@ -345,6 +418,17 @@ final class SettingsStore: ObservableObject {
         guard userDefaults.object(forKey: key) != nil else { return defaultValue }
         let value = userDefaults.double(forKey: key)
         return value > 0 ? value : defaultValue
+    }
+
+    private static func boundedDouble(
+        key: String,
+        from userDefaults: UserDefaults,
+        default defaultValue: Double,
+        range: ClosedRange<Double>
+    ) -> Double {
+        guard userDefaults.object(forKey: key) != nil else { return defaultValue }
+        let value = userDefaults.double(forKey: key)
+        return range.contains(value) ? value : defaultValue
     }
 
     private static func bool(key: String, from userDefaults: UserDefaults, default defaultValue: Bool) -> Bool {

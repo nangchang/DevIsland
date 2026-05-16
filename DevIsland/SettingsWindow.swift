@@ -121,6 +121,9 @@ struct SettingsWindowView: View {
             BridgeIPCSettingsPane(store: store)
                 .tabItem { Label(l10n.tabBridge, systemImage: "cable.connector") }
 
+            OpenPeonSettingsPane(store: store)
+                .tabItem { Label("OpenPeon", systemImage: "speaker.wave.2") }
+
             ExperimentalPTYSettingsPane()
                 .environmentObject(store)
                 .tabItem { Label(l10n.tabExperimental, systemImage: "testtube.2") }
@@ -316,6 +319,126 @@ private struct BridgeIPCSettingsPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct OpenPeonSettingsPane: View {
+    @ObservedObject var store: SettingsStore
+    @ObservedObject private var packStore = CESPPackStore.shared
+
+    private var activePackSelection: Binding<String> {
+        Binding(
+            get: { store.settings.openPeonActivePackName ?? "" },
+            set: { store.settings.openPeonActivePackName = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    var body: some View {
+        Form {
+            Section("Sound packs") {
+                Toggle("Enable OpenPeon sounds", isOn: $store.settings.openPeonEnabled)
+                Toggle("Mute all OpenPeon sounds", isOn: $store.settings.openPeonGlobalMuted)
+
+                HStack {
+                    TextField("Packs folder", text: $store.settings.openPeonPacksDirectory)
+                        .textFieldStyle(.roundedBorder)
+                    Button {
+                        CESPPackStore.shared.reload(settings: store.settings)
+                    } label: {
+                        Label("Reload", systemImage: "arrow.clockwise")
+                    }
+                    Button {
+                        openPacksFolder()
+                    } label: {
+                        Label("Open", systemImage: "folder")
+                    }
+                }
+
+                Picker("Active pack", selection: activePackSelection) {
+                    Text("First valid pack").tag("")
+                    ForEach(packStore.packs.filter { $0.validation.isValid }) { pack in
+                        Text(pack.displayName).tag(pack.manifest.name)
+                    }
+                }
+                .disabled(packStore.packs.filter { $0.validation.isValid }.isEmpty)
+
+                if let error = packStore.lastReloadError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+                if packStore.packs.isEmpty {
+                    Text("No OpenPeon packs found.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Playback") {
+                Slider(value: $store.settings.openPeonMasterVolume, in: 0...1) {
+                    Text("Master volume")
+                } minimumValueLabel: {
+                    Image(systemName: "speaker")
+                } maximumValueLabel: {
+                    Image(systemName: "speaker.wave.3")
+                }
+                Stepper(
+                    "Debounce: \(store.settings.openPeonDebounceMilliseconds) ms",
+                    value: $store.settings.openPeonDebounceMilliseconds,
+                    in: 0...10_000,
+                    step: 100
+                )
+            }
+
+            Section("Categories") {
+                ForEach(CESPCategory.allCases) { category in
+                    Toggle(category.label, isOn: categoryBinding(category))
+                }
+            }
+
+            Section("Validation") {
+                ForEach(packStore.packs) { pack in
+                    DisclosureGroup(pack.displayName) {
+                        if pack.validation.isValid {
+                            Label("Valid", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                        ForEach(pack.validation.errors, id: \.self) { error in
+                            Label(error, systemImage: "xmark.octagon.fill")
+                                .foregroundStyle(.red)
+                        }
+                        ForEach(pack.validation.warnings, id: \.self) { warning in
+                            Label(warning, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear {
+            CESPPackStore.shared.reload(settings: store.settings)
+        }
+        .onChange(of: store.settings.openPeonPacksDirectory) { _, _ in
+            CESPPackStore.shared.reload(settings: store.settings)
+        }
+    }
+
+    private func categoryBinding(_ category: CESPCategory) -> Binding<Bool> {
+        Binding(
+            get: { !store.settings.openPeonMutedCategories.contains(category.rawValue) },
+            set: { enabled in
+                if enabled {
+                    store.settings.openPeonMutedCategories.remove(category.rawValue)
+                } else {
+                    store.settings.openPeonMutedCategories.insert(category.rawValue)
+                }
+            }
+        )
+    }
+
+    private func openPacksFolder() {
+        let url = URL(fileURLWithPath: NSString(string: store.settings.openPeonPacksDirectory).expandingTildeInPath, isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(url)
     }
 }
 

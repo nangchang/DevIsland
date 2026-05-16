@@ -656,8 +656,18 @@ class AppState: ObservableObject {
         let isApproval = Self.isApprovalEvent(normalizedEvent, for: agentKind) && !isUserQuestionTool
         let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
         let replayToolName = toolName.isEmpty ? displayToolName : toolName
+        let cespCategory = CESPEventMapper.category(
+            event: event,
+            normalizedEvent: normalizedEvent,
+            agentKind: agentKind,
+            toolName: toolName,
+            notificationType: notificationType,
+            message: displayMsg,
+            payload: parsedJSON
+        )
 
         if isStop {
+            playOpenPeonSound(cespCategory)
             guard !sessionId.isEmpty else {
                 respondWithReplay(
                     "{\"response\": \"approved\"}",
@@ -768,6 +778,7 @@ class AppState: ObservableObject {
 
         if isNotification {
             print("[DevIsland] notification event: \(event) for \(toolName) → auto-approved")
+            playOpenPeonSound(cespCategory)
             guard !sessionId.isEmpty else {
                 respondWithReplay(
                     "{\"response\": \"approved\"}",
@@ -1145,6 +1156,7 @@ class AppState: ObservableObject {
                 receivedAt: request.receivedAt
             )
             self.sessionStore.appendPending(request: request, item: newItem)
+            self.playOpenPeonSound(cespCategory)
 
             if !request.sessionId.isEmpty {
                 self.sessionStore.updateActiveSession(
@@ -1178,6 +1190,13 @@ class AppState: ObservableObject {
 
     private static func isApprovalEvent(_ normalizedEvent: String, for agentKind: BuddyKind) -> Bool {
         HookEventNormalizer.isApprovalEvent(normalizedEvent, for: agentKind)
+    }
+
+    private func playOpenPeonSound(_ category: CESPCategory?) {
+        guard let category else { return }
+        Task { @MainActor in
+            CESPAudioPlayer.shared.play(category: category)
+        }
     }
 
     private func displayMessage(for toolName: String, toolInput: [String: Any]?, json: [String: Any], eventName: String) -> String {

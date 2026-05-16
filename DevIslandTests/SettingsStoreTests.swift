@@ -41,6 +41,13 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.settings.bridgeFallbackToTcp)
         XCTAssertEqual(store.settings.approvalFallbackPolicy, .pass)
         XCTAssertEqual(store.settings.replayRetentionDays, 30)
+        XCTAssertFalse(store.settings.openPeonEnabled)
+        XCTAssertEqual(store.settings.openPeonPacksDirectory, AppSettings.defaultOpenPeonPacksDirectory)
+        XCTAssertNil(store.settings.openPeonActivePackName)
+        XCTAssertEqual(store.settings.openPeonMasterVolume, 0.7)
+        XCTAssertFalse(store.settings.openPeonGlobalMuted)
+        XCTAssertTrue(store.settings.openPeonMutedCategories.contains(CESPCategory.taskAcknowledge.rawValue))
+        XCTAssertEqual(store.settings.openPeonDebounceMilliseconds, 1500)
     }
 
     func testSettingsPersistAndReload() {
@@ -55,6 +62,13 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.bridgeFallbackToTcp = false
         store.settings.approvalFallbackPolicy = .deny
         store.settings.replayRetentionDays = 14
+        store.settings.openPeonEnabled = true
+        store.settings.openPeonPacksDirectory = "/tmp/openpeon-packs"
+        store.settings.openPeonActivePackName = "sample-pack"
+        store.settings.openPeonMasterVolume = 0.25
+        store.settings.openPeonGlobalMuted = true
+        store.settings.openPeonMutedCategories = [CESPCategory.inputRequired.rawValue]
+        store.settings.openPeonDebounceMilliseconds = 500
 
         let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
@@ -68,6 +82,13 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.settings.bridgeFallbackToTcp)
         XCTAssertEqual(reloaded.settings.approvalFallbackPolicy, .deny)
         XCTAssertEqual(reloaded.settings.replayRetentionDays, 14)
+        XCTAssertTrue(reloaded.settings.openPeonEnabled)
+        XCTAssertEqual(reloaded.settings.openPeonPacksDirectory, "/tmp/openpeon-packs")
+        XCTAssertEqual(reloaded.settings.openPeonActivePackName, "sample-pack")
+        XCTAssertEqual(reloaded.settings.openPeonMasterVolume, 0.25)
+        XCTAssertTrue(reloaded.settings.openPeonGlobalMuted)
+        XCTAssertEqual(reloaded.settings.openPeonMutedCategories, Set([CESPCategory.inputRequired.rawValue]))
+        XCTAssertEqual(reloaded.settings.openPeonDebounceMilliseconds, 500)
     }
 
     func testInvalidPersistedValuesFallBackToDefaults() {
@@ -80,6 +101,9 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set(-10, forKey: SettingsStore.DefaultsKey.bridgeResponseTimeoutSeconds)
         defaults.set("bad-policy", forKey: SettingsStore.DefaultsKey.approvalFallbackPolicy)
         defaults.set(0, forKey: SettingsStore.DefaultsKey.replayRetentionDays)
+        defaults.set("", forKey: SettingsStore.DefaultsKey.openPeonPacksDirectory)
+        defaults.set(2.0, forKey: SettingsStore.DefaultsKey.openPeonMasterVolume)
+        defaults.set(0, forKey: SettingsStore.DefaultsKey.openPeonDebounceMilliseconds)
 
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
