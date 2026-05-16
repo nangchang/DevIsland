@@ -113,10 +113,9 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 // AppState is the central hub: owns the IPC server, session list, pending approval queue,
 // and decision dispatch. It also holds Gemini-specific UX state (auto-edit mode, emulation).
 //
-// TODO(gap-5): AppState (~93 KB) handles too many responsibilities. Planned decomposition:
-//   - Hook parsing/normalization → ApprovalProxyController / HookEventNormalizer (partially done)
-//   - AskUserQuestion / ExitPlanMode flow → QuestionBroker (new type)
-//   - Gemini UX logic → GeminiSessionState or GeminiPromptPolicy
+// TODO(gap-5): AppState (~93 KB) handles too many concerns. 
+//   Progress: PTYSessionBuffer, ReplayRecorder, and SessionStore were extracted in P4.
+//   Next: GeminiSessionState should be extracted.
 //   Splitting reduces test surface and makes each concern independently testable.
 //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
 class AppState: ObservableObject {

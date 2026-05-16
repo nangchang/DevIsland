@@ -329,6 +329,18 @@ Users can toggle **"Auto-approve Safe tools"** in the menu bar. When enabled, an
 
 On collapse, the frame shrinks after a 0.45 s delay (matching the SwiftUI spring animation) to avoid a jump.
 
+## ⚡ Performance & Stability Standards
+
+DevIsland is a mission-critical monitoring tool. It must never interfere with the developer's primary workflow or cause system instability.
+
+1.  **Non-blocking UI**: All heavy operations (AppleScript execution, SQLite writes, network I/O) MUST be performed asynchronously.
+    -   **AppleScript**: Use `Process` with `/usr/bin/osascript` and a timeout; never use `NSAppleScript` on the main thread.
+    -   **Database**: SQLite writes must be performed on the serial `approvalPersistenceQueue`. Use `.async` to avoid blocking the UI or the socket processing loop.
+2.  **Resource Management**:
+    -   **PTY Buffers**: Always call `ptyBuffer.remove(sessionId:)` when a session ends or is pruned to prevent memory accumulation.
+    -   **Log Retention**: SQLite logs are automatically pruned after 30 days (default) to maintain database performance and minimize disk usage.
+3.  **Silent Failure Prevention**: Every error path in the `HookSocketServer` and bridge must have a corresponding user-facing notification or a robust fallback.
+
 ## Approval Proxy Architecture
 
 DevIsland acts as a policy-based **Approval Proxy daemon**: the macOS app itself is the daemon + UI, and the bridge scripts stay ultra-thin. No separate Node.js/Tauri process is needed.
@@ -452,7 +464,8 @@ PRAGMAs: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`
 | 2 | `AppState.sendDecision` | ✅ Fixed: approval scope persistence now uses the shared provider path, with Claude session/persistent coverage in tests |
 | 3 | `AppState.globalAutoApproveTypes` | ✅ Fixed: all providers now write to SQLite via `persistApprovalScope`; in-memory sets remain as a fast-path cache |
 | 4 | `ProviderAdapter.swift` | `GeminiPromptPolicy.swift` does not exist; Gemini logic is minimal hardcoded formatter |
-| 5 | `AppState.swift` | 93 KB class handles too many concerns; `QuestionBroker` and `GeminiSessionState` not yet extracted |
+| 5 | `AppState.swift` | 93 KB class handles too many concerns; `GeminiSessionState` not yet extracted (`PTYSessionBuffer`, `ReplayRecorder`, and `SessionStore` were extracted in P4) |
+| 6 | `HookSocketServer.swift` | `NWListener` initialization `catch` block misses `onServerFailed` callback (Silent Failure); needs retry logic and port-occupied UX |
 
 ## 📝 Commit Guidelines
 
