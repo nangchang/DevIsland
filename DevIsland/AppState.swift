@@ -114,8 +114,8 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 // and decision dispatch. It also holds Gemini-specific UX state (auto-edit mode, emulation).
 //
 // TODO(gap-5): AppState (~93 KB) handles too many concerns. 
-//   Progress: PTYSessionBuffer and ReplayRecorder were extracted in P4.
-//   Next: SessionStore and GeminiSessionState should be extracted.
+//   Progress: PTYSessionBuffer, ReplayRecorder, and SessionStore were extracted in P4.
+//   Next: GeminiSessionState should be extracted.
 //   Splitting reduces test surface and makes each concern independently testable.
 //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
 class AppState: ObservableObject {
