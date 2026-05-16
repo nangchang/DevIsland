@@ -76,7 +76,8 @@ enum CESPEventMapper {
 
     private static func containsFailureKeyword(_ text: String) -> Bool {
         let lower = text.lowercased()
-        return ["error", "failed", "exception", "timeout"].contains { lower.contains($0) }
+        let patterns = [#"\berror\b"#, #"\bfailed\b"#, #"\bexception\b"#, #"\btimeout\b"#]
+        return patterns.contains { lower.range(of: $0, options: .regularExpression) != nil }
     }
 
     private static func containsResourceLimitKeyword(_ text: String) -> Bool {
