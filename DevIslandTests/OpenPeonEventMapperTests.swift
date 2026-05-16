@@ -4,13 +4,17 @@ import XCTest
 final class OpenPeonEventMapperTests: XCTestCase {
     func testApprovalEventsMapToInputRequired() {
         XCTAssertEqual(map("PermissionRequest"), .inputRequired)
-        XCTAssertEqual(map("BeforeTool"), .inputRequired)
+        XCTAssertEqual(map("AfterAgent"), .inputRequired)
         XCTAssertEqual(map("Elicitation"), .inputRequired)
+    }
+
+    func testAcknowledgeEventsMapToTaskAcknowledge() {
+        XCTAssertEqual(map("PreToolUse"), .taskAcknowledge)
+        XCTAssertEqual(map("BeforeTool"), .taskAcknowledge)
     }
 
     func testCompletionEventsMapToTaskComplete() {
         XCTAssertEqual(map("Stop"), .taskComplete)
-        XCTAssertEqual(map("AfterAgent"), .taskComplete)
     }
 
     func testPreCompactMapsToResourceLimit() {
