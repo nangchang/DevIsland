@@ -125,12 +125,12 @@ final class SessionStore: ObservableObject {
         pendingItems.append(item)
     }
 
-    /// Removes and returns the first pending request and its display item.
+    /// Removes and returns the first pending request and its display item (ID-matched).
     @discardableResult
     func removeFirstPending() -> PendingRequest? {
         guard !pendingQueue.isEmpty else { return nil }
         let request = pendingQueue.removeFirst()
-        if !pendingItems.isEmpty { pendingItems.removeFirst() }
+        pendingItems.removeAll { $0.id == request.id }
         return request
     }
 
@@ -140,11 +140,6 @@ final class SessionStore: ObservableObject {
         pendingQueue.removeAll { $0.sessionId == sessionId }
         pendingItems.removeAll { $0.sessionId == sessionId }
         return removed
-    }
-
-    /// Removes the pending item with the given id (used after discarding invalid requests).
-    func removePendingItem(id: UUID) {
-        pendingItems.removeAll { $0.id == id }
     }
 
     /// Removes `sessionId` from activeSessions and clears session-scoped auto-approve cache.
