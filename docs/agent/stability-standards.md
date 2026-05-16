@@ -24,12 +24,12 @@ Every error path in `HookSocketServer`, bridge IPC, persistence, and pack loadin
 
 ## Transport Failure Fallback
 
-When the app is unreachable, bridge fallback defaults should preserve safety:
+When the app is unreachable, the bridge default is `pass` so the originating CLI can continue with its native prompt or fallback behavior. Users who prefer fail-closed behavior can opt into `deny` with `approvalFallbackPolicy`.
 
 | Risk level | Default action |
 |---|---|
-| safe / read-only | pass or allow |
-| low / medium | deny |
-| high / write | deny |
-| critical / shell / destructive | deny |
-| unknown | deny unless explicitly overridden |
+| safe / read-only | pass |
+| low / medium | pass |
+| high / write | pass |
+| critical / shell / destructive | pass |
+| unknown | pass unless explicitly configured to deny |
