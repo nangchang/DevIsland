@@ -220,6 +220,11 @@ private struct ApprovalSettingsPane: View {
                 Toggle(l10n.lblGeminiEmulate, isOn: $appState.emulateGeminiInteractiveMode)
             }
 
+            Section(l10n.secRetention) {
+                Stepper(l10n.lblReplayRetention(store.settings.replayRetentionDays),
+                        value: $store.settings.replayRetentionDays, in: 1...365)
+            }
+
             Section(l10n.secFallback) {
                 Picker(l10n.lblFallbackPolicy, selection: store.binding(\.approvalFallbackPolicy)) {
                     ForEach(ApprovalFallbackPolicy.allCases) { policy in

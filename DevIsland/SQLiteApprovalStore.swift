@@ -259,6 +259,23 @@ final class SQLiteApprovalStore {
         try execute("DELETE FROM rules WHERE id = ?", [id.uuidString])
     }
 
+    func pruneOldLogs(replayRetentionDays: Int, ptyRetentionDays: Int) throws {
+        let replayCutoff = Date().timeIntervalSince1970 - Double(replayRetentionDays) * 86_400
+        let ptyCutoff    = Date().timeIntervalSince1970 - Double(ptyRetentionDays) * 86_400
+        // Delete decisions referencing old hook events, then the hook events themselves.
+        // Decisions with hook_event_id IS NULL are pruned by decided_at.
+        try execute(
+            "DELETE FROM approval_decisions WHERE hook_event_id IN (SELECT id FROM hook_events WHERE received_at < ?)",
+            [replayCutoff]
+        )
+        try execute(
+            "DELETE FROM approval_decisions WHERE hook_event_id IS NULL AND decided_at < ?",
+            [replayCutoff]
+        )
+        try execute("DELETE FROM hook_events WHERE received_at < ?", [replayCutoff])
+        try execute("DELETE FROM pty_messages WHERE created_at < ?", [ptyCutoff])
+    }
+
     func sessionDecision(for request: ApprovalPolicyRequest) throws -> ApprovalPolicyDecision? {
         try firstDecision(
             sql:

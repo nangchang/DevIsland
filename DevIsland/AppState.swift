@@ -318,6 +318,20 @@ class AppState: ObservableObject {
         emulateGeminiInteractiveMode = userDefaults.bool(forKey: DefaultsKey.emulateGeminiInteractiveMode)
         ensureSelectedDisplay()
 
+        if let proxy = approvalProxy {
+            let rawReplay = userDefaults.integer(forKey: SettingsStore.DefaultsKey.replayRetentionDays)
+            let replayDays = rawReplay > 0 ? rawReplay : AppSettings.defaults.replayRetentionDays
+            let rawPty = userDefaults.integer(forKey: SettingsStore.DefaultsKey.ptyTranscriptRetentionDays)
+            let ptyDays = rawPty > 0 ? rawPty : AppSettings.defaults.ptyTranscriptRetentionDays
+            approvalPersistenceQueue.async {
+                do {
+                    try proxy.pruneOldLogs(replayRetentionDays: replayDays, ptyRetentionDays: ptyDays)
+                } catch {
+                    print("[DevIsland] [PRUNE] Failed to prune old logs: \(error)")
+                }
+            }
+        }
+
         if startServer {
             BridgeTokenManager.shared.generateIfNeeded()
 

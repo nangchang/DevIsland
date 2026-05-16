@@ -176,6 +176,8 @@ extension L10n {
     var secAutoApprovals:    String { s("Automatic approvals",           "자동 승인") }
     var lblAutoSafe:         String { s("Auto-approve safe/read-only tools", "안전/읽기 전용 도구 자동 승인") }
     var lblGeminiEmulate:    String { s("Gemini interactive emulation",  "Gemini 대화형 에뮬레이션") }
+    var secRetention:        String { s("Log retention",                 "로그 보관") }
+    func lblReplayRetention(_ n: Int) -> String { s("Replay log: \(n) days", "리플레이 로그: \(n)일") }
     var secFallback:         String { s("Transport failure fallback",    "전송 실패 폴백") }
     var lblFallbackPolicy:   String { s("Fallback policy",               "폴백 정책") }
 

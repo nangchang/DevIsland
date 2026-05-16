@@ -276,4 +276,53 @@ final class SQLiteApprovalStoreTests: XCTestCase {
         XCTAssertEqual(entries[0].decisionSource, .persistentRule)
         XCTAssertEqual(entries[0].decisionReason, "latest")
     }
+
+    func testPruneOldLogsRemovesExpiredRows() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let old  = Date(timeIntervalSince1970: 1_000)   // far in the past
+        let recent = Date()
+
+        // Old hook event + linked decision
+        let oldEventId = try store.insertHookEvent(
+            requestId: "old", provider: .claude, sessionId: "s1",
+            eventName: "PermissionRequest", toolName: "Bash",
+            payloadJSON: "{}", receivedAt: old
+        )
+        try store.insertDecision(
+            hookEventId: oldEventId, provider: .claude, sessionId: "s1",
+            toolName: "Bash", action: .allow, source: .user, reason: nil, decidedAt: old
+        )
+
+        // Recent hook event + linked decision
+        let newEventId = try store.insertHookEvent(
+            requestId: "new", provider: .claude, sessionId: "s1",
+            eventName: "PermissionRequest", toolName: "Bash",
+            payloadJSON: "{}", receivedAt: recent
+        )
+        try store.insertDecision(
+            hookEventId: newEventId, provider: .claude, sessionId: "s1",
+            toolName: "Bash", action: .allow, source: .user, reason: nil, decidedAt: recent
+        )
+
+        try store.pruneOldLogs(replayRetentionDays: 30, ptyRetentionDays: 7)
+
+        let entries = try store.replayLog(limit: 20)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].id, newEventId)
+    }
+
+    func testPruneOldLogsPrunesPTYMessages() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let old    = Date(timeIntervalSince1970: 1_000)
+        let recent = Date()
+
+        try store.insertPTYMessage(sessionId: "s1", provider: .claude, direction: .output, content: "old",    createdAt: old)
+        try store.insertPTYMessage(sessionId: "s1", provider: .claude, direction: .output, content: "recent", createdAt: recent)
+
+        try store.pruneOldLogs(replayRetentionDays: 30, ptyRetentionDays: 7)
+
+        let messages = try store.ptyMessages(sessionId: "s1", limit: 10)
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertEqual(messages[0].content, "recent")
+    }
 }

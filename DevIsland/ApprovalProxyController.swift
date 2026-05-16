@@ -84,4 +84,8 @@ final class ApprovalProxyController {
     func ptyMessages(sessionId: String? = nil, limit: Int = 500) throws -> [PTYMessage] {
         try store.ptyMessages(sessionId: sessionId, limit: limit)
     }
+
+    func pruneOldLogs(replayRetentionDays: Int, ptyRetentionDays: Int) throws {
+        try store.pruneOldLogs(replayRetentionDays: replayRetentionDays, ptyRetentionDays: ptyRetentionDays)
+    }
 }
