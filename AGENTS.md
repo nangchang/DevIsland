@@ -65,9 +65,13 @@ Read this file before editing. Open the referenced docs only when the task touch
 
 1. **Feature Branches**: Never commit directly to `main`. Always use a descriptive branch.
 2. **Atomic Commits**: Each commit should represent one logical task or fix.
-3. **Explain the Why**: Commit messages must describe the rationale or problem solved, not just “feedback applied”.
-4. **No Mixed Changes**: Do not mix unrelated refactors, style changes, docs, and features in one commit.
-5. **Descriptive Tags**: Use conventional prefixes such as `feat:`, `fix:`, `docs:`, `refactor:`.
+3. **Commit Message Convention**:
+    * **Title**: Must be in English, following Conventional Commits (e.g., `feat:`, `fix:`, `docs:`).
+    * **Body**: Must include a detailed explanation in **Korean**, focusing on the "Why" and the rationale behind the change.
+4. **Propose & Confirm Protocol**: Before performing any mutation (file edit, branch creation, commit), the agent MUST propose the plan and the draft commit message to the user and obtain explicit approval.
+5. **Explain the Why**: Commit messages must describe the rationale or problem solved, not just “feedback applied”.
+6. **No Mixed Changes**: Do not mix unrelated refactors, style changes, docs, and features in one commit.
+7. **Descriptive Tags**: Use conventional prefixes such as `feat:`, `fix:`, `docs:`, `refactor:`.
 
 ## Working Tree Safety
 
