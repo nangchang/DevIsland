@@ -70,3 +70,10 @@
 *   **Stale TODO 정리**: 이미 공통 persistence 경로로 처리되는 gap-2 TODO를 제거해 현재 구현 상태와 문서가 어긋나지 않도록 정리했습니다.
 *   **테스트 보강**: dismiss 후 이전 PTY 조각(`pass`)이 다음 출력(`word:`)과 합쳐져 auto-inject를 트리거하지 않는 회귀 테스트를 추가했습니다.
 *   **검증**: `git diff --check`, `swiftc -parse DevIsland/AppState.swift DevIslandTests/AppStateTests.swift`, `./scripts/run-tests.sh` 통과.
+
+### 2026-05-16 — P4 시작 (`feat/p4-appstate-decomposition`)
+*   **테스트 확충**: P4 추출 전 characterization 테스트 8개를 추가했습니다. PTY 청크 경계 패턴 매칭(`testPTYSlidingWindowMatchesPatternAcrossChunks`), 매칭 후 버퍼 초기화로 재발화 방지(`testPTYMatchClearsBufferSoAccumulatedPatternDoesNotRefire`), stop 이벤트 시 PTY 버퍼 제거(`testStopEventClearsPTYOutputBuffer`), 세션 메타데이터 중복 없이 갱신(`testSessionMetadataUpdatedNotDuplicated`), selectedSessionId 자동 전환(`testSelectedSessionIdAutoSwitchesWhenActiveSessionRemoved`), hook_events 및 approval_decisions replay log 기록 검증(`testApprovalEventIsRecordedInReplayLog`, `testApprovalDecisionLinkedToHookEventInReplayLog`).
+*   **`PTYSessionBuffer` 추출**: `AppState`의 `ptyOutputBuffers: [String: String]` 딕셔너리와 `ptyBufferLock: NSLock()`을 독립 `struct PTYSessionBuffer`로 추출했습니다(`DevIsland/PTYSessionBuffer.swift`). `appendAndWindow`, `clearOnMatch`, `remove` 3개의 API로 슬라이딩 윈도우 로직을 캡슐화하고 스레드 안전성을 내부화했습니다.
+*   **`ReplayRecorder` 추출**: `recordReplayHookEvent`, `recordReplayDecision`, `makeReplayHookEventId`, `replayPayloadString` 등 replay 기록 관련 코드를 `final class ReplayRecorder`로 추출했습니다(`DevIsland/ReplayRecorder.swift`). 음수 ID 예약 스킴, FK 순서 보장, 실패 시 FK 없이 재시도하는 fallback을 포함합니다.
+*   **`SessionStore` 보류**: `activeSessions`, `pendingQueue` 등 170여 곳에서 참조되는 `@Published` 속성은 SwiftUI 뷰 전체 업데이트를 동반해야 하므로 별도 PR로 분리합니다.
+*   **검증**: `./scripts/run-tests.sh` 통과 (총 테스트 37개). 커밋: `df01f5c`.
