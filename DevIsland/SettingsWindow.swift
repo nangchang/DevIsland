@@ -223,6 +223,11 @@ private struct ApprovalSettingsPane: View {
                 Toggle(l10n.lblGeminiEmulate, isOn: $appState.emulateGeminiInteractiveMode)
             }
 
+            Section(l10n.secPermissionTimeout) {
+                Stepper(l10n.lblPermissionTimeout(Int(store.settings.permissionTimeoutSeconds)),
+                        value: $store.settings.permissionTimeoutSeconds, in: 10...3600, step: 10)
+            }
+
             Section(l10n.secReplayRetention) {
                 Stepper(l10n.lblReplayRetention(store.settings.replayRetentionDays),
                         value: $store.settings.replayRetentionDays, in: 1...365)

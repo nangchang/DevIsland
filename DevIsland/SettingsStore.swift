@@ -86,6 +86,7 @@ struct AppSettings: Equatable {
     var bridgeResponseTimeoutSeconds: Double
     var bridgeFallbackToTcp: Bool
     var approvalFallbackPolicy: ApprovalFallbackPolicy
+    var permissionTimeoutSeconds: Double
     var replayRetentionDays: Int
     var ptyEnabled: Bool
     var ptyAutoInjectPatterns: [PTYAutoInjectPattern]
@@ -134,6 +135,7 @@ struct AppSettings: Equatable {
         bridgeResponseTimeoutSeconds: 300,
         bridgeFallbackToTcp: true,
         approvalFallbackPolicy: .pass,
+        permissionTimeoutSeconds: 120,
         replayRetentionDays: 30,
         ptyEnabled: false,
         ptyAutoInjectPatterns: [],
@@ -187,6 +189,7 @@ final class SettingsStore: ObservableObject {
         static let bridgeResponseTimeoutSeconds = "bridgeResponseTimeoutSeconds"
         static let bridgeFallbackToTcp = "bridgeFallbackToTcp"
         static let approvalFallbackPolicy = "approvalFallbackPolicy"
+        static let permissionTimeoutSeconds = "permissionTimeoutSeconds"
         static let replayRetentionDays = "replayRetentionDays"
         static let ptyEnabled = "ptyEnabled"
         static let ptyAutoInjectPatterns = "ptyAutoInjectPatterns"
@@ -231,6 +234,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.bridgeResponseTimeoutSeconds, forKey: DefaultsKey.bridgeResponseTimeoutSeconds)
         userDefaults.set(settings.bridgeFallbackToTcp, forKey: DefaultsKey.bridgeFallbackToTcp)
         userDefaults.set(settings.approvalFallbackPolicy.rawValue, forKey: DefaultsKey.approvalFallbackPolicy)
+        userDefaults.set(settings.permissionTimeoutSeconds, forKey: DefaultsKey.permissionTimeoutSeconds)
         userDefaults.set(settings.replayRetentionDays, forKey: DefaultsKey.replayRetentionDays)
         userDefaults.set(settings.ptyEnabled, forKey: DefaultsKey.ptyEnabled)
         if let data = try? JSONEncoder().encode(settings.ptyAutoInjectPatterns) {
@@ -331,6 +335,11 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.approvalFallbackPolicy,
                 from: userDefaults,
                 default: defaults.approvalFallbackPolicy
+            ),
+            permissionTimeoutSeconds: positiveDouble(
+                key: DefaultsKey.permissionTimeoutSeconds,
+                from: userDefaults,
+                default: defaults.permissionTimeoutSeconds
             ),
             replayRetentionDays: positiveInt(
                 key: DefaultsKey.replayRetentionDays,
