@@ -79,9 +79,11 @@ If `providerOutput` is present, the bridge writes it to stdout verbatim. Otherwi
 
 `AppState.handleMessage()` classifies events into:
 
-1. Stop events: remove sessions, clean pending requests, respond approved.
+1. Session-close events: `exit`, `shutdown`, and `sessionend` remove sessions, clean pending requests, and respond approved.
 2. Notification events: update session state, respond approved.
 3. Approval events: enqueue pending request and show approval UI.
+
+Provider `Stop` hooks are handled as lifecycle/status notifications in the current app flow. OpenPeon may map `Stop` to `task.complete` for sound feedback, but that mapping does not change AppState session pruning behavior.
 
 ## Provider-Specific Notes
 

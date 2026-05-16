@@ -26,7 +26,7 @@ Config file: `~/.claude/settings.json` or project-local `.claude/settings.json`.
 
 Claude Code may block security-sensitive operations in Auto Mode before DevIsland sees the event. If the user sees “Denied by auto-mode classifier”, that is a Claude restriction; use interactive mode.
 
-DevIsland uses `PermissionRequest` for approval. `PreToolUse` and `PostToolUse` are registered for progress tracking only.
+DevIsland uses `PermissionRequest` for standard tool approval. `PostToolUse` is audit/replay tracking. Claude `PreToolUse` is mostly status tracking, but selected tools such as `AskUserQuestion` and `ExitPlanMode` can return Claude-specific hook output to preserve or update tool input.
 
 Approval output:
 
