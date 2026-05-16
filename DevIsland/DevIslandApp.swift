@@ -6,6 +6,7 @@ struct DevIslandApp: App {
     @ObservedObject private var state = AppState.shared
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
 
+    @MainActor
     init() {
         _ = SettingsStore.shared
         CESPPackStore.shared.reload(settings: SettingsStore.shared.settings)
