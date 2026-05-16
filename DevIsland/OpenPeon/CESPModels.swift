@@ -68,6 +68,6 @@ struct CESPPack: Identifiable, Equatable {
     let validation: CESPValidationResult
 
     var displayName: String {
-        manifest.displayName?.isEmpty == false ? manifest.displayName! : manifest.name
+        manifest.displayName.flatMap { $0.isEmpty ? nil : $0 } ?? manifest.name
     }
 }
