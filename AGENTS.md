@@ -71,7 +71,8 @@ Read this file before editing. Open the referenced docs only when the task touch
 4. **Propose & Confirm Protocol**: Before performing any mutation (file edit, branch creation, commit), the agent MUST propose the plan and the draft commit message to the user and obtain explicit approval.
 5. **Explain the Why**: Commit messages must describe the rationale or problem solved, not just “feedback applied”.
 6. **No Mixed Changes**: Do not mix unrelated refactors, style changes, docs, and features in one commit.
-7. **Descriptive Tags**: Use conventional prefixes such as `feat:`, `fix:`, `docs:`, `refactor:`.
+7. **Update Documentation After Changes**: When finishing work, check whether code, behavior, settings, commands, or architecture docs need updates. Update the relevant docs in the same logical change, or explicitly explain why no documentation update is needed.
+8. **Descriptive Tags**: Use conventional prefixes such as `feat:`, `fix:`, `docs:`, `refactor:`.
 
 ## Working Tree Safety
 
