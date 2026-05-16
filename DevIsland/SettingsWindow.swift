@@ -391,14 +391,26 @@ private struct OpenPeonSettingsPane: View {
 
             Section(l10n.secOpenPeonCategories) {
                 ForEach(CESPCategory.allCases) { category in
-                    Toggle(isOn: categoryBinding(category)) {
-                        HStack {
-                            Text(category.label)
-                            Spacer()
-                            Text(category.cespKey)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(.secondary)
+                    HStack {
+                        Toggle(isOn: categoryBinding(category)) {
+                            HStack {
+                                Text(category.label)
+                                Spacer()
+                                Text(category.cespKey)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        
+                        Button {
+                            CESPAudioPlayer.shared.play(category: category)
+                        } label: {
+                            Image(systemName: "speaker.wave.2.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.blue)
+                        }
+                        .buttonStyle(.plain)
+                        .help(l10n.btnPlayPreview)
                     }
                 }
             }

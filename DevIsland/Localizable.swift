@@ -214,6 +214,7 @@ extension L10n {
     var phOpenPeonPacksFolder:       String { s("Packs folder",                  "팩 폴더") }
     var btnReload:                   String { s("Reload",                        "다시 불러오기") }
     var btnOpen:                     String { s("Open",                          "열기") }
+    var btnPlayPreview:              String { s("Play preview",                  "미리듣기 재생") }
     var lblOpenPeonActivePack:       String { s("Active pack",                   "활성 팩") }
     var lblOpenPeonFirstValidPack:   String { s("First valid pack",              "첫 번째 유효한 팩") }
     var lblOpenPeonNoPacks:          String { s("No OpenPeon packs found.",      "OpenPeon 팩을 찾을 수 없습니다.") }
