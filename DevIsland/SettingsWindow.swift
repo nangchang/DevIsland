@@ -324,7 +324,7 @@ private struct BridgeIPCSettingsPane: View {
 
 private struct OpenPeonSettingsPane: View {
     @ObservedObject var store: SettingsStore
-    @StateObject private var packStore = CESPPackStore.shared
+    @ObservedObject private var packStore = CESPPackStore.shared
 
     private var activePackSelection: Binding<String> {
         Binding(

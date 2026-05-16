@@ -7,29 +7,49 @@ final class CESPPackStore: ObservableObject {
 
     @Published private(set) var packs: [CESPPack] = []
     @Published private(set) var lastReloadError: String?
+    private var reloadID = UUID()
 
     func reload(settings: AppSettings) {
         reload(packsDirectory: settings.openPeonPacksDirectory)
     }
 
     func reload(packsDirectory: String) {
+        let id = UUID()
+        reloadID = id
         let directory = URL(fileURLWithPath: NSString(string: packsDirectory).expandingTildeInPath, isDirectory: true)
-        let fileManager = FileManager.default
-        guard let entries = try? fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            packs = []
-            lastReloadError = "Could not read \(directory.path)"
-            return
-        }
 
-        packs = entries
-            .filter { ((try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false) }
-            .compactMap { CESPPackValidator.loadPack(at: $0, fileManager: fileManager) }
-            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-        lastReloadError = nil
+        Task.detached(priority: .utility) {
+            let result = Self.scanPacks(in: directory)
+            await MainActor.run {
+                guard self.reloadID == id else { return }
+                switch result {
+                case .success(let packs):
+                    self.packs = packs
+                    self.lastReloadError = nil
+                case .failure:
+                    self.packs = []
+                    self.lastReloadError = "Could not read \(directory.path)"
+                }
+            }
+        }
+    }
+
+    private nonisolated static func scanPacks(in directory: URL) -> Result<[CESPPack], Error> {
+        let fileManager = FileManager.default
+        do {
+            let entries = try fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+            let packs = entries
+                .filter { ((try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false) }
+                .compactMap { CESPPackValidator.loadPack(at: $0, fileManager: fileManager) }
+                .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            return .success(packs)
+        } catch {
+            return .failure(error)
+        }
     }
 
     func activePack(settings: AppSettings) -> CESPPack? {
