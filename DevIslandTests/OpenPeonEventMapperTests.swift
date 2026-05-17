@@ -48,7 +48,11 @@ final class OpenPeonEventMapperTests: XCTestCase {
     func testCodexPostToolUseWithMessageDescribingErrorIsNotTaskError() {
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",
-            "tool_response": ["success": true]
+            "tool_response": [
+                "success": true,
+                "stdout": "The command succeeded after an initial error.",
+                "stderr": ""
+            ]
         ]
         XCTAssertEqual(
             CESPEventMapper.category(
@@ -61,7 +65,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 payload: payload
             ),
             .taskComplete,
-            "Descriptive messages about errors in successful tool results should not trigger taskError sound for Codex"
+            "Descriptive messages about errors in tool_response stdout/stderr should not trigger taskError sound for Codex"
         )
     }
 
@@ -81,6 +85,10 @@ final class OpenPeonEventMapperTests: XCTestCase {
     }
 
     func testClaudeNotificationWithMessageDescribingErrorIsNotTaskError() {
+        let payload: [String: Any] = [
+            "notification_type": "info",
+            "message": "I will fix the syntax error."
+        ]
         XCTAssertNil(
             CESPEventMapper.category(
                 event: "Notification",
@@ -89,7 +97,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 toolName: "",
                 notificationType: "info",
                 message: "I will fix the syntax error.",
-                payload: nil
+                payload: payload
             ),
             "Descriptive messages about errors should not trigger taskError sound for Claude"
         )
@@ -112,7 +120,10 @@ final class OpenPeonEventMapperTests: XCTestCase {
     }
 
     func testClaudeNotificationWithMachineReadableErrorInPayloadIsTaskError() {
-        let payload: [String: Any] = ["error": "System crash"]
+        let payload: [String: Any] = [
+            "error_details": ["code": 500, "reason": "Internal server error"],
+            "message": "Just checking in..."
+        ]
         XCTAssertEqual(
             CESPEventMapper.category(
                 event: "Notification",
@@ -124,7 +135,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 payload: payload
             ),
             .taskError,
-            "Machine-readable failure in payload should trigger taskError even if type is generic"
+            "Machine-readable failure in payload (even in nested fields) should trigger taskError"
         )
     }
 

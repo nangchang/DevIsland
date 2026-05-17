@@ -149,12 +149,18 @@ enum CESPEventMapper {
         return containsFailure(in: payload)
     }
 
-    private static func containsFailure(in value: Any) -> Bool {
+    private static let conversationalKeys: Set<String> = ["message", "prompt", "stdout", "stderr", "description"]
+
+    private static func containsFailure(in value: Any, key: String? = nil) -> Bool {
+        if let key = key?.lowercased(), conversationalKeys.contains(key) {
+            return false
+        }
+
         // This intentionally catches only clear machine-readable or textual failures.
         // User-denied approvals are handled by the approval flow, not as task errors.
         if let dict = value as? [String: Any] {
-            for (key, nested) in dict {
-                let lowerKey = key.lowercased()
+            for (k, nested) in dict {
+                let lowerKey = k.lowercased()
                 if ["error", "errors", "exception", "failed", "failure"].contains(lowerKey) {
                     return true
                 }
@@ -166,7 +172,7 @@ enum CESPEventMapper {
                    ["failed", "failure", "error"].contains(status.lowercased()) {
                     return true
                 }
-                if containsFailure(in: nested) {
+                if containsFailure(in: nested, key: k) {
                     return true
                 }
             }
