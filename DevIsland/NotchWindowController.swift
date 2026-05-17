@@ -8,6 +8,8 @@ import CoreGraphics
 let collapsedNotchSize = NSSize(width: 260, height: 32)
 let expandedNotchSize = NSSize(width: 692, height: 300)
 let notchHorizontalOffset: CGFloat = -10
+let notchExpansionDuration: TimeInterval = 0.35
+let notchCollapseDuration: TimeInterval = 0.28
 
 class NotchWindowController: NSWindowController {
     private var cancellables = Set<AnyCancellable>()
@@ -118,7 +120,9 @@ class NotchWindowController: NSWindowController {
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] showInFullScreenApps in
-                self?.window?.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: showInFullScreenApps)
+                let behavior = Self.collectionBehavior(showInFullScreenApps: showInFullScreenApps)
+                self?.window?.collectionBehavior = behavior
+                self?.expandedPanel.collectionBehavior = behavior
                 self?.resetPinnedPosition()
                 self?.updateWindowFrame(animate: false)
                 self?.updateFullScreenVisibility()
@@ -245,7 +249,7 @@ class NotchWindowController: NSWindowController {
                 self?.window?.orderOut(nil)
             }
             pendingSettle = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + notchExpansionDuration, execute: work)
             
         } else {
             window?.level = .mainMenu + 2

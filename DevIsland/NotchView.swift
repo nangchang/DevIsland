@@ -81,8 +81,8 @@ struct NotchView: View {
 
     private var notchExpansionAnimation: Animation {
         isExpanded
-            ? .spring(response: 0.35, dampingFraction: 0.75)
-            : .easeOut(duration: 0.28)
+            ? .spring(response: notchExpansionDuration, dampingFraction: 0.75)
+            : .easeOut(duration: notchCollapseDuration)
     }
 
     var body: some View {
