@@ -1527,7 +1527,7 @@ struct NotchView: View {
                 .offset(x: 6, y: 4)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 18)
     }
 
     // MARK: Expanded
@@ -1602,7 +1602,7 @@ struct NotchView: View {
                 .buttonStyle(.plain)
                 .help(l10n.notchDismiss)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 30)
             .padding(.top, 20)
 
             // ── Main Dashboard ──────────────────────────
