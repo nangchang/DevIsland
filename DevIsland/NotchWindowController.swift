@@ -1374,10 +1374,11 @@ struct NotchView: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var mascotState = MascotState.shared
     @State private var buddyPulse = false
+    @State private var localIsExpanded = false
 
     var forceCollapsed: Bool = false
     private var isExpanded: Bool {
-        forceCollapsed ? false : state.isNotchExpanded
+        forceCollapsed ? false : localIsExpanded
     }
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
@@ -1468,9 +1469,27 @@ struct NotchView: View {
             }
             if forceCollapsed {
                 mascotState.refresh(settings: settingsStore.settings, forceRandomize: true)
+            } else {
+                localIsExpanded = false
+                if state.isNotchExpanded {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        localIsExpanded = true
+                    }
+                }
             }
             
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
+        }
+        .onChange(of: state.isNotchExpanded) { newValue in
+            if !forceCollapsed {
+                if newValue {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        localIsExpanded = true
+                    }
+                } else {
+                    localIsExpanded = false
+                }
+            }
         }
         .onReceive(settingsStore.$settings) { settings in
             if forceCollapsed {
