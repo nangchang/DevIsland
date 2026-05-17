@@ -26,10 +26,33 @@ final class OpenPeonEventMapperTests: XCTestCase {
         XCTAssertEqual(map("PreCompact", for: .gemini), .resourceLimit)
     }
 
-    func testFailurePostToolUseMapsToTaskError() {
+    func testCodexPostToolUseSuccessFalseIsTaskError() {
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",
-            "tool_response": ["success": false]
+            "tool_response": [
+                "success": false,
+                "error": "compilation failed"
+            ]
+        ]
+
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "PostToolUse",
+                normalizedEvent: "posttooluse",
+                agentKind: .codex,
+                toolName: "Bash",
+                notificationType: "",
+                message: "",
+                payload: payload
+            ),
+            .taskError
+        )
+    }
+
+    func testCodexPostToolUseStatusErrorIsTaskError() {
+        let payload: [String: Any] = [
+            "hook_event_name": "PostToolUse",
+            "tool_response": ["status": "error"]
         ]
 
         XCTAssertEqual(
@@ -113,6 +136,31 @@ final class OpenPeonEventMapperTests: XCTestCase {
             ),
             .taskComplete,
             "Descriptive messages about errors in tool_response stdout/stderr should not trigger taskError sound for Codex"
+        )
+    }
+
+    func testCodexPostToolUseEmptyErrorValueIsTaskComplete() {
+        let payload: [String: Any] = [
+            "hook_event_name": "PostToolUse",
+            "tool_response": [
+                "success": true,
+                "error": NSNull(),
+                "errors": [],
+                "failed": false
+            ]
+        ]
+
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "PostToolUse",
+                normalizedEvent: "posttooluse",
+                agentKind: .codex,
+                toolName: "Bash",
+                notificationType: "",
+                message: "",
+                payload: payload
+            ),
+            .taskComplete
         )
     }
 

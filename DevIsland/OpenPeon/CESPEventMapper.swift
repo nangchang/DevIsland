@@ -110,7 +110,7 @@ enum CESPEventMapper {
         case "posttooluse":
             // For Codex tool results, prioritize machine-readable signals in the payload.
             // Avoid generic 'message' matching to prevent false positives from conversational text.
-            if let payload, containsFailure(in: payload) {
+            if let payload, containsStructuredFailure(in: payload) {
                 return .taskError
             }
             // Even if message contains 'error', if payload doesn't confirm it, treat as complete.
@@ -155,6 +155,63 @@ enum CESPEventMapper {
 
     private static let conversationalKeys: Set<String> = ["message", "prompt", "stdout", "stderr", "description"]
 
+    private static func containsStructuredFailure(in value: Any) -> Bool {
+        if let dict = value as? [String: Any] {
+            if containsExplicitFailureFields(in: dict) {
+                return true
+            }
+            for (_, nested) in dict {
+                if containsStructuredFailure(in: nested) {
+                    return true
+                }
+            }
+        } else if let array = value as? [Any] {
+            return array.contains { containsStructuredFailure(in: $0) }
+        }
+        return false
+    }
+
+    private static func containsExplicitFailureFields(in dict: [String: Any]) -> Bool {
+        for (key, nested) in dict {
+            let lowerKey = key.lowercased()
+            if ["error", "errors", "exception", "failed", "failure"].contains(lowerKey),
+               hasMeaningfulFailureValue(nested) {
+                return true
+            }
+            if lowerKey == "success", let success = nested as? Bool, success == false {
+                return true
+            }
+            if lowerKey == "status",
+               let status = nested as? String,
+               ["failed", "failure", "error"].contains(status.lowercased()) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func hasMeaningfulFailureValue(_ value: Any) -> Bool {
+        if value is NSNull {
+            return false
+        }
+        if let bool = value as? Bool {
+            return bool
+        }
+        if let string = value as? String {
+            return !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if let array = value as? [Any] {
+            return !array.isEmpty
+        }
+        if let dict = value as? [String: Any] {
+            return !dict.isEmpty
+        }
+        return true
+    }
+
+    // Legacy/common fallback used outside provider-specific completion mappings.
+    // Codex PostToolUse and Claude PostToolUse avoid this text scanner because
+    // their tool output can legitimately contain error-related words.
     private static func containsFailure(in value: Any, key: String? = nil) -> Bool {
         if let key = key?.lowercased(), conversationalKeys.contains(key) {
             return false
