@@ -460,7 +460,7 @@ final class AppStateTests: XCTestCase {
     // MARK: - Gemini Emulation Mode (emulateGeminiInteractiveMode = true)
 
     func testGeminiEmulationModeRiskyToolRequiresApproval() {
-        appState.emulateGeminiInteractiveMode = true
+        appState.geminiState.emulateInteractiveMode = true
         let sessionId = "gemini-emulate-risky"
         let message = """
         {
@@ -481,7 +481,7 @@ final class AppStateTests: XCTestCase {
         // Safe tools in emulation mode still go to pending unless autoApproveSafeTools is enabled.
         // The emulation block only skips the isAutoApprovedGlobal reset for safe tools;
         // it does not set autoApproval itself — that requires the separate autoApproveSafeTools setting.
-        appState.emulateGeminiInteractiveMode = true
+        appState.geminiState.emulateInteractiveMode = true
         let message = """
         {
             "hook_event_name": "BeforeTool",
@@ -496,7 +496,7 @@ final class AppStateTests: XCTestCase {
     }
 
     func testGeminiEmulationModeSafeToolAutoApprovedWhenSettingEnabled() {
-        appState.emulateGeminiInteractiveMode = true
+        appState.geminiState.emulateInteractiveMode = true
         appState.autoApproveSafeTools = true
         let expectation = XCTestExpectation(description: "Safe tool auto-approved with autoApproveSafeTools enabled")
         let message = """
@@ -517,7 +517,7 @@ final class AppStateTests: XCTestCase {
     }
 
     func testGeminiEmulationModeExplicitGlobalApproveBypassesBlock() {
-        appState.emulateGeminiInteractiveMode = true
+        appState.geminiState.emulateInteractiveMode = true
         appState.globalAutoApproveTypes.insert("write_to_file")
 
         let expectation = XCTestExpectation(description: "Explicitly approved tool passes through even in emulation mode")
@@ -538,7 +538,7 @@ final class AppStateTests: XCTestCase {
     }
 
     func testGeminiEmulationModeExplicitSessionApproveBypassesBlock() {
-        appState.emulateGeminiInteractiveMode = true
+        appState.geminiState.emulateInteractiveMode = true
         let sessionId = "gemini-emulate-session"
         appState.sessionStore.sessionAutoApproveTypes[sessionId] = ["replace_file_content"]
 
@@ -566,7 +566,7 @@ final class AppStateTests: XCTestCase {
         //              exit_plan_mode=medium, enter_plan_mode=medium (no matching heuristic keyword).
         // Consequence: auto-edit state is set but has no effect on risky tools in emulation mode —
         // every risky tool always requires manual approval.
-        appState.emulateGeminiInteractiveMode = true
+        appState.geminiState.emulateInteractiveMode = true
         let sessionId = "gemini-emulate-autoedit"
 
         // Step 1: risky tool → pending queue

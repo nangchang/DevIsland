@@ -111,11 +111,10 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 // MARK: - App State
 
 // AppState is the central hub: owns the IPC server, session list, pending approval queue,
-// and decision dispatch. It also holds Gemini-specific UX state (auto-edit mode, emulation).
+// and decision dispatch.
 //
-// TODO(gap-5): AppState (~93 KB) handles too many concerns. 
-//   Progress: PTYSessionBuffer, ReplayRecorder, and SessionStore were extracted in P4.
-//   Next: GeminiSessionState should be extracted.
+// gap-5 (done): GeminiSessionState extracted (emulateInteractiveMode + UserDefaults persistence).
+//   PTYSessionBuffer, ReplayRecorder, SessionStore were extracted in P4.
 //   Splitting reduces test surface and makes each concern independently testable.
 //   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
 class AppState: ObservableObject {
@@ -140,7 +139,6 @@ class AppState: ObservableObject {
         static let requestDisplayTarget = "requestDisplayTarget"
         static let globalAutoApproveTypes = "globalAutoApproveTypes"
         static let autoApproveSafeTools = "autoApproveSafeTools"
-        static let emulateGeminiInteractiveMode = "emulateGeminiInteractiveMode"
     }
 
     typealias FrontmostCheck = (
@@ -193,12 +191,6 @@ class AppState: ObservableObject {
         }
     }
     
-    @Published var emulateGeminiInteractiveMode = false {
-        didSet {
-            userDefaults.set(emulateGeminiInteractiveMode, forKey: DefaultsKey.emulateGeminiInteractiveMode)
-        }
-    }
-    
     // gap-3 (done): All providers now write to SQLiteApprovalStore via persistApprovalScope.
     // These in-memory sets remain as a fast-path read cache for the current session only.
     // globalAutoApproveTypes is also persisted to UserDefaults for backward compatibility
@@ -208,6 +200,7 @@ class AppState: ObservableObject {
     private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
 
     let sessionStore: SessionStore
+    let geminiState: GeminiSessionState
 
     private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
@@ -244,6 +237,7 @@ class AppState: ObservableObject {
         self.approvalProxy = approvalProxy
         self.codexRuleSyncAdapter = codexRuleSyncAdapter
         self.sessionStore = SessionStore()
+        self.geminiState = GeminiSessionState(userDefaults: userDefaults)
         self.replayRecorder = ReplayRecorder(proxy: approvalProxy, queue: approvalPersistenceQueue)
         
         if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
@@ -301,7 +295,6 @@ class AppState: ObservableObject {
             globalAutoApproveTypes = Set(rules.map(\.toolName))
         }
         autoApproveSafeTools = userDefaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
-        emulateGeminiInteractiveMode = userDefaults.bool(forKey: DefaultsKey.emulateGeminiInteractiveMode)
         ensureSelectedDisplay()
 
         if let proxy = approvalProxy {
@@ -923,7 +916,7 @@ class AppState: ObservableObject {
             return
         }
 
-        let isGeminiNormalMode = agentKind == .gemini && !emulateGeminiInteractiveMode
+        let isGeminiNormalMode = agentKind == .gemini && !geminiState.emulateInteractiveMode
         
         guard isApproval && !isGeminiNormalMode else {
             print("[DevIsland] ignoring non-approval event (or Gemini normal mode): \(event)")
@@ -1003,7 +996,7 @@ class AppState: ObservableObject {
         // [핵심] 제미나이 일반 모드 에뮬레이션 로직
         // 제미나이 CLI가 --auto-approve나 --yolo로 실행되어 터미널 프롬프트가 뜨지 않는 상황일 때,
         // DevIsland가 'Interactive 모드'처럼 위험한 툴을 선별해서 승인 창을 띄웁니다.
-        if emulateGeminiInteractiveMode && agentKind == .gemini {
+        if geminiState.emulateInteractiveMode && agentKind == .gemini {
             let isExplicitlyApproved = globalAutoApproveTypes.contains(toolName) || isAutoApprovedSession
             if GeminiPromptPolicy.emulationShouldForceApproval(toolName: toolName, isExplicitlyApproved: isExplicitlyApproved) {
                 isAutoApprovedGlobal = false
