@@ -41,7 +41,7 @@ final class L10n: ObservableObject {
 
     var isKorean: Bool {
         switch language {
-        case .system:  return Locale.current.language.languageCode?.identifier == "ko"
+        case .system:  return Locale.preferredLanguages.first?.hasPrefix("ko") ?? false
         case .english: return false
         case .korean:  return true
         }
@@ -159,9 +159,9 @@ extension L10n {
 
     // General tab
     var secApprovalProxy:    String { s("Approval Proxy",               "승인 프록시") }
-    var descApprovalProxy:   String { s("DevIsland acts as a policy-based Approval Proxy daemon. The macOS app handles all policy decisions; the bridge scripts stay thin. See AGENTS.md for architecture details.",
-                                        "DevIsland는 정책 기반 승인 프록시 데몬으로 동작합니다. macOS 앱이 모든 정책 결정을 처리하고, 브리지 스크립트는 최소화됩니다. 아키텍처 세부 사항은 AGENTS.md를 참조하세요.") }
-    var btnResetProxy:       String { s("Reset Approval Proxy Settings", "승인 프록시 설정 초기화") }
+    var descApprovalProxy:   String { s("DevIsland intercepts AI agent tool requests and applies your approval rules before allowing or blocking each action.",
+                                        "DevIsland가 AI 에이전트의 도구 요청을 가로채 승인 규칙을 적용한 후 각 작업을 허용하거나 차단합니다.") }
+    var btnResetProxy:       String { s("Reset All Settings to Defaults", "모든 설정 초기화") }
     var secLanguage:         String { s("Language",                      "언어") }
     var lblLanguage:         String { s("Language",                      "언어") }
 
