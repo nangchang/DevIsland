@@ -49,9 +49,19 @@ struct ApprovalPolicyEngine {
         }
     }
 
+    private static let regexCache = NSCache<NSString, NSRegularExpression>()
+
     private static func regexMatches(pattern: String, against input: String) -> Bool {
         guard pattern.count <= 200 else { return false }
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        let key = pattern as NSString
+        let regex: NSRegularExpression
+        if let cached = regexCache.object(forKey: key) {
+            regex = cached
+        } else {
+            guard let compiled = try? NSRegularExpression(pattern: pattern) else { return false }
+            regexCache.setObject(compiled, forKey: key)
+            regex = compiled
+        }
         let range = NSRange(input.startIndex..., in: input)
         return regex.firstMatch(in: input, options: .withoutAnchoringBounds, range: range) != nil
     }
