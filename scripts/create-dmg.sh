@@ -6,7 +6,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 EXPORT_DIR="$BUILD_DIR/Export"
 ARCHIVE_PATH="$BUILD_DIR/$APP_NAME.xcarchive"
-DMG_PATH="$ROOT_DIR/$APP_NAME.dmg"
+
+VERSION="$(grep 'CFBundleShortVersionString:' "$ROOT_DIR/project.yml" | sed -E 's/.*: "(.*)"/\1/')"
+ARCH="arm64"
+DMG_NAME="${APP_NAME}-${VERSION}-${ARCH}"
+DMG_PATH="$ROOT_DIR/${DMG_NAME}.dmg"
 
 cd "$ROOT_DIR"
 
