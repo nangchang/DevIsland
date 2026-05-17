@@ -265,7 +265,7 @@ class NotchWindowController: NSWindowController {
                 self?.updateWindowFrame(animate: false)
             }
             pendingSettle = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + notchCollapseDuration, execute: work)
         }
     }
 
