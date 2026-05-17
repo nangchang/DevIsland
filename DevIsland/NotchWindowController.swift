@@ -1327,15 +1327,53 @@ struct SessionRowView: View {
 }
 
 // MARK: - Notch View
+class MascotState: ObservableObject {
+    static let shared = MascotState()
+    
+    @Published var leftMascot: BuddyKind = .claudeCode
+    @Published var rightMascot: BuddyKind = .gemini
+    
+    func refresh(settings: AppSettings, forceRandomize: Bool = false) {
+        leftMascot = resolvedMascot(
+            current: forceRandomize ? nil : leftMascot,
+            mode: settings.notchLeftCharacterMode,
+            specific: settings.notchLeftCharacterKind,
+            randomCandidates: settings.notchLeftRandomCharacterKinds
+        )
+        rightMascot = resolvedMascot(
+            current: forceRandomize ? nil : rightMascot,
+            mode: settings.notchRightCharacterMode,
+            specific: settings.notchRightCharacterKind,
+            randomCandidates: settings.notchRightRandomCharacterKinds
+        )
+    }
+    
+    private func resolvedMascot(
+        current: BuddyKind?,
+        mode: NotchCharacterMode,
+        specific: BuddyKind,
+        randomCandidates: Set<BuddyKind>
+    ) -> BuddyKind {
+        switch mode {
+        case .specific:
+            return specific
+        case .random:
+            let candidates = randomCandidates.isEmpty ? Set(BuddyKind.defaultRandomCases) : randomCandidates
+            if let current, candidates.contains(current) {
+                return current
+            }
+            return candidates.randomElement() ?? .claudeCode
+        }
+    }
+}
 
 struct NotchView: View {
     @ObservedObject var state = AppState.shared
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var settingsStore = SettingsStore.shared
     @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var mascotState = MascotState.shared
     @State private var buddyPulse = false
-    @State private var leftMascot: BuddyKind = .claudeCode
-    @State private var rightMascot: BuddyKind = .gemini
 
     var forceCollapsed: Bool = false
     private var isExpanded: Bool {
@@ -1428,45 +1466,16 @@ struct NotchView: View {
             withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
                 buddyPulse = true
             }
-            refreshMascots(settings: settingsStore.settings, forceRandomize: true)
+            if forceCollapsed {
+                mascotState.refresh(settings: settingsStore.settings, forceRandomize: true)
+            }
             
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
         }
         .onReceive(settingsStore.$settings) { settings in
-            refreshMascots(settings: settings)
-        }
-    }
-
-    private func refreshMascots(settings: AppSettings, forceRandomize: Bool = false) {
-        leftMascot = resolvedMascot(
-            current: forceRandomize ? nil : leftMascot,
-            mode: settings.notchLeftCharacterMode,
-            specific: settings.notchLeftCharacterKind,
-            randomCandidates: settings.notchLeftRandomCharacterKinds
-        )
-        rightMascot = resolvedMascot(
-            current: forceRandomize ? nil : rightMascot,
-            mode: settings.notchRightCharacterMode,
-            specific: settings.notchRightCharacterKind,
-            randomCandidates: settings.notchRightRandomCharacterKinds
-        )
-    }
-
-    private func resolvedMascot(
-        current: BuddyKind?,
-        mode: NotchCharacterMode,
-        specific: BuddyKind,
-        randomCandidates: Set<BuddyKind>
-    ) -> BuddyKind {
-        switch mode {
-        case .specific:
-            return specific
-        case .random:
-            let candidates = randomCandidates.isEmpty ? Set(BuddyKind.defaultRandomCases) : randomCandidates
-            if let current, candidates.contains(current) {
-                return current
+            if forceCollapsed {
+                mascotState.refresh(settings: settings)
             }
-            return candidates.randomElement() ?? .claudeCode
         }
     }
 
@@ -1481,7 +1490,7 @@ struct NotchView: View {
             HStack {
                 CLIBuddyView(
                     isActive: buddyPulse,
-                    kind: leftMascot
+                    kind: mascotState.leftMascot
                 )
                 .frame(width: 24, height: 24)
                 .offset(x: -6, y: 4)
@@ -1490,7 +1499,7 @@ struct NotchView: View {
 
                 CLIBuddyView(
                     isActive: buddyPulse, 
-                    kind: rightMascot
+                    kind: mascotState.rightMascot
                 )
                 .frame(width: 24, height: 24)
                 .offset(x: 6, y: 4)
