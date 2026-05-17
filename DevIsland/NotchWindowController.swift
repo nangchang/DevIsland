@@ -5,8 +5,8 @@ import CoreGraphics
 
 // MARK: - Window Controller
 
-fileprivate let collapsedNotchSize = NSSize(width: 248, height: 32)
-fileprivate let expandedNotchSize = NSSize(width: 680, height: 300)
+fileprivate let collapsedNotchSize = NSSize(width: 260, height: 32)
+fileprivate let expandedNotchSize = NSSize(width: 692, height: 300)
 fileprivate let notchHorizontalOffset: CGFloat = -10
 
 class NotchWindowController: NSWindowController {
@@ -1419,12 +1419,9 @@ struct NotchView: View {
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
                     // Background
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: 0,
-                        bottomLeadingRadius: isExpanded ? 24 : 14,
-                        bottomTrailingRadius: isExpanded ? 24 : 14,
-                        topTrailingRadius: 0,
-                        style: .continuous
+                    NotchShape(
+                        cornerRadius: isExpanded ? 24 : 14,
+                        topFilletRadius: 6
                     )
                     .fill(Color.black)
                     .frame(
@@ -1843,5 +1840,51 @@ struct NotchView: View {
         if state.timeoutProgress > 0.5  { return .green }
         if state.timeoutProgress > 0.25 { return .orange }
         return .red
+    }
+}
+
+// MARK: - Custom Shapes
+
+struct NotchShape: Shape {
+    var cornerRadius: CGFloat
+    var topFilletRadius: CGFloat
+    
+    var animatableData: CGFloat {
+        get { cornerRadius }
+        set { cornerRadius = newValue }
+    }
+    
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        
+        let w = rect.width
+        let h = rect.height
+        let r = cornerRadius
+        let tr = topFilletRadius
+        
+        // Top Left Fillet
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addQuadCurve(to: CGPoint(x: tr, y: tr), control: CGPoint(x: tr, y: 0))
+        
+        // Left Edge
+        path.addLine(to: CGPoint(x: tr, y: h - r))
+        
+        // Bottom Left Corner
+        path.addQuadCurve(to: CGPoint(x: tr + r, y: h), control: CGPoint(x: tr, y: h))
+        
+        // Bottom Edge
+        path.addLine(to: CGPoint(x: w - tr - r, y: h))
+        
+        // Bottom Right Corner
+        path.addQuadCurve(to: CGPoint(x: w - tr, y: h - r), control: CGPoint(x: w - tr, y: h))
+        
+        // Right Edge
+        path.addLine(to: CGPoint(x: w - tr, y: tr))
+        
+        // Top Right Fillet
+        path.addQuadCurve(to: CGPoint(x: w, y: 0), control: CGPoint(x: w - tr, y: 0))
+        
+        path.closeSubpath()
+        return path
     }
 }
