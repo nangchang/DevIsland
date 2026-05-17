@@ -8,7 +8,7 @@ EXPORT_DIR="$BUILD_DIR/Export"
 ARCHIVE_PATH="$BUILD_DIR/$APP_NAME.xcarchive"
 
 VERSION="$(grep 'CFBundleShortVersionString:' "$ROOT_DIR/project.yml" | sed -E 's/.*: "(.*)"/\1/')"
-ARCH="$(uname -m)"
+ARCH="arm64"
 DMG_NAME="${APP_NAME}-${VERSION}-${ARCH}"
 DMG_PATH="$ROOT_DIR/${DMG_NAME}.dmg"
 
