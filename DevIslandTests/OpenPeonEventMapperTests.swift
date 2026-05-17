@@ -19,6 +19,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
         XCTAssertEqual(map("Stop", for: .gemini), .taskComplete)
         XCTAssertEqual(map("Stop", for: .claudeCode), .taskComplete)
         XCTAssertEqual(map("PostToolUse", for: .codex), .taskComplete)
+        XCTAssertEqual(map("PostToolUse", for: .claudeCode), .taskComplete)
     }
 
     func testPreCompactMapsToResourceLimit() {
@@ -42,6 +43,52 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 payload: payload
             ),
             .taskError
+        )
+    }
+
+    func testClaudePostToolUseFailureMapsToTaskError() {
+        let payload: [String: Any] = [
+            "hook_event_name": "PostToolUseFailure",
+            "error": "Tool execution failed",
+            "is_interrupt": false
+        ]
+
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "PostToolUseFailure",
+                normalizedEvent: "posttoolusefailure",
+                agentKind: .claudeCode,
+                toolName: "Bash",
+                notificationType: "",
+                message: "Tool execution failed",
+                payload: payload
+            ),
+            .taskError
+        )
+    }
+
+    func testClaudePostToolUseOutputDescribingErrorIsTaskComplete() {
+        let payload: [String: Any] = [
+            "hook_event_name": "PostToolUse",
+            "tool_response": [
+                "stdout": "** TEST FAILED **\nerror: compiler diagnostic",
+                "stderr": "",
+                "interrupted": false
+            ]
+        ]
+
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "PostToolUse",
+                normalizedEvent: "posttooluse",
+                agentKind: .claudeCode,
+                toolName: "Bash",
+                notificationType: "",
+                message: "** TEST FAILED **\nerror: compiler diagnostic",
+                payload: payload
+            ),
+            .taskComplete,
+            "Claude PostToolUse means the tool completed; PostToolUseFailure carries tool execution failures"
         )
     }
 

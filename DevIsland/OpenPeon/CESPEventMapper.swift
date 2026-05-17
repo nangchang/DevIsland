@@ -35,6 +35,10 @@ enum CESPEventMapper {
             return .inputRequired
         case "pretooluse":
             return .taskAcknowledge
+        case "posttooluse":
+            return .taskComplete
+        case "posttoolusefailure":
+            return .taskError
         case "stop":
             // Sound feedback treats Stop as task completion without changing AppState's
             // lifecycle/pruning rules for provider sessions.
