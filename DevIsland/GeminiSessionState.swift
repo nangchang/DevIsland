@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// Gemini-specific global state extracted from AppState.
 ///

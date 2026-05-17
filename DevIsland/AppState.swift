@@ -115,6 +115,8 @@ enum NotchDisplayTarget: String, CaseIterable, Identifiable {
 //
 // gap-5 (done): GeminiSessionState extracted (emulateInteractiveMode + UserDefaults persistence).
 //   PTYSessionBuffer, ReplayRecorder, SessionStore were extracted in P4.
+//   Splitting reduces test surface and makes each concern independently testable.
+//   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
 class AppState: ObservableObject {
     static let shared = AppState(
         startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1",
