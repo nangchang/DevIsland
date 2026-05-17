@@ -105,7 +105,7 @@ enum ToolMessageFormatter {
         return ""
     }
 
-    static func postToolMessage(from response: [String: Any]?) -> String {
+    private static func postToolMessage(from response: [String: Any]?) -> String {
         guard let response = response else { return "Completed" }
         if let stdout = response["stdout"] as? String, !stdout.isEmpty {
             return stdout
@@ -150,12 +150,12 @@ enum ToolMessageFormatter {
         return joinedMessageLines(lines)
     }
 
-    static func prefixedBlock(_ label: String, _ value: String?) -> String? {
+    private static func prefixedBlock(_ label: String, _ value: String?) -> String? {
         guard let value = value, !value.isEmpty else { return nil }
         return "\(label):\n\(value)"
     }
 
-    static func joinedMessageLines(_ lines: [String?]) -> String {
+    private static func joinedMessageLines(_ lines: [String?]) -> String {
         lines.compactMap { line in
             guard let line = line?.trimmingCharacters(in: .whitespacesAndNewlines), !line.isEmpty else {
                 return nil

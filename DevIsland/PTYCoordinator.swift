@@ -77,11 +77,11 @@ final class PTYCoordinator {
         ptyBuffer.remove(sessionId: sessionId)
     }
 
-    func isEnabled() -> Bool {
+    private func isEnabled() -> Bool {
         userDefaults.bool(forKey: SettingsStore.DefaultsKey.ptyEnabled)
     }
 
-    func autoInjectPatterns() -> [PTYAutoInjectPattern] {
+    private func autoInjectPatterns() -> [PTYAutoInjectPattern] {
         guard let data = userDefaults.data(forKey: SettingsStore.DefaultsKey.ptyAutoInjectPatterns),
               let patterns = try? JSONDecoder().decode([PTYAutoInjectPattern].self, from: data) else {
             return []
