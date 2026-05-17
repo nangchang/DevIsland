@@ -152,9 +152,22 @@ fi
 if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ -n "$CMUX_WORKSPACE_ID" ] || [ -n "$CMUX_SURFACE_ID" ]; }; then
   if osascript -e 'return (application "cmux" is running)' 2>/dev/null | grep -q "true"; then
     TERM_APP="cmux"
-    # TERM_TITLE은 비워둬서 아래의 PWD 폴백이 처리하도록 함.
-    # cmux current-workspace는 포커스된 워크스페이스를 반환해서 다른 세션의 타이틀도 함께 변경됨.
-    TERM_TITLE=""
+    # ID로 워크스페이스 이름을 조회 — current-workspace는 포커스 상태에 따라 바뀌므로 사용 안 함
+    if [ -n "$CMUX_WORKSPACE_ID" ]; then
+      TERM_TITLE=$(osascript 2>/dev/null << ASEOF
+tell application "cmux"
+  repeat with aWindow in windows
+    repeat with aTab in tabs of aWindow
+      if (id of aTab) is "$CMUX_WORKSPACE_ID" then
+        return name of aTab
+      end if
+    end repeat
+  end repeat
+  return ""
+end tell
+ASEOF
+)
+    fi
     TERM_WINDOW_ID="${CMUX_WORKSPACE_ID:-}"
     TERM_TAB_INDEX="${CMUX_SURFACE_ID:-}"
   fi
