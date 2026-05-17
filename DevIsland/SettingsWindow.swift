@@ -160,7 +160,7 @@ private struct GeneralSettingsPane: View {
             Section(l10n.secApprovalProxy) {
                 Text(l10n.descApprovalProxy)
                     .foregroundStyle(.secondary)
-                Button(l10n.btnResetProxy) {
+                Button(l10n.btnResetAllSettings) {
                     store.resetToDefaults()
                 }
             }
