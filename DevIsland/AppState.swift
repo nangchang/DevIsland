@@ -108,7 +108,7 @@ class AppState: ObservableObject {
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
-    private let ptyBuffer = PTYSessionBuffer()
+    private let ptyCoordinator: PTYCoordinator
     private var timeoutDuration: Double {
         let v = userDefaults.double(forKey: SettingsStore.DefaultsKey.permissionTimeoutSeconds)
         return v > 0 ? v : 120.0
@@ -130,6 +130,12 @@ class AppState: ObservableObject {
         self.codexRuleSyncAdapter = codexRuleSyncAdapter
         self.sessionStore = SessionStore()
         self.geminiState = GeminiSessionState(userDefaults: userDefaults)
+        self.ptyCoordinator = PTYCoordinator(
+            ptyBuffer: PTYSessionBuffer(),
+            approvalProxy: approvalProxy,
+            persistenceQueue: approvalPersistenceQueue,
+            userDefaults: userDefaults
+        )
         self.replayRecorder = ReplayRecorder(proxy: approvalProxy, queue: approvalPersistenceQueue)
         
         if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
@@ -249,7 +255,7 @@ class AppState: ObservableObject {
                 guard let self else { return }
                 let prunedIds = self.sessionStore.pruneInactiveSessions()
                 for id in prunedIds {
-                    self.clearPTYOutputBuffer(sessionId: id)
+                    self.ptyCoordinator.clearBuffer(sessionId: id)
                 }
             }
         }
@@ -517,7 +523,7 @@ class AppState: ObservableObject {
 
         // PTY output events are handled before hook_events recording to avoid polluting the replay log.
         if event == "PTYOutput" {
-            handlePTYOutputEvent(
+            ptyCoordinator.handleOutputEvent(
                 sessionId: sessionId,
                 provider: providerKind(for: agentKind),
                 content: (parsedJSON?["content"] as? String) ?? "",
@@ -607,7 +613,7 @@ class AppState: ObservableObject {
                     )
                 }
                 self.sessionStore.removeSession(id: fullSessionId)
-                self.clearPTYOutputBuffer(sessionId: fullSessionId)
+                self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
 
                 if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                     self.currentResponseHandler = nil
@@ -1113,7 +1119,7 @@ class AppState: ObservableObject {
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
             self.sessionStore.removeSession(id: sessionId)
-            self.clearPTYOutputBuffer(sessionId: sessionId)
+            self.ptyCoordinator.clearBuffer(sessionId: sessionId)
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                 self.currentResponseHandler?("{\"response\": \"pass\"}")
@@ -1490,74 +1496,6 @@ class AppState: ObservableObject {
     func ptyMessages(sessionId: String? = nil, limit: Int = 500) throws -> [PTYMessage] {
         guard let approvalProxy else { return [] }
         return try approvalProxy.ptyMessages(sessionId: sessionId, limit: limit)
-    }
-
-    private func handlePTYOutputEvent(
-        sessionId: String,
-        provider: ProviderKind,
-        content: String,
-        responseHandler: (String) -> Void
-    ) {
-        guard currentPTYEnabled(), !content.isEmpty else {
-            responseHandler("{\"response\":\"approved\"}")
-            return
-        }
-        let window = ptyBuffer.appendAndWindow(sessionId: sessionId, content: content)
-        let patterns = currentPTYAutoInjectPatterns()
-        let matched = patterns.first { window.lowercased().contains($0.pattern.lowercased()) }
-        let injectionText = matched?.response
-
-        if injectionText != nil {
-            ptyBuffer.clearOnMatch(sessionId: sessionId)
-        }
-
-        approvalPersistenceQueue.async { [weak self] in
-            guard let self else { return }
-            do {
-                try self.approvalProxy?.recordPTYMessage(
-                    sessionId: sessionId,
-                    provider: provider,
-                    direction: .output,
-                    content: content
-                )
-                if let injection = injectionText {
-                    try self.approvalProxy?.recordPTYMessage(
-                        sessionId: sessionId,
-                        provider: provider,
-                        direction: .input,
-                        content: injection
-                    )
-                }
-            } catch {
-                print("[DevIsland] [PTY] Failed to record PTY message: \(error)")
-            }
-        }
-
-        if let injection = injectionText {
-            let resp: [String: Any] = ["response": "approved", "injection": injection]
-            if let data = try? JSONSerialization.data(withJSONObject: resp),
-               let str = String(data: data, encoding: .utf8) {
-                responseHandler(str)
-                return
-            }
-        }
-        responseHandler("{\"response\":\"approved\"}")
-    }
-
-    private func clearPTYOutputBuffer(sessionId: String) {
-        ptyBuffer.remove(sessionId: sessionId)
-    }
-
-    private func currentPTYEnabled() -> Bool {
-        userDefaults.bool(forKey: SettingsStore.DefaultsKey.ptyEnabled)
-    }
-
-    private func currentPTYAutoInjectPatterns() -> [PTYAutoInjectPattern] {
-        guard let data = userDefaults.data(forKey: SettingsStore.DefaultsKey.ptyAutoInjectPatterns),
-              let patterns = try? JSONDecoder().decode([PTYAutoInjectPattern].self, from: data) else {
-            return []
-        }
-        return patterns
     }
 
     private func startTimeout() {
