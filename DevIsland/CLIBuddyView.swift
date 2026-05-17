@@ -461,15 +461,17 @@ PixelCell(64, 80, 8, 4, c0),
     private func pixelGrid(size: CGFloat, cells: [PixelCell]) -> some View {
         let unit = size / 128
 
-        return ZStack(alignment: .topLeading) {
-            ForEach(cells.indices, id: \.self) { index in
-                let cell = cells[index]
-                Rectangle()
-                    .fill(cell.color)
-                    .frame(width: unit * CGFloat(cell.width), height: unit * CGFloat(cell.height))
-                    .offset(x: unit * CGFloat(cell.x), y: unit * CGFloat(cell.y))
+        return Canvas { context, _ in
+            for cell in cells {
+                let rect = CGRect(
+                    x: unit * CGFloat(cell.x),
+                    y: unit * CGFloat(cell.y),
+                    width: unit * CGFloat(cell.width),
+                    height: unit * CGFloat(cell.height)
+                )
+                context.fill(Path(rect), with: .color(cell.color))
             }
         }
-        .frame(width: size, height: size, alignment: .topLeading)
+        .frame(width: size, height: size)
     }
 }
