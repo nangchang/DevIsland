@@ -109,7 +109,7 @@ struct SettingsWindowView: View {
             GeneralSettingsPane(store: store)
                 .tabItem { Label(l10n.tabGeneral, systemImage: "gearshape") }
 
-            DisplaySettingsPane(appState: appState)
+            DisplaySettingsPane(appState: appState, store: store)
                 .tabItem { Label(l10n.tabDisplay, systemImage: "display") }
 
             ApprovalSettingsPane(appState: appState, store: store)
@@ -171,6 +171,7 @@ private struct GeneralSettingsPane: View {
 
 private struct DisplaySettingsPane: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
@@ -193,6 +194,24 @@ private struct DisplaySettingsPane: View {
                 Toggle(l10n.lblShowFullScreen, isOn: $appState.showInFullScreenApps)
             }
 
+            Section(l10n.secNotchCharacters) {
+                NotchCharacterControl(
+                    title: l10n.lblLeftCharacter,
+                    mode: store.binding(\.notchLeftCharacterMode),
+                    specificKind: store.binding(\.notchLeftCharacterKind),
+                    randomKinds: store.binding(\.notchLeftRandomCharacterKinds)
+                )
+
+                Divider()
+
+                NotchCharacterControl(
+                    title: l10n.lblRightCharacter,
+                    mode: store.binding(\.notchRightCharacterMode),
+                    specificKind: store.binding(\.notchRightCharacterKind),
+                    randomKinds: store.binding(\.notchRightRandomCharacterKinds)
+                )
+            }
+
             Section(l10n.secRequests) {
                 Picker(l10n.lblRequestDisplay, selection: $appState.requestDisplayTarget) {
                     ForEach(RequestDisplayTarget.allCases) { target in
@@ -208,6 +227,57 @@ private struct DisplaySettingsPane: View {
         let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 1
         let role = screen == NSScreen.main ? l10n.monitorMain() : l10n.monitorN(index)
         return "\(role) · \(Int(screen.frame.width))×\(Int(screen.frame.height))"
+    }
+}
+
+private struct NotchCharacterControl: View {
+    let title: String
+    @Binding var mode: NotchCharacterMode
+    @Binding var specificKind: BuddyKind
+    @Binding var randomKinds: Set<BuddyKind>
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker(title, selection: $mode) {
+                ForEach(NotchCharacterMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+
+            if mode == .specific {
+                Picker(l10n.lblCharacter, selection: $specificKind) {
+                    ForEach(BuddyKind.selectableCases) { kind in
+                        Text(kind.label).tag(kind)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(l10n.lblRandomIncludes)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    ForEach(BuddyKind.selectableCases) { kind in
+                        Toggle(kind.label, isOn: randomBinding(for: kind))
+                            .disabled(randomKinds.count == 1 && randomKinds.contains(kind))
+                    }
+                }
+                .padding(.leading, 2)
+            }
+        }
+    }
+
+    private func randomBinding(for kind: BuddyKind) -> Binding<Bool> {
+        Binding(
+            get: { randomKinds.contains(kind) },
+            set: { isIncluded in
+                if isIncluded {
+                    randomKinds.insert(kind)
+                } else if randomKinds.count > 1 {
+                    randomKinds.remove(kind)
+                }
+            }
+        )
     }
 }
 

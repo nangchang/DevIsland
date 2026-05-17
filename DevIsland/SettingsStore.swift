@@ -76,6 +76,21 @@ enum ApprovalFallbackPolicy: String, CaseIterable, Identifiable {
     }
 }
 
+enum NotchCharacterMode: String, CaseIterable, Identifiable {
+    case random
+    case specific
+
+    var id: String { rawValue }
+
+    var label: String {
+        let l = L10n.shared
+        switch self {
+        case .random:   return l.notchCharacterRandom
+        case .specific: return l.notchCharacterSpecific
+        }
+    }
+}
+
 struct AppSettings: Equatable {
     var claudeSessionApprovalMode: ClaudeSessionApprovalMode
     var claudePersistentApprovalDestination: ClaudePersistentApprovalDestination
@@ -98,6 +113,12 @@ struct AppSettings: Equatable {
     var openPeonGlobalMuted: Bool
     var openPeonMutedCategories: Set<String>
     var openPeonDebounceMilliseconds: Int
+    var notchLeftCharacterMode: NotchCharacterMode
+    var notchLeftCharacterKind: BuddyKind
+    var notchLeftRandomCharacterKinds: Set<BuddyKind>
+    var notchRightCharacterMode: NotchCharacterMode
+    var notchRightCharacterKind: BuddyKind
+    var notchRightRandomCharacterKinds: Set<BuddyKind>
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -151,7 +172,13 @@ struct AppSettings: Equatable {
             CESPCategory.sessionEnd.rawValue,
             CESPCategory.userSpam.rawValue
         ],
-        openPeonDebounceMilliseconds: 1500
+        openPeonDebounceMilliseconds: 1500,
+        notchLeftCharacterMode: .random,
+        notchLeftCharacterKind: .claudeCode,
+        notchLeftRandomCharacterKinds: Set(BuddyKind.defaultRandomCases),
+        notchRightCharacterMode: .random,
+        notchRightCharacterKind: .gemini,
+        notchRightRandomCharacterKinds: Set(BuddyKind.defaultRandomCases)
     )
 }
 
@@ -201,6 +228,12 @@ final class SettingsStore: ObservableObject {
         static let openPeonGlobalMuted = "openPeonGlobalMuted"
         static let openPeonMutedCategories = "openPeonMutedCategories"
         static let openPeonDebounceMilliseconds = "openPeonDebounceMilliseconds"
+        static let notchLeftCharacterMode = "notchLeftCharacterMode"
+        static let notchLeftCharacterKind = "notchLeftCharacterKind"
+        static let notchLeftRandomCharacterKinds = "notchLeftRandomCharacterKinds"
+        static let notchRightCharacterMode = "notchRightCharacterMode"
+        static let notchRightCharacterKind = "notchRightCharacterKind"
+        static let notchRightRandomCharacterKinds = "notchRightRandomCharacterKinds"
     }
 
     private let userDefaults: UserDefaults
@@ -248,6 +281,12 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.openPeonGlobalMuted, forKey: DefaultsKey.openPeonGlobalMuted)
         userDefaults.set(Array(settings.openPeonMutedCategories).sorted(), forKey: DefaultsKey.openPeonMutedCategories)
         userDefaults.set(settings.openPeonDebounceMilliseconds, forKey: DefaultsKey.openPeonDebounceMilliseconds)
+        userDefaults.set(settings.notchLeftCharacterMode.rawValue, forKey: DefaultsKey.notchLeftCharacterMode)
+        userDefaults.set(settings.notchLeftCharacterKind.rawValue, forKey: DefaultsKey.notchLeftCharacterKind)
+        userDefaults.set(settings.notchLeftRandomCharacterKinds.map(\.rawValue).sorted(), forKey: DefaultsKey.notchLeftRandomCharacterKinds)
+        userDefaults.set(settings.notchRightCharacterMode.rawValue, forKey: DefaultsKey.notchRightCharacterMode)
+        userDefaults.set(settings.notchRightCharacterKind.rawValue, forKey: DefaultsKey.notchRightCharacterKind)
+        userDefaults.set(settings.notchRightRandomCharacterKinds.map(\.rawValue).sorted(), forKey: DefaultsKey.notchRightRandomCharacterKinds)
         writeBridgeConfig(settings)
     }
 
@@ -395,6 +434,40 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.openPeonDebounceMilliseconds,
                 from: userDefaults,
                 default: defaults.openPeonDebounceMilliseconds
+            ),
+            notchLeftCharacterMode: enumValue(
+                NotchCharacterMode.self,
+                key: DefaultsKey.notchLeftCharacterMode,
+                from: userDefaults,
+                default: defaults.notchLeftCharacterMode
+            ),
+            notchLeftCharacterKind: enumValue(
+                BuddyKind.self,
+                key: DefaultsKey.notchLeftCharacterKind,
+                from: userDefaults,
+                default: defaults.notchLeftCharacterKind
+            ),
+            notchLeftRandomCharacterKinds: buddyKindSet(
+                key: DefaultsKey.notchLeftRandomCharacterKinds,
+                from: userDefaults,
+                default: defaults.notchLeftRandomCharacterKinds
+            ),
+            notchRightCharacterMode: enumValue(
+                NotchCharacterMode.self,
+                key: DefaultsKey.notchRightCharacterMode,
+                from: userDefaults,
+                default: defaults.notchRightCharacterMode
+            ),
+            notchRightCharacterKind: enumValue(
+                BuddyKind.self,
+                key: DefaultsKey.notchRightCharacterKind,
+                from: userDefaults,
+                default: defaults.notchRightCharacterKind
+            ),
+            notchRightRandomCharacterKinds: buddyKindSet(
+                key: DefaultsKey.notchRightRandomCharacterKinds,
+                from: userDefaults,
+                default: defaults.notchRightRandomCharacterKinds
             )
         )
     }
@@ -443,5 +516,15 @@ final class SettingsStore: ObservableObject {
     private static func bool(key: String, from userDefaults: UserDefaults, default defaultValue: Bool) -> Bool {
         guard userDefaults.object(forKey: key) != nil else { return defaultValue }
         return userDefaults.bool(forKey: key)
+    }
+
+    private static func buddyKindSet(
+        key: String,
+        from userDefaults: UserDefaults,
+        default defaultValue: Set<BuddyKind>
+    ) -> Set<BuddyKind> {
+        guard let values = userDefaults.stringArray(forKey: key) else { return defaultValue }
+        let kinds = Set(values.compactMap(BuddyKind.init(rawValue:)))
+        return kinds.isEmpty ? defaultValue : kinds
     }
 }
