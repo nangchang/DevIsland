@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew/downloads
+          key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: ${{ runner.os }}-brew-
+
+      - name: Cache XcodeGen
+        id: cache-xcodegen
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew/bin/xcodegen
+            /opt/homebrew/Cellar/xcodegen
+          key: ${{ runner.os }}-xcodegen-${{ hashFiles('.github/workflows/ci.yml') }}
+
+      - name: Install XcodeGen
+        if: steps.cache-xcodegen.outputs.cache-hit != 'true'
+        run: brew install xcodegen
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: /tmp/DevIsland-CI-DerivedData
+          key: ${{ runner.os }}-deriveddata-${{ hashFiles('project.yml', 'DevIsland/**/*.swift') }}
+          restore-keys: ${{ runner.os }}-deriveddata-
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build & Run Tests
+        run: |
+          HOST_ARCH="$(uname -m)"
+          xcodebuild test \
+            -project DevIsland.xcodeproj \
+            -scheme DevIsland \
+            -destination "platform=macOS,arch=${HOST_ARCH}" \
+            -derivedDataPath /tmp/DevIsland-CI-DerivedData \
+            -quiet 2>&1 | awk '
+              /DVTErrorPresenter: Unable to load simulator devices\./ { skip = 1; next }
+              skip && /^--$/ { skipDashCount += 1; if (skipDashCount >= 2) { skip = 0; skipDashCount = 0 }; next }
+              skip { next }
+              /iOSSimulator: .*CoreSimulator is out of date/ { next }
+              /CoreSimulator is out of date\./ { next }
+              { print }
+            '
