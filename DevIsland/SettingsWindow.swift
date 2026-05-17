@@ -157,9 +157,7 @@ private struct GeneralSettingsPane: View {
                 .pickerStyle(.radioGroup)
             }
 
-            Section(l10n.secApprovalProxy) {
-                Text(l10n.descApprovalProxy)
-                    .foregroundStyle(.secondary)
+            Section {
                 Button(l10n.btnResetAllSettings) {
                     store.resetToDefaults()
                 }

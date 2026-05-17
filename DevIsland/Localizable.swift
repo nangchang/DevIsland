@@ -158,9 +158,6 @@ extension L10n {
     var tabExperimental:     String { s("Experimental", "실험적") }
 
     // General tab
-    var secApprovalProxy:    String { s("Approval Proxy",               "승인 프록시") }
-    var descApprovalProxy:   String { s("DevIsland intercepts AI agent tool requests and applies your approval rules before allowing or blocking each action.",
-                                        "DevIsland가 AI 에이전트의 도구 요청을 가로채 승인 규칙을 적용한 후 각 작업을 허용하거나 차단합니다.") }
     var btnResetAllSettings: String { s("Reset All Settings to Defaults", "모든 설정 초기화") }
     var secLanguage:         String { s("Language",                      "언어") }
     var lblLanguage:         String { s("Language",                      "언어") }
