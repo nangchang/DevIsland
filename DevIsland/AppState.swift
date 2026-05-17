@@ -2,112 +2,6 @@ import SwiftUI
 import Combine
 import AppKit
 
-// MARK: - Pending Request
-
-struct PendingRequest: Identifiable {
-    let id = UUID()
-    let hookEventId: Int64?
-    let sessionId: String
-    let agentKind: BuddyKind
-    let eventName: String
-    let toolName: String
-    let rawToolName: String
-    let workspaceRoot: String?
-    let isReplay: Bool
-    let message: String
-    let responseHandler: (String) -> Void
-    let receivedAt: Date
-}
-
-struct PendingItem: Identifiable, Equatable {
-    let id: UUID
-    let toolName: String
-    let message: String
-    let sessionId: String
-    let terminalTitle: String
-    let terminalWindowId: String
-    let terminalTabIndex: String
-    let terminalTmuxPane: String
-    let terminalTmuxSocket: String
-    let terminalTmuxClient: String
-    let receivedAt: Date
-}
-
-enum SessionStatus: Equatable {
-    case idle
-    case pending
-    case timeoutBypassed(Date)
-    case autoApproved(Date)
-    case policyApproved(Date)
-
-    var isTimeoutBypassed: Bool {
-        if case .timeoutBypassed = self { return true }
-        if case .autoApproved = self { return true }
-        if case .policyApproved = self { return true }
-        return false
-    }
-}
-
-struct ActiveSession: Identifiable, Equatable {
-    let id: String // full sessionId
-    var terminalTitle: String
-    var agentKind: BuddyKind
-    var terminalApp: String
-    var terminalTTY: String
-    var terminalWindowId: String
-    var terminalTabIndex: String
-    var terminalTmuxPane: String
-    var terminalTmuxSocket: String
-    var terminalTmuxClient: String
-    var lastToolName: String
-    var lastEventName: String
-    var lastMessage: String
-    let startTime: Date
-    var lastActiveAt: Date
-    var isPending: Bool
-    var isLifecycleTracked: Bool
-    var isAutoEditActive: Bool
-    var status: SessionStatus
-}
-
-enum RequestDisplayTarget: String, CaseIterable, Identifiable {
-    case notch
-    case focused
-    case mouse
-
-    var id: String { rawValue }
-
-    var label: String {
-        let l = L10n.shared
-        switch self {
-        case .notch:   return l.reqNotch
-        case .focused: return l.reqFocused
-        case .mouse:   return l.reqMouse
-        }
-    }
-}
-
-enum NotchDisplayTarget: String, CaseIterable, Identifiable {
-    case automatic
-    case main
-    case mouse
-    case focused
-    case specific
-
-    var id: String { rawValue }
-
-    var label: String {
-        let l = L10n.shared
-        switch self {
-        case .automatic: return l.notchAuto
-        case .main:      return l.notchMain
-        case .mouse:     return l.notchMouse
-        case .focused:   return l.notchFocused
-        case .specific:  return l.notchSpecific
-        }
-    }
-}
-
 // MARK: - App State
 
 // AppState is the central hub: owns the IPC server, session list, pending approval queue,
@@ -216,7 +110,7 @@ class AppState: ObservableObject {
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
-    private let ptyBuffer = PTYSessionBuffer()
+    private let ptyCoordinator: PTYCoordinator
     private var timeoutDuration: Double {
         let v = userDefaults.double(forKey: SettingsStore.DefaultsKey.permissionTimeoutSeconds)
         return v > 0 ? v : 120.0
@@ -238,6 +132,12 @@ class AppState: ObservableObject {
         self.codexRuleSyncAdapter = codexRuleSyncAdapter
         self.sessionStore = SessionStore()
         self.geminiState = GeminiSessionState(userDefaults: userDefaults)
+        self.ptyCoordinator = PTYCoordinator(
+            ptyBuffer: PTYSessionBuffer(),
+            approvalProxy: approvalProxy,
+            persistenceQueue: approvalPersistenceQueue,
+            userDefaults: userDefaults
+        )
         self.replayRecorder = ReplayRecorder(proxy: approvalProxy, queue: approvalPersistenceQueue)
         
         if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
@@ -357,7 +257,7 @@ class AppState: ObservableObject {
                 guard let self else { return }
                 let prunedIds = self.sessionStore.pruneInactiveSessions()
                 for id in prunedIds {
-                    self.clearPTYOutputBuffer(sessionId: id)
+                    self.ptyCoordinator.clearBuffer(sessionId: id)
                 }
             }
         }
@@ -601,7 +501,7 @@ class AppState: ObservableObject {
 
                 print("Parsed Hook: event=\(event), session=\(sessionId), title=\(terminalTitle)")
 
-                displayMsg = displayMessage(
+                displayMsg = ToolMessageFormatter.displayMessage(
                     for: toolName,
                     toolInput: toolInput,
                     json: json,
@@ -625,7 +525,7 @@ class AppState: ObservableObject {
 
         // PTY output events are handled before hook_events recording to avoid polluting the replay log.
         if event == "PTYOutput" {
-            handlePTYOutputEvent(
+            ptyCoordinator.handleOutputEvent(
                 sessionId: sessionId,
                 provider: providerKind(for: agentKind),
                 content: (parsedJSON?["content"] as? String) ?? "",
@@ -715,7 +615,7 @@ class AppState: ObservableObject {
                     )
                 }
                 self.sessionStore.removeSession(id: fullSessionId)
-                self.clearPTYOutputBuffer(sessionId: fullSessionId)
+                self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
 
                 if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                     self.currentResponseHandler = nil
@@ -1210,166 +1110,6 @@ class AppState: ObservableObject {
         }
     }
 
-    private func displayMessage(for toolName: String, toolInput: [String: Any]?, json: [String: Any], eventName: String) -> String {
-        if HookEventNormalizer.normalizedName(eventName) == "userpromptsubmit",
-           let prompt = json["prompt"] as? String {
-            return prompt
-        }
-
-        if HookEventNormalizer.normalizedName(eventName) == "posttooluse" {
-            return postToolMessage(from: json["tool_response"] as? [String: Any])
-        }
-
-        if let input = toolInput {
-            let lowerToolName = toolName.lowercased()
-            switch lowerToolName {
-            // Claude Code
-            case "bash":
-                return joinedMessageLines([
-                    input["description"] as? String,
-                    input["command"] as? String
-                ])
-            case "write":
-                return joinedMessageLines([
-                    input["file_path"] as? String,
-                    input["content"] as? String
-                ])
-            case "edit":
-                return joinedMessageLines([
-                    input["file_path"] as? String,
-                    prefixedBlock("old", input["old_string"] as? String),
-                    prefixedBlock("new", input["new_string"] as? String)
-                ])
-            case "multiedit":
-                return multiEditMessage(from: input)
-            case "read":
-                return readMessage(from: input)
-            case "webfetch":
-                return joinedMessageLines([
-                    input["url"] as? String,
-                    input["prompt"] as? String
-                ])
-            
-            // Gemini CLI
-            case "run_shell_command":
-                return joinedMessageLines([
-                    input["description"] as? String,
-                    input["command"] as? String
-                ])
-            case "write_file":
-                return joinedMessageLines([
-                    input["file_path"] as? String,
-                    input["content"] as? String
-                ])
-            case "read_file":
-                return joinedMessageLines([
-                    input["file_path"] as? String,
-                    "lines: \(input["start_line"] ?? 1) - \(input["end_line"] ?? "")"
-                ])
-            case "replace":
-                return joinedMessageLines([
-                    input["file_path"] as? String,
-                    input["instruction"] as? String,
-                    prefixedBlock("old", input["old_string"] as? String),
-                    prefixedBlock("new", input["new_string"] as? String)
-                ])
-            case "grep_search":
-                return joinedMessageLines([
-                    "pattern: \(input["pattern"] ?? "")",
-                    "include: \(input["include_pattern"] ?? "")"
-                ])
-            case "glob":
-                return "pattern: \(input["pattern"] ?? "")"
-            case "web_fetch":
-                return "prompt: \(input["prompt"] ?? "")"
-                
-            // Codex CLI
-            case "shell":
-                return input["command"] as? String ?? ""
-            case "apply_patch":
-                return joinedMessageLines([
-                    input["path"] as? String,
-                    input["patch"] as? String
-                ])
-                
-            default:
-                return input.keys.sorted().map { key in
-                    "\(key): \(input[key] ?? "")"
-                }.joined(separator: "\n")
-            }
-        }
-
-        if let message = json["message"] as? String, !message.isEmpty {
-            return message
-        }
-
-        if let suggestions = json["permission_suggestions"] as? [[String: Any]] {
-            return suggestions.compactMap { suggestion in
-                suggestion["behavior"] as? String
-            }.map { "Suggested: \($0)" }.joined(separator: "\n")
-        }
-
-        return ""
-    }
-
-    private func postToolMessage(from response: [String: Any]?) -> String {
-        guard let response = response else { return "Completed" }
-        if let stdout = response["stdout"] as? String, !stdout.isEmpty {
-            return stdout
-        }
-        if let stderr = response["stderr"] as? String, !stderr.isEmpty {
-            return stderr
-        }
-        return "Completed"
-    }
-
-    private func multiEditMessage(from input: [String: Any]) -> String {
-        var lines: [String] = []
-        if let filePath = input["file_path"] as? String {
-            lines.append(filePath)
-        }
-        if let edits = input["edits"] as? [[String: Any]] {
-            for (index, edit) in edits.enumerated() {
-                lines.append("edit \(index + 1)")
-                if let oldBlock = prefixedBlock("old", edit["old_string"] as? String) {
-                    lines.append(oldBlock)
-                }
-                if let newBlock = prefixedBlock("new", edit["new_string"] as? String) {
-                    lines.append(newBlock)
-                }
-            }
-        }
-        return joinedMessageLines(lines)
-    }
-
-    private func readMessage(from input: [String: Any]) -> String {
-        var lines: [String] = []
-        if let filePath = input["file_path"] as? String {
-            lines.append(filePath)
-        }
-        let details = ["offset", "limit"].compactMap { key -> String? in
-            guard let value = input[key] else { return nil }
-            return "\(key): \(value)"
-        }.joined(separator: ", ")
-        if !details.isEmpty {
-            lines.append(details)
-        }
-        return joinedMessageLines(lines)
-    }
-
-    private func prefixedBlock(_ label: String, _ value: String?) -> String? {
-        guard let value = value, !value.isEmpty else { return nil }
-        return "\(label):\n\(value)"
-    }
-
-    private func joinedMessageLines(_ lines: [String?]) -> String {
-        lines.compactMap { line in
-            guard let line = line?.trimmingCharacters(in: .whitespacesAndNewlines), !line.isEmpty else {
-                return nil
-            }
-            return line
-        }.joined(separator: "\n\n")
-    }
 
     static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
         HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)
@@ -1381,7 +1121,7 @@ class AppState: ObservableObject {
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
             self.sessionStore.removeSession(id: sessionId)
-            self.clearPTYOutputBuffer(sessionId: sessionId)
+            self.ptyCoordinator.clearBuffer(sessionId: sessionId)
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                 self.currentResponseHandler?("{\"response\": \"pass\"}")
@@ -1758,74 +1498,6 @@ class AppState: ObservableObject {
     func ptyMessages(sessionId: String? = nil, limit: Int = 500) throws -> [PTYMessage] {
         guard let approvalProxy else { return [] }
         return try approvalProxy.ptyMessages(sessionId: sessionId, limit: limit)
-    }
-
-    private func handlePTYOutputEvent(
-        sessionId: String,
-        provider: ProviderKind,
-        content: String,
-        responseHandler: (String) -> Void
-    ) {
-        guard currentPTYEnabled(), !content.isEmpty else {
-            responseHandler("{\"response\":\"approved\"}")
-            return
-        }
-        let window = ptyBuffer.appendAndWindow(sessionId: sessionId, content: content)
-        let patterns = currentPTYAutoInjectPatterns()
-        let matched = patterns.first { window.lowercased().contains($0.pattern.lowercased()) }
-        let injectionText = matched?.response
-
-        if injectionText != nil {
-            ptyBuffer.clearOnMatch(sessionId: sessionId)
-        }
-
-        approvalPersistenceQueue.async { [weak self] in
-            guard let self else { return }
-            do {
-                try self.approvalProxy?.recordPTYMessage(
-                    sessionId: sessionId,
-                    provider: provider,
-                    direction: .output,
-                    content: content
-                )
-                if let injection = injectionText {
-                    try self.approvalProxy?.recordPTYMessage(
-                        sessionId: sessionId,
-                        provider: provider,
-                        direction: .input,
-                        content: injection
-                    )
-                }
-            } catch {
-                print("[DevIsland] [PTY] Failed to record PTY message: \(error)")
-            }
-        }
-
-        if let injection = injectionText {
-            let resp: [String: Any] = ["response": "approved", "injection": injection]
-            if let data = try? JSONSerialization.data(withJSONObject: resp),
-               let str = String(data: data, encoding: .utf8) {
-                responseHandler(str)
-                return
-            }
-        }
-        responseHandler("{\"response\":\"approved\"}")
-    }
-
-    private func clearPTYOutputBuffer(sessionId: String) {
-        ptyBuffer.remove(sessionId: sessionId)
-    }
-
-    private func currentPTYEnabled() -> Bool {
-        userDefaults.bool(forKey: SettingsStore.DefaultsKey.ptyEnabled)
-    }
-
-    private func currentPTYAutoInjectPatterns() -> [PTYAutoInjectPattern] {
-        guard let data = userDefaults.data(forKey: SettingsStore.DefaultsKey.ptyAutoInjectPatterns),
-              let patterns = try? JSONDecoder().decode([PTYAutoInjectPattern].self, from: data) else {
-            return []
-        }
-        return patterns
     }
 
     private func startTimeout() {
