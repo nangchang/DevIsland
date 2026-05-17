@@ -150,16 +150,11 @@ ASEOF
 fi
 
 if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ -n "$CMUX_WORKSPACE_ID" ] || [ -n "$CMUX_SURFACE_ID" ]; }; then
-  _CMUX_BIN="${CMUX_CLAUDE_HOOK_CMUX_BIN:-}"
-  if [ -z "$_CMUX_BIN" ]; then
-    for _p in "/Applications/cmux.app/Contents/Resources/bin/cmux" "$HOME/.local/bin/cmux"; do
-      [ -x "$_p" ] && _CMUX_BIN="$_p" && break
-    done
-  fi
-  if [ -n "$_CMUX_BIN" ] && osascript -e 'return (application "cmux" is running)' 2>/dev/null | grep -q "true"; then
+  if osascript -e 'return (application "cmux" is running)' 2>/dev/null | grep -q "true"; then
     TERM_APP="cmux"
-    _CMUX_WS=$("$_CMUX_BIN" current-workspace 2>/dev/null | head -1 | tr -d '[:space:]')
-    TERM_TITLE="${_CMUX_WS:-${CMUX_WORKSPACE_ID:-cmux}}"
+    # TERM_TITLE은 비워둬서 아래의 PWD 폴백이 처리하도록 함.
+    # cmux current-workspace는 포커스된 워크스페이스를 반환해서 다른 세션의 타이틀도 함께 변경됨.
+    TERM_TITLE=""
     TERM_WINDOW_ID="${CMUX_WORKSPACE_ID:-}"
     TERM_TAB_INDEX="${CMUX_SURFACE_ID:-}"
   fi
