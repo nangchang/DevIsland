@@ -122,7 +122,7 @@ struct SessionRowView: View {
         }
     }
 
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    private static let sharedTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         HStack(spacing: 8) {
@@ -226,7 +226,7 @@ struct SessionRowView: View {
                 .stroke(isCurrent ? tool.color.opacity(0.5) : Color.clear, lineWidth: 1)
         )
         .onAppear { updateTimeAgo() }
-        .onReceive(timer) { _ in updateTimeAgo() }
+        .onReceive(Self.sharedTimer) { _ in updateTimeAgo() }
     }
 
     private func updateTimeAgo() {
