@@ -354,10 +354,14 @@ private struct ProviderSettingsPane: View {
             }
 
             Section("Gemini") {
-                Toggle(l10n.lblGeminiEmulate, isOn: $geminiState.emulateInteractiveMode)
-                Text(l10n.descGemini)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Toggle(isOn: $geminiState.emulateInteractiveMode) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(l10n.lblGeminiEmulate)
+                        Text(l10n.descGemini)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .formStyle(.grouped)
