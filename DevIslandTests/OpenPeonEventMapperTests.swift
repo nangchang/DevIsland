@@ -139,6 +139,53 @@ final class OpenPeonEventMapperTests: XCTestCase {
         )
     }
 
+    func testCodexPostToolUseObjectOutputDescribingErrorIsTaskComplete() {
+        let payload: [String: Any] = [
+            "hook_event_name": "PostToolUse",
+            "tool_response": [
+                "stdout": "error: build failed",
+                "stderr": "timeout while retrying",
+                "output": "task.error documentation",
+                "diagnostics": ["error": "reported in command output"]
+            ]
+        ]
+
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "PostToolUse",
+                normalizedEvent: "posttooluse",
+                agentKind: .codex,
+                toolName: "Bash",
+                notificationType: "",
+                message: "error: build failed",
+                payload: payload
+            ),
+            .taskComplete,
+            "Codex tool_response output fields are not structured failure signals"
+        )
+    }
+
+    func testCodexPostToolUseStringResponseDescribingErrorIsTaskComplete() {
+        let payload: [String: Any] = [
+            "hook_event_name": "PostToolUse",
+            "tool_response": "docs mention task.error, failed checks, and timeout handling"
+        ]
+
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "PostToolUse",
+                normalizedEvent: "posttooluse",
+                agentKind: .codex,
+                toolName: "Bash",
+                notificationType: "",
+                message: "docs mention task.error, failed checks, and timeout handling",
+                payload: payload
+            ),
+            .taskComplete,
+            "Codex string tool_response is command output, not a structured failure signal"
+        )
+    }
+
     func testCodexPostToolUseEmptyErrorValueIsTaskComplete() {
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",

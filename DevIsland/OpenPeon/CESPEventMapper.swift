@@ -154,14 +154,20 @@ enum CESPEventMapper {
     }
 
     private static let conversationalKeys: Set<String> = ["message", "prompt", "stdout", "stderr", "description"]
+    private static let outputContainerKeys: Set<String> = ["tool_response"]
 
-    private static func containsStructuredFailure(in value: Any) -> Bool {
+    private static func containsStructuredFailure(in value: Any, key: String? = nil) -> Bool {
+        if let key = key?.lowercased(), outputContainerKeys.contains(key) {
+            guard let dict = value as? [String: Any] else { return false }
+            return containsExplicitFailureFields(in: dict)
+        }
+
         if let dict = value as? [String: Any] {
             if containsExplicitFailureFields(in: dict) {
                 return true
             }
-            for (_, nested) in dict {
-                if containsStructuredFailure(in: nested) {
+            for (nestedKey, nested) in dict {
+                if containsStructuredFailure(in: nested, key: nestedKey) {
                     return true
                 }
             }
