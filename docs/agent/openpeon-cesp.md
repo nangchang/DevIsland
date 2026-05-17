@@ -34,8 +34,9 @@ Default pack directory:
 | `sessionstart`, `startup`, `init` | `session.start` |
 | `permissionrequest`, `beforetool`, `elicitation` | `input.required` |
 | `pretooluse` | `task.acknowledge` |
-| success-like `posttooluse` | `task.complete` |
-| failure-like `posttooluse` | `task.error` |
+| Claude/Codex success-like `posttooluse` | `task.complete` |
+| Claude `posttoolusefailure` | `task.error` |
+| structured failure-like `posttooluse` | `task.error` |
 | `stop`, `afteragent` | `task.complete` |
 | `sessionend`, `exit`, `shutdown` | `session.end` |
 | `precompact` | `resource.limit` |
@@ -44,7 +45,7 @@ Default pack directory:
 
 `stop` maps to `task.complete` for sound feedback only. Do not change AppState session pruning semantics as part of sound mapping.
 
-Failure detection is intentionally conservative: machine-readable `error`, `errors`, `exception`, `failed`, `failure`, `status: "failed"`, `success: false`, or clear textual `error`, `failed`, `exception`, `timeout`.
+Failure detection is intentionally conservative. Claude tool execution failure is detected through `PostToolUseFailure`; Claude `PostToolUse` remains `task.complete` even when stdout/stderr mention errors. Codex string `tool_response` is treated as command output and does not trigger `task.error` by keyword. Structured machine-readable `success: false`, `status: "failed"`, or meaningful non-empty `error`, `errors`, `exception`, `failed`, or `failure` values can still map to `task.error`.
 
 ## Settings
 
