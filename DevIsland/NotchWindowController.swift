@@ -222,6 +222,9 @@ class NotchWindowController: NSWindowController {
         pendingSettle?.cancel()
         
         if expanded {
+            window?.level = .mainMenu + 1
+            expandedPanel.level = .mainMenu + 2
+            
             if isManualExpand {
                 isManualExpand = false
                 resetPinnedPosition()
@@ -245,6 +248,9 @@ class NotchWindowController: NSWindowController {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
             
         } else {
+            window?.level = .mainMenu + 2
+            expandedPanel.level = .mainMenu + 1
+            
             AppState.shared.isExpandingFromRequest = false
             resetPinnedPosition()
             
