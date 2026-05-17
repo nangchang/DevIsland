@@ -1388,7 +1388,7 @@ struct NotchView: View {
             withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
                 buddyPulse = true
             }
-            refreshMascots(settings: settingsStore.settings)
+            refreshMascots(settings: settingsStore.settings, forceRandomize: true)
             
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
         }
@@ -1397,13 +1397,15 @@ struct NotchView: View {
         }
     }
 
-    private func refreshMascots(settings: AppSettings) {
+    private func refreshMascots(settings: AppSettings, forceRandomize: Bool = false) {
         leftMascot = resolvedMascot(
+            current: forceRandomize ? nil : leftMascot,
             mode: settings.notchLeftCharacterMode,
             specific: settings.notchLeftCharacterKind,
             randomCandidates: settings.notchLeftRandomCharacterKinds
         )
         rightMascot = resolvedMascot(
+            current: forceRandomize ? nil : rightMascot,
             mode: settings.notchRightCharacterMode,
             specific: settings.notchRightCharacterKind,
             randomCandidates: settings.notchRightRandomCharacterKinds
@@ -1411,6 +1413,7 @@ struct NotchView: View {
     }
 
     private func resolvedMascot(
+        current: BuddyKind?,
         mode: NotchCharacterMode,
         specific: BuddyKind,
         randomCandidates: Set<BuddyKind>
@@ -1420,6 +1423,9 @@ struct NotchView: View {
             return specific
         case .random:
             let candidates = randomCandidates.isEmpty ? Set(BuddyKind.defaultRandomCases) : randomCandidates
+            if let current, candidates.contains(current) {
+                return current
+            }
             return candidates.randomElement() ?? .claudeCode
         }
     }
