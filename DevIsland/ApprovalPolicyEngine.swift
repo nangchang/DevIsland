@@ -43,6 +43,8 @@ struct ApprovalPolicyEngine {
         case .regex:
             return regexMatches(pattern: rule.pattern, against: toolName)
         case .commandPrefix, .pathPrefix:
+            // NOTE: matches against toolName only; full command/path matching requires
+            // toolInput in ApprovalPolicyRequest, which is not currently available.
             return toolName.hasPrefix(rule.pattern)
         }
     }
