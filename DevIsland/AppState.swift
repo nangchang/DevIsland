@@ -569,11 +569,15 @@ class AppState: ObservableObject {
         var displayToolName = ""
         var workspaceRoot: String?
         var isReplayPayload = false
+        var isSubAgentSession = false
 
         if let json = parsedJSON {
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
                 toolName  = json["tool_name"] as? String ?? ""
                 sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
+                if let parentId = json["parent_session_id"] as? String, !parentId.isEmpty {
+                    isSubAgentSession = true
+                }
                 print("[DevIsland] [MSG] Parsed JSON from \(sessionId.prefix(8))")
                 terminalTitle = json["terminal_title"] as? String ?? "Terminal"
                 terminalApp = json["terminal_app"] as? String ?? ""
@@ -610,6 +614,20 @@ class AppState: ObservableObject {
                     json: json,
                     eventName: event
                 )
+        }
+
+        // TODO: 서브 에이전트 이벤트 처리 — parent_session_id 기반 세션 관계 추적, UI 표시, 소리 구분 등
+        if isSubAgentSession {
+            recordReplayHookEvent(
+                requestId: requestId,
+                provider: providerKind(for: agentKind),
+                sessionId: sessionId,
+                eventName: event,
+                toolName: toolName,
+                payload: parsedJSON
+            )
+            responseHandler("{\"response\": \"approved\"}")
+            return
         }
 
         // PTY output events are handled before hook_events recording to avoid polluting the replay log.

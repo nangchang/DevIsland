@@ -36,7 +36,7 @@ enum CESPEventMapper {
         case "pretooluse":
             return .taskAcknowledge
         case "posttooluse":
-            return .taskComplete
+            return nil
         case "posttoolusefailure":
             return .taskError
         case "stop":
