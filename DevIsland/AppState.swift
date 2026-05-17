@@ -618,6 +618,14 @@ class AppState: ObservableObject {
 
         // TODO: 서브 에이전트 이벤트 처리 — parent_session_id 기반 세션 관계 추적, UI 표시, 소리 구분 등
         if isSubAgentSession {
+            recordReplayHookEvent(
+                requestId: requestId,
+                provider: providerKind(for: agentKind),
+                sessionId: sessionId,
+                eventName: event,
+                toolName: toolName,
+                payload: parsedJSON
+            )
             responseHandler("{\"response\": \"approved\"}")
             return
         }
