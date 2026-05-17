@@ -46,7 +46,18 @@ enum CESPEventMapper {
             if type == "input_required" || type == "permission_prompt" {
                 return .inputRequired
             }
-            return isFailurePayload(payload, message: message) ? .taskError : nil
+            // For Claude notifications, only treat as error if the type is explicitly error-related.
+            // Generic 'message' matching is avoided here because Claude often mentions 'error'
+            // in non-failure conversational contexts.
+            if type.contains("error") || type.contains("fatal") || type.contains("fail") {
+                return .taskError
+            }
+            // Fall back to checking the machine-readable payload for failure signals,
+            // but ignore the descriptive 'message'.
+            if let payload, containsFailure(in: payload) {
+                return .taskError
+            }
+            return nil
         default:
             return isFailurePayload(payload, message: message) ? .taskError : nil
         }
@@ -93,7 +104,13 @@ enum CESPEventMapper {
         case "pretooluse":
             return .taskAcknowledge
         case "posttooluse":
-            return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
+            // For Codex tool results, prioritize machine-readable signals in the payload.
+            // Avoid generic 'message' matching to prevent false positives from conversational text.
+            if let payload, containsFailure(in: payload) {
+                return .taskError
+            }
+            // Even if message contains 'error', if payload doesn't confirm it, treat as complete.
+            return .taskComplete
         case "sessionend", "exit", "shutdown":
             return .sessionEnd
         default:
@@ -132,12 +149,18 @@ enum CESPEventMapper {
         return containsFailure(in: payload)
     }
 
-    private static func containsFailure(in value: Any) -> Bool {
+    private static let conversationalKeys: Set<String> = ["message", "prompt", "stdout", "stderr", "description"]
+
+    private static func containsFailure(in value: Any, key: String? = nil) -> Bool {
+        if let key = key?.lowercased(), conversationalKeys.contains(key) {
+            return false
+        }
+
         // This intentionally catches only clear machine-readable or textual failures.
         // User-denied approvals are handled by the approval flow, not as task errors.
         if let dict = value as? [String: Any] {
-            for (key, nested) in dict {
-                let lowerKey = key.lowercased()
+            for (k, nested) in dict {
+                let lowerKey = k.lowercased()
                 if ["error", "errors", "exception", "failed", "failure"].contains(lowerKey) {
                     return true
                 }
@@ -149,7 +172,7 @@ enum CESPEventMapper {
                    ["failed", "failure", "error"].contains(status.lowercased()) {
                     return true
                 }
-                if containsFailure(in: nested) {
+                if containsFailure(in: nested, key: k) {
                     return true
                 }
             }

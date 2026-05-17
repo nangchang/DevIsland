@@ -45,6 +45,30 @@ final class OpenPeonEventMapperTests: XCTestCase {
         )
     }
 
+    func testCodexPostToolUseWithMessageDescribingErrorIsNotTaskError() {
+        let payload: [String: Any] = [
+            "hook_event_name": "PostToolUse",
+            "tool_response": [
+                "success": true,
+                "stdout": "The command succeeded after an initial error.",
+                "stderr": ""
+            ]
+        ]
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "PostToolUse",
+                normalizedEvent: "posttooluse",
+                agentKind: .codex,
+                toolName: "Bash",
+                notificationType: "",
+                message: "The command succeeded after an initial error.",
+                payload: payload
+            ),
+            .taskComplete,
+            "Descriptive messages about errors in tool_response stdout/stderr should not trigger taskError sound for Codex"
+        )
+    }
+
     func testNotificationInputRequiredMapsToInputRequired() {
         XCTAssertEqual(
             CESPEventMapper.category(
@@ -57,6 +81,61 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 payload: nil
             ),
             .inputRequired
+        )
+    }
+
+    func testClaudeNotificationWithMessageDescribingErrorIsNotTaskError() {
+        let payload: [String: Any] = [
+            "notification_type": "info",
+            "message": "I will fix the syntax error."
+        ]
+        XCTAssertNil(
+            CESPEventMapper.category(
+                event: "Notification",
+                normalizedEvent: "notification",
+                agentKind: .claudeCode,
+                toolName: "",
+                notificationType: "info",
+                message: "I will fix the syntax error.",
+                payload: payload
+            ),
+            "Descriptive messages about errors should not trigger taskError sound for Claude"
+        )
+    }
+
+    func testClaudeNotificationWithActualErrorTypeIsTaskError() {
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "Notification",
+                normalizedEvent: "notification",
+                agentKind: .claudeCode,
+                toolName: "",
+                notificationType: "error",
+                message: "Fatal error occurred",
+                payload: nil
+            ),
+            .taskError,
+            "Actual error notification type should trigger taskError"
+        )
+    }
+
+    func testClaudeNotificationWithMachineReadableErrorInPayloadIsTaskError() {
+        let payload: [String: Any] = [
+            "error_details": ["code": 500, "reason": "Internal server error"],
+            "message": "Just checking in..."
+        ]
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "Notification",
+                normalizedEvent: "notification",
+                agentKind: .claudeCode,
+                toolName: "",
+                notificationType: "info",
+                message: "Just checking in...",
+                payload: payload
+            ),
+            .taskError,
+            "Machine-readable failure in payload (even in nested fields) should trigger taskError"
         )
     }
 
