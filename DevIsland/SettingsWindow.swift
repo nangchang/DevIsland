@@ -112,10 +112,10 @@ struct SettingsWindowView: View {
             DisplaySettingsPane(appState: appState, store: store)
                 .tabItem { Label(l10n.tabDisplay, systemImage: "display") }
 
-            ApprovalSettingsPane(appState: appState, geminiState: appState.geminiState, store: store)
+            ApprovalSettingsPane(appState: appState, store: store)
                 .tabItem { Label(l10n.tabApproval, systemImage: "hand.raised") }
 
-            ProviderSettingsPane(store: store)
+            ProviderSettingsPane(geminiState: appState.geminiState, store: store)
                 .tabItem { Label(l10n.tabProviders, systemImage: "person.3.sequence") }
 
             BridgeIPCSettingsPane(store: store)
@@ -281,7 +281,6 @@ private struct NotchCharacterControl: View {
 
 private struct ApprovalSettingsPane: View {
     @ObservedObject var appState: AppState
-    @ObservedObject var geminiState: GeminiSessionState
     @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
 
@@ -289,7 +288,6 @@ private struct ApprovalSettingsPane: View {
         Form {
             Section(l10n.secAutoApprovals) {
                 Toggle(l10n.lblAutoSafe, isOn: $appState.autoApproveSafeTools)
-                Toggle(l10n.lblGeminiEmulate, isOn: $geminiState.emulateInteractiveMode)
             }
 
             Section(l10n.secPermissionTimeout) {
@@ -317,6 +315,7 @@ private struct ApprovalSettingsPane: View {
 }
 
 private struct ProviderSettingsPane: View {
+    @ObservedObject var geminiState: GeminiSessionState
     @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
 
@@ -339,6 +338,10 @@ private struct ProviderSettingsPane: View {
                     }
                 }
 
+                Text(store.settings.claudePersistentApprovalDestination.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 if store.settings.claudePersistentApprovalDestination == .projectSettings {
                     Label(l10n.warnProjectSettings, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
@@ -351,8 +354,14 @@ private struct ProviderSettingsPane: View {
             }
 
             Section("Gemini") {
-                Text(l10n.descGemini)
-                    .foregroundStyle(.secondary)
+                Toggle(isOn: $geminiState.emulateInteractiveMode) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(l10n.lblGeminiEmulate)
+                        Text(l10n.descGemini)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .formStyle(.grouped)
