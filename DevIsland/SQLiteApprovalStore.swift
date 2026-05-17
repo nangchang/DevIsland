@@ -12,7 +12,7 @@ final class SQLiteApprovalStore {
         case unsupportedSchemaVersion(Int32)
     }
 
-    static let currentSchemaVersion: Int32 = 2
+    static let currentSchemaVersion: Int32 = 3
 
     static func deterministicRuleID(
         provider: ProviderKind,
@@ -265,9 +265,6 @@ final class SQLiteApprovalStore {
         let ptyCutoff    = Date().timeIntervalSince1970 - Double(ptyRetentionDays) * 86_400
         // Delete decisions referencing old hook events, then the hook events themselves.
         // Decisions with hook_event_id IS NULL are pruned by decided_at.
-        // TODO: add idx_hook_events_received_at, idx_decisions_hook_event_id,
-        //       idx_decisions_decided_at, idx_pty_messages_created_at in a future migration
-        //       to avoid full-table scans here.
         try execute(
             "DELETE FROM approval_decisions WHERE hook_event_id IN (SELECT id FROM hook_events WHERE received_at < ?)",
             [replayCutoff]
@@ -303,8 +300,8 @@ final class SQLiteApprovalStore {
     }
 
     func persistentDecision(for request: ApprovalPolicyRequest) throws -> ApprovalPolicyDecision? {
-        // Phase 3 stores all planned MatchKind values, but only exact persistent
-        // matching is evaluated until the dedicated matcher layer is introduced.
+        // Deprecated: use persistentCandidates + ApprovalPolicyEngine for pattern matching.
+        // Kept for backward compatibility with tests that call this directly.
         try firstDecision(
             sql:
                 """
@@ -328,6 +325,33 @@ final class SQLiteApprovalStore {
                 request.now.timeIntervalSince1970
             ],
             source: .persistentRule
+        )
+    }
+
+    /// Returns all enabled persistent rules for the request's provider and workspace,
+    /// ordered deny-first then most-recent-first. Pattern evaluation is done in Swift
+    /// by ApprovalPolicyEngine so non-exact match kinds are included.
+    func persistentCandidates(for request: ApprovalPolicyRequest) throws -> [ApprovalRule] {
+        try fetchRules(
+            sql:
+                """
+                SELECT id, provider, tool_name, match_kind, pattern, action, scope, risk_floor,
+                       workspace_root, created_at, expires_at, enabled
+                FROM rules
+                WHERE enabled = 1
+                  AND scope = 'persistent'
+                  AND provider IN (?, 'any')
+                  AND (workspace_root IS NULL OR workspace_root = ?)
+                  AND (expires_at IS NULL OR expires_at > ?)
+                ORDER BY
+                  CASE action WHEN 'deny' THEN 0 ELSE 1 END,
+                  created_at DESC
+                """,
+            parameters: [
+                request.provider.rawValue,
+                request.workspaceRoot,
+                request.now.timeIntervalSince1970
+            ]
         )
     }
 
@@ -388,6 +412,7 @@ final class SQLiteApprovalStore {
         }
         try migrateToVersion1()
         if version < 2 { try migrateToVersion2() }
+        if version < 3 { try migrateToVersion3() }
         try execute("PRAGMA user_version = \(Self.currentSchemaVersion)")
     }
 
@@ -478,6 +503,13 @@ final class SQLiteApprovalStore {
         try execute("CREATE INDEX IF NOT EXISTS idx_rules_lookup ON rules(provider, scope, tool_name, pattern, enabled, expires_at)")
         try execute("CREATE INDEX IF NOT EXISTS idx_hook_events_session ON hook_events(provider, session_id, received_at)")
         try execute("CREATE INDEX IF NOT EXISTS idx_decisions_session ON approval_decisions(provider, session_id, decided_at)")
+    }
+
+    private func migrateToVersion3() throws {
+        try execute("CREATE INDEX IF NOT EXISTS idx_hook_events_received_at ON hook_events(received_at)")
+        try execute("CREATE INDEX IF NOT EXISTS idx_decisions_hook_event_id ON approval_decisions(hook_event_id)")
+        try execute("CREATE INDEX IF NOT EXISTS idx_decisions_decided_at ON approval_decisions(decided_at)")
+        try execute("CREATE INDEX IF NOT EXISTS idx_pty_messages_created_at ON pty_messages(created_at)")
     }
 
     private func migrateToVersion2() throws {
