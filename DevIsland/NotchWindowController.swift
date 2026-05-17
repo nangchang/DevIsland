@@ -1486,7 +1486,7 @@ struct NotchView: View {
             
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
         }
-        .onChange(of: state.isNotchExpanded) { newValue in
+        .onChange(of: state.isNotchExpanded) { _, newValue in
             if !forceCollapsed {
                 if newValue {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
