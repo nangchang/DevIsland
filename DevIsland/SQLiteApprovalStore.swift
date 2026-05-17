@@ -300,8 +300,8 @@ final class SQLiteApprovalStore {
     }
 
     func persistentDecision(for request: ApprovalPolicyRequest) throws -> ApprovalPolicyDecision? {
-        // Phase 3 stores all planned MatchKind values, but only exact persistent
-        // matching is evaluated until the dedicated matcher layer is introduced.
+        // Deprecated: use persistentCandidates + ApprovalPolicyEngine for pattern matching.
+        // Kept for backward compatibility with tests that call this directly.
         try firstDecision(
             sql:
                 """
@@ -325,6 +325,33 @@ final class SQLiteApprovalStore {
                 request.now.timeIntervalSince1970
             ],
             source: .persistentRule
+        )
+    }
+
+    /// Returns all enabled persistent rules for the request's provider and workspace,
+    /// ordered deny-first then most-recent-first. Pattern evaluation is done in Swift
+    /// by ApprovalPolicyEngine so non-exact match kinds are included.
+    func persistentCandidates(for request: ApprovalPolicyRequest) throws -> [ApprovalRule] {
+        try fetchRules(
+            sql:
+                """
+                SELECT id, provider, tool_name, match_kind, pattern, action, scope, risk_floor,
+                       workspace_root, created_at, expires_at, enabled
+                FROM rules
+                WHERE enabled = 1
+                  AND scope = 'persistent'
+                  AND provider IN (?, 'any')
+                  AND (workspace_root IS NULL OR workspace_root = ?)
+                  AND (expires_at IS NULL OR expires_at > ?)
+                ORDER BY
+                  CASE action WHEN 'deny' THEN 0 ELSE 1 END,
+                  created_at DESC
+                """,
+            parameters: [
+                request.provider.rawValue,
+                request.workspaceRoot,
+                request.now.timeIntervalSince1970
+            ]
         )
     }
 
