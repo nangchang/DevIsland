@@ -178,7 +178,7 @@ extension L10n {
     // Approval tab
     var secAutoApprovals:    String { s("Automatic approvals",           "자동 승인") }
     var lblAutoSafe:         String { s("Auto-approve safe/read-only tools", "안전/읽기 전용 도구 자동 승인") }
-    var lblGeminiEmulate:    String { s("Gemini interactive emulation",  "Gemini 대화형 에뮬레이션") }
+    var lblGeminiEmulate:    String { s("Show approval for risky tools",  "위험 도구 승인 창 표시") }
     var secPermissionTimeout: String { s("Permission timeout",             "권한 요청 타임아웃") }
     func lblPermissionTimeout(_ n: Int) -> String { s("Auto-pass after \(n) seconds", "\(n)초 후 자동 패스") }
     var secReplayRetention:  String { s("Replay log retention",          "리플레이 로그 보관") }
@@ -187,14 +187,14 @@ extension L10n {
     var lblFallbackPolicy:   String { s("Fallback policy",               "폴백 정책") }
 
     // Providers tab
-    var lblSessionApproval:  String { s("Session approval mode",         "세션 승인 모드") }
-    var lblPersistentDest:   String { s("Persistent approval destination","영구 승인 대상") }
+    var lblSessionApproval:  String { s("Session approval",               "세션 승인 방식") }
+    var lblPersistentDest:   String { s("Persistent approval scope",       "영구 승인 적용 범위") }
     var warnProjectSettings: String { s("Project settings can be committed to the repository. Review changes before committing.",
                                         "프로젝트 설정은 저장소에 커밋될 수 있습니다. 커밋 전에 변경 사항을 검토하세요.") }
     var descCodex:           String { s("Codex session approval will use DevIsland-managed cache and persistent SQLite rules in later phases.",
                                         "Codex 세션 승인은 이후 단계에서 DevIsland 관리 캐시와 영구 SQLite 규칙을 사용합니다.") }
-    var descGemini:          String { s("Existing Gemini auto-edit, interactive notification, and safe-tool behavior remain compatible with Approval Proxy settings.",
-                                        "기존 Gemini 자동 편집, 대화형 알림, 안전 도구 동작은 승인 프록시 설정과 호환됩니다.") }
+    var descGemini:          String { s("Prompts for approval on risky tools even when running with --auto-approve or --yolo.",
+                                        "--auto-approve 또는 --yolo로 실행 중일 때도 위험한 도구는 승인을 요청합니다.") }
 
     // Bridge/IPC tab
     var secTransport:        String { s("Transport",                     "전송") }
@@ -314,17 +314,23 @@ extension L10n {
     var modeNative:   String { s("Native Claude permissions",            "Claude 기본 권한") }
     var modeCache:    String { s("DevIsland-managed session cache",      "DevIsland 관리 세션 캐시") }
     var modeHybrid:   String { s("Hybrid",                               "하이브리드") }
-    var detailNative: String { s("Recommended. DevIsland returns updatedPermissions with destination=session.",
-                                  "권장. DevIsland가 destination=session으로 updatedPermissions를 반환합니다.") }
-    var detailCache:  String { s("DevIsland stores session-scoped approvals and returns simple allow responses.",
-                                  "DevIsland가 세션 범위 승인을 저장하고 단순 허용 응답을 반환합니다.") }
-    var detailHybrid: String { s("Use native Claude permissions first and keep DevIsland cache as fallback.",
-                                  "Claude 기본 권한을 먼저 사용하고 DevIsland 캐시를 폴백으로 유지합니다.") }
+    var detailNative: String { s("Recommended. Claude manages approvals. Most compatible.",
+                                  "권장. 승인 내역을 Claude가 관리합니다. 가장 안정적입니다.") }
+    var detailCache:  String { s("DevIsland remembers approved tools for the session. Won't ask again.",
+                                  "DevIsland가 세션 중 승인한 도구를 기억해 다시 묻지 않습니다.") }
+    var detailHybrid: String { s("Uses Claude permissions when available, falls back to DevIsland.",
+                                  "Claude 방식을 우선 사용하고, 지원되지 않으면 DevIsland가 처리합니다.") }
 
     // Enum labels — ClaudePersistentApprovalDestination
-    var destLocal:   String { s("localSettings (.claude/settings.local.json)",  "localSettings (.claude/settings.local.json)") }
-    var destProject: String { s("projectSettings (.claude/settings.json)",       "projectSettings (.claude/settings.json)") }
-    var destUser:    String { s("userSettings (~/.claude/settings.json)",         "userSettings (~/.claude/settings.json)") }
+    var destLocal:        String { s("Project local",  "프로젝트 로컬") }
+    var destProject:      String { s("Project shared", "프로젝트 공유") }
+    var destUser:         String { s("User-wide",      "사용자 전체") }
+    var detailDestLocal:  String { s("Applies to this project only. Not committed to git. (.claude/settings.local.json)",
+                                     "이 프로젝트에만 적용됩니다. git에 커밋되지 않습니다. (.claude/settings.local.json)") }
+    var detailDestProject: String { s("Shared with your team. Can be committed to git. (.claude/settings.json)",
+                                      "팀원과 공유됩니다. git에 커밋될 수 있습니다. (.claude/settings.json)") }
+    var detailDestUser:   String { s("Applies across all projects. (~/.claude/settings.json)",
+                                     "모든 프로젝트에 적용됩니다. (~/.claude/settings.json)") }
 
     // Enum labels — BridgeTransportKind
     var transportTCP:  String { s("TCP loopback",         "TCP 루프백") }

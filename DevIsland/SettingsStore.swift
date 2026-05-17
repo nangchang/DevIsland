@@ -44,6 +44,15 @@ enum ClaudePersistentApprovalDestination: String, CaseIterable, Identifiable {
         case .userSettings:    return l.destUser
         }
     }
+
+    var detail: String {
+        let l = L10n.shared
+        switch self {
+        case .localSettings:   return l.detailDestLocal
+        case .projectSettings: return l.detailDestProject
+        case .userSettings:    return l.detailDestUser
+        }
+    }
 }
 
 enum BridgeTransportKind: String, CaseIterable, Identifiable {
