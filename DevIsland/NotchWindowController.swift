@@ -1570,12 +1570,15 @@ struct NotchView: View {
                 Button {
                     state.dismissCurrentRequest()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.white.opacity(0.2))
-                        .symbolRenderingMode(.hierarchical)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
+                .help(l10n.notchDismiss)
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
