@@ -131,6 +131,7 @@ for key, config in [
     ('Stop',              lifecycle_config),
     ('PreToolUse',        lifecycle_config),
     ('PostToolUse',       lifecycle_config),
+    ('PostToolUseFailure', lifecycle_config),
     ('UserPromptSubmit',  lifecycle_config),
     ('Elicitation',       lifecycle_config),
     ('PermissionRequest', approval_config),

@@ -26,6 +26,7 @@ PASSIVE_EVENTS = {
     "Stop",
     "PreToolUse",
     "PostToolUse",
+    "PostToolUseFailure",
     "UserPromptSubmit",
     "Elicitation",
     "BeforeTool",

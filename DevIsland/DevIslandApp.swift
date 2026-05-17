@@ -283,6 +283,7 @@ enum BridgeInstaller {
             ("Stop",              lifecycleConfig),
             ("PreToolUse",        lifecycleConfig),
             ("PostToolUse",       lifecycleConfig),
+            ("PostToolUseFailure", lifecycleConfig),
             ("UserPromptSubmit",  lifecycleConfig),
             ("Elicitation",       lifecycleConfig),
             ("PermissionRequest", approvalConfig),

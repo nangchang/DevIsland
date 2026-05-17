@@ -6,7 +6,7 @@ DevIsland supports Claude Code, Codex CLI, and Gemini CLI through the same bridg
 
 | CLI Agent | Config File | Approval Event | Lifecycle Events |
 |---|---|---|---|
-| Claude Code | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop` |
+| Claude Code | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `Stop` |
 | Codex CLI | `~/.codex/hooks.json` + `config.toml` | `PermissionRequest` | `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` |
 | Gemini CLI | `~/.gemini/settings.json` | `BeforeTool` | `SessionStart`, `SessionEnd`, `AfterAgent`, `Notification` |
 
@@ -26,7 +26,7 @@ Config file: `~/.claude/settings.json` or project-local `.claude/settings.json`.
 
 Claude Code may block security-sensitive operations in Auto Mode before DevIsland sees the event. If the user sees “Denied by auto-mode classifier”, that is a Claude restriction; use interactive mode.
 
-DevIsland uses `PermissionRequest` for standard tool approval. `PostToolUse` is audit/replay tracking. Claude `PreToolUse` is mostly status tracking, but selected tools such as `AskUserQuestion` and `ExitPlanMode` can return Claude-specific hook output to preserve or update tool input.
+DevIsland uses `PermissionRequest` for standard tool approval. `PostToolUse` is audit/replay tracking for successful tool completion, and `PostToolUseFailure` is the failure signal used for error sound feedback. Claude `PreToolUse` is mostly status tracking, but selected tools such as `AskUserQuestion` and `ExitPlanMode` can return Claude-specific hook output to preserve or update tool input.
 
 Approval output:
 
