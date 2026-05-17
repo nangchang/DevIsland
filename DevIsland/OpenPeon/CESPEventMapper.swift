@@ -104,7 +104,13 @@ enum CESPEventMapper {
         case "pretooluse":
             return .taskAcknowledge
         case "posttooluse":
-            return isFailurePayload(payload, message: message) ? .taskError : .taskComplete
+            // For Codex tool results, prioritize machine-readable signals in the payload.
+            // Avoid generic 'message' matching to prevent false positives from conversational text.
+            if let payload, containsFailure(in: payload) {
+                return .taskError
+            }
+            // Even if message contains 'error', if payload doesn't confirm it, treat as complete.
+            return .taskComplete
         case "sessionend", "exit", "shutdown":
             return .sessionEnd
         default:

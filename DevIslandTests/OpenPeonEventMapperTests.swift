@@ -45,6 +45,26 @@ final class OpenPeonEventMapperTests: XCTestCase {
         )
     }
 
+    func testCodexPostToolUseWithMessageDescribingErrorIsNotTaskError() {
+        let payload: [String: Any] = [
+            "hook_event_name": "PostToolUse",
+            "tool_response": ["success": true]
+        ]
+        XCTAssertEqual(
+            CESPEventMapper.category(
+                event: "PostToolUse",
+                normalizedEvent: "posttooluse",
+                agentKind: .codex,
+                toolName: "Bash",
+                notificationType: "",
+                message: "The command succeeded after an initial error.",
+                payload: payload
+            ),
+            .taskComplete,
+            "Descriptive messages about errors in successful tool results should not trigger taskError sound for Codex"
+        )
+    }
+
     func testNotificationInputRequiredMapsToInputRequired() {
         XCTAssertEqual(
             CESPEventMapper.category(
