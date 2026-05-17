@@ -24,31 +24,55 @@ class NotchWindowController: NSWindowController {
     private var pinnedDisplayId: UInt32?
     private var isHiddenForFullScreen = false
     private var isManualExpand = false
+    private var expandedPanel: NSPanel!
 
     convenience init() {
-        let panel = NSPanel(
+        let collapsedPanel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: collapsedNotchSize),
+            styleMask: [.nonactivatingPanel, .borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        collapsedPanel.isFloatingPanel = true
+        collapsedPanel.level = .mainMenu + 1
+        collapsedPanel.backgroundColor = .clear
+        collapsedPanel.isOpaque = false
+        collapsedPanel.hasShadow = false
+        collapsedPanel.ignoresMouseEvents = false
+        collapsedPanel.acceptsMouseMovedEvents = true
+        collapsedPanel.isMovableByWindowBackground = false
+        collapsedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
+
+        let expandedPanel = NSPanel(
             contentRect: NSRect(origin: .zero, size: expandedNotchSize),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
         )
 
-        panel.isFloatingPanel = true
-        panel.level = .mainMenu + 1
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = false
-        panel.ignoresMouseEvents = false
-        panel.acceptsMouseMovedEvents = true
-        panel.isMovableByWindowBackground = false
-        panel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
+        expandedPanel.isFloatingPanel = true
+        expandedPanel.level = .mainMenu + 2
+        expandedPanel.backgroundColor = .clear
+        expandedPanel.isOpaque = false
+        expandedPanel.hasShadow = false
+        expandedPanel.ignoresMouseEvents = false
+        expandedPanel.acceptsMouseMovedEvents = true
+        expandedPanel.isMovableByWindowBackground = false
+        expandedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
 
-        self.init(window: panel)
+        self.init(window: collapsedPanel)
+        self.expandedPanel = expandedPanel
 
-        let notchView = NotchHostingView(rootView: NotchView())
-        notchView.wantsLayer = true
-        notchView.layer?.backgroundColor = .clear
-        panel.contentView = notchView
+        let collapsedView = NotchHostingView(rootView: NotchView(forceCollapsed: true))
+        collapsedView.wantsLayer = true
+        collapsedView.layer?.backgroundColor = .clear
+        collapsedPanel.contentView = collapsedView
+        
+        let expandedView = NotchHostingView(rootView: NotchView(forceCollapsed: false))
+        expandedView.wantsLayer = true
+        expandedView.layer?.backgroundColor = .clear
+        expandedPanel.contentView = expandedView
         
         updateWindowFrame(animate: false)
 
@@ -110,7 +134,7 @@ class NotchWindowController: NSWindowController {
             }
             .store(in: &cancellables)
 
-        NotificationCenter.default.publisher(for: NSWindow.didChangeScreenNotification, object: panel)
+        NotificationCenter.default.publisher(for: NSWindow.didChangeScreenNotification, object: collapsedPanel)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.resetPinnedPosition()
@@ -199,28 +223,35 @@ class NotchWindowController: NSWindowController {
         
         if expanded {
             if isManualExpand {
-                // 클릭 확장: 현재 화면 그대로 유지
                 isManualExpand = false
                 resetPinnedPosition()
                 updateWindowFrame(animate: false)
             } else {
-                // 요청 확장: requestDisplayTarget에 따라 화면 결정
                 let override = Self.requestTargetScreen()
-                print("[DevIsland] Request expansion detected, override screen: \(override?.displayId.description ?? "none")")
                 resetPinnedPosition()
                 updateWindowFrame(animate: false, targetScreenOverride: override)
                 
-                // 실제 승인 요청인 경우에만 즉시 해제 (알림은 메시지 표시를 위해 유지)
                 if AppState.shared.sessionStore.pendingCount > 0 {
                     AppState.shared.isExpandingFromRequest = false
                 }
             }
+            
+            expandedPanel.orderFrontRegardless()
+            
+            let work = DispatchWorkItem { [weak self] in
+                self?.window?.orderOut(nil)
+            }
+            pendingSettle = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+            
         } else {
-            // 축소 시: 핀 위치를 즉시 해제해 설정된 화면으로 돌아가도록 한다.
-            // 프레임 자체는 SwiftUI 애니메이션이 끝난 후 줄여 점프 방지.
             AppState.shared.isExpandingFromRequest = false
             resetPinnedPosition()
+            
+            window?.orderFrontRegardless()
+            
             let work = DispatchWorkItem { [weak self] in
+                self?.expandedPanel.orderOut(nil)
                 self?.updateWindowFrame(animate: false)
             }
             pendingSettle = work
@@ -232,9 +263,6 @@ class NotchWindowController: NSWindowController {
         guard let window = window else { return }
         let screen = targetScreenOverride ?? targetScreen(for: window)
         
-        let expanded = AppState.shared.isNotchExpanded
-        let size = sizeOverride ?? Self.notchSize(expanded: expanded)
-        
         if let pinnedDisplayId, pinnedDisplayId != screen.displayId {
             resetPinnedPosition()
         }
@@ -243,20 +271,22 @@ class NotchWindowController: NSWindowController {
         pinnedCenterX = centerX
         pinnedDisplayId = screen.displayId
 
-        let x = centerX - size.width / 2
-        let y = screen.frame.maxY - size.height
+        let colX = centerX - collapsedNotchSize.width / 2 + notchHorizontalOffset
+        let colY = screen.frame.maxY - collapsedNotchSize.height
+        window.setFrame(NSRect(origin: NSPoint(x: colX, y: colY), size: collapsedNotchSize), display: true, animate: animate)
         
-        let newFrame = NSRect(origin: NSPoint(x: x, y: y), size: size)
-        window.setFrame(newFrame, display: true, animate: animate)
+        let expX = centerX - expandedNotchSize.width / 2 + notchHorizontalOffset
+        let expY = screen.frame.maxY - expandedNotchSize.height
+        expandedPanel.setFrame(NSRect(origin: NSPoint(x: expX, y: expY), size: expandedNotchSize), display: true, animate: animate)
+        
         updateFullScreenVisibility()
     }
 
     func expandFromCollapsedWindow() {
         guard !AppState.shared.isNotchExpanded else { return }
 
-        // 프레임과 SwiftUI 상태를 같은 런루프에서 바꿔 중간 위치가 보이지 않게 한다.
         isManualExpand = true
-        updateWindowFrame(animate: false, sizeOverride: expandedNotchSize)
+        updateWindowFrame(animate: false)
         AppState.shared.isNotchExpanded = true
     }
 
@@ -313,12 +343,17 @@ class NotchWindowController: NSWindowController {
             guard !isHiddenForFullScreen else { return }
             isHiddenForFullScreen = true
             window.orderOut(nil)
+            expandedPanel.orderOut(nil)
             return
         }
 
         guard isHiddenForFullScreen else { return }
         isHiddenForFullScreen = false
-        window.orderFrontRegardless()
+        if AppState.shared.isNotchExpanded {
+            expandedPanel.orderFrontRegardless()
+        } else {
+            window.orderFrontRegardless()
+        }
     }
 
     private func targetScreen(for window: NSWindow) -> NSScreen {
@@ -1302,16 +1337,21 @@ struct NotchView: View {
     @State private var leftMascot: BuddyKind = .claudeCode
     @State private var rightMascot: BuddyKind = .gemini
 
+    var forceCollapsed: Bool = false
+    private var isExpanded: Bool {
+        forceCollapsed ? false : state.isNotchExpanded
+    }
+
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
-        sessionStore.pendingCount > 0 || (state.isNotchExpanded && state.isExpandingFromRequest && !state.currentMessage.isEmpty)
+        sessionStore.pendingCount > 0 || (isExpanded && state.isExpandingFromRequest && !state.currentMessage.isEmpty)
     }
     private var headerTitle: String { isActionAreaShowing && !state.currentToolName.isEmpty ? tool.label : L10n.shared.notchSessions }
     private var displayedSessionId: String {
         state.currentSessionId.isEmpty ? (sessionStore.selectedSessionId ?? "") : state.currentSessionId
     }
     private var notchSize: NSSize {
-        state.isNotchExpanded ? expandedNotchSize : collapsedNotchSize
+        isExpanded ? expandedNotchSize : collapsedNotchSize
     }
 
     private var currentBuddyKind: BuddyKind {
@@ -1322,7 +1362,7 @@ struct NotchView: View {
     }
 
     private var notchExpansionAnimation: Animation {
-        state.isNotchExpanded
+        isExpanded
             ? .spring(response: 0.35, dampingFraction: 0.75)
             : .easeOut(duration: 0.28)
     }
@@ -1336,8 +1376,8 @@ struct NotchView: View {
                     // Background
                     UnevenRoundedRectangle(
                         topLeadingRadius: 0,
-                        bottomLeadingRadius: state.isNotchExpanded ? 24 : 14,
-                        bottomTrailingRadius: state.isNotchExpanded ? 24 : 14,
+                        bottomLeadingRadius: isExpanded ? 24 : 14,
+                        bottomTrailingRadius: isExpanded ? 24 : 14,
                         topTrailingRadius: 0,
                         style: .continuous
                     )
@@ -1349,7 +1389,7 @@ struct NotchView: View {
                     )
 
                     VStack(alignment: .center, spacing: 0) {
-                        if state.isNotchExpanded {
+                        if isExpanded {
                             expandedContent
                                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
                         } else {
@@ -1357,7 +1397,7 @@ struct NotchView: View {
                                 .transition(.opacity)
                         }
                         
-                        if !state.isNotchExpanded {
+                        if !isExpanded {
                             Spacer(minLength: 0)
                         }
                     }
@@ -1375,11 +1415,11 @@ struct NotchView: View {
             )
             .contentShape(Rectangle())
             .onTapGesture {
-                if !state.isNotchExpanded {
+                if !isExpanded {
                     (NSApp.windows.first { $0.windowController is NotchWindowController }?.windowController as? NotchWindowController)?.expandFromCollapsedWindow()
                 }
             }
-            .animation(notchExpansionAnimation, value: state.isNotchExpanded)
+            .animation(notchExpansionAnimation, value: isExpanded)
 
             Spacer()
         }
