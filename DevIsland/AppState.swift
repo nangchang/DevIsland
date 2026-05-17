@@ -968,7 +968,7 @@ class AppState: ObservableObject {
         //           노치 UI를 펼쳐 사용자에게 터미널로 돌아가야 함을 알립니다.
         //    - 대상: 직접 입력(ask_user), 계획 승인(exit_plan_mode), 자체 보안 정책상 터미널 확인이 강제되는 툴(run_shell_command),
         //           그리고 계획 단계에서 발생하는 임시 파일 작업들(.gemini/tmp/).
-        let isInteractive = ["ask_user", "exit_plan_mode", "run_shell_command"].contains(toolName) || isPlanAction
+        let isInteractive = GeminiPromptPolicy.isInteractiveTool(toolName, isPlanAction: isPlanAction)
         
         // 자동 승인 여부 판단 (전역 설정 + 세션별 툴 등록 + 현재가 자동 편집 모드인지 + Safe 등급 툴 자동 승인 옵션)
         var isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName) || isInteractive
@@ -986,11 +986,8 @@ class AppState: ObservableObject {
         // 제미나이 CLI가 --auto-approve나 --yolo로 실행되어 터미널 프롬프트가 뜨지 않는 상황일 때,
         // DevIsland가 'Interactive 모드'처럼 위험한 툴을 선별해서 승인 창을 띄웁니다.
         if emulateGeminiInteractiveMode && agentKind == .gemini {
-            // 사용자가 명시적으로 추가한 글로벌/세션 자동 승인 툴은 에뮬레이션 모드라도 존중하여 패스시킵니다.
-            let isExplicitlyApproved = globalAutoApproveTypes.contains(toolName) || isAutoApprovedSession  // isAutoApprovedSession already uses sessionStore
-            
-            // 위험한 툴이면서 사용자가 명시적으로 승인하지 않은 경우에만 자동 통과를 막고 승인을 강제합니다.
-            if ToolKnowledge.risk(for: toolName) != .safe && !isExplicitlyApproved {
+            let isExplicitlyApproved = globalAutoApproveTypes.contains(toolName) || isAutoApprovedSession
+            if GeminiPromptPolicy.emulationShouldForceApproval(toolName: toolName, isExplicitlyApproved: isExplicitlyApproved) {
                 isAutoApprovedGlobal = false
                 isAutoEditActive = false
                 print("[DevIsland] [EMULATION] Gemini interactive emulation forced for tool: \(toolName)")

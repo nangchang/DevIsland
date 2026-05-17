@@ -6,12 +6,6 @@ import Foundation
 // Claude-specific output is handled by helpers below (claudePreToolUseOutput,
 // claudeUserPromptSubmitOutput, etc.) and ClaudeAdapter in the same file.
 //
-// TODO(gap-4): Extract Gemini-specific prompt/policy logic into GeminiPromptPolicy.swift.
-//   Currently the Gemini branch is a minimal allow/deny formatter with no policy
-//   customization. GeminiPromptPolicy should mirror ClaudePromptPolicy in structure
-//   and expose Gemini-specific BeforeTool control (e.g., auto-edit emulation policy,
-//   plan-mode detection, interactive emulation rules).
-//   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
 struct ProviderAdapter {
     static let denialMessage = "DevIsland에서 거절되었습니다."
 
@@ -67,13 +61,7 @@ struct ProviderAdapter {
 
         let allow = decision == "approved"
         if provider == .gemini {
-            var output: [String: AnyJSON] = [
-                "decision": .string(allow ? "allow" : "deny")
-            ]
-            if !allow {
-                output["reason"] = .string(denialMessage)
-            }
-            return output
+            return GeminiPromptPolicy.beforeToolOutput(allow: allow, denialMessage: denialMessage)
         }
 
         if provider == .codex {
