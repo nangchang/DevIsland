@@ -32,6 +32,8 @@ class MascotState: ObservableObject {
         randomCandidates: Set<BuddyKind>
     ) -> BuddyKind {
         switch mode {
+        case .hidden:
+            return current ?? specific
         case .specific:
             return specific
         case .random:
@@ -69,7 +71,7 @@ struct NotchView: View {
         state.currentSessionId.isEmpty ? (sessionStore.selectedSessionId ?? "") : state.currentSessionId
     }
     private var notchSize: NSSize {
-        isExpanded ? expandedNotchSize : collapsedNotchSize
+        NotchLayout.size(expanded: isExpanded, settings: settingsStore.settings)
     }
 
     private var currentBuddyKind: BuddyKind {
@@ -80,9 +82,10 @@ struct NotchView: View {
     }
 
     private var notchExpansionAnimation: Animation {
-        isExpanded
-            ? .spring(response: notchExpansionDuration, dampingFraction: 0.75)
-            : .easeOut(duration: notchCollapseDuration)
+        let settings = settingsStore.settings
+        return isExpanded
+            ? Animation.spring(response: NotchLayout.expansionDuration(settings: settings), dampingFraction: 0.75)
+            : Animation.easeOut(duration: NotchLayout.collapseDuration(settings: settings))
     }
 
     var body: some View {
@@ -91,17 +94,7 @@ struct NotchView: View {
 
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
-                    // Background
-                    NotchShape(
-                        cornerRadius: isExpanded ? 24 : 14,
-                        topFilletRadius: 6
-                    )
-                    .fill(Color.black)
-                    .frame(
-                        width: notchSize.width,
-                        height: notchSize.height,
-                        alignment: .top
-                    )
+                    notchBackground
 
                     VStack(alignment: .center, spacing: 0) {
                         if isExpanded {
@@ -174,6 +167,37 @@ struct NotchView: View {
         }
     }
 
+    private var notchBackground: some View {
+        let shape = NotchShape(
+            cornerRadius: isExpanded ? 24 : 14,
+            topFilletRadius: 6
+        )
+
+        return ZStack(alignment: .top) {
+            if settingsStore.settings.notchBackdropShadowEnabled {
+                shape
+                    .fill(Color.black.opacity(isExpanded ? 0.32 : 0.28))
+                    .offset(y: isExpanded ? 3 : 2)
+                    .blur(radius: isExpanded ? 3 : 2)
+                    .allowsHitTesting(false)
+
+                shape
+                    .fill(Color.black.opacity(isExpanded ? 0.16 : 0.14))
+                    .offset(y: 1)
+                    .blur(radius: 1)
+                    .allowsHitTesting(false)
+            }
+
+            shape
+                .fill(Color.black.opacity(settingsStore.settings.notchPanelOpacity))
+        }
+        .frame(
+            width: notchSize.width,
+            height: notchSize.height,
+            alignment: .top
+        )
+    }
+
     // MARK: Collapsed
 
     var collapsedContent: some View {
@@ -182,25 +206,29 @@ struct NotchView: View {
                 .foregroundColor(.white.opacity(0.6))
                 .font(.system(size: 11, weight: .semibold))
 
-            HStack {
+            if settingsStore.settings.notchLeftCharacterMode != .hidden {
                 CLIBuddyView(
                     isActive: buddyPulse,
                     kind: mascotState.leftMascot
                 )
                 .frame(width: 24, height: 24)
-                .offset(x: -6, y: 4)
+                .position(x: 24, y: characterCenterY)
+            }
 
-                Spacer(minLength: 0)
-
+            if settingsStore.settings.notchRightCharacterMode != .hidden {
                 CLIBuddyView(
                     isActive: buddyPulse,
                     kind: mascotState.rightMascot
                 )
                 .frame(width: 24, height: 24)
-                .offset(x: 6, y: 4)
+                .position(x: notchSize.width - 24, y: characterCenterY)
             }
         }
-        .padding(.horizontal, 18)
+        .frame(width: notchSize.width, height: notchSize.height)
+    }
+
+    private var characterCenterY: CGFloat {
+        max(12, min(notchSize.height - 12, notchSize.height / 2 + settingsStore.settings.notchCharacterVerticalOffset))
     }
 
     // MARK: Expanded
@@ -245,6 +273,19 @@ struct NotchView: View {
                 }
 
                 Spacer()
+
+                Button {
+                    AppWindowRouter.showSettings()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .help(l10n.helpOpenSettings)
 
                 if !displayedSessionId.isEmpty {
                     Button {
@@ -456,7 +497,7 @@ struct NotchView: View {
                 }
                 .padding(.bottom, 20)
             }
-            .frame(width: sessionStore.activeSessions.isEmpty ? 680 : 420)
+            .frame(width: sessionStore.activeSessions.isEmpty ? max(0, notchSize.width - 12) : min(420, notchSize.width * 0.62))
 
             if !sessionStore.activeSessions.isEmpty {
                 Rectangle()

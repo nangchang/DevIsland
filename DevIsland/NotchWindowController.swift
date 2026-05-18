@@ -5,11 +5,58 @@ import CoreGraphics
 
 // MARK: - Window Controller
 
-let collapsedNotchSize = NSSize(width: 260, height: 32)
-let expandedNotchSize = NSSize(width: 692, height: 300)
+let baseCollapsedNotchSize = NSSize(width: 260, height: 32)
+let baseExpandedNotchSize = NSSize(width: 692, height: 300)
 let notchHorizontalOffset: CGFloat = -10
-let notchExpansionDuration: TimeInterval = 0.35
-let notchCollapseDuration: TimeInterval = 0.28
+let baseNotchExpansionDuration: TimeInterval = 0.35
+let baseNotchCollapseDuration: TimeInterval = 0.28
+
+enum NotchLayout {
+    static func shadowOutset(expanded: Bool, settings: AppSettings) -> CGFloat {
+        settings.notchBackdropShadowEnabled ? (expanded ? 8 : 5) : 0
+    }
+
+    static func collapsedSize(settings: AppSettings) -> NSSize {
+        NSSize(width: settings.collapsedNotchWidth, height: settings.collapsedNotchHeight)
+    }
+
+    static func expandedSize(settings: AppSettings) -> NSSize {
+        NSSize(width: settings.expandedNotchWidth, height: settings.expandedNotchHeight)
+    }
+
+    static func size(expanded: Bool, settings: AppSettings) -> NSSize {
+        expanded ? expandedSize(settings: settings) : collapsedSize(settings: settings)
+    }
+
+    static func windowSize(expanded: Bool, settings: AppSettings) -> NSSize {
+        let size = size(expanded: expanded, settings: settings)
+        let outset = shadowOutset(expanded: expanded, settings: settings)
+        return NSSize(width: size.width, height: size.height + outset)
+    }
+
+    static func transitionScale(settings: AppSettings) -> Double {
+        let widthRatio = settings.expandedNotchWidth / baseExpandedNotchSize.width
+        let heightRatio = settings.expandedNotchHeight / baseExpandedNotchSize.height
+        let ratio = max(widthRatio, heightRatio)
+        return min(max(ratio, 1.0), 1.7)
+    }
+
+    static func expansionDuration(settings: AppSettings) -> TimeInterval {
+        baseNotchExpansionDuration * transitionScale(settings: settings)
+    }
+
+    static func collapseDuration(settings: AppSettings) -> TimeInterval {
+        baseNotchCollapseDuration * transitionScale(settings: settings)
+    }
+}
+
+private struct NotchAppearanceSnapshot: Equatable {
+    let collapsedSize: NSSize
+    let expandedSize: NSSize
+    let collapsedWindowSize: NSSize
+    let expandedWindowSize: NSSize
+    let shadowEnabled: Bool
+}
 
 class NotchWindowController: NSWindowController {
     private var cancellables = Set<AnyCancellable>()
@@ -30,7 +77,7 @@ class NotchWindowController: NSWindowController {
 
     convenience init() {
         let collapsedPanel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: collapsedNotchSize),
+            contentRect: NSRect(origin: .zero, size: NotchLayout.windowSize(expanded: false, settings: SettingsStore.shared.settings)),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
@@ -47,7 +94,7 @@ class NotchWindowController: NSWindowController {
         collapsedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
 
         let expandedPanel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: expandedNotchSize),
+            contentRect: NSRect(origin: .zero, size: NotchLayout.windowSize(expanded: true, settings: SettingsStore.shared.settings)),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
@@ -126,6 +173,25 @@ class NotchWindowController: NSWindowController {
                 self?.resetPinnedPosition()
                 self?.updateWindowFrame(animate: false)
                 self?.updateFullScreenVisibility()
+            }
+            .store(in: &cancellables)
+
+        SettingsStore.shared.$settings
+            .map { settings in
+                NotchAppearanceSnapshot(
+                    collapsedSize: NotchLayout.collapsedSize(settings: settings),
+                    expandedSize: NotchLayout.expandedSize(settings: settings),
+                    collapsedWindowSize: NotchLayout.windowSize(expanded: false, settings: settings),
+                    expandedWindowSize: NotchLayout.windowSize(expanded: true, settings: settings),
+                    shadowEnabled: settings.notchBackdropShadowEnabled
+                )
+            }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] snapshot in
+                self?.window?.hasShadow = false
+                self?.expandedPanel.hasShadow = false
+                self?.updateWindowFrame(animate: false)
             }
             .store(in: &cancellables)
 
@@ -224,6 +290,10 @@ class NotchWindowController: NSWindowController {
 
     private func handleExpansionChange(_ expanded: Bool) {
         pendingSettle?.cancel()
+        let settings = SettingsStore.shared.settings
+        let usesTransparentPanel = settings.notchPanelOpacity < 0.999
+        let expansionDuration = NotchLayout.expansionDuration(settings: settings)
+        let collapseDuration = NotchLayout.collapseDuration(settings: settings)
         
         if expanded {
             window?.level = .mainMenu + 1
@@ -244,12 +314,16 @@ class NotchWindowController: NSWindowController {
             }
             
             expandedPanel.orderFrontRegardless()
-            
-            let work = DispatchWorkItem { [weak self] in
-                self?.window?.orderOut(nil)
+
+            if usesTransparentPanel {
+                window?.orderOut(nil)
+            } else {
+                let work = DispatchWorkItem { [weak self] in
+                    self?.window?.orderOut(nil)
+                }
+                pendingSettle = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + expansionDuration, execute: work)
             }
-            pendingSettle = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + notchExpansionDuration, execute: work)
             
         } else {
             window?.level = .mainMenu + 2
@@ -257,21 +331,34 @@ class NotchWindowController: NSWindowController {
             
             AppState.shared.isExpandingFromRequest = false
             resetPinnedPosition()
-            
-            window?.orderFrontRegardless()
-            
-            let work = DispatchWorkItem { [weak self] in
-                self?.expandedPanel.orderOut(nil)
-                self?.updateWindowFrame(animate: false)
+
+            if usesTransparentPanel {
+                let work = DispatchWorkItem { [weak self] in
+                    self?.expandedPanel.orderOut(nil)
+                    self?.updateWindowFrame(animate: false)
+                    self?.window?.orderFrontRegardless()
+                }
+                pendingSettle = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration, execute: work)
+            } else {
+                window?.orderFrontRegardless()
+
+                let work = DispatchWorkItem { [weak self] in
+                    self?.expandedPanel.orderOut(nil)
+                    self?.updateWindowFrame(animate: false)
+                }
+                pendingSettle = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration, execute: work)
             }
-            pendingSettle = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + notchCollapseDuration, execute: work)
         }
     }
 
     func updateWindowFrame(animate: Bool = true, sizeOverride: NSSize? = nil, targetScreenOverride: NSScreen? = nil) {
         guard let window = window else { return }
         let screen = targetScreenOverride ?? targetScreen(for: window)
+        let settings = SettingsStore.shared.settings
+        let collapsedWindowSize = NotchLayout.windowSize(expanded: false, settings: settings)
+        let expandedWindowSize = NotchLayout.windowSize(expanded: true, settings: settings)
         
         if let pinnedDisplayId, pinnedDisplayId != screen.displayId {
             resetPinnedPosition()
@@ -281,13 +368,13 @@ class NotchWindowController: NSWindowController {
         pinnedCenterX = centerX
         pinnedDisplayId = screen.displayId
 
-        let colX = centerX - collapsedNotchSize.width / 2 + notchHorizontalOffset
-        let colY = screen.frame.maxY - collapsedNotchSize.height
-        window.setFrame(NSRect(origin: NSPoint(x: colX, y: colY), size: collapsedNotchSize), display: true, animate: animate)
+        let colX = centerX - collapsedWindowSize.width / 2 + notchHorizontalOffset
+        let colY = screen.frame.maxY - collapsedWindowSize.height
+        window.setFrame(NSRect(origin: NSPoint(x: colX, y: colY), size: sizeOverride ?? collapsedWindowSize), display: true, animate: animate)
         
-        let expX = centerX - expandedNotchSize.width / 2 + notchHorizontalOffset
-        let expY = screen.frame.maxY - expandedNotchSize.height
-        expandedPanel.setFrame(NSRect(origin: NSPoint(x: expX, y: expY), size: expandedNotchSize), display: true, animate: animate)
+        let expX = centerX - expandedWindowSize.width / 2 + notchHorizontalOffset
+        let expY = screen.frame.maxY - expandedWindowSize.height
+        expandedPanel.setFrame(NSRect(origin: NSPoint(x: expX, y: expY), size: expandedWindowSize), display: true, animate: animate)
         
         updateFullScreenVisibility()
     }
@@ -301,7 +388,7 @@ class NotchWindowController: NSWindowController {
     }
 
     private static func notchSize(expanded: Bool) -> NSSize {
-        expanded ? expandedNotchSize : collapsedNotchSize
+        NotchLayout.size(expanded: expanded, settings: SettingsStore.shared.settings)
     }
 
     private static func collectionBehavior(showInFullScreenApps: Bool) -> NSWindow.CollectionBehavior {
@@ -601,8 +688,15 @@ class NotchHostingView: NSHostingView<NotchView> {
     }
 
     private func notchHitRect() -> CGRect {
-        // 동적 프레임 모드에서는 윈도우 전체가 곧 노치이므로 bounds 전체를 리턴
-        return bounds
+        let visualSize = NotchLayout.size(
+            expanded: AppState.shared.isNotchExpanded,
+            settings: SettingsStore.shared.settings
+        )
+        return CGRect(
+            x: (bounds.width - visualSize.width) / 2,
+            y: bounds.maxY - visualSize.height,
+            width: visualSize.width,
+            height: visualSize.height
+        )
     }
 }
-
