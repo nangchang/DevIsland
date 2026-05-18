@@ -91,6 +91,8 @@ final class OpenPeonEventMapperTests: XCTestCase {
     }
 
     func testClaudePostToolUseOutputDoesNotMapToSoundEvent() {
+        // Claude reports real tool failures through PostToolUseFailure; PostToolUse
+        // output can contain compiler/test error text without producing sound feedback.
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",
             "tool_response": [
