@@ -691,20 +691,25 @@ class AppState: ObservableObject {
         }
 
         if isNotification {
-            print("[DevIsland] notification event: \(event) for \(toolName) → auto-approved")
+            let shouldPassToClaudeNativePrompt = agentKind == .claudeCode && isUserQuestionTool
+            let notificationResponse = shouldPassToClaudeNativePrompt ? "pass" : "approved"
+            let notificationAction: RuleAction = shouldPassToClaudeNativePrompt ? .prompt : .allow
+            let notificationReason = shouldPassToClaudeNativePrompt ? "Claude user question native prompt" : "notification"
+
+            print("[DevIsland] notification event: \(event) for \(toolName) → \(notificationResponse)")
             playOpenPeonSound(cespCategory)
             guard !sessionId.isEmpty else {
                 respondWithReplay(
-                    "{\"response\": \"approved\"}",
+                    "{\"response\": \"\(notificationResponse)\"}",
                     responseHandler: responseHandler,
                     hookEventId: hookEventId,
                     agentKind: agentKind,
                     sessionId: sessionId,
                     toolName: replayToolName,
                     workspaceRoot: workspaceRoot,
-                    action: .allow,
+                    action: notificationAction,
                     source: .automatic,
-                    reason: "notification"
+                    reason: notificationReason
                 )
                 return
             }
@@ -802,16 +807,16 @@ class AppState: ObservableObject {
             }
 
             respondWithReplay(
-                "{\"response\": \"approved\"}",
+                "{\"response\": \"\(notificationResponse)\"}",
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
                 agentKind: agentKind,
                 sessionId: sessionId,
                 toolName: replayToolName,
                 workspaceRoot: workspaceRoot,
-                action: .allow,
+                action: notificationAction,
                 source: .automatic,
-                reason: "notification"
+                reason: notificationReason
             )
             return
         }
