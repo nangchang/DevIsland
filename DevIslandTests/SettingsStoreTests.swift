@@ -49,6 +49,14 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.settings.openPeonGlobalMuted)
         XCTAssertTrue(store.settings.openPeonMutedCategories.contains(CESPCategory.taskAcknowledge.rawValue))
         XCTAssertEqual(store.settings.openPeonDebounceMilliseconds, 1500)
+        XCTAssertEqual(store.settings.notchPanelOpacity, 1.0)
+        XCTAssertTrue(store.settings.notchBackdropShadowEnabled)
+        XCTAssertEqual(store.settings.collapsedNotchWidth, 260)
+        XCTAssertEqual(store.settings.collapsedNotchHeight, 32)
+        XCTAssertEqual(store.settings.expandedNotchWidth, 692)
+        XCTAssertEqual(store.settings.expandedNotchHeight, 300)
+        XCTAssertEqual(store.settings.notchAutoCollapseDelay, .seconds5)
+        XCTAssertEqual(store.settings.notchCharacterVerticalOffset, 4)
         XCTAssertEqual(store.settings.notchLeftCharacterMode, .random)
         XCTAssertEqual(store.settings.notchLeftCharacterKind, .claudeCode)
         XCTAssertEqual(store.settings.notchLeftRandomCharacterKinds, Set(BuddyKind.defaultRandomCases))
@@ -77,6 +85,14 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.openPeonGlobalMuted = true
         store.settings.openPeonMutedCategories = [CESPCategory.inputRequired.rawValue]
         store.settings.openPeonDebounceMilliseconds = 500
+        store.settings.notchPanelOpacity = 0.65
+        store.settings.notchBackdropShadowEnabled = false
+        store.settings.collapsedNotchWidth = 320
+        store.settings.collapsedNotchHeight = 42
+        store.settings.expandedNotchWidth = 780
+        store.settings.expandedNotchHeight = 420
+        store.settings.notchAutoCollapseDelay = .seconds10
+        store.settings.notchCharacterVerticalOffset = -2
         store.settings.notchLeftCharacterMode = .specific
         store.settings.notchLeftCharacterKind = .codex
         store.settings.notchLeftRandomCharacterKinds = [.codex, .island]
@@ -104,6 +120,14 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.settings.openPeonGlobalMuted)
         XCTAssertEqual(reloaded.settings.openPeonMutedCategories, Set([CESPCategory.inputRequired.rawValue]))
         XCTAssertEqual(reloaded.settings.openPeonDebounceMilliseconds, 500)
+        XCTAssertEqual(reloaded.settings.notchPanelOpacity, 0.65)
+        XCTAssertFalse(reloaded.settings.notchBackdropShadowEnabled)
+        XCTAssertEqual(reloaded.settings.collapsedNotchWidth, 320)
+        XCTAssertEqual(reloaded.settings.collapsedNotchHeight, 42)
+        XCTAssertEqual(reloaded.settings.expandedNotchWidth, 780)
+        XCTAssertEqual(reloaded.settings.expandedNotchHeight, 420)
+        XCTAssertEqual(reloaded.settings.notchAutoCollapseDelay, .seconds10)
+        XCTAssertEqual(reloaded.settings.notchCharacterVerticalOffset, -2)
         XCTAssertEqual(reloaded.settings.notchLeftCharacterMode, .specific)
         XCTAssertEqual(reloaded.settings.notchLeftCharacterKind, .codex)
         XCTAssertEqual(reloaded.settings.notchLeftRandomCharacterKinds, [.codex, .island])
@@ -126,6 +150,13 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set("", forKey: SettingsStore.DefaultsKey.openPeonPacksDirectory)
         defaults.set(2.0, forKey: SettingsStore.DefaultsKey.openPeonMasterVolume)
         defaults.set(0, forKey: SettingsStore.DefaultsKey.openPeonDebounceMilliseconds)
+        defaults.set(0.2, forKey: SettingsStore.DefaultsKey.notchBackgroundOpacity)
+        defaults.set(10, forKey: SettingsStore.DefaultsKey.collapsedNotchWidth)
+        defaults.set(100, forKey: SettingsStore.DefaultsKey.collapsedNotchHeight)
+        defaults.set(100, forKey: SettingsStore.DefaultsKey.expandedNotchWidth)
+        defaults.set(1000, forKey: SettingsStore.DefaultsKey.expandedNotchHeight)
+        defaults.set("bad-delay", forKey: SettingsStore.DefaultsKey.notchAutoCollapseDelay)
+        defaults.set(100, forKey: SettingsStore.DefaultsKey.notchCharacterVerticalOffset)
         defaults.set("bad-mode", forKey: SettingsStore.DefaultsKey.notchLeftCharacterMode)
         defaults.set("bad-kind", forKey: SettingsStore.DefaultsKey.notchLeftCharacterKind)
         defaults.set(["bad-kind"], forKey: SettingsStore.DefaultsKey.notchLeftRandomCharacterKinds)
@@ -136,6 +167,14 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
         XCTAssertEqual(store.settings, .defaults)
+    }
+
+    func testLegacyNotchBackgroundOpacityMigratesToPanelOpacity() {
+        defaults.set(0.7, forKey: SettingsStore.DefaultsKey.notchBackgroundOpacity)
+
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+
+        XCTAssertEqual(store.settings.notchPanelOpacity, 0.7)
     }
 
     func testBridgeRuntimeConfigWritesTransportSettingsForBridge() throws {

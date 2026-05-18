@@ -86,6 +86,7 @@ enum ApprovalFallbackPolicy: String, CaseIterable, Identifiable {
 }
 
 enum NotchCharacterMode: String, CaseIterable, Identifiable {
+    case hidden
     case random
     case specific
 
@@ -94,8 +95,40 @@ enum NotchCharacterMode: String, CaseIterable, Identifiable {
     var label: String {
         let l = L10n.shared
         switch self {
+        case .hidden:   return l.notchCharacterHidden
         case .random:   return l.notchCharacterRandom
         case .specific: return l.notchCharacterSpecific
+        }
+    }
+}
+
+enum NotchAutoCollapseDelay: String, CaseIterable, Identifiable {
+    case off
+    case seconds3
+    case seconds5
+    case seconds10
+    case seconds30
+
+    var id: String { rawValue }
+
+    var seconds: TimeInterval? {
+        switch self {
+        case .off:       return nil
+        case .seconds3:  return 3
+        case .seconds5:  return 5
+        case .seconds10: return 10
+        case .seconds30: return 30
+        }
+    }
+
+    var label: String {
+        let l = L10n.shared
+        switch self {
+        case .off:       return l.notchAutoCollapseOff
+        case .seconds3:  return l.labelSeconds(3)
+        case .seconds5:  return l.labelSeconds(5)
+        case .seconds10: return l.labelSeconds(10)
+        case .seconds30: return l.labelSeconds(30)
         }
     }
 }
@@ -122,6 +155,14 @@ struct AppSettings: Equatable {
     var openPeonGlobalMuted: Bool
     var openPeonMutedCategories: Set<String>
     var openPeonDebounceMilliseconds: Int
+    var notchPanelOpacity: Double
+    var notchBackdropShadowEnabled: Bool
+    var collapsedNotchWidth: Double
+    var collapsedNotchHeight: Double
+    var expandedNotchWidth: Double
+    var expandedNotchHeight: Double
+    var notchAutoCollapseDelay: NotchAutoCollapseDelay
+    var notchCharacterVerticalOffset: Double
     var notchLeftCharacterMode: NotchCharacterMode
     var notchLeftCharacterKind: BuddyKind
     var notchLeftRandomCharacterKinds: Set<BuddyKind>
@@ -182,6 +223,14 @@ struct AppSettings: Equatable {
             CESPCategory.userSpam.rawValue
         ],
         openPeonDebounceMilliseconds: 1500,
+        notchPanelOpacity: 1.0,
+        notchBackdropShadowEnabled: true,
+        collapsedNotchWidth: 260,
+        collapsedNotchHeight: 32,
+        expandedNotchWidth: 692,
+        expandedNotchHeight: 300,
+        notchAutoCollapseDelay: .seconds5,
+        notchCharacterVerticalOffset: 4,
         notchLeftCharacterMode: .random,
         notchLeftCharacterKind: .claudeCode,
         notchLeftRandomCharacterKinds: Set(BuddyKind.defaultRandomCases),
@@ -237,6 +286,15 @@ final class SettingsStore: ObservableObject {
         static let openPeonGlobalMuted = "openPeonGlobalMuted"
         static let openPeonMutedCategories = "openPeonMutedCategories"
         static let openPeonDebounceMilliseconds = "openPeonDebounceMilliseconds"
+        static let notchBackgroundOpacity = "notchBackgroundOpacity"
+        static let notchPanelOpacity = "notchPanelOpacity"
+        static let notchBackdropShadowEnabled = "notchBackdropShadowEnabled"
+        static let collapsedNotchWidth = "collapsedNotchWidth"
+        static let collapsedNotchHeight = "collapsedNotchHeight"
+        static let expandedNotchWidth = "expandedNotchWidth"
+        static let expandedNotchHeight = "expandedNotchHeight"
+        static let notchAutoCollapseDelay = "notchAutoCollapseDelay"
+        static let notchCharacterVerticalOffset = "notchCharacterVerticalOffset"
         static let notchLeftCharacterMode = "notchLeftCharacterMode"
         static let notchLeftCharacterKind = "notchLeftCharacterKind"
         static let notchLeftRandomCharacterKinds = "notchLeftRandomCharacterKinds"
@@ -290,6 +348,14 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.openPeonGlobalMuted, forKey: DefaultsKey.openPeonGlobalMuted)
         userDefaults.set(Array(settings.openPeonMutedCategories).sorted(), forKey: DefaultsKey.openPeonMutedCategories)
         userDefaults.set(settings.openPeonDebounceMilliseconds, forKey: DefaultsKey.openPeonDebounceMilliseconds)
+        userDefaults.set(settings.notchPanelOpacity, forKey: DefaultsKey.notchPanelOpacity)
+        userDefaults.set(settings.notchBackdropShadowEnabled, forKey: DefaultsKey.notchBackdropShadowEnabled)
+        userDefaults.set(settings.collapsedNotchWidth, forKey: DefaultsKey.collapsedNotchWidth)
+        userDefaults.set(settings.collapsedNotchHeight, forKey: DefaultsKey.collapsedNotchHeight)
+        userDefaults.set(settings.expandedNotchWidth, forKey: DefaultsKey.expandedNotchWidth)
+        userDefaults.set(settings.expandedNotchHeight, forKey: DefaultsKey.expandedNotchHeight)
+        userDefaults.set(settings.notchAutoCollapseDelay.rawValue, forKey: DefaultsKey.notchAutoCollapseDelay)
+        userDefaults.set(settings.notchCharacterVerticalOffset, forKey: DefaultsKey.notchCharacterVerticalOffset)
         userDefaults.set(settings.notchLeftCharacterMode.rawValue, forKey: DefaultsKey.notchLeftCharacterMode)
         userDefaults.set(settings.notchLeftCharacterKind.rawValue, forKey: DefaultsKey.notchLeftCharacterKind)
         userDefaults.set(settings.notchLeftRandomCharacterKinds.map(\.rawValue).sorted(), forKey: DefaultsKey.notchLeftRandomCharacterKinds)
@@ -444,6 +510,54 @@ final class SettingsStore: ObservableObject {
                 from: userDefaults,
                 default: defaults.openPeonDebounceMilliseconds
             ),
+            notchPanelOpacity: boundedDouble(
+                key: DefaultsKey.notchPanelOpacity,
+                fallbackKey: DefaultsKey.notchBackgroundOpacity,
+                from: userDefaults,
+                default: defaults.notchPanelOpacity,
+                range: 0.4...1.0
+            ),
+            notchBackdropShadowEnabled: bool(
+                key: DefaultsKey.notchBackdropShadowEnabled,
+                from: userDefaults,
+                default: defaults.notchBackdropShadowEnabled
+            ),
+            collapsedNotchWidth: boundedDouble(
+                key: DefaultsKey.collapsedNotchWidth,
+                from: userDefaults,
+                default: defaults.collapsedNotchWidth,
+                range: 180...420
+            ),
+            collapsedNotchHeight: boundedDouble(
+                key: DefaultsKey.collapsedNotchHeight,
+                from: userDefaults,
+                default: defaults.collapsedNotchHeight,
+                range: 24...56
+            ),
+            expandedNotchWidth: boundedDouble(
+                key: DefaultsKey.expandedNotchWidth,
+                from: userDefaults,
+                default: defaults.expandedNotchWidth,
+                range: 560...1200
+            ),
+            expandedNotchHeight: boundedDouble(
+                key: DefaultsKey.expandedNotchHeight,
+                from: userDefaults,
+                default: defaults.expandedNotchHeight,
+                range: 240...720
+            ),
+            notchAutoCollapseDelay: enumValue(
+                NotchAutoCollapseDelay.self,
+                key: DefaultsKey.notchAutoCollapseDelay,
+                from: userDefaults,
+                default: defaults.notchAutoCollapseDelay
+            ),
+            notchCharacterVerticalOffset: boundedDouble(
+                key: DefaultsKey.notchCharacterVerticalOffset,
+                from: userDefaults,
+                default: defaults.notchCharacterVerticalOffset,
+                range: -8...12
+            ),
             notchLeftCharacterMode: enumValue(
                 NotchCharacterMode.self,
                 key: DefaultsKey.notchLeftCharacterMode,
@@ -513,12 +627,21 @@ final class SettingsStore: ObservableObject {
 
     private static func boundedDouble(
         key: String,
+        fallbackKey: String? = nil,
         from userDefaults: UserDefaults,
         default defaultValue: Double,
         range: ClosedRange<Double>
     ) -> Double {
-        guard userDefaults.object(forKey: key) != nil else { return defaultValue }
-        let value = userDefaults.double(forKey: key)
+        let resolvedKey: String
+        if userDefaults.object(forKey: key) != nil {
+            resolvedKey = key
+        } else if let fallbackKey, userDefaults.object(forKey: fallbackKey) != nil {
+            resolvedKey = fallbackKey
+        } else {
+            return defaultValue
+        }
+
+        let value = userDefaults.double(forKey: resolvedKey)
         return range.contains(value) ? value : defaultValue
     }
 

@@ -190,6 +190,54 @@ private struct DisplaySettingsPane: View {
                 }
 
                 Toggle(l10n.lblShowFullScreen, isOn: $appState.showInFullScreenApps)
+
+                Slider(
+                    value: store.binding(\.notchPanelOpacity),
+                    in: 0.4...1.0,
+                    step: 0.05
+                ) {
+                    Text(l10n.lblPanelOpacity(Int(store.settings.notchPanelOpacity * 100)))
+                }
+
+                Toggle(l10n.lblNotchShadow, isOn: store.binding(\.notchBackdropShadowEnabled))
+
+                Slider(
+                    value: store.binding(\.collapsedNotchWidth),
+                    in: 180...420,
+                    step: 1
+                ) {
+                    Text(l10n.lblCollapsedNotchWidth(Int(store.settings.collapsedNotchWidth)))
+                }
+
+                Slider(
+                    value: store.binding(\.collapsedNotchHeight),
+                    in: 24...56,
+                    step: 1
+                ) {
+                    Text(l10n.lblCollapsedNotchHeight(Int(store.settings.collapsedNotchHeight)))
+                }
+
+                Slider(
+                    value: store.binding(\.expandedNotchWidth),
+                    in: 560...1200,
+                    step: 1
+                ) {
+                    Text(l10n.lblExpandedNotchWidth(Int(store.settings.expandedNotchWidth)))
+                }
+
+                Slider(
+                    value: store.binding(\.expandedNotchHeight),
+                    in: 240...720,
+                    step: 1
+                ) {
+                    Text(l10n.lblExpandedNotchHeight(Int(store.settings.expandedNotchHeight)))
+                }
+
+                Picker(l10n.lblNotchAutoCollapse, selection: store.binding(\.notchAutoCollapseDelay)) {
+                    ForEach(NotchAutoCollapseDelay.allCases) { delay in
+                        Text(delay.label).tag(delay)
+                    }
+                }
             }
 
             Section(l10n.secNotchCharacters) {
@@ -208,6 +256,14 @@ private struct DisplaySettingsPane: View {
                     specificKind: store.binding(\.notchRightCharacterKind),
                     randomKinds: store.binding(\.notchRightRandomCharacterKinds)
                 )
+
+                Slider(
+                    value: store.binding(\.notchCharacterVerticalOffset),
+                    in: -8...12,
+                    step: 1
+                ) {
+                    Text(l10n.lblCharacterVerticalOffset(Int(store.settings.notchCharacterVerticalOffset)))
+                }
             }
 
             Section(l10n.secRequests) {
@@ -249,7 +305,7 @@ private struct NotchCharacterControl: View {
                         Text(kind.label).tag(kind)
                     }
                 }
-            } else {
+            } else if mode == .random {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(l10n.lblRandomIncludes)
                         .font(.caption)
