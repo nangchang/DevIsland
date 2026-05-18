@@ -258,6 +258,14 @@ private struct DisplaySettingsPane: View {
                 )
 
                 Slider(
+                    value: store.binding(\.notchCharacterHorizontalInset),
+                    in: 12...64,
+                    step: 1
+                ) {
+                    Text(l10n.lblCharacterHorizontalInset(Int(store.settings.notchCharacterHorizontalInset)))
+                }
+
+                Slider(
                     value: store.binding(\.notchCharacterVerticalOffset),
                     in: -8...12,
                     step: 1

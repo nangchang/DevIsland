@@ -56,6 +56,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings.expandedNotchWidth, 692)
         XCTAssertEqual(store.settings.expandedNotchHeight, 300)
         XCTAssertEqual(store.settings.notchAutoCollapseDelay, .seconds5)
+        XCTAssertEqual(store.settings.notchCharacterHorizontalInset, 24)
         XCTAssertEqual(store.settings.notchCharacterVerticalOffset, 4)
         XCTAssertEqual(store.settings.notchLeftCharacterMode, .random)
         XCTAssertEqual(store.settings.notchLeftCharacterKind, .claudeCode)
@@ -92,6 +93,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.expandedNotchWidth = 780
         store.settings.expandedNotchHeight = 420
         store.settings.notchAutoCollapseDelay = .seconds10
+        store.settings.notchCharacterHorizontalInset = 36
         store.settings.notchCharacterVerticalOffset = -2
         store.settings.notchLeftCharacterMode = .specific
         store.settings.notchLeftCharacterKind = .codex
@@ -127,6 +129,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.settings.expandedNotchWidth, 780)
         XCTAssertEqual(reloaded.settings.expandedNotchHeight, 420)
         XCTAssertEqual(reloaded.settings.notchAutoCollapseDelay, .seconds10)
+        XCTAssertEqual(reloaded.settings.notchCharacterHorizontalInset, 36)
         XCTAssertEqual(reloaded.settings.notchCharacterVerticalOffset, -2)
         XCTAssertEqual(reloaded.settings.notchLeftCharacterMode, .specific)
         XCTAssertEqual(reloaded.settings.notchLeftCharacterKind, .codex)
@@ -156,6 +159,7 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set(100, forKey: SettingsStore.DefaultsKey.expandedNotchWidth)
         defaults.set(1000, forKey: SettingsStore.DefaultsKey.expandedNotchHeight)
         defaults.set("bad-delay", forKey: SettingsStore.DefaultsKey.notchAutoCollapseDelay)
+        defaults.set(100, forKey: SettingsStore.DefaultsKey.notchCharacterHorizontalInset)
         defaults.set(100, forKey: SettingsStore.DefaultsKey.notchCharacterVerticalOffset)
         defaults.set("bad-mode", forKey: SettingsStore.DefaultsKey.notchLeftCharacterMode)
         defaults.set("bad-kind", forKey: SettingsStore.DefaultsKey.notchLeftCharacterKind)

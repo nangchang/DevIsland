@@ -212,7 +212,7 @@ struct NotchView: View {
                     kind: mascotState.leftMascot
                 )
                 .frame(width: 24, height: 24)
-                .position(x: 24, y: characterCenterY)
+                .position(x: characterHorizontalInset, y: characterCenterY)
             }
 
             if settingsStore.settings.notchRightCharacterMode != .hidden {
@@ -221,10 +221,14 @@ struct NotchView: View {
                     kind: mascotState.rightMascot
                 )
                 .frame(width: 24, height: 24)
-                .position(x: notchSize.width - 24, y: characterCenterY)
+                .position(x: notchSize.width - characterHorizontalInset, y: characterCenterY)
             }
         }
         .frame(width: notchSize.width, height: notchSize.height)
+    }
+
+    private var characterHorizontalInset: CGFloat {
+        max(12, min(notchSize.width / 2 - 12, settingsStore.settings.notchCharacterHorizontalInset))
     }
 
     private var characterCenterY: CGFloat {

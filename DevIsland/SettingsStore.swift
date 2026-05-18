@@ -162,6 +162,7 @@ struct AppSettings: Equatable {
     var expandedNotchWidth: Double
     var expandedNotchHeight: Double
     var notchAutoCollapseDelay: NotchAutoCollapseDelay
+    var notchCharacterHorizontalInset: Double
     var notchCharacterVerticalOffset: Double
     var notchLeftCharacterMode: NotchCharacterMode
     var notchLeftCharacterKind: BuddyKind
@@ -230,6 +231,7 @@ struct AppSettings: Equatable {
         expandedNotchWidth: 692,
         expandedNotchHeight: 300,
         notchAutoCollapseDelay: .seconds5,
+        notchCharacterHorizontalInset: 24,
         notchCharacterVerticalOffset: 4,
         notchLeftCharacterMode: .random,
         notchLeftCharacterKind: .claudeCode,
@@ -294,6 +296,7 @@ final class SettingsStore: ObservableObject {
         static let expandedNotchWidth = "expandedNotchWidth"
         static let expandedNotchHeight = "expandedNotchHeight"
         static let notchAutoCollapseDelay = "notchAutoCollapseDelay"
+        static let notchCharacterHorizontalInset = "notchCharacterHorizontalInset"
         static let notchCharacterVerticalOffset = "notchCharacterVerticalOffset"
         static let notchLeftCharacterMode = "notchLeftCharacterMode"
         static let notchLeftCharacterKind = "notchLeftCharacterKind"
@@ -355,6 +358,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.expandedNotchWidth, forKey: DefaultsKey.expandedNotchWidth)
         userDefaults.set(settings.expandedNotchHeight, forKey: DefaultsKey.expandedNotchHeight)
         userDefaults.set(settings.notchAutoCollapseDelay.rawValue, forKey: DefaultsKey.notchAutoCollapseDelay)
+        userDefaults.set(settings.notchCharacterHorizontalInset, forKey: DefaultsKey.notchCharacterHorizontalInset)
         userDefaults.set(settings.notchCharacterVerticalOffset, forKey: DefaultsKey.notchCharacterVerticalOffset)
         userDefaults.set(settings.notchLeftCharacterMode.rawValue, forKey: DefaultsKey.notchLeftCharacterMode)
         userDefaults.set(settings.notchLeftCharacterKind.rawValue, forKey: DefaultsKey.notchLeftCharacterKind)
@@ -551,6 +555,12 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.notchAutoCollapseDelay,
                 from: userDefaults,
                 default: defaults.notchAutoCollapseDelay
+            ),
+            notchCharacterHorizontalInset: boundedDouble(
+                key: DefaultsKey.notchCharacterHorizontalInset,
+                from: userDefaults,
+                default: defaults.notchCharacterHorizontalInset,
+                range: 12...64
             ),
             notchCharacterVerticalOffset: boundedDouble(
                 key: DefaultsKey.notchCharacterVerticalOffset,
