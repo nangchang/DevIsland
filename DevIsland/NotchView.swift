@@ -73,6 +73,15 @@ struct NotchView: View {
     private var notchSize: NSSize {
         NotchLayout.size(expanded: isExpanded, settings: settingsStore.settings)
     }
+    private var approvalLeftColumnHeight: CGFloat {
+        notchSize.height - 80  // header paddingTop(20) + badge(48) + approvalContent paddingTop(12)
+    }
+    private var approvalPrimaryColumnWidth: CGFloat {
+        if sessionStore.activeSessions.isEmpty {
+            return max(0, notchSize.width - 12)
+        }
+        return max(420, min(notchSize.width * 0.68, notchSize.width - 220))
+    }
 
     private var currentBuddyKind: BuddyKind {
         let session = sessionStore.activeSessions.first { $0.id == state.currentSessionId }
@@ -376,10 +385,9 @@ struct NotchView: View {
                     .background(Color.white.opacity(0.04))
                     .cornerRadius(12)
                     .padding(.horizontal, 16)
-                    .frame(maxHeight: 120)
+                    .frame(maxHeight: .infinity)
                 }
-
-                Spacer()
+                .frame(maxHeight: .infinity)
 
                 VStack(spacing: 12) {
                     if state.hasResponseHandler {
@@ -501,7 +509,7 @@ struct NotchView: View {
                 }
                 .padding(.bottom, 20)
             }
-            .frame(width: sessionStore.activeSessions.isEmpty ? max(0, notchSize.width - 12) : min(420, notchSize.width * 0.62))
+            .frame(width: approvalPrimaryColumnWidth, height: approvalLeftColumnHeight)
 
             if !sessionStore.activeSessions.isEmpty {
                 Rectangle()
