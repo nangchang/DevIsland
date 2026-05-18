@@ -117,6 +117,13 @@ class AppState: ObservableObject {
         let v = userDefaults.double(forKey: SettingsStore.DefaultsKey.permissionTimeoutSeconds)
         return v > 0 ? v : 120.0
     }
+    private var notificationAutoCollapseDelay: TimeInterval? {
+        guard let rawValue = userDefaults.string(forKey: SettingsStore.DefaultsKey.notchAutoCollapseDelay) else {
+            return AppSettings.defaults.notchAutoCollapseDelay.seconds
+        }
+        return NotchAutoCollapseDelay(rawValue: rawValue)?.seconds
+            ?? AppSettings.defaults.notchAutoCollapseDelay.seconds
+    }
     private static let replayTerminalApp = "DevIsland Replay"
     private static let replayTimestampFormatter = ISO8601DateFormatter()
     private let replayRecorder: ReplayRecorder
@@ -803,12 +810,13 @@ class AppState: ObservableObject {
                         self.isNotchExpanded = true
                         self.isExpandingFromRequest = true
                         
-                        // 알림 유지 시간 확보 (최소 5초)
                         self.notificationTimer?.invalidate()
-                        self.notificationTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
-                            if self?.currentResponseHandler == nil && self?.isNotchExpanded == true {
-                                self?.isNotchExpanded = false
-                                self?.isExpandingFromRequest = false
+                        if let delay = self.notificationAutoCollapseDelay {
+                            self.notificationTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+                                if self?.currentResponseHandler == nil && self?.isNotchExpanded == true {
+                                    self?.isNotchExpanded = false
+                                    self?.isExpandingFromRequest = false
+                                }
                             }
                         }
                     }

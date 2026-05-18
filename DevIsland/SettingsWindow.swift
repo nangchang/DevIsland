@@ -11,6 +11,7 @@ enum AppWindowRouter {
     private static var ptyTranscriptController: HostedWindowController?
 
     static func showSettings() {
+        AppState.shared.isNotchExpanded = false
         let controller = cachedController(&settingsController) {
             HostedWindowController(
                 title: L10n.shared.winSettings,
@@ -190,6 +191,49 @@ private struct DisplaySettingsPane: View {
                 }
 
                 Toggle(l10n.lblShowFullScreen, isOn: $appState.showInFullScreenApps)
+
+                SettingsSliderRow(
+                    title: l10n.lblPanelOpacity(Int(store.settings.notchPanelOpacity * 100)),
+                    value: store.binding(\.notchPanelOpacity),
+                    range: 0.4...1.0,
+                    step: 0.05
+                )
+
+                Toggle(l10n.lblNotchShadow, isOn: store.binding(\.notchBackdropShadowEnabled))
+
+                SettingsSliderRow(
+                    title: l10n.lblCollapsedNotchWidth(Int(store.settings.collapsedNotchWidth)),
+                    value: store.binding(\.collapsedNotchWidth),
+                    range: 180...420,
+                    step: 1
+                )
+
+                SettingsSliderRow(
+                    title: l10n.lblCollapsedNotchHeight(Int(store.settings.collapsedNotchHeight)),
+                    value: store.binding(\.collapsedNotchHeight),
+                    range: 24...56,
+                    step: 1
+                )
+
+                SettingsSliderRow(
+                    title: l10n.lblExpandedNotchWidth(Int(store.settings.expandedNotchWidth)),
+                    value: store.binding(\.expandedNotchWidth),
+                    range: 560...1200,
+                    step: 1
+                )
+
+                SettingsSliderRow(
+                    title: l10n.lblExpandedNotchHeight(Int(store.settings.expandedNotchHeight)),
+                    value: store.binding(\.expandedNotchHeight),
+                    range: 240...720,
+                    step: 1
+                )
+
+                Picker(l10n.lblNotchAutoCollapse, selection: store.binding(\.notchAutoCollapseDelay)) {
+                    ForEach(NotchAutoCollapseDelay.allCases) { delay in
+                        Text(delay.label).tag(delay)
+                    }
+                }
             }
 
             Section(l10n.secNotchCharacters) {
@@ -208,6 +252,20 @@ private struct DisplaySettingsPane: View {
                     specificKind: store.binding(\.notchRightCharacterKind),
                     randomKinds: store.binding(\.notchRightRandomCharacterKinds)
                 )
+
+                SettingsSliderRow(
+                    title: l10n.lblCharacterHorizontalInset(Int(store.settings.notchCharacterHorizontalInset)),
+                    value: store.binding(\.notchCharacterHorizontalInset),
+                    range: 12...64,
+                    step: 1
+                )
+
+                SettingsSliderRow(
+                    title: l10n.lblCharacterVerticalOffset(Int(store.settings.notchCharacterVerticalOffset)),
+                    value: store.binding(\.notchCharacterVerticalOffset),
+                    range: -8...12,
+                    step: 1
+                )
             }
 
             Section(l10n.secRequests) {
@@ -225,6 +283,22 @@ private struct DisplaySettingsPane: View {
         let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 1
         let role = screen == NSScreen.main ? l10n.monitorMain() : l10n.monitorN(index)
         return "\(role) · \(Int(screen.frame.width))×\(Int(screen.frame.height))"
+    }
+}
+
+private struct SettingsSliderRow: View {
+    let title: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .foregroundStyle(.primary)
+                .frame(width: 220, alignment: .leading)
+            Slider(value: $value, in: range, step: step)
+        }
     }
 }
 
@@ -249,7 +323,7 @@ private struct NotchCharacterControl: View {
                         Text(kind.label).tag(kind)
                     }
                 }
-            } else {
+            } else if mode == .random {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(l10n.lblRandomIncludes)
                         .font(.caption)

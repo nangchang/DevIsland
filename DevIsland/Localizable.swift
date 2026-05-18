@@ -167,11 +167,20 @@ extension L10n {
     var lblDisplay:          String { s("Display",                       "표시") }
     var lblMonitor:          String { s("Monitor",                       "모니터") }
     var lblShowFullScreen:   String { s("Show above full-screen apps",   "전체화면 앱 위에 표시") }
+    func lblPanelOpacity(_ percent: Int) -> String { s("Panel opacity: \(percent)%", "패널 불투명도: \(percent)%") }
+    var lblNotchShadow:      String { s("Backdrop shadow",               "백드롭 그림자") }
+    func lblCollapsedNotchWidth(_ px: Int) -> String { s("Collapsed width: \(px) px", "접힌 노치 너비: \(px) px") }
+    func lblCollapsedNotchHeight(_ px: Int) -> String { s("Collapsed height: \(px) px", "접힌 노치 높이: \(px) px") }
+    func lblExpandedNotchWidth(_ px: Int) -> String { s("Expanded width: \(px) px", "확장 윈도우 너비: \(px) px") }
+    func lblExpandedNotchHeight(_ px: Int) -> String { s("Expanded height: \(px) px", "확장 윈도우 높이: \(px) px") }
+    var lblNotchAutoCollapse: String { s("Auto-collapse",                "자동 닫힘") }
     var secNotchCharacters:  String { s("Notch characters",              "노치 캐릭터") }
     var lblLeftCharacter:    String { s("Left character",                "왼쪽 캐릭터") }
     var lblRightCharacter:   String { s("Right character",               "오른쪽 캐릭터") }
     var lblCharacter:        String { s("Character",                     "캐릭터") }
     var lblRandomIncludes:   String { s("Random includes",               "랜덤 포함 캐릭터") }
+    func lblCharacterHorizontalInset(_ px: Int) -> String { s("Character horizontal position: \(px) px", "캐릭터 가로 위치: \(px) px") }
+    func lblCharacterVerticalOffset(_ px: Int) -> String { s("Character vertical position: \(px) px", "캐릭터 세로 위치: \(px) px") }
     var secRequests:         String { s("Requests",                      "요청") }
     var lblRequestDisplay:   String { s("Request display",               "요청 표시") }
 
@@ -302,8 +311,10 @@ extension L10n {
     var notchMouse:    String { s("Monitor with mouse",      "마우스가 있는 모니터") }
     var notchFocused:  String { s("Monitor with focus",      "포커스가 있는 모니터") }
     var notchSpecific: String { s("Selected monitor",        "선택한 모니터") }
+    var notchCharacterHidden:   String { s("Hidden",         "숨김") }
     var notchCharacterRandom:   String { s("Random",         "랜덤") }
     var notchCharacterSpecific: String { s("Specific",       "지정") }
+    var notchAutoCollapseOff:   String { s("Off",            "끔") }
 
     // Enum labels — RequestDisplayTarget
     var reqNotch:   String { s("Notch display",  "노치 화면") }
@@ -356,6 +367,7 @@ extension L10n {
     var notchFocusTerminal:    String { s("Focus Terminal",    "터미널 포커스") }
     var notchDismiss:          String { s("Dismiss",           "닫기") }
     var notchUnknown:          String { s("Unknown",           "알 수 없음") }
+    var helpOpenSettings:       String { s("Open settings",     "설정 열기") }
     var helpFocusTerminal:     String { s("Focus terminal",    "터미널 포커스") }
     var helpDismissSession:    String { s("Dismiss session",   "세션 닫기") }
     var helpDismissPending:    String { s("Dismiss session and pass pending request to terminal",
