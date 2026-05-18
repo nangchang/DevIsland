@@ -91,6 +91,7 @@ class NotchWindowController: NSWindowController {
         collapsedPanel.ignoresMouseEvents = false
         collapsedPanel.acceptsMouseMovedEvents = true
         collapsedPanel.isMovableByWindowBackground = false
+        collapsedPanel.animationBehavior = .none
         collapsedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
 
         let expandedPanel = NSPanel(
