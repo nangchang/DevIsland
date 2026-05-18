@@ -1105,6 +1105,7 @@ class AppState: ObservableObject {
 
     private func playOpenPeonSound(_ category: CESPCategory?) {
         guard let category else { return }
+        guard ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1" else { return }
         Task { @MainActor in
             CESPAudioPlayer.shared.play(category: category)
         }

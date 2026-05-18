@@ -19,7 +19,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
         XCTAssertEqual(map("Stop", for: .gemini), .taskComplete)
         XCTAssertEqual(map("Stop", for: .claudeCode), .taskComplete)
         XCTAssertEqual(map("PostToolUse", for: .codex), .taskComplete)
-        XCTAssertEqual(map("PostToolUse", for: .claudeCode), .taskComplete)
+        XCTAssertNil(map("PostToolUse", for: .claudeCode))
     }
 
     func testPreCompactMapsToResourceLimit() {
@@ -90,7 +90,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
         )
     }
 
-    func testClaudePostToolUseOutputDescribingErrorIsTaskComplete() {
+    func testClaudePostToolUseOutputDoesNotMapToSoundEvent() {
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",
             "tool_response": [
@@ -100,7 +100,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
             ]
         ]
 
-        XCTAssertEqual(
+        XCTAssertNil(
             CESPEventMapper.category(
                 event: "PostToolUse",
                 normalizedEvent: "posttooluse",
@@ -110,8 +110,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 message: "** TEST FAILED **\nerror: compiler diagnostic",
                 payload: payload
             ),
-            .taskComplete,
-            "Claude PostToolUse means the tool completed; PostToolUseFailure carries tool execution failures"
+            "Claude PostToolUse does not produce sound feedback; PostToolUseFailure carries tool execution failures"
         )
     }
 
