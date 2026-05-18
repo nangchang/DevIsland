@@ -763,7 +763,35 @@ final class AppStateTests: XCTestCase {
             expectation.fulfill()
         }
 
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+    }
+
+    func testClaudeAskUserQuestionPreToolUseWithAnswersPreservesUpdatedInputPath() {
+        let expectation = XCTestExpectation(description: "Claude AskUserQuestion with answers is approved")
+        let message = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "claude",
+            "session_id": "claude-question-answered",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {"id": "q1", "prompt": "Proceed?"}
+                ],
+                "answers": {
+                    "q1": "Yes"
+                }
+            }
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
 
         wait(for: [expectation], timeout: 1.0)
         XCTAssertEqual(appState.sessionStore.pendingCount, 0)
@@ -788,11 +816,14 @@ final class AppStateTests: XCTestCase {
         )
 
         let json = parseResponse(response)
-        let providerOutput = json?["providerOutput"] as? [String: Any]
+        guard let providerOutput = json?["providerOutput"] as? [String: Any] else {
+            XCTFail("providerOutput should not be nil")
+            return
+        }
         XCTAssertEqual(json?["decision"] as? String, "pass")
-        XCTAssertEqual(providerOutput?["continue"] as? Bool, true)
-        XCTAssertEqual(providerOutput?["suppressOutput"] as? Bool, true)
-        XCTAssertNil(providerOutput?["hookSpecificOutput"])
+        XCTAssertEqual(providerOutput["continue"] as? Bool, true)
+        XCTAssertEqual(providerOutput["suppressOutput"] as? Bool, true)
+        XCTAssertNil(providerOutput["hookSpecificOutput"])
     }
     
     func testMultipleSessions() {
