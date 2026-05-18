@@ -44,10 +44,12 @@ class AppState: ObservableObject {
         _ tmuxSocket: String?,
         _ tmuxClient: String?
     ) -> Bool
+    typealias OpenPeonSoundPlayer = (_ category: CESPCategory) -> Void
 
     private let userDefaults: UserDefaults
     private let frontmostCheck: FrontmostCheck
     private let codexRuleSyncAdapter: CodexRuleSyncAdapter
+    private let openPeonSoundPlayer: OpenPeonSoundPlayer
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
@@ -124,12 +126,18 @@ class AppState: ObservableObject {
         userDefaults: UserDefaults = .standard,
         frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost,
         approvalProxy: ApprovalProxyController? = nil,
-        codexRuleSyncAdapter: CodexRuleSyncAdapter = CodexJSONRuleSyncAdapter()
+        codexRuleSyncAdapter: CodexRuleSyncAdapter = CodexJSONRuleSyncAdapter(),
+        openPeonSoundPlayer: @escaping OpenPeonSoundPlayer = { category in
+            Task { @MainActor in
+                CESPAudioPlayer.shared.play(category: category)
+            }
+        }
     ) {
         self.userDefaults = userDefaults
         self.frontmostCheck = frontmostCheck
         self.approvalProxy = approvalProxy
         self.codexRuleSyncAdapter = codexRuleSyncAdapter
+        self.openPeonSoundPlayer = openPeonSoundPlayer
         self.sessionStore = SessionStore()
         self.geminiState = GeminiSessionState(userDefaults: userDefaults)
         self.ptyCoordinator = PTYCoordinator(
@@ -1111,9 +1119,7 @@ class AppState: ObservableObject {
 
     private func playOpenPeonSound(_ category: CESPCategory?) {
         guard let category else { return }
-        Task { @MainActor in
-            CESPAudioPlayer.shared.play(category: category)
-        }
+        openPeonSoundPlayer(category)
     }
 
 
