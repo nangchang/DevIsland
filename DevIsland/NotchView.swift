@@ -127,10 +127,9 @@ struct NotchView: View {
             }
             .frame(
                 width: notchSize.width,
-                height: notchSize.height,
+                height: NotchLayout.windowSize(expanded: isExpanded, settings: settingsStore.settings).height,
                 alignment: .top
             )
-            .clipped()
             .contentShape(Rectangle())
             .onTapGesture {
                 if !isExpanded {
