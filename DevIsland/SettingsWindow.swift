@@ -191,47 +191,42 @@ private struct DisplaySettingsPane: View {
 
                 Toggle(l10n.lblShowFullScreen, isOn: $appState.showInFullScreenApps)
 
-                Slider(
+                SettingsSliderRow(
+                    title: l10n.lblPanelOpacity(Int(store.settings.notchPanelOpacity * 100)),
                     value: store.binding(\.notchPanelOpacity),
-                    in: 0.4...1.0,
+                    range: 0.4...1.0,
                     step: 0.05
-                ) {
-                    Text(l10n.lblPanelOpacity(Int(store.settings.notchPanelOpacity * 100)))
-                }
+                )
 
                 Toggle(l10n.lblNotchShadow, isOn: store.binding(\.notchBackdropShadowEnabled))
 
-                Slider(
+                SettingsSliderRow(
+                    title: l10n.lblCollapsedNotchWidth(Int(store.settings.collapsedNotchWidth)),
                     value: store.binding(\.collapsedNotchWidth),
-                    in: 180...420,
+                    range: 180...420,
                     step: 1
-                ) {
-                    Text(l10n.lblCollapsedNotchWidth(Int(store.settings.collapsedNotchWidth)))
-                }
+                )
 
-                Slider(
+                SettingsSliderRow(
+                    title: l10n.lblCollapsedNotchHeight(Int(store.settings.collapsedNotchHeight)),
                     value: store.binding(\.collapsedNotchHeight),
-                    in: 24...56,
+                    range: 24...56,
                     step: 1
-                ) {
-                    Text(l10n.lblCollapsedNotchHeight(Int(store.settings.collapsedNotchHeight)))
-                }
+                )
 
-                Slider(
+                SettingsSliderRow(
+                    title: l10n.lblExpandedNotchWidth(Int(store.settings.expandedNotchWidth)),
                     value: store.binding(\.expandedNotchWidth),
-                    in: 560...1200,
+                    range: 560...1200,
                     step: 1
-                ) {
-                    Text(l10n.lblExpandedNotchWidth(Int(store.settings.expandedNotchWidth)))
-                }
+                )
 
-                Slider(
+                SettingsSliderRow(
+                    title: l10n.lblExpandedNotchHeight(Int(store.settings.expandedNotchHeight)),
                     value: store.binding(\.expandedNotchHeight),
-                    in: 240...720,
+                    range: 240...720,
                     step: 1
-                ) {
-                    Text(l10n.lblExpandedNotchHeight(Int(store.settings.expandedNotchHeight)))
-                }
+                )
 
                 Picker(l10n.lblNotchAutoCollapse, selection: store.binding(\.notchAutoCollapseDelay)) {
                     ForEach(NotchAutoCollapseDelay.allCases) { delay in
@@ -257,21 +252,19 @@ private struct DisplaySettingsPane: View {
                     randomKinds: store.binding(\.notchRightRandomCharacterKinds)
                 )
 
-                Slider(
+                SettingsSliderRow(
+                    title: l10n.lblCharacterHorizontalInset(Int(store.settings.notchCharacterHorizontalInset)),
                     value: store.binding(\.notchCharacterHorizontalInset),
-                    in: 12...64,
+                    range: 12...64,
                     step: 1
-                ) {
-                    Text(l10n.lblCharacterHorizontalInset(Int(store.settings.notchCharacterHorizontalInset)))
-                }
+                )
 
-                Slider(
+                SettingsSliderRow(
+                    title: l10n.lblCharacterVerticalOffset(Int(store.settings.notchCharacterVerticalOffset)),
                     value: store.binding(\.notchCharacterVerticalOffset),
-                    in: -8...12,
+                    range: -8...12,
                     step: 1
-                ) {
-                    Text(l10n.lblCharacterVerticalOffset(Int(store.settings.notchCharacterVerticalOffset)))
-                }
+                )
             }
 
             Section(l10n.secRequests) {
@@ -289,6 +282,22 @@ private struct DisplaySettingsPane: View {
         let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 1
         let role = screen == NSScreen.main ? l10n.monitorMain() : l10n.monitorN(index)
         return "\(role) · \(Int(screen.frame.width))×\(Int(screen.frame.height))"
+    }
+}
+
+private struct SettingsSliderRow: View {
+    let title: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .foregroundStyle(.primary)
+                .frame(width: 220, alignment: .leading)
+            Slider(value: $value, in: range, step: step)
+        }
     }
 }
 
