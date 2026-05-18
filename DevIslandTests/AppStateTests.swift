@@ -775,11 +775,38 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.hasResponseHandler)
     }
 
-    func testClaudeAskUserQuestionPreToolUseWithAnswersPreservesUpdatedInputPath() {
-        let expectation = XCTestExpectation(description: "Claude AskUserQuestion with answers is approved")
+    func testClaudeAskUserQuestionPermissionRequestPassesToNativePrompt() {
+        let expectation = XCTestExpectation(description: "Claude AskUserQuestion permission request passes through")
         let message = """
         {
-            "hook_event_name": "PreToolUse",
+            "hook_event_name": "PermissionRequest",
+            "cli_source": "claude",
+            "session_id": "claude-question-permission",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {"id": "q1", "prompt": "Proceed?"}
+                ]
+            }
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "pass")
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+    }
+
+    func testClaudeAskUserQuestionPostToolUseWithAnswersPassesThrough() {
+        let expectation = XCTestExpectation(description: "Claude AskUserQuestion post tool result passes through")
+        let message = """
+        {
+            "hook_event_name": "PostToolUse",
             "cli_source": "claude",
             "session_id": "claude-question-answered",
             "tool_name": "AskUserQuestion",
@@ -790,13 +817,18 @@ final class AppStateTests: XCTestCase {
                 "answers": {
                     "q1": "Yes"
                 }
+            },
+            "tool_response": {
+                "answers": {
+                    "q1": "Yes"
+                }
             }
         }
         """
 
         appState.handleMessage(message) { response in
             let json = self.parseResponse(response)
-            XCTAssertEqual(json?["response"] as? String, "approved")
+            XCTAssertEqual(json?["response"] as? String, "pass")
             expectation.fulfill()
         }
 

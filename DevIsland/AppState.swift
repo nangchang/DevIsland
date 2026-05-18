@@ -700,9 +700,9 @@ class AppState: ObservableObject {
         }
 
         if isNotification {
-            let passToNativePrompt = agentKind == .claudeCode && isUserQuestionTool && toolInput?["answers"] == nil
-            let notification = passToNativePrompt
-                ? (response: "pass", action: RuleAction.prompt, reason: "Claude user question native prompt")
+            let passClaudeUserQuestion = agentKind == .claudeCode && isUserQuestionTool
+            let notification = passClaudeUserQuestion
+                ? (response: "pass", action: RuleAction.prompt, reason: "Claude user question passthrough")
                 : (response: "approved", action: RuleAction.allow, reason: "notification")
 
             print("[DevIsland] notification event: \(event) for \(toolName) → \(notification.response)")
