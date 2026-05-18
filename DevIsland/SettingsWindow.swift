@@ -11,6 +11,7 @@ enum AppWindowRouter {
     private static var ptyTranscriptController: HostedWindowController?
 
     static func showSettings() {
+        AppState.shared.isNotchExpanded = false
         let controller = cachedController(&settingsController) {
             HostedWindowController(
                 title: L10n.shared.winSettings,
