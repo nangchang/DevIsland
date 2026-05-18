@@ -105,10 +105,10 @@ struct NotchView: View {
                 ZStack(alignment: .top) {
                     notchBackground
 
-                    VStack(alignment: .center, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
                         if isExpanded {
                             expandedContent
-                                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                                .transition(.opacity)
                         } else {
                             collapsedContent
                                 .transition(.opacity)
@@ -130,6 +130,7 @@ struct NotchView: View {
                 height: notchSize.height,
                 alignment: .top
             )
+            .clipped()
             .contentShape(Rectangle())
             .onTapGesture {
                 if !isExpanded {
