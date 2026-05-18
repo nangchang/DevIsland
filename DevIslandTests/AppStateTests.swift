@@ -740,6 +740,91 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.hasResponseHandler)
         XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "claude-lifecycle" }))
     }
+
+    func testClaudeAskUserQuestionPreToolUsePassesToNativePrompt() {
+        let expectation = XCTestExpectation(description: "Claude AskUserQuestion passes through")
+        let message = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "claude",
+            "session_id": "claude-question",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {"id": "q1", "prompt": "Proceed?"}
+                ]
+            }
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "pass")
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+    }
+
+    func testClaudeAskUserQuestionPreToolUseWithAnswersPreservesUpdatedInputPath() {
+        let expectation = XCTestExpectation(description: "Claude AskUserQuestion with answers is approved")
+        let message = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "claude",
+            "session_id": "claude-question-answered",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {"id": "q1", "prompt": "Proceed?"}
+                ],
+                "answers": {
+                    "q1": "Yes"
+                }
+            }
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+    }
+
+    func testClaudeAskUserQuestionPassDoesNotBecomeAllowProviderOutput() {
+        let response = AppState.richResponseString(
+            fromLegacyResponse: "{\"response\":\"pass\"}",
+            requestId: "claude-question",
+            source: "claude",
+            event: "PreToolUse",
+            toolName: "AskUserQuestion",
+            toolInput: [
+                "questions": .array([
+                    .object([
+                        "id": .string("q1"),
+                        "prompt": .string("Proceed?")
+                    ])
+                ])
+            ]
+        )
+
+        let json = parseResponse(response)
+        guard let providerOutput = json?["providerOutput"] as? [String: Any] else {
+            XCTFail("providerOutput should not be nil")
+            return
+        }
+        XCTAssertEqual(json?["decision"] as? String, "pass")
+        XCTAssertEqual(providerOutput["continue"] as? Bool, true)
+        XCTAssertEqual(providerOutput["suppressOutput"] as? Bool, true)
+        XCTAssertNil(providerOutput["hookSpecificOutput"])
+    }
     
     func testMultipleSessions() {
         var callCount1 = 0

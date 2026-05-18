@@ -463,6 +463,7 @@ class AppState: ObservableObject {
         var workspaceRoot: String?
         var isReplayPayload = false
         var isSubAgentSession = false
+        var toolInput: [String: Any]?
 
         if let json = parsedJSON {
                 event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
@@ -489,7 +490,7 @@ class AppState: ObservableObject {
                     if !label.isEmpty && label != "/" { terminalTitle = label }
                 }
                 agentKind = Self.agentKind(from: json, terminalTitle: terminalTitle)
-                let toolInput = json["tool_input"] as? [String: Any]
+                toolInput = json["tool_input"] as? [String: Any]
                 
                 // 제미나이의 계획(Plan) 작성인지 일반 코드 수정인지 구분하여 UI에 표시
                 let filePath = toolInput?["file_path"] as? String ?? ""
@@ -691,20 +692,25 @@ class AppState: ObservableObject {
         }
 
         if isNotification {
-            print("[DevIsland] notification event: \(event) for \(toolName) → auto-approved")
+            let passToNativePrompt = agentKind == .claudeCode && isUserQuestionTool && toolInput?["answers"] == nil
+            let notification = passToNativePrompt
+                ? (response: "pass", action: RuleAction.prompt, reason: "Claude user question native prompt")
+                : (response: "approved", action: RuleAction.allow, reason: "notification")
+
+            print("[DevIsland] notification event: \(event) for \(toolName) → \(notification.response)")
             playOpenPeonSound(cespCategory)
             guard !sessionId.isEmpty else {
                 respondWithReplay(
-                    "{\"response\": \"approved\"}",
+                    "{\"response\": \"\(notification.response)\"}",
                     responseHandler: responseHandler,
                     hookEventId: hookEventId,
                     agentKind: agentKind,
                     sessionId: sessionId,
                     toolName: replayToolName,
                     workspaceRoot: workspaceRoot,
-                    action: .allow,
+                    action: notification.action,
                     source: .automatic,
-                    reason: "notification"
+                    reason: notification.reason
                 )
                 return
             }
@@ -802,16 +808,16 @@ class AppState: ObservableObject {
             }
 
             respondWithReplay(
-                "{\"response\": \"approved\"}",
+                "{\"response\": \"\(notification.response)\"}",
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
                 agentKind: agentKind,
                 sessionId: sessionId,
                 toolName: replayToolName,
                 workspaceRoot: workspaceRoot,
-                action: .allow,
+                action: notification.action,
                 source: .automatic,
-                reason: "notification"
+                reason: notification.reason
             )
             return
         }
