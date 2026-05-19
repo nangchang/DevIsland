@@ -31,12 +31,24 @@ git fetch origin pull/{n}/head:{local-branch} && git checkout {local-branch}
 
 # diff position 번호 확인
 gh api "repos/nangchang/DevIsland/pulls/{n}/files" --jq '.[] | select(.filename=="path/to/file") | .patch'
+
+# PR 코멘트 전체 조회 (인라인 + 일반 + 리뷰 요약 모두 확인 필요)
+gh api "repos/nangchang/DevIsland/pulls/{n}/comments" --jq '.[] | "[inline] \(.user.login) \(.path):\(.line // "?") — \(.body)"'
+gh api "repos/nangchang/DevIsland/issues/{n}/comments" --jq '.[] | "[comment] \(.user.login): \(.body)"'
+gh api "repos/nangchang/DevIsland/pulls/{n}/reviews" --jq '.[] | "[review] \(.user.login) (\(.state)): \(.body)"'
 ```
 
 ## Bridge Path
 
 브리지 스크립트 설치 위치: `~/Library/Application Support/DevIsland/devisland-bridge.sh`
 경로에 공백이 있으므로 hook command 문자열 생성 시 경로를 따옴표로 감싸야 함: `"<path>" --source claude`
+
+## ProviderAdapter ↔ Python 브리지 계약
+
+Swift `ProviderAdapter`가 빈 dict `[:]`를 반환하면 IPC 응답에 `providerOutput: {}`로 인코딩된다.
+Python 브리지에서 `obj.get("providerOutput") or None` 처리 시 빈 dict는 falsy → `None`이 되어
+`final_output`의 fallback 로직이 실행된다. Swift 응답 형식을 바꿀 때 `devisland_bridge.py`의
+`final_output` 함수도 같이 확인할 것.
 
 ## Swift SourceKit 진단 오류
 
