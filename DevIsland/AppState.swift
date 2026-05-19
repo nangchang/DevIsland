@@ -1816,7 +1816,7 @@ class AppState: ObservableObject {
 
     func dismissCurrentRequest() {
         if currentResponseHandler != nil {
-            sendDecision(approved: false, reason: "Dismissed")
+            sendDecision(approved: false, reason: "Dismissed", passToTerminal: true)
         } else {
             isNotchExpanded = false
             isExpandingFromRequest = false

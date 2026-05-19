@@ -50,7 +50,7 @@ struct ProviderAdapter {
         guard let decision else { return nil }
 
         if decision == "pass" {
-            if provider == .claude {
+            if provider == .claude && event != "PermissionRequest" {
                 return [
                     "continue": .bool(true),
                     "suppressOutput": .bool(true)
