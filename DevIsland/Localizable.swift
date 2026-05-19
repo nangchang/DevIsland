@@ -74,6 +74,8 @@ extension L10n {
     var menuRemoveCodex:        String { s("Remove Codex CLI only…",     "Codex CLI만 제거…") }
     var menuRemoveGemini:       String { s("Remove Gemini CLI only…",    "Gemini CLI만 제거…") }
     var menuAccessibility:      String { s("Request Accessibility Permission…", "접근성 권한 요청…") }
+    var menuCheckForUpdates:    String { s("Check for Updates…",         "업데이트 확인…") }
+    func menuUpdateAvailable(_ v: String) -> String { s("Update Available (\(v))…", "업데이트 있음 (\(v))…") }
     var menuQuit:               String { s("Quit DevIsland",             "DevIsland 종료") }
 
     // MARK: Alerts — install
@@ -141,6 +143,28 @@ extension L10n {
     var dmgEjectFailTitle:   String { s("Eject Failed",                          "꺼내기 실패") }
     var dmgEjectFailMsg:     String { s("Failed to eject the installer. Please eject manually from Finder.",
                                         "설치 파일을 꺼내는 중 오류가 발생했습니다. Finder에서 직접 꺼내주세요.") }
+
+    // MARK: Alerts — UpdateChecker
+    var updateAvailableTitle:     String { s("Update Available",       "업데이트 가능") }
+    func updateAvailableMsg(_ v: String) -> String {
+        s("DevIsland \(v) is available.\nInstall and relaunch?",
+          "DevIsland \(v)이(가) 출시되었습니다.\n설치 후 재실행하시겠습니까?")
+    }
+    var updateInstallBtn:         String { s("Install and Relaunch",   "설치 후 재실행") }
+    var updateLaterBtn:           String { s("Later",                  "나중에") }
+    var updateUpToDateTitle:      String { s("Up to Date",             "최신 버전") }
+    func updateUpToDateMsg(_ v: String) -> String {
+        s("DevIsland \(v) is the latest version.", "DevIsland \(v)이 최신 버전입니다.")
+    }
+    var updateDownloading:        String { s("Downloading…",            "다운로드 중…") }
+    var updateInstalling:         String { s("Installing…",             "설치 중…") }
+    var updateRelaunching:        String { s("Relaunching…",            "재실행 중…") }
+    var updateFailedTitle:        String { s("Update Failed",          "업데이트 실패") }
+    var updateCheckFailedTitle:   String { s("Update Check Failed",    "업데이트 확인 실패") }
+    var updateInvalidResponseMsg: String { s("Invalid response from GitHub.",
+                                             "GitHub에서 잘못된 응답을 받았습니다.") }
+    var updateNoAssetMsg:         String { s("No DMG found in the latest release.",
+                                             "최신 릴리즈에서 DMG를 찾을 수 없습니다.") }
 
     // MARK: Settings Window
     var winSettings:         String { s("DevIsland Settings",  "DevIsland 설정") }

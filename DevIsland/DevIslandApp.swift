@@ -33,6 +33,7 @@ struct MenuBarMenu: View {
     @ObservedObject var state = AppState.shared
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var updateChecker = UpdateChecker.shared
 
     static let versionString: String = {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
@@ -129,6 +130,17 @@ struct MenuBarMenu: View {
         }
 
         Divider()
+
+        if updateChecker.hasUpdate, let release = updateChecker.latestRelease {
+            Button(l.menuUpdateAvailable(release.version)) {
+                updateChecker.installUpdate()
+            }
+        } else {
+            Button(updateChecker.isChecking ? "…" : l.menuCheckForUpdates) {
+                updateChecker.checkManually()
+            }
+            .disabled(updateChecker.isChecking || updateChecker.isUpdating)
+        }
 
         Text(MenuBarMenu.versionString)
             .font(.system(size: 10))
@@ -595,6 +607,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             _ = AppState.shared
             self.notchWindowController = NotchWindowController()
             self.notchWindowController?.showWindow(nil)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            UpdateChecker.shared.schedulePeriodicCheck()
         }
     }
 }
