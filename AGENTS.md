@@ -30,7 +30,7 @@ xcodegen generate
 # xcode-build-server — gives SourceKit-LSP full project context
 # Eliminates false-positive "Cannot find type X in scope" errors in editors/AI tools
 brew install xcode-build-server
-xcode-build-server config -scheme DevIsland -workspace DevIsland.xcodeproj/project.xcworkspace
+xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
 ```
 
 `buildServer.json` is gitignored (contains machine-local DerivedData paths). Re-run `xcode-build-server config` if you switch schemes or DerivedData is cleaned.

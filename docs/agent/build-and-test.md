@@ -13,7 +13,7 @@ xcodegen generate
 
 # Configure SourceKit-LSP (eliminates false-positive cross-file errors in editors/AI tools)
 # buildServer.json is gitignored — run once per machine, re-run after DerivedData clean
-xcode-build-server config -scheme DevIsland -workspace DevIsland.xcodeproj/project.xcworkspace
+xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
 
 # Open in Xcode
 open DevIsland.xcodeproj
