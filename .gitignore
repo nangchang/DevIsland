@@ -28,3 +28,6 @@ Pods/
 *.xcarchive
 *.xcodeproj
 *.dmg
+
+# xcode-build-server (machine-local DerivedData paths)
+buildServer.json

@@ -18,6 +18,23 @@ Read this file before editing. Open the referenced docs only when the task touch
 | OpenPeon CESP sound packs | [docs/agent/openpeon-cesp.md](docs/agent/openpeon-cesp.md) |
 | Performance and stability rules | [docs/agent/stability-standards.md](docs/agent/stability-standards.md) |
 
+## One-Time Local Setup
+
+After cloning, run these once to configure the development environment:
+
+```bash
+# XcodeGen — generate .xcodeproj from project.yml
+brew install xcodegen
+xcodegen generate
+
+# xcode-build-server — gives SourceKit-LSP full project context
+# Eliminates false-positive "Cannot find type X in scope" errors in editors/AI tools
+brew install xcode-build-server
+xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
+```
+
+`buildServer.json` is gitignored (contains machine-local DerivedData paths). Re-run `xcode-build-server config` if you switch schemes or DerivedData is cleaned.
+
 ## Mandatory Checks
 
 - Run the existing unit tests before committing any code change:
