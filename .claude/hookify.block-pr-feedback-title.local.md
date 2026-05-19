@@ -9,7 +9,7 @@ conditions:
     pattern: git\s+commit
   - field: command
     operator: regex_match
-    pattern: (?:PR|리뷰|피드백|코멘트).*반영|반영.*(?:PR|리뷰|피드백|코멘트)
+    pattern: (?i)(?:(?:PR|리뷰|피드백|코멘트).*(?:반영|적용)|(?:반영|적용).*(?:PR|리뷰|피드백|코멘트))
 ---
 
 **커밋 제목에 "PR/리뷰/피드백 반영" 류 표현이 감지되었습니다.**
