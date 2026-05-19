@@ -158,7 +158,7 @@ if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ -n "$CMUX_WORKSPACE_ID" ] 
 tell application "cmux"
   repeat with aWindow in windows
     repeat with aTab in tabs of aWindow
-      if (id of aTab) is "$CMUX_WORKSPACE_ID" then
+      if ((id of aTab) as text) is "$CMUX_WORKSPACE_ID" then
         return name of aTab
       end if
     end repeat
