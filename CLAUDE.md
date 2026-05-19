@@ -3,6 +3,21 @@
 This file provides Claude Code–specific guidance for this repository.
 For general project documentation (architecture, build, key files), see [AGENTS.md](AGENTS.md).
 
+## AI Attribution
+
+커밋, GitHub 코멘트, 이슈 등 AI가 작성한 내용에는 반드시 출처를 표시한다.
+
+**커밋 트레일러** (커밋 메시지 마지막 줄, 실제 사용 모델 버전 기입):
+```
+Co-Authored-By: Claude <모델-버전> <noreply@anthropic.com>
+```
+예: `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
+
+**GitHub 코멘트·이슈 푸터** (본문 마지막 줄):
+```
+> 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
+
 ## Bridge Installation
 
 The bridge connects Claude Code hooks to the app:
@@ -19,23 +34,28 @@ bash scripts/install-launch-agent.sh
 
 Bridge logs are written to `/tmp/DevIsland.bridge.log`. The app logs to `/tmp/DevIsland.log` and `/tmp/DevIsland.error.log` when running as a LaunchAgent.
 
+```bash
+# 브리지 로그 실시간 확인
+tail -f /tmp/DevIsland.bridge.log
+```
+
 ## PR Review
 
-인라인 리뷰 코멘트는 `gh api repos/nangchang/DevIsland/pulls/{n}/reviews` POST로 작성.
+인라인 리뷰 코멘트는 `gh api repos/nangchang/DevIsland/pulls/<PR_NUMBER>/reviews` POST로 작성.
 `position`은 diff 파일 내 1-indexed 줄 번호 (헝크 헤더 포함). `REQUEST_CHANGES`는 본인 PR에 불가 — `COMMENT` 사용.
 
 ```bash
 # PR 브랜치 체크아웃
-gh pr view {n} --repo nangchang/DevIsland --json headRefName -q .headRefName
-git fetch origin pull/{n}/head:{local-branch} && git checkout {local-branch}
+gh pr view <PR_NUMBER> --repo nangchang/DevIsland --json headRefName -q .headRefName
+git fetch origin pull/<PR_NUMBER>/head:<local-branch> && git checkout <local-branch>
 
 # diff position 번호 확인
-gh api "repos/nangchang/DevIsland/pulls/{n}/files" --jq '.[] | select(.filename=="path/to/file") | .patch'
+gh api "repos/nangchang/DevIsland/pulls/<PR_NUMBER>/files" --jq '.[] | select(.filename=="path/to/file") | .patch'
 
 # PR 코멘트 전체 조회 (인라인 + 일반 + 리뷰 요약 모두 확인 필요)
-gh api "repos/nangchang/DevIsland/pulls/{n}/comments" --jq '.[] | "[inline] \(.user.login) \(.path):\(.line // "?") — \(.body)"'
-gh api "repos/nangchang/DevIsland/issues/{n}/comments" --jq '.[] | "[comment] \(.user.login): \(.body)"'
-gh api "repos/nangchang/DevIsland/pulls/{n}/reviews" --jq '.[] | "[review] \(.user.login) (\(.state)): \(.body)"'
+gh api "repos/nangchang/DevIsland/pulls/<PR_NUMBER>/comments" --jq '.[] | "[inline] \(.user.login) \(.path):\(.line // "?") — \(.body)"'
+gh api "repos/nangchang/DevIsland/issues/<PR_NUMBER>/comments" --jq '.[] | "[comment] \(.user.login): \(.body)"'
+gh api "repos/nangchang/DevIsland/pulls/<PR_NUMBER>/reviews" --jq '.[] | "[review] \(.user.login) (\(.state)): \(.body)"'
 ```
 
 ## Bridge Path

@@ -21,6 +21,7 @@ Gemini CLI는 이 저장소에서 작업할 때 다음 규칙을 **반드시** �
    - 실행: `./scripts/run-tests.sh`
 5. **Update Docs After Changes**: 작업을 완료할 때 코드, 동작, 설정, 명령어, 아키텍처 설명과 문서가 어긋나지 않는지 확인하십시오. 필요한 문서는 같은 논리적 변경 안에서 함께 업데이트하고, 문서 변경이 필요 없다면 그 이유를 명시하십시오.
 6. **No Project File Commits**: `.xcodeproj` 파일은 절대 커밋하지 마십시오. `project.yml` 수정 후 `xcodegen generate`를 실행하십시오.
+7. **AI Attribution**: 커밋 메시지 마지막에 `Co-Authored-By: Gemini CLI <noreply@google.com>` 트레일러를 추가하십시오. GitHub 코멘트·이슈 작성 시 본문 마지막에 `> 🤖 Generated with [Gemini CLI](https://github.com/google-gemini/generative-ai-cli)` 푸터를 붙이십시오.
 
 ## 🚦 Documentation Reference
 
