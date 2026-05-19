@@ -7,10 +7,11 @@ For general project documentation (architecture, build, key files), see [AGENTS.
 
 커밋, GitHub 코멘트, 이슈 등 AI가 작성한 내용에는 반드시 출처를 표시한다.
 
-**커밋 트레일러** (커밋 메시지 마지막 줄):
+**커밋 트레일러** (커밋 메시지 마지막 줄, 실제 사용 모델 버전 기입):
 ```
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude <모델-버전> <noreply@anthropic.com>
 ```
+예: `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
 
 **GitHub 코멘트·이슈 푸터** (본문 마지막 줄):
 ```

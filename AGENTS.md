@@ -90,7 +90,7 @@ xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
 6. **No Mixed Changes**: Do not mix unrelated refactors, style changes, docs, and features in one commit.
 7. **Update Documentation After Changes**: When finishing work, check whether code, behavior, settings, commands, or architecture docs need updates. Update the relevant docs in the same logical change, or explicitly explain why no documentation update is needed.
 8. **Descriptive Tags**: Use conventional prefixes such as `feat:`, `fix:`, `docs:`, `refactor:`.
-9. **AI Attribution**: AI가 커밋을 작성할 경우 메시지 마지막에 `Co-Authored-By:` 트레일러를 추가한다. GitHub 코멘트·이슈를 AI가 작성할 경우 본문 마지막에 `> 🤖 Generated with [<Tool>](url)` 푸터를 붙인다.
+9. **AI Attribution**: When an AI agent creates a commit, append a `Co-Authored-By:` trailer to the message. For GitHub comments or issues, append a `> 🤖 Generated with [<Tool>](url)` footer.
 
 ## Working Tree Safety
 
