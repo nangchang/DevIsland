@@ -14,6 +14,7 @@ enum UpdateError: LocalizedError {
     case appNotFound
     case invalidResponse
     case noAsset
+    case httpError(Int)
 
     var errorDescription: String? {
         switch self {
@@ -21,6 +22,7 @@ enum UpdateError: LocalizedError {
         case .appNotFound:           return "DevIsland.app not found in DMG"
         case .invalidResponse:       return "Invalid response from GitHub"
         case .noAsset:               return "No DMG found in release assets"
+        case .httpError(let code):   return "HTTP error \(code)"
         }
     }
 }
@@ -85,7 +87,11 @@ final class UpdateChecker: ObservableObject {
             req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             req.timeoutInterval = 10
 
-            let (data, _) = try await URLSession.shared.data(for: req)
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                throw UpdateError.httpError(code)
+            }
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tagName = json["tag_name"] as? String,
@@ -136,7 +142,11 @@ final class UpdateChecker: ObservableObject {
         do {
             updateStatusText = L10n.shared.updateDownloading
             downloadProgress = -1
-            let (tempURL, _) = try await URLSession.shared.download(from: downloadURL)
+            let (tempURL, downloadResponse) = try await URLSession.shared.download(from: downloadURL)
+            guard (downloadResponse as? HTTPURLResponse)?.statusCode == 200 else {
+                let code = (downloadResponse as? HTTPURLResponse)?.statusCode ?? -1
+                throw UpdateError.httpError(code)
+            }
 
             updateStatusText = L10n.shared.updateInstalling
             downloadProgress = 0.5
@@ -202,14 +212,17 @@ final class UpdateChecker: ObservableObject {
             destURL = appsDir.appendingPathComponent(appSrc.lastPathComponent)
         }
 
-        if fm.fileExists(atPath: destURL.path) {
-            try fm.trashItem(at: destURL, resultingItemURL: nil)
-        }
-        try fm.copyItem(at: appSrc, to: destURL)
+        // 스테이징 경로에 먼저 복사한 뒤 원자적으로 교체 → 복사 실패 시 기존 앱 보존
+        let stagingURL = tmpDir.appendingPathComponent("DevIsland-staging-\(UUID().uuidString).app")
+        defer { try? fm.removeItem(at: stagingURL) }
+        try fm.copyItem(at: appSrc, to: stagingURL)
+        shell("/usr/bin/xattr", ["-dr", "com.apple.quarantine", stagingURL.path])
 
-        // 다운로드한 DMG에서 복사된 앱에는 com.apple.quarantine xattr이 붙어
-        // macOS가 실행을 차단하므로 제거한다
-        shell("/usr/bin/xattr", ["-dr", "com.apple.quarantine", destURL.path])
+        if fm.fileExists(atPath: destURL.path) {
+            _ = try fm.replaceItemAt(destURL, withItemAt: stagingURL)
+        } else {
+            try fm.moveItem(at: stagingURL, to: destURL)
+        }
 
         return destURL
     }
