@@ -213,10 +213,10 @@ class TerminalFocuser {
                 set wantedTermId to \(tabIndexLiteral)
                 set fw to front window
                 set selTab to selected tab of fw
-                if wantedTabId is "" or ((id of selTab) as text) is wantedTabId then
+                if wantedTabId is "" or (id of selTab as text) is wantedTabId then
                   if wantedTermId is "" then return "true"
                   set focTerm to focused terminal of selTab
-                  if ((id of focTerm) as text) is wantedTermId then return "true"
+                  if (id of focTerm as text) is wantedTermId then return "true"
                 end if
               end try
               return "false"
@@ -522,12 +522,12 @@ class TerminalFocuser {
               set wantedTermId to \(tabIndexLiteral)
               repeat with aWindow in windows
                 repeat with aTab in tabs of aWindow
-                  if ((id of aTab) as text) is wantedTabId then
+                  if (id of aTab as text) is wantedTabId then
                     activate window aWindow
                     select tab aTab
                     if wantedTermId is not "" then
                       repeat with aTerm in terminals of aTab
-                        if ((id of aTerm) as text) is wantedTermId then
+                        if (id of aTerm as text) is wantedTermId then
                           focus aTerm
                           return
                         end if
