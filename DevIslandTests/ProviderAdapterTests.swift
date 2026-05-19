@@ -248,6 +248,18 @@ final class ProviderAdapterTests: XCTestCase {
             source: "ClaudeCode"
         )
 
+        // PermissionRequest + pass → empty dict so Claude Code falls back to native UI
+        XCTAssertNotNil(output)
+        XCTAssertTrue(output?.isEmpty == true)
+    }
+
+    func testClaudePassNonPermissionRequestOutput() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "pass",
+            event: "PreToolUse",
+            source: "ClaudeCode"
+        )
+
         XCTAssertEqual(output?["continue"]?.rawValue as? Bool, true)
         XCTAssertEqual(output?["suppressOutput"]?.rawValue as? Bool, true)
     }
