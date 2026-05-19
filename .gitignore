@@ -31,3 +31,7 @@ Pods/
 
 # xcode-build-server (machine-local DerivedData paths)
 buildServer.json
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/worktrees/
