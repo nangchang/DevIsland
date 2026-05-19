@@ -246,7 +246,7 @@ def final_output(*, event: str, decision: str, provider_output: dict[str, Any] |
     message = "DevIsland에서 거절되었습니다."
 
     if decision == "pass":
-        if cli_source == "claude":
+        if cli_source == "claude" and event != "PermissionRequest":
             return {"continue": True, "suppressOutput": True}
         return {}
 
