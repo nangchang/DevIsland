@@ -6,10 +6,14 @@ DevIsland uses XcodeGen. There is no committed `.xcodeproj`.
 
 ```bash
 # One-time setup
-brew install xcodegen
+brew install xcodegen xcode-build-server
 
 # Generate the Xcode project
 xcodegen generate
+
+# Configure SourceKit-LSP (eliminates false-positive cross-file errors in editors/AI tools)
+# buildServer.json is gitignored — run once per machine, re-run after DerivedData clean
+xcode-build-server config -scheme DevIsland -workspace DevIsland.xcodeproj/project.xcworkspace
 
 # Open in Xcode
 open DevIsland.xcodeproj

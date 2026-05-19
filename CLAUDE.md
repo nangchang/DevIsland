@@ -40,4 +40,4 @@ gh api "repos/nangchang/DevIsland/pulls/{n}/files" --jq '.[] | select(.filename=
 
 ## Swift SourceKit 진단 오류
 
-단일 파일 편집 시 "Cannot find 'AppState' in scope" 류의 오류는 cross-file 참조로 인한 것 — 빌드 오류 아님, 무시해도 됨.
+`xcode-build-server`를 설정하면 cross-file 참조 오류가 사라진다 (AGENTS.md "One-Time Local Setup" 참고). 설정 전이거나 DerivedData 초기화 후에는 "Cannot find 'AppState' in scope" 류의 오류가 표시될 수 있으나 빌드 오류가 아님 — `xcodebuild build`로 실제 오류 여부 확인.
