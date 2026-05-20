@@ -141,7 +141,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
         )
     }
 
-    func testCodexPostToolUseObjectOutputDescribingErrorDoesNotMapToSoundEvent() {
+    func testCodexPostToolUseNestedDiagnosticErrorDoesNotMapToSoundEvent() {
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",
             "tool_response": [
@@ -163,7 +163,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 payload: payload
             ),
             nil,
-            "Codex tool_response output fields are not structured failure signals or completion signals"
+            "Codex tool_response only treats top-level explicit fields as structured failure signals; nested diagnostics are command output context"
         )
     }
 
