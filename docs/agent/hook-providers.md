@@ -49,7 +49,7 @@ Required feature flag:
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
 
 DevIsland uses `PermissionRequest` for approval. `PreToolUse` is status tracking only and returns `{}` so Codex continues without a DevIsland prompt.

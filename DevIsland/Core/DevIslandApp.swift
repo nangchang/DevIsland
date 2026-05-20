@@ -162,27 +162,45 @@ enum BridgeInstaller {
     private static let bridgeFileName = "devisland-bridge.sh"
     private static let bridgeHelperFileName = "devisland_bridge.py"
 
+    private struct InstallPaths {
+        let home: URL
+        let bridgeDir: URL
+        let destURL: URL
+    }
+
+    private enum BridgeInstallerError: LocalizedError {
+        case missingBridgeScript
+        case missingBridgeHelper
+
+        var errorDescription: String? {
+            switch self {
+            case .missingBridgeScript:
+                return L10n.shared.alertBundleNoScript
+            case .missingBridgeHelper:
+                return L10n.shared.alertBundleNoHelper
+            }
+        }
+    }
+
     // MARK: Public entry points
 
     /// Claude Code, Codex CLI, Gemini CLI 모두 설치
     static func installAll() {
-        install()
-        installCodex()
-        installGemini()
+        do {
+            try installClaudeHooks()
+            try installCodexHooks()
+            try installGeminiHooks()
+            let l = L10n.shared
+            showAlert(title: l.alertAllInstalled, message: l.alertAllInstalledMsg, isError: false)
+        } catch {
+            showAlert(title: L10n.shared.alertInstallFailed, message: error.localizedDescription, isError: true)
+        }
     }
 
     /// Claude Code (~/.claude/settings.json)
     static func install() {
-        guard let bridgeURL = bridgeScriptURL() else { return }
-        guard let helperURL = bridgeHelperURL() else { return }
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
-        let settingsURL = home.appendingPathComponent(".claude/settings.json")
-
         do {
-            try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
-            try patchClaudeSettings(at: settingsURL, bridgePath: destURL.path)
+            try installClaudeHooks()
             let l = L10n.shared
             showAlert(title: l.alertClaudeInstalled, message: l.alertClaudeRestartMsg, isError: false)
         } catch {
@@ -192,18 +210,8 @@ enum BridgeInstaller {
 
     /// Codex CLI (~/.codex/hooks.json + config.toml)
     static func installCodex() {
-        guard let bridgeURL = bridgeScriptURL() else { return }
-        guard let helperURL = bridgeHelperURL() else { return }
-        let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
-        let codexHooksURL  = home.appendingPathComponent(".codex/hooks.json")
-        let codexConfigURL = home.appendingPathComponent(".codex/config.toml")
-
         do {
-            try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
-            try patchCodexHooks(at: codexHooksURL, bridgePath: destURL.path)
-            ensureCodexFeatureFlag(at: codexConfigURL)
+            try installCodexHooks()
             let l = L10n.shared
             showAlert(title: l.alertCodexInstalled, message: l.alertCodexRestartMsg, isError: false)
         } catch {
@@ -213,16 +221,8 @@ enum BridgeInstaller {
 
     /// Gemini CLI (~/.gemini/settings.json)
     static func installGemini() {
-        guard let bridgeURL = bridgeScriptURL() else { return }
-        guard let helperURL = bridgeHelperURL() else { return }
-        let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
-        let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
-
         do {
-            try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
-            try patchGeminiSettings(at: geminiSettingsURL, bridgePath: destURL.path)
+            try installGeminiHooks()
             let l = L10n.shared
             showAlert(title: l.alertGeminiInstalled, message: l.alertGeminiRestartMsg, isError: false)
         } catch {
@@ -230,22 +230,60 @@ enum BridgeInstaller {
         }
     }
 
+    private static func installClaudeHooks() throws {
+        let bridgeURL = try bridgeScriptURL()
+        let helperURL = try bridgeHelperURL()
+        let paths = installPaths()
+        let settingsURL = paths.home.appendingPathComponent(".claude/settings.json")
+
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try patchClaudeSettings(at: settingsURL, bridgePath: paths.destURL.path)
+    }
+
+    private static func installCodexHooks() throws {
+        let bridgeURL = try bridgeScriptURL()
+        let helperURL = try bridgeHelperURL()
+        let paths = installPaths()
+        let codexHooksURL  = paths.home.appendingPathComponent(".codex/hooks.json")
+        let codexConfigURL = paths.home.appendingPathComponent(".codex/config.toml")
+
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try patchCodexHooks(at: codexHooksURL, bridgePath: paths.destURL.path)
+        ensureCodexFeatureFlag(at: codexConfigURL)
+    }
+
+    private static func installGeminiHooks() throws {
+        let bridgeURL = try bridgeScriptURL()
+        let helperURL = try bridgeHelperURL()
+        let paths = installPaths()
+        let geminiSettingsURL = paths.home.appendingPathComponent(".gemini/settings.json")
+
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try patchGeminiSettings(at: geminiSettingsURL, bridgePath: paths.destURL.path)
+    }
+
     // MARK: Shared helpers
 
-    private static func bridgeScriptURL() -> URL? {
+    private static func installPaths() -> InstallPaths {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
+        return InstallPaths(
+            home: home,
+            bridgeDir: bridgeDir,
+            destURL: bridgeDir.appendingPathComponent(bridgeFileName)
+        )
+    }
+
+    private static func bridgeScriptURL() throws -> URL {
         guard let url = Bundle.main.url(forResource: "devisland-bridge", withExtension: "sh") else {
-            let l = L10n.shared
-            showAlert(title: l.alertInstallFailed, message: l.alertBundleNoScript, isError: true)
-            return nil
+            throw BridgeInstallerError.missingBridgeScript
         }
         return url
     }
 
-    private static func bridgeHelperURL() -> URL? {
+    private static func bridgeHelperURL() throws -> URL {
         guard let url = Bundle.main.url(forResource: "devisland_bridge", withExtension: "py") else {
-            let l = L10n.shared
-            showAlert(title: l.alertInstallFailed, message: l.alertBundleNoHelper, isError: true)
-            return nil
+            throw BridgeInstallerError.missingBridgeHelper
         }
         return url
     }
@@ -389,7 +427,7 @@ enum BridgeInstaller {
             lines = content.components(separatedBy: .newlines)
         }
 
-        // 기존 [hooks] 또는 [[hooks.]] 관련 설정 제거 및 features 활성화 (hooks.json으로 일원화)
+        // 기존 [hooks] 또는 [[hooks.]] 관련 설정 제거 및 hooks feature 활성화 (hooks.json으로 일원화)
         var newLines: [String] = []
         var skip = false
         for line in lines {
@@ -406,12 +444,36 @@ enum BridgeInstaller {
             }
         }
 
-        if let index = newLines.firstIndex(where: { $0.contains("codex_hooks") }) {
-            if newLines[index].contains("false") {
-                newLines[index] = newLines[index].replacingOccurrences(of: "false", with: "true")
+        if let featuresIndex = newLines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "[features]" }) {
+            var featuresEnd = featuresIndex + 1
+            while featuresEnd < newLines.count {
+                if newLines[featuresEnd].trimmingCharacters(in: .whitespaces).hasPrefix("[") {
+                    break
+                }
+                featuresEnd += 1
             }
+
+            var foundHooks = false
+            var featureLines: [String] = []
+            for line in newLines[(featuresIndex + 1)..<featuresEnd] {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                let key = trimmed.split(separator: "=", maxSplits: 1).first?.trimmingCharacters(in: .whitespaces) ?? ""
+                switch key {
+                case "hooks":
+                    featureLines.append("hooks = true")
+                    foundHooks = true
+                case "codex_hooks":
+                    continue
+                default:
+                    featureLines.append(line)
+                }
+            }
+            if !foundHooks {
+                featureLines.append("hooks = true")
+            }
+            newLines.replaceSubrange((featuresIndex + 1)..<featuresEnd, with: featureLines)
         } else {
-            newLines.append("\n[features]\ncodex_hooks = true\n")
+            newLines.append("\n[features]\nhooks = true\n")
         }
 
         let out = newLines.joined(separator: "\n")

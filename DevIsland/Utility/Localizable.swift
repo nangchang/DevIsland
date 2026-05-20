@@ -79,6 +79,7 @@ extension L10n {
     var menuQuit:               String { s("Quit DevIsland",             "DevIsland 종료") }
 
     // MARK: Alerts — install
+    var alertAllInstalled:         String { s("All Hooks Installed",          "전체 훅 설치 완료") }
     var alertClaudeInstalled:      String { s("Claude Code Installed",          "Claude Code 설치 완료") }
     var alertClaudeInstallFailed:  String { s("Claude Code Installation Failed","Claude Code 설치 실패") }
     var alertCodexInstalled:       String { s("Codex CLI Installed",            "Codex CLI 설치 완료") }
@@ -86,6 +87,8 @@ extension L10n {
     var alertGeminiInstalled:      String { s("Gemini CLI Installed",           "Gemini CLI 설치 완료") }
     var alertGeminiInstallFailed:  String { s("Gemini CLI Installation Failed", "Gemini CLI 설치 실패") }
     var alertInstallFailed:        String { s("Installation Failed",            "설치 실패") }
+    var alertAllInstalledMsg:      String { s("All bridge hooks installed.\nRestart each CLI session.",
+                                              "모든 브리지 훅이 설치되었습니다.\n각 CLI 세션을 재시작해주세요.") }
     var alertBridgeInstalled:      String { s("Bridge installed.\nRestart your session.",
                                               "브리지가 설치되었습니다.\n세션을 재시작해주세요.") }
     var alertClaudeRestartMsg:     String { s("Bridge installed.\nRestart your Claude Code session.",
