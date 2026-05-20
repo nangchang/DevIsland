@@ -18,7 +18,8 @@ final class OpenPeonEventMapperTests: XCTestCase {
     func testCompletionEventsMapToTaskComplete() {
         XCTAssertEqual(map("Stop", for: .gemini), .taskComplete)
         XCTAssertEqual(map("Stop", for: .claudeCode), .taskComplete)
-        XCTAssertEqual(map("PostToolUse", for: .codex), .taskComplete)
+        XCTAssertEqual(map("Stop", for: .codex), .taskComplete)
+        XCTAssertNil(map("PostToolUse", for: .codex))
         XCTAssertNil(map("PostToolUse", for: .claudeCode))
     }
 
@@ -116,7 +117,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
         )
     }
 
-    func testCodexPostToolUseWithMessageDescribingErrorIsNotTaskError() {
+    func testCodexPostToolUseWithMessageDescribingErrorDoesNotMapToSoundEvent() {
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",
             "tool_response": [
@@ -135,12 +136,12 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 message: "The command succeeded after an initial error.",
                 payload: payload
             ),
-            .taskComplete,
-            "Descriptive messages about errors in tool_response stdout/stderr should not trigger taskError sound for Codex"
+            nil,
+            "Codex PostToolUse is per-tool output and should not trigger completion or error sound without structured failure"
         )
     }
 
-    func testCodexPostToolUseObjectOutputDescribingErrorIsTaskComplete() {
+    func testCodexPostToolUseObjectOutputDescribingErrorDoesNotMapToSoundEvent() {
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",
             "tool_response": [
@@ -161,12 +162,12 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 message: "error: build failed",
                 payload: payload
             ),
-            .taskComplete,
-            "Codex tool_response output fields are not structured failure signals"
+            nil,
+            "Codex tool_response output fields are not structured failure signals or completion signals"
         )
     }
 
-    func testCodexPostToolUseStringResponseDescribingErrorIsTaskComplete() {
+    func testCodexPostToolUseStringResponseDescribingErrorDoesNotMapToSoundEvent() {
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",
             "tool_response": "docs mention task.error, failed checks, and timeout handling"
@@ -182,12 +183,12 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 message: "docs mention task.error, failed checks, and timeout handling",
                 payload: payload
             ),
-            .taskComplete,
-            "Codex string tool_response is command output, not a structured failure signal"
+            nil,
+            "Codex string tool_response is command output, not a structured failure or completion signal"
         )
     }
 
-    func testCodexPostToolUseEmptyErrorValueIsTaskComplete() {
+    func testCodexPostToolUseEmptyErrorValueDoesNotMapToSoundEvent() {
         let payload: [String: Any] = [
             "hook_event_name": "PostToolUse",
             "tool_response": [
@@ -208,7 +209,7 @@ final class OpenPeonEventMapperTests: XCTestCase {
                 message: "",
                 payload: payload
             ),
-            .taskComplete
+            nil
         )
     }
 

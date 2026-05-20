@@ -113,7 +113,9 @@ enum CESPEventMapper {
             if let payload, containsStructuredFailure(in: payload) {
                 return .taskError
             }
-            // Even if message contains 'error', if payload doesn't confirm it, treat as complete.
+            // Codex PostToolUse is per-tool output, not turn completion.
+            return nil
+        case "stop":
             return .taskComplete
         case "sessionend", "exit", "shutdown":
             return .sessionEnd
