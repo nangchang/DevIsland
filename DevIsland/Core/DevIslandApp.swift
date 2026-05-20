@@ -162,6 +162,12 @@ enum BridgeInstaller {
     private static let bridgeFileName = "devisland-bridge.sh"
     private static let bridgeHelperFileName = "devisland_bridge.py"
 
+    private struct InstallPaths {
+        let home: URL
+        let bridgeDir: URL
+        let destURL: URL
+    }
+
     // MARK: Public entry points
 
     /// Claude Code, Codex CLI, Gemini CLI 모두 설치
@@ -213,42 +219,46 @@ enum BridgeInstaller {
     private static func installClaudeHooks() throws {
         let bridgeURL = try bridgeScriptURL()
         let helperURL = try bridgeHelperURL()
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
-        let settingsURL = home.appendingPathComponent(".claude/settings.json")
+        let paths = installPaths()
+        let settingsURL = paths.home.appendingPathComponent(".claude/settings.json")
 
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
-        try patchClaudeSettings(at: settingsURL, bridgePath: destURL.path)
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try patchClaudeSettings(at: settingsURL, bridgePath: paths.destURL.path)
     }
 
     private static func installCodexHooks() throws {
         let bridgeURL = try bridgeScriptURL()
         let helperURL = try bridgeHelperURL()
-        let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
-        let codexHooksURL  = home.appendingPathComponent(".codex/hooks.json")
-        let codexConfigURL = home.appendingPathComponent(".codex/config.toml")
+        let paths = installPaths()
+        let codexHooksURL  = paths.home.appendingPathComponent(".codex/hooks.json")
+        let codexConfigURL = paths.home.appendingPathComponent(".codex/config.toml")
 
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
-        try patchCodexHooks(at: codexHooksURL, bridgePath: destURL.path)
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try patchCodexHooks(at: codexHooksURL, bridgePath: paths.destURL.path)
         ensureCodexFeatureFlag(at: codexConfigURL)
     }
 
     private static func installGeminiHooks() throws {
         let bridgeURL = try bridgeScriptURL()
         let helperURL = try bridgeHelperURL()
-        let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
-        let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
+        let paths = installPaths()
+        let geminiSettingsURL = paths.home.appendingPathComponent(".gemini/settings.json")
 
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
-        try patchGeminiSettings(at: geminiSettingsURL, bridgePath: destURL.path)
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try patchGeminiSettings(at: geminiSettingsURL, bridgePath: paths.destURL.path)
     }
 
     // MARK: Shared helpers
+
+    private static func installPaths() -> InstallPaths {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
+        return InstallPaths(
+            home: home,
+            bridgeDir: bridgeDir,
+            destURL: bridgeDir.appendingPathComponent(bridgeFileName)
+        )
+    }
 
     private static func bridgeScriptURL() throws -> URL {
         guard let url = Bundle.main.url(forResource: "devisland-bridge", withExtension: "sh") else {
