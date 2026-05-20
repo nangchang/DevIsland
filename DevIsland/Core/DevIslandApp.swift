@@ -168,6 +168,20 @@ enum BridgeInstaller {
         let destURL: URL
     }
 
+    private enum BridgeInstallerError: LocalizedError {
+        case missingBridgeScript
+        case missingBridgeHelper
+
+        var errorDescription: String? {
+            switch self {
+            case .missingBridgeScript:
+                return L10n.shared.alertBundleNoScript
+            case .missingBridgeHelper:
+                return L10n.shared.alertBundleNoHelper
+            }
+        }
+    }
+
     // MARK: Public entry points
 
     /// Claude Code, Codex CLI, Gemini CLI 모두 설치
@@ -262,16 +276,14 @@ enum BridgeInstaller {
 
     private static func bridgeScriptURL() throws -> URL {
         guard let url = Bundle.main.url(forResource: "devisland-bridge", withExtension: "sh") else {
-            throw NSError(domain: "BridgeInstaller", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBundleNoScript])
+            throw BridgeInstallerError.missingBridgeScript
         }
         return url
     }
 
     private static func bridgeHelperURL() throws -> URL {
         guard let url = Bundle.main.url(forResource: "devisland_bridge", withExtension: "py") else {
-            throw NSError(domain: "BridgeInstaller", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBundleNoHelper])
+            throw BridgeInstallerError.missingBridgeHelper
         }
         return url
     }
