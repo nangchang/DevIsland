@@ -166,23 +166,21 @@ enum BridgeInstaller {
 
     /// Claude Code, Codex CLI, Gemini CLI 모두 설치
     static func installAll() {
-        install()
-        installCodex()
-        installGemini()
+        do {
+            try installClaudeHooks()
+            try installCodexHooks()
+            try installGeminiHooks()
+            let l = L10n.shared
+            showAlert(title: l.alertAllInstalled, message: l.alertAllInstalledMsg, isError: false)
+        } catch {
+            showAlert(title: L10n.shared.alertInstallFailed, message: error.localizedDescription, isError: true)
+        }
     }
 
     /// Claude Code (~/.claude/settings.json)
     static func install() {
-        guard let bridgeURL = bridgeScriptURL() else { return }
-        guard let helperURL = bridgeHelperURL() else { return }
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
-        let settingsURL = home.appendingPathComponent(".claude/settings.json")
-
         do {
-            try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
-            try patchClaudeSettings(at: settingsURL, bridgePath: destURL.path)
+            try installClaudeHooks()
             let l = L10n.shared
             showAlert(title: l.alertClaudeInstalled, message: l.alertClaudeRestartMsg, isError: false)
         } catch {
@@ -192,18 +190,8 @@ enum BridgeInstaller {
 
     /// Codex CLI (~/.codex/hooks.json + config.toml)
     static func installCodex() {
-        guard let bridgeURL = bridgeScriptURL() else { return }
-        guard let helperURL = bridgeHelperURL() else { return }
-        let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
-        let codexHooksURL  = home.appendingPathComponent(".codex/hooks.json")
-        let codexConfigURL = home.appendingPathComponent(".codex/config.toml")
-
         do {
-            try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
-            try patchCodexHooks(at: codexHooksURL, bridgePath: destURL.path)
-            ensureCodexFeatureFlag(at: codexConfigURL)
+            try installCodexHooks()
             let l = L10n.shared
             showAlert(title: l.alertCodexInstalled, message: l.alertCodexRestartMsg, isError: false)
         } catch {
@@ -213,16 +201,8 @@ enum BridgeInstaller {
 
     /// Gemini CLI (~/.gemini/settings.json)
     static func installGemini() {
-        guard let bridgeURL = bridgeScriptURL() else { return }
-        guard let helperURL = bridgeHelperURL() else { return }
-        let home    = URL(fileURLWithPath: NSHomeDirectory())
-        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
-        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
-        let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
-
         do {
-            try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
-            try patchGeminiSettings(at: geminiSettingsURL, bridgePath: destURL.path)
+            try installGeminiHooks()
             let l = L10n.shared
             showAlert(title: l.alertGeminiInstalled, message: l.alertGeminiRestartMsg, isError: false)
         } catch {
@@ -230,22 +210,58 @@ enum BridgeInstaller {
         }
     }
 
+    private static func installClaudeHooks() throws {
+        let bridgeURL = try bridgeScriptURL()
+        let helperURL = try bridgeHelperURL()
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
+        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
+        let settingsURL = home.appendingPathComponent(".claude/settings.json")
+
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
+        try patchClaudeSettings(at: settingsURL, bridgePath: destURL.path)
+    }
+
+    private static func installCodexHooks() throws {
+        let bridgeURL = try bridgeScriptURL()
+        let helperURL = try bridgeHelperURL()
+        let home    = URL(fileURLWithPath: NSHomeDirectory())
+        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
+        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
+        let codexHooksURL  = home.appendingPathComponent(".codex/hooks.json")
+        let codexConfigURL = home.appendingPathComponent(".codex/config.toml")
+
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
+        try patchCodexHooks(at: codexHooksURL, bridgePath: destURL.path)
+        ensureCodexFeatureFlag(at: codexConfigURL)
+    }
+
+    private static func installGeminiHooks() throws {
+        let bridgeURL = try bridgeScriptURL()
+        let helperURL = try bridgeHelperURL()
+        let home    = URL(fileURLWithPath: NSHomeDirectory())
+        let bridgeDir = home.appendingPathComponent(sharedBridgePath)
+        let destURL  = bridgeDir.appendingPathComponent(bridgeFileName)
+        let geminiSettingsURL = home.appendingPathComponent(".gemini/settings.json")
+
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: destURL, hooksDir: bridgeDir)
+        try patchGeminiSettings(at: geminiSettingsURL, bridgePath: destURL.path)
+    }
+
     // MARK: Shared helpers
 
-    private static func bridgeScriptURL() -> URL? {
+    private static func bridgeScriptURL() throws -> URL {
         guard let url = Bundle.main.url(forResource: "devisland-bridge", withExtension: "sh") else {
-            let l = L10n.shared
-            showAlert(title: l.alertInstallFailed, message: l.alertBundleNoScript, isError: true)
-            return nil
+            throw NSError(domain: "BridgeInstaller", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBundleNoScript])
         }
         return url
     }
 
-    private static func bridgeHelperURL() -> URL? {
+    private static func bridgeHelperURL() throws -> URL {
         guard let url = Bundle.main.url(forResource: "devisland_bridge", withExtension: "py") else {
-            let l = L10n.shared
-            showAlert(title: l.alertInstallFailed, message: l.alertBundleNoHelper, isError: true)
-            return nil
+            throw NSError(domain: "BridgeInstaller", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBundleNoHelper])
         }
         return url
     }
