@@ -232,7 +232,7 @@ with open(path, 'w') as f:
 EOF
 
     # config.toml에서 features 활성화 및 구형 [[hooks]] 제거
-    echo "✓ Codex CLI config.toml 패치 중 (Features 활성화 및 정리)..."
+    echo "✓ Codex CLI config.toml 패치 중 (hooks feature 활성화 및 정리)..."
     python3 - "$CODEX_CONFIG" "$BRIDGE_DEST" << 'EOF'
 import sys, os
 
@@ -256,36 +256,41 @@ for line in lines:
     if not skip:
         new_lines.append(line)
 
-# features 확인 및 활성화
-found_flag = False
+# [features] 섹션 안에서 hooks feature flag를 활성화하고 deprecated codex_hooks는 제거
 features_idx = None
 for i, line in enumerate(new_lines):
-    strip_line = line.strip()
-    if strip_line == '[features]':
+    if line.strip() == '[features]':
         features_idx = i
-    if strip_line.startswith('codex_hooks'):
-        if 'false' in line:
-            new_lines[i] = line.replace('false', 'true')
-        found_flag = True
         break
 
-if not found_flag:
-    if features_idx is not None:
-        # [features] 섹션이 있지만 codex_hooks 키가 없음 — 섹션 끝에 삽입
-        insert_idx = features_idx + 1
-        while insert_idx < len(new_lines):
-            s = new_lines[insert_idx].strip()
-            if s.startswith('['):
-                break
-            insert_idx += 1
-        if new_lines[insert_idx - 1].strip() and not new_lines[insert_idx - 1].endswith('\n'):
-            new_lines.insert(insert_idx, '\n')
-            insert_idx += 1
-        new_lines.insert(insert_idx, 'codex_hooks = true\n')
-    else:
-        if new_lines and not new_lines[-1].endswith('\n'):
-            new_lines.append('\n')
-        new_lines.append('\n[features]\ncodex_hooks = true\n')
+if features_idx is not None:
+    features_end = features_idx + 1
+    while features_end < len(new_lines):
+        if new_lines[features_end].strip().startswith('['):
+            break
+        features_end += 1
+
+    found_hooks = False
+    feature_lines = []
+    for line in new_lines[features_idx + 1:features_end]:
+        stripped = line.strip()
+        key = stripped.split('=', 1)[0].strip() if '=' in stripped else ''
+        if key == 'hooks':
+            feature_lines.append('hooks = true\n')
+            found_hooks = True
+        elif key == 'codex_hooks':
+            continue
+        else:
+            feature_lines.append(line)
+
+    if not found_hooks:
+        feature_lines.append('hooks = true\n')
+
+    new_lines = new_lines[:features_idx + 1] + feature_lines + new_lines[features_end:]
+else:
+    if new_lines and not new_lines[-1].endswith('\n'):
+        new_lines.append('\n')
+    new_lines.append('\n[features]\nhooks = true\n')
 
 with open(path, 'w') as f:
     f.writelines(new_lines)

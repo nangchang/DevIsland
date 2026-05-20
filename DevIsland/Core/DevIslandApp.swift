@@ -389,7 +389,7 @@ enum BridgeInstaller {
             lines = content.components(separatedBy: .newlines)
         }
 
-        // 기존 [hooks] 또는 [[hooks.]] 관련 설정 제거 및 features 활성화 (hooks.json으로 일원화)
+        // 기존 [hooks] 또는 [[hooks.]] 관련 설정 제거 및 hooks feature 활성화 (hooks.json으로 일원화)
         var newLines: [String] = []
         var skip = false
         for line in lines {
@@ -406,12 +406,36 @@ enum BridgeInstaller {
             }
         }
 
-        if let index = newLines.firstIndex(where: { $0.contains("codex_hooks") }) {
-            if newLines[index].contains("false") {
-                newLines[index] = newLines[index].replacingOccurrences(of: "false", with: "true")
+        if let featuresIndex = newLines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "[features]" }) {
+            var featuresEnd = featuresIndex + 1
+            while featuresEnd < newLines.count {
+                if newLines[featuresEnd].trimmingCharacters(in: .whitespaces).hasPrefix("[") {
+                    break
+                }
+                featuresEnd += 1
             }
+
+            var foundHooks = false
+            var featureLines: [String] = []
+            for line in newLines[(featuresIndex + 1)..<featuresEnd] {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                let key = trimmed.split(separator: "=", maxSplits: 1).first?.trimmingCharacters(in: .whitespaces) ?? ""
+                switch key {
+                case "hooks":
+                    featureLines.append("hooks = true")
+                    foundHooks = true
+                case "codex_hooks":
+                    continue
+                default:
+                    featureLines.append(line)
+                }
+            }
+            if !foundHooks {
+                featureLines.append("hooks = true")
+            }
+            newLines.replaceSubrange((featuresIndex + 1)..<featuresEnd, with: featureLines)
         } else {
-            newLines.append("\n[features]\ncodex_hooks = true\n")
+            newLines.append("\n[features]\nhooks = true\n")
         }
 
         let out = newLines.joined(separator: "\n")
