@@ -46,21 +46,117 @@ class MascotState: ObservableObject {
     }
 }
 
-// MARK: - Notch View
+// MARK: - Collapsed View (dedicated collapsed window)
+
+struct NotchCollapsedView: View {
+    @ObservedObject private var settingsStore = SettingsStore.shared
+    @ObservedObject private var mascotState = MascotState.shared
+    @State private var buddyPulse = false
+
+    private var notchSize: NSSize {
+        NotchLayout.collapsedSize(settings: settingsStore.settings)
+    }
+
+    var body: some View {
+        HStack {
+            Spacer()
+
+            VStack(spacing: 0) {
+                ZStack(alignment: .top) {
+                    collapsedBackground
+
+                    ZStack {
+                        Text("DevIsland")
+                            .foregroundColor(.white.opacity(0.6))
+                            .font(.system(size: 11, weight: .semibold))
+
+                        if settingsStore.settings.notchLeftCharacterMode != .hidden {
+                            CLIBuddyView(
+                                isActive: buddyPulse,
+                                kind: mascotState.leftMascot
+                            )
+                            .frame(width: 24, height: 24)
+                            .position(x: characterHorizontalInset, y: characterCenterY)
+                        }
+
+                        if settingsStore.settings.notchRightCharacterMode != .hidden {
+                            CLIBuddyView(
+                                isActive: buddyPulse,
+                                kind: mascotState.rightMascot
+                            )
+                            .frame(width: 24, height: 24)
+                            .position(x: notchSize.width - characterHorizontalInset, y: characterCenterY)
+                        }
+                    }
+                    .frame(width: notchSize.width, height: notchSize.height)
+                }
+            }
+            .frame(
+                width: notchSize.width,
+                height: NotchLayout.windowSize(expanded: false, settings: settingsStore.settings).height,
+                alignment: .top
+            )
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
+                buddyPulse = true
+            }
+            mascotState.refresh(settings: settingsStore.settings, forceRandomize: true)
+        }
+        .onReceive(settingsStore.$settings) { settings in
+            mascotState.refresh(settings: settings)
+        }
+    }
+
+    private var collapsedBackground: some View {
+        let shape = NotchShape(cornerRadius: 14, topFilletRadius: 6)
+
+        return ZStack(alignment: .top) {
+            if settingsStore.settings.notchBackdropShadowEnabled {
+                shape
+                    .fill(Color.black.opacity(0.28))
+                    .offset(y: 2)
+                    .blur(radius: 2)
+                    .allowsHitTesting(false)
+
+                shape
+                    .fill(Color.black.opacity(0.14))
+                    .offset(y: 1)
+                    .blur(radius: 1)
+                    .allowsHitTesting(false)
+            }
+
+            shape
+                .fill(Color.black.opacity(settingsStore.settings.notchPanelOpacity))
+        }
+        .frame(
+            width: notchSize.width,
+            height: notchSize.height,
+            alignment: .top
+        )
+    }
+
+    private var characterHorizontalInset: CGFloat {
+        max(12, min(notchSize.width / 2 - 12, settingsStore.settings.notchCharacterHorizontalInset))
+    }
+
+    private var characterCenterY: CGFloat {
+        max(12, min(notchSize.height - 12, notchSize.height / 2 + settingsStore.settings.notchCharacterVerticalOffset))
+    }
+}
+
+// MARK: - Notch View (expanded window only)
 
 struct NotchView: View {
     @ObservedObject var state = AppState.shared
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var settingsStore = SettingsStore.shared
     @ObservedObject private var l10n = L10n.shared
-    @ObservedObject private var mascotState = MascotState.shared
     @State private var buddyPulse = false
-    @State private var localIsExpanded = false
-
-    var forceCollapsed: Bool = false
-    private var isExpanded: Bool {
-        forceCollapsed ? false : localIsExpanded
-    }
+    @State private var isExpanded = false
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
@@ -74,7 +170,7 @@ struct NotchView: View {
         NotchLayout.size(expanded: isExpanded, settings: settingsStore.settings)
     }
     private var approvalLeftColumnHeight: CGFloat {
-        notchSize.height - 80  // header paddingTop(20) + badge(48) + approvalContent paddingTop(12)
+        notchSize.height - 80
     }
     private var approvalPrimaryColumnWidth: CGFloat {
         if sessionStore.activeSessions.isEmpty {
@@ -109,9 +205,6 @@ struct NotchView: View {
                         if isExpanded {
                             expandedContent
                                 .transition(.opacity)
-                        } else {
-                            collapsedContent
-                                .transition(.opacity)
                         }
 
                         if !isExpanded {
@@ -130,12 +223,6 @@ struct NotchView: View {
                 height: NotchLayout.windowSize(expanded: isExpanded, settings: settingsStore.settings).height,
                 alignment: .top
             )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if !isExpanded {
-                    (NSApp.windows.first { $0.windowController is NotchWindowController }?.windowController as? NotchWindowController)?.expandFromCollapsedWindow()
-                }
-            }
             .animation(notchExpansionAnimation, value: isExpanded)
 
             Spacer()
@@ -145,33 +232,21 @@ struct NotchView: View {
             withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
                 buddyPulse = true
             }
-            if forceCollapsed {
-                mascotState.refresh(settings: settingsStore.settings, forceRandomize: true)
-            } else {
-                localIsExpanded = false
-                if state.isNotchExpanded {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        localIsExpanded = true
-                    }
+            isExpanded = false
+            if state.isNotchExpanded {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    isExpanded = true
                 }
             }
-
             DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
         }
         .onChange(of: state.isNotchExpanded) { _, newValue in
-            if !forceCollapsed {
-                if newValue {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        localIsExpanded = true
-                    }
-                } else {
-                    localIsExpanded = false
+            if newValue {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    isExpanded = true
                 }
-            }
-        }
-        .onReceive(settingsStore.$settings) { settings in
-            if forceCollapsed {
-                mascotState.refresh(settings: settings)
+            } else {
+                isExpanded = false
             }
         }
     }
@@ -205,43 +280,6 @@ struct NotchView: View {
             height: notchSize.height,
             alignment: .top
         )
-    }
-
-    // MARK: Collapsed
-
-    var collapsedContent: some View {
-        ZStack {
-            Text("DevIsland")
-                .foregroundColor(.white.opacity(0.6))
-                .font(.system(size: 11, weight: .semibold))
-
-            if settingsStore.settings.notchLeftCharacterMode != .hidden {
-                CLIBuddyView(
-                    isActive: buddyPulse,
-                    kind: mascotState.leftMascot
-                )
-                .frame(width: 24, height: 24)
-                .position(x: characterHorizontalInset, y: characterCenterY)
-            }
-
-            if settingsStore.settings.notchRightCharacterMode != .hidden {
-                CLIBuddyView(
-                    isActive: buddyPulse,
-                    kind: mascotState.rightMascot
-                )
-                .frame(width: 24, height: 24)
-                .position(x: notchSize.width - characterHorizontalInset, y: characterCenterY)
-            }
-        }
-        .frame(width: notchSize.width, height: notchSize.height)
-    }
-
-    private var characterHorizontalInset: CGFloat {
-        max(12, min(notchSize.width / 2 - 12, settingsStore.settings.notchCharacterHorizontalInset))
-    }
-
-    private var characterCenterY: CGFloat {
-        max(12, min(notchSize.height - 12, notchSize.height / 2 + settingsStore.settings.notchCharacterVerticalOffset))
     }
 
     // MARK: Expanded

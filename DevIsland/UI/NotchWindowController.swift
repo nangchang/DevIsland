@@ -115,12 +115,12 @@ class NotchWindowController: NSWindowController {
         self.init(window: collapsedPanel)
         self.expandedPanel = expandedPanel
 
-        let collapsedView = NotchHostingView(rootView: NotchView(forceCollapsed: true))
+        let collapsedView = NotchCollapsedHostingView(rootView: NotchCollapsedView())
         collapsedView.wantsLayer = true
         collapsedView.layer?.backgroundColor = .clear
         collapsedPanel.contentView = collapsedView
-        
-        let expandedView = NotchHostingView(rootView: NotchView(forceCollapsed: false))
+
+        let expandedView = NotchHostingView(rootView: NotchView())
         expandedView.wantsLayer = true
         expandedView.layer?.backgroundColor = .clear
         expandedPanel.contentView = expandedView
@@ -669,7 +669,32 @@ fileprivate extension CGRect {
     }
 }
 
-// MARK: - Passthrough Hosting View
+// MARK: - Collapsed Passthrough Hosting View
+
+class NotchCollapsedHostingView: NSHostingView<NotchCollapsedView> {
+    override var isOpaque: Bool { false }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard notchHitRect().contains(point) else { return nil }
+        return super.hitTest(point) ?? self
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        (window?.windowController as? NotchWindowController)?.expandFromCollapsedWindow()
+    }
+
+    private func notchHitRect() -> CGRect {
+        let visualSize = NotchLayout.collapsedSize(settings: SettingsStore.shared.settings)
+        return CGRect(
+            x: (bounds.width - visualSize.width) / 2,
+            y: bounds.maxY - visualSize.height,
+            width: visualSize.width,
+            height: visualSize.height
+        )
+    }
+}
+
+// MARK: - Expanded Passthrough Hosting View
 
 class NotchHostingView: NSHostingView<NotchView> {
     // 투명 픽셀 영역에서 OS 수준 click-through가 동작하도록 비불투명 처리
@@ -678,15 +703,6 @@ class NotchHostingView: NSHostingView<NotchView> {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard notchHitRect().contains(point) else { return nil }
         return super.hitTest(point) ?? self  // SwiftUI 내부 이벤트 라우팅 유지
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        if !AppState.shared.isNotchExpanded {
-            (window?.windowController as? NotchWindowController)?.expandFromCollapsedWindow()
-            return
-        }
-
-        super.mouseDown(with: event)
     }
 
     private func notchHitRect() -> CGRect {
