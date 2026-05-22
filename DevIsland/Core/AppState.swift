@@ -811,7 +811,8 @@ class AppState: ObservableObject {
                                      isUserQuestionTool ||
                                      (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode)))
 
-                if isInformational && !isStartEvent && !sessionMessage.isEmpty {
+                let isCurrentlyViewed = self.isExpandingFromRequest && self.currentSessionId == fullSessionId
+                if isInformational && !isStartEvent && !sessionMessage.isEmpty && !isCurrentlyViewed {
                     self.sessionStore.setUnread(true, sessionId: fullSessionId)
                 }
 
