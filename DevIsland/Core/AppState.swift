@@ -265,16 +265,21 @@ class AppState: ObservableObject {
                 }
                 self?.handleMessage(message, responseHandler: effectiveHandler)
             }
-            server.onServerFailed = {
-                print("[DevIsland] [ERROR] Socket server failed. Check if port 9090 is occupied.")
+            server.onServerFailed = { [weak self] error in
+                print("[DevIsland] [ERROR] Socket server failed: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     let alert = NSAlert()
                     alert.messageText = "Server Error"
-                    alert.informativeText = "Could not start the 9090 port server. Please ensure no other DevIsland instances are running."
+                    alert.informativeText = "Could not start the DevIsland server.\n\(error.localizedDescription)\n\nEnsure no other DevIsland instances are running, then retry."
                     alert.alertStyle = .critical
+                    alert.addButton(withTitle: "Retry")
                     alert.addButton(withTitle: "Exit")
-                    alert.runModal()
-                    NSApplication.shared.terminate(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                    if alert.runModal() == .alertFirstButtonReturn {
+                        self?.server.start(transport: Self.currentBridgeTransport())
+                    } else {
+                        NSApplication.shared.terminate(nil)
+                    }
                 }
             }
             server.start(transport: Self.currentBridgeTransport())
