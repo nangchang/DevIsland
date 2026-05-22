@@ -255,18 +255,23 @@ final class SQLiteApprovalStore {
         )
     }
 
+    // Normalized form used for lifecycle event matching: lowercase, underscores/hyphens stripped.
+    // Matches HookEventNormalizer.normalizedName in Swift.
+    private static let sqlNormalize = "lower(replace(replace(event_name,'_',''),'-',''))"
+
     func openSessions(since: Date) throws -> [OpenSessionRecord] {
+        let n = Self.sqlNormalize
         let sql = """
             WITH starts AS (
                 SELECT session_id, provider, MIN(received_at) AS start_at
                 FROM hook_events
-                WHERE event_name IN ('sessionstart', 'startup', 'init')
+                WHERE \(n) IN ('sessionstart', 'startup', 'init')
                   AND received_at > ?
                 GROUP BY session_id
             ),
             ended AS (
                 SELECT DISTINCT session_id FROM hook_events
-                WHERE event_name IN ('exit', 'shutdown', 'sessionend', 'devisland_dismissed')
+                WHERE \(n) IN ('exit', 'shutdown', 'sessionend', 'devisland_dismissed')
             ),
             latest AS (
                 SELECT e.session_id, e.payload_json, e.event_name, e.tool_name, e.received_at,
