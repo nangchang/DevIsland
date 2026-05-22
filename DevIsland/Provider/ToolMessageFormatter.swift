@@ -10,7 +10,7 @@ enum ToolMessageFormatter {
         }
 
         if HookEventNormalizer.normalizedName(eventName) == "posttooluse" {
-            return postToolMessage(from: json["tool_response"] as? [String: Any])
+            return postToolMessage(from: json["tool_response"], json: json)
         }
 
         if let input = toolInput {
@@ -175,14 +175,20 @@ enum ToolMessageFormatter {
             .joined(separator: "\n")
     }
 
-    private static func postToolMessage(from response: [String: Any]?) -> String {
-        guard let response = response else { return "Completed" }
-        if let stdout = response["stdout"] as? String, !stdout.isEmpty {
-            return stdout
+    private static func postToolMessage(from response: Any?, json: [String: Any]) -> String {
+        if let response = response as? [String: Any],
+           let message = firstString(in: response, keys: ["stdout", "stderr", "message", "output", "result", "summary"]) {
+            return message
         }
-        if let stderr = response["stderr"] as? String, !stderr.isEmpty {
-            return stderr
+
+        if let message = displayString(response) {
+            return message
         }
+
+        if let message = firstString(in: json, keys: ["message", "summary", "output", "result"]) {
+            return message
+        }
+
         return "Completed"
     }
 

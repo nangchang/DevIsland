@@ -105,4 +105,53 @@ final class ToolMessageFormatterTests: XCTestCase {
             """
         )
     }
+
+    func testFormatsStringPostToolResponse() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "shell",
+            toolInput: nil,
+            json: [
+                "hook_event_name": "PostToolUse",
+                "tool_name": "shell",
+                "tool_response": "Codex turn completed"
+            ],
+            eventName: "PostToolUse"
+        )
+
+        XCTAssertEqual(message, "Codex turn completed")
+    }
+
+    func testFormatsPostToolMessageField() {
+        let response: [String: Any] = [
+            "message": "Waiting for the next prompt"
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "shell",
+            toolInput: nil,
+            json: [
+                "hook_event_name": "PostToolUse",
+                "tool_name": "shell",
+                "tool_response": response
+            ],
+            eventName: "PostToolUse"
+        )
+
+        XCTAssertEqual(message, "Waiting for the next prompt")
+    }
+
+    func testFormatsTopLevelPostToolMessageWhenResponseIsMissing() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "shell",
+            toolInput: nil,
+            json: [
+                "hook_event_name": "PostToolUse",
+                "tool_name": "shell",
+                "message": "Task completed with no changes"
+            ],
+            eventName: "PostToolUse"
+        )
+
+        XCTAssertEqual(message, "Task completed with no changes")
+    }
 }
