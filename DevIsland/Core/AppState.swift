@@ -1815,12 +1815,27 @@ class AppState: ObservableObject {
         }
     }
 
+    func showSessionDetail(_ sessionId: String) {
+        guard currentResponseHandler == nil else { return }
+        sessionStore.selectedSessionId = sessionId
+        currentSessionId = sessionId
+        syncDisplayToSelectedSession()
+        isExpandingFromRequest = true
+    }
+
     func dismissCurrentRequest() {
         if currentResponseHandler != nil {
             sendDecision(approved: false, reason: "Dismissed", passToTerminal: true)
+        } else if isExpandingFromRequest {
+            // Go back to session list instead of collapsing the notch
+            isExpandingFromRequest = false
+            currentSessionId = ""
+            currentMessage = ""
+            currentToolName = ""
+            currentEventName = ""
+            notificationTimer?.invalidate()
         } else {
             isNotchExpanded = false
-            isExpandingFromRequest = false
             notificationTimer?.invalidate()
         }
     }

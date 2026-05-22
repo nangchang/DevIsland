@@ -126,7 +126,7 @@ struct SessionRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Button(action: { AppState.shared.sessionStore.selectedSessionId = session.id }) {
+            Button(action: { AppState.shared.showSessionDetail(session.id) }) {
                 HStack(spacing: 12) {
                     ZStack(alignment: .topTrailing) {
                         AgentRequestBadge(
@@ -205,6 +205,8 @@ struct SessionRowView: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
