@@ -13,6 +13,13 @@ enum ToolMessageFormatter {
             return postToolMessage(from: json["tool_response"], json: json)
         }
 
+        if HookEventNormalizer.normalizedName(eventName) == "stop" {
+            return firstString(
+                in: json,
+                keys: ["last_assistant_message", "message", "summary", "output", "result"]
+            ) ?? ""
+        }
+
         if let input = toolInput {
             if HookEventNormalizer.isUserQuestionTool(toolName),
                let message = userQuestionMessage(from: input) {
@@ -97,7 +104,7 @@ enum ToolMessageFormatter {
             }
         }
 
-        if let message = json["message"] as? String, !message.isEmpty {
+        if let message = firstString(in: json, keys: ["message", "last_assistant_message"]) {
             return message
         }
 

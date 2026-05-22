@@ -167,7 +167,7 @@ send_claude_smoke() {
     send_claude_pretool Bash "ls -la"
     send_claude_posttool Bash "ls -la"
     send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" notification_type idle_prompt message "클로드가 다음 입력을 기다리고 있습니다.")" claude
-    send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "작업이 완료되었습니다.")" claude
+    send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" last_assistant_message "작업이 완료되었습니다.")" claude
 }
 
 send_claude_question() {
@@ -270,7 +270,7 @@ interactive_claude() {
             6)
                 send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" notification_type idle_prompt message "클로드가 다음 입력을 기다리고 있습니다.")" claude ;;
             7)
-                send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "작업이 모두 완료되었습니다.")" claude ;;
+                send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" last_assistant_message "작업이 모두 완료되었습니다.")" claude ;;
             8)
                 send_event "$(make_json hook_event_name SessionEnd session_id "$SESSION_ID")" claude
                 break ;;
@@ -457,7 +457,7 @@ case "$COMMAND" in
     idle)
         send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" notification_type idle_prompt message "입력을 기다리는 중...")" claude ;;
     finish)
-        send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "완료되었습니다.")" claude ;;
+        send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" last_assistant_message "완료되었습니다.")" claude ;;
     stop)
         send_event "$(make_json hook_event_name SessionEnd session_id "$SESSION_ID")" claude ;;
 

@@ -154,4 +154,35 @@ final class ToolMessageFormatterTests: XCTestCase {
 
         XCTAssertEqual(message, "Task completed with no changes")
     }
+
+    func testFormatsClaudeStopLastAssistantMessage() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "",
+            toolInput: nil,
+            json: [
+                "hook_event_name": "Stop",
+                "session_id": "claude-session",
+                "last_assistant_message": "Implemented the requested change and tests passed."
+            ],
+            eventName: "Stop"
+        )
+
+        XCTAssertEqual(message, "Implemented the requested change and tests passed.")
+    }
+
+    func testClaudeStopLastAssistantMessageTakesPrecedence() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "",
+            toolInput: nil,
+            json: [
+                "hook_event_name": "Stop",
+                "session_id": "claude-session",
+                "message": "Task completed",
+                "last_assistant_message": "Actual assistant response"
+            ],
+            eventName: "Stop"
+        )
+
+        XCTAssertEqual(message, "Actual assistant response")
+    }
 }
