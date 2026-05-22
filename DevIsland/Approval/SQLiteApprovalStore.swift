@@ -284,7 +284,7 @@ final class SQLiteApprovalStore {
                    l.received_at, s.start_at
             FROM starts s
             JOIN latest l ON l.session_id = s.session_id AND l.rn = 1
-            ORDER BY s.start_at DESC
+            ORDER BY s.start_at ASC
             """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
