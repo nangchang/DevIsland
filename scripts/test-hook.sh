@@ -26,6 +26,7 @@ usage() {
     echo "  $0 [옵션] start             # 세션 시작 (Claude Code)"
     echo "  $0 [옵션] bash [command]    # Bash 명령 승인 요청 (Claude Code)"
     echo "  $0 [옵션] write [path]      # 파일 쓰기 승인 요청 (Claude Code)"
+    echo "  $0 [옵션] claude-question   # Claude AskUserQuestion 표시 테스트"
     echo "  $0 [옵션] claude-pretool    # Claude PreToolUse 상태 이벤트"
     echo "  $0 [옵션] claude-posttool   # Claude PostToolUse 상태 이벤트"
     echo "  $0 [옵션] claude-smoke      # Claude 주요 훅 세트 재생"
@@ -35,6 +36,7 @@ usage() {
     echo "  $0 [옵션] codex-tool [name] # Codex PreToolUse 시뮬레이션"
     echo "  $0 [옵션] codex-posttool    # Codex PostToolUse 상태 이벤트"
     echo "  $0 [옵션] codex-permission  # Codex PermissionRequest 승인 요청"
+    echo "  $0 [옵션] codex-question    # Codex 질문성 도구 표시 테스트"
     echo "  $0 [옵션] codex-stop        # Codex Stop 완료 이벤트"
     echo "  $0 [옵션] codex-stale       # 삭제 버튼 테스트용 Codex 세션 생성"
     echo "  $0 [옵션] codex-smoke       # Codex 주요 훅 세트 재생"
@@ -165,7 +167,13 @@ send_claude_smoke() {
     send_claude_pretool Bash "ls -la"
     send_claude_posttool Bash "ls -la"
     send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" notification_type idle_prompt message "클로드가 다음 입력을 기다리고 있습니다.")" claude
-    send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "작업이 완료되었습니다.")" claude
+    send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" last_assistant_message "작업이 완료되었습니다.")" claude
+}
+
+send_claude_question() {
+    local input
+    input=$(python3 -c 'import json; print(json.dumps({"questions":[{"header":"Framework","question":"Which framework should I use?","options":[{"label":"SwiftUI","description":"Native macOS UI"},{"label":"AppKit"}],"multiSelect":False}]}))')
+    send_event "$(make_json hook_event_name PreToolUse session_id "$SESSION_ID" tool_name AskUserQuestion tool_input "$input" cwd "$(pwd)")" claude
 }
 
 # ── Codex CLI 이벤트 빌더 ────────────────────────────────────────────────
@@ -193,6 +201,12 @@ send_codex_smoke() {
     send_event "$(make_codex_event PreToolUse shell "$input")" codex
     send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name shell tool_input "$input" tool_response "completed" cwd "$(pwd)")" codex
     send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "Codex turn completed" cwd "$(pwd)")" codex
+}
+
+send_codex_question() {
+    local input
+    input=$(python3 -c 'import json; print(json.dumps({"question":"Which branch should I use?","choices":[{"label":"main"},{"label":"feature/dev-island"}]}))')
+    send_event "$(make_codex_event PermissionRequest request_user_input "$input")" codex
 }
 
 # ── Gemini CLI 이벤트 빌더 ──────────────────────────────────────────────
@@ -233,6 +247,7 @@ interactive_claude() {
         echo "7) 작업 완료 알림 (Stop)"
         echo "8) 세션 종료 (SessionEnd)"
         echo "9) Claude 주요 훅 세트 재생"
+        echo "a) AskUserQuestion 표시 테스트"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 그냥 종료"
         read -p "선택: " choice
@@ -255,12 +270,14 @@ interactive_claude() {
             6)
                 send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" notification_type idle_prompt message "클로드가 다음 입력을 기다리고 있습니다.")" claude ;;
             7)
-                send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "작업이 모두 완료되었습니다.")" claude ;;
+                send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" last_assistant_message "작업이 모두 완료되었습니다.")" claude ;;
             8)
                 send_event "$(make_json hook_event_name SessionEnd session_id "$SESSION_ID")" claude
                 break ;;
             9)
                 send_claude_smoke ;;
+            a|A)
+                send_claude_question ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
                 echo "지연 모드가 $([ "$DELAY" -eq 1 ] && echo "켜졌습니다" || echo "꺼졌습니다")." ;;
@@ -287,6 +304,7 @@ interactive_codex() {
         echo "7) 승인 요청 (PermissionRequest)"
         echo "8) 작업 종료 (Stop)"
         echo "9) 삭제 버튼 테스트용 stale 세션 생성"
+        echo "a) 질문성 도구 표시 테스트"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 종료"
         read -p "선택: " choice
@@ -317,6 +335,8 @@ interactive_codex() {
             9)
                 send_codex_stale
                 echo "🧪 Codex 세션을 목록에 남겼습니다. 앱의 세션 row에서 x 버튼으로 삭제를 테스트하세요." ;;
+            a|A)
+                send_codex_question ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
                 echo "지연 모드가 $([ "$DELAY" -eq 1 ] && echo "켜졌습니다" || echo "꺼졌습니다")." ;;
@@ -423,6 +443,8 @@ case "$COMMAND" in
         CONTENT=${2:-"Hello World"}
         input=$(make_json file_path "$FILE" content "$CONTENT")
         send_event "$(make_claude_permission write "$input")" claude ;;
+    claude-question)
+        send_claude_question ;;
     claude-pretool)
         send_claude_pretool "${1:-Bash}" "${2:-ls -la}" ;;
     claude-posttool)
@@ -435,7 +457,7 @@ case "$COMMAND" in
     idle)
         send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" notification_type idle_prompt message "입력을 기다리는 중...")" claude ;;
     finish)
-        send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "완료되었습니다.")" claude ;;
+        send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" last_assistant_message "완료되었습니다.")" claude ;;
     stop)
         send_event "$(make_json hook_event_name SessionEnd session_id "$SESSION_ID")" claude ;;
 
@@ -453,6 +475,8 @@ case "$COMMAND" in
         CMD=${2:-"rm -rf build"}
         input=$(make_json command "$CMD")
         send_event "$(make_codex_event PermissionRequest "$TOOL" "$input")" codex ;;
+    codex-question)
+        send_codex_question ;;
     codex-stop)
         send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" message "Codex turn completed" cwd "$(pwd)")" codex ;;
     codex-stale)

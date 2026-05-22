@@ -793,9 +793,10 @@ class AppState: ObservableObject {
                 }
 
                 // 알림 확장 로직 (질문이나 작업 완료 시)
-                let isInformational = (normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
+                let isCodexPostToolUse = agentKind == .codex && normalizedEvent == "posttooluse"
+                let isInformational = !isCodexPostToolUse && ((normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
                                      isUserQuestionTool ||
-                                     (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode))
+                                     (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode)))
 
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
                     // 터미널이 포커스되어 있지 않을 때만 확장

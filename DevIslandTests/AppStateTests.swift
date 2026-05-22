@@ -748,6 +748,33 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "claude-lifecycle" }))
     }
 
+    func testCodexPostToolUseDoesNotExpandNotification() {
+        let expectation = XCTestExpectation(description: "Codex PostToolUse responds")
+        let message = """
+        {
+            "hook_event_name": "PostToolUse",
+            "cli_source": "codex",
+            "session_id": "codex-posttool",
+            "tool_name": "shell",
+            "tool_response": "Should I continue?"
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-posttool" }))
+        XCTAssertFalse(appState.isNotchExpanded)
+        XCTAssertFalse(appState.isExpandingFromRequest)
+        XCTAssertEqual(appState.currentMessage, "")
+    }
+
     func testClaudeAskUserQuestionPreToolUsePassesToNativePrompt() {
         let expectation = XCTestExpectation(description: "Claude AskUserQuestion passes through")
         let message = """

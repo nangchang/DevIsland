@@ -10,10 +10,22 @@ enum ToolMessageFormatter {
         }
 
         if HookEventNormalizer.normalizedName(eventName) == "posttooluse" {
-            return postToolMessage(from: json["tool_response"] as? [String: Any])
+            return postToolMessage(from: json["tool_response"], json: json)
+        }
+
+        if HookEventNormalizer.normalizedName(eventName) == "stop" {
+            return firstString(
+                in: json,
+                keys: ["last_assistant_message", "message", "summary", "output", "result"]
+            ) ?? ""
         }
 
         if let input = toolInput {
+            if HookEventNormalizer.isUserQuestionTool(toolName),
+               let message = userQuestionMessage(from: input) {
+                return message
+            }
+
             let lowerToolName = toolName.lowercased()
             switch lowerToolName {
             // Claude Code
@@ -92,7 +104,7 @@ enum ToolMessageFormatter {
             }
         }
 
-        if let message = json["message"] as? String, !message.isEmpty {
+        if let message = firstString(in: json, keys: ["message", "last_assistant_message"]) {
             return message
         }
 
@@ -105,14 +117,85 @@ enum ToolMessageFormatter {
         return ""
     }
 
-    private static func postToolMessage(from response: [String: Any]?) -> String {
-        guard let response = response else { return "Completed" }
-        if let stdout = response["stdout"] as? String, !stdout.isEmpty {
-            return stdout
+    private static func userQuestionMessage(from input: [String: Any]) -> String? {
+        if let questions = input["questions"] as? [[String: Any]], !questions.isEmpty {
+            let blocks = questions.enumerated().compactMap { index, question in
+                questionMessage(from: question, index: index + 1, includeOrdinal: questions.count > 1)
+            }
+            return joinedMessageLines(blocks)
         }
-        if let stderr = response["stderr"] as? String, !stderr.isEmpty {
-            return stderr
+
+        return questionMessage(from: input, index: 1, includeOrdinal: false)
+    }
+
+    private static func questionMessage(from input: [String: Any], index: Int, includeOrdinal: Bool) -> String? {
+        var lines: [String] = []
+        let title = firstString(in: input, keys: ["header", "title", "label"])
+        let body = firstString(in: input, keys: ["question", "prompt", "message", "description", "text"])
+
+        if includeOrdinal {
+            lines.append(title.map { "\(index). \($0)" } ?? "Question \(index)")
+        } else if let title {
+            lines.append(title)
         }
+
+        if let body, body != title {
+            lines.append(body)
+        }
+
+        if let options = optionsMessage(from: input["options"] ?? input["choices"]) {
+            lines.append("Options:\n\(options)")
+        }
+
+        if (input["multiSelect"] as? Bool) == true || (input["multi_select"] as? Bool) == true {
+            lines.append("Multiple selections allowed")
+        }
+
+        return joinedMessageLines(lines)
+    }
+
+    private static func optionsMessage(from value: Any?) -> String? {
+        guard let value else { return nil }
+
+        let labels: [String]
+        if let options = value as? [[String: Any]] {
+            labels = options.compactMap { option in
+                let label = firstString(in: option, keys: ["label", "title", "value", "id"])
+                let description = firstString(in: option, keys: ["description", "detail", "help"])
+                guard let label else { return nil }
+                if let description, description != label {
+                    return "\(label) - \(description)"
+                }
+                return label
+            }
+        } else if let options = value as? [String] {
+            labels = options
+        } else if let options = value as? [Any] {
+            labels = options.compactMap { displayString($0) }
+        } else {
+            labels = []
+        }
+
+        guard !labels.isEmpty else { return nil }
+        return labels.enumerated()
+            .map { index, label in "\(index + 1). \(label)" }
+            .joined(separator: "\n")
+    }
+
+    private static func postToolMessage(from response: Any?, json: [String: Any]) -> String {
+        if let response = response as? [String: Any],
+           let message = firstString(in: response, keys: ["stdout", "stderr", "message", "output", "result", "summary"]) {
+            return message
+        }
+
+        if let message = displayString(response) {
+            return message
+        }
+
+        if let message = firstString(in: json, keys: ["message", "summary", "output", "result"]) {
+            return message
+        }
+
         return "Completed"
     }
 
@@ -153,6 +236,29 @@ enum ToolMessageFormatter {
     private static func prefixedBlock(_ label: String, _ value: String?) -> String? {
         guard let value = value, !value.isEmpty else { return nil }
         return "\(label):\n\(value)"
+    }
+
+    private static func firstString(in dictionary: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let value = displayString(dictionary[key]) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func displayString(_ value: Any?) -> String? {
+        guard let value else { return nil }
+        let string: String
+        if let value = value as? String {
+            string = value
+        } else if let value = value as? CustomStringConvertible {
+            string = value.description
+        } else {
+            return nil
+        }
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func joinedMessageLines(_ lines: [String?]) -> String {
