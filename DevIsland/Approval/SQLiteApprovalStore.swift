@@ -271,7 +271,7 @@ final class SQLiteApprovalStore {
             ),
             ended AS (
                 SELECT DISTINCT session_id FROM hook_events
-                WHERE \(n) IN ('exit', 'shutdown', 'sessionend', 'devisland_dismissed')
+                WHERE \(n) IN ('exit', 'shutdown', 'sessionend', 'devislanddismissed')
             ),
             latest AS (
                 SELECT e.session_id, e.payload_json, e.event_name, e.tool_name, e.received_at,
