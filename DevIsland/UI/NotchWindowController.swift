@@ -343,11 +343,11 @@ class NotchWindowController: NSWindowController {
                 pendingSettle = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration, execute: work)
             } else {
+                updateWindowFrame(animate: false)
                 window?.orderFrontRegardless()
 
                 let work = DispatchWorkItem { [weak self] in
                     self?.expandedPanel.orderOut(nil)
-                    self?.updateWindowFrame(animate: false)
                 }
                 pendingSettle = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration, execute: work)
@@ -681,6 +681,7 @@ class NotchCollapsedHostingView: NSHostingView<NotchCollapsedView> {
 
     override func mouseDown(with event: NSEvent) {
         (window?.windowController as? NotchWindowController)?.expandFromCollapsedWindow()
+        super.mouseDown(with: event)
     }
 
     private func notchHitRect() -> CGRect {
