@@ -529,7 +529,7 @@ struct NotchView: View {
                             .buttonStyle(.plain)
                             .help(l10n.helpFocusTerminal)
 
-                            Button(action: { state.isNotchExpanded = false }) {
+                            Button(action: { state.dismissCurrentRequest() }) {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
                                     Text(l10n.notchDismiss)
