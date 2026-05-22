@@ -1903,7 +1903,12 @@ class AppState: ObservableObject {
                 terminalTmuxClient: json["terminal_tmux_client"] as? String ?? "",
                 toolName: record.lastToolName,
                 eventName: record.lastEventName,
-                message: "",
+                message: ToolMessageFormatter.displayMessage(
+                    for: record.lastToolName,
+                    toolInput: json["tool_input"] as? [String: Any],
+                    json: json,
+                    eventName: record.lastEventName
+                ),
                 isPending: false,
                 isLifecycleTracked: true
             )
