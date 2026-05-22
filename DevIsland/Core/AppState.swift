@@ -489,6 +489,7 @@ class AppState: ObservableObject {
         var isPlanAction = false
         var displayToolName = ""
         var workspaceRoot: String?
+        var sessionStartSource = ""
         var isReplayPayload = false
         var isSubAgentSession = false
         var toolInput: [String: Any]?
@@ -510,6 +511,7 @@ class AppState: ObservableObject {
                 terminalTmuxSocket = json["terminal_tmux_socket"] as? String ?? ""
                 terminalTmuxClient = json["terminal_tmux_client"] as? String ?? ""
                 workspaceRoot = json["cwd"] as? String
+                sessionStartSource = json["source"] as? String ?? ""
                 notificationType = json["notification_type"] as? String ?? ""
                 isReplayPayload = json["replay_origin_event_id"] != nil
                 // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
@@ -781,6 +783,59 @@ class AppState: ObservableObject {
 
             DispatchQueue.main.async {
                 // sessionStore 뮤테이션은 항상 메인 스레드에서 수행 (@Published → SwiftUI 업데이트)
+                if isStartEvent &&
+                    agentKind == .codex &&
+                    Self.shouldSupersedeCodexSessionsOnStart(source: sessionStartSource) {
+                    let removedSessionIds = self.sessionStore.removeSupersededCodexSessions(
+                        newSessionId: fullSessionId,
+                        terminalApp: terminalApp,
+                        terminalTTY: terminalTTY,
+                        terminalWindowId: terminalWindowId,
+                        terminalTabIndex: terminalTabIndex,
+                        terminalTmuxPane: terminalTmuxPane,
+                        terminalTmuxSocket: terminalTmuxSocket,
+                        terminalTmuxClient: terminalTmuxClient
+                    )
+
+                    var removedCurrentRequest = false
+                    for removedSessionId in removedSessionIds {
+                        let removedRequests = self.sessionStore.removeAllPending(sessionId: removedSessionId)
+                        if removedRequests.contains(where: { $0.id == self.showingRequestId }) {
+                            removedCurrentRequest = true
+                        }
+                        removedRequests.forEach {
+                            self.respondWithReplay(
+                                "{\"response\": \"denied\"}",
+                                responseHandler: $0.responseHandler,
+                                hookEventId: $0.hookEventId,
+                                agentKind: $0.agentKind,
+                                sessionId: $0.sessionId,
+                                toolName: $0.rawToolName.isEmpty ? $0.toolName : $0.rawToolName,
+                                workspaceRoot: $0.workspaceRoot,
+                                action: .deny,
+                                source: .automatic,
+                                reason: "session superseded"
+                            )
+                        }
+                        self.ptyCoordinator.clearBuffer(sessionId: removedSessionId)
+                    }
+
+                    if removedSessionIds.contains(self.currentSessionId) || removedCurrentRequest {
+                        self.currentResponseHandler = nil
+                        self.isShowingRequest = false
+                        self.showingRequestId = nil
+                        self.timeoutTimer?.invalidate()
+                        self.timeoutProgress = 1.0
+                        self.currentSessionId = ""
+                        self.currentToolName = ""
+                        self.currentEventName = ""
+                        self.currentMessage = ""
+                        if !self.sessionStore.pendingQueue.isEmpty {
+                            self.showNextRequest()
+                        }
+                    }
+                }
+
                 let hasPendingForSession = self.sessionStore.pendingQueue.contains { $0.sessionId == fullSessionId }
                 self.sessionStore.updateActiveSession(
                     sessionId: fullSessionId,
@@ -798,7 +853,8 @@ class AppState: ObservableObject {
                     message: sessionMessage,
                     isPending: hasPendingForSession,
                     preserveMessage: normalizedEvent == "posttooluse" || sessionMessage.isEmpty,
-                    isLifecycleTracked: isStartEvent || agentKind != .claudeCode // Codex/Gemini는 기본적으로 추적 유지
+                    isLifecycleTracked: isStartEvent || agentKind != .claudeCode, // Codex/Gemini는 기본적으로 추적 유지
+                    isSubAgentSession: isSubAgentSession
                 )
 
                 if isStartEvent || (self.sessionStore.selectedSessionId == nil) {
@@ -1150,6 +1206,11 @@ class AppState: ObservableObject {
 
     private static func isApprovalEvent(_ normalizedEvent: String, for agentKind: BuddyKind) -> Bool {
         HookEventNormalizer.isApprovalEvent(normalizedEvent, for: agentKind)
+    }
+
+    private static func shouldSupersedeCodexSessionsOnStart(source: String) -> Bool {
+        let normalized = HookEventNormalizer.normalizedName(source)
+        return ["clear", "startup", "resume"].contains(normalized)
     }
 
     private func playOpenPeonSound(_ category: CESPCategory?) {

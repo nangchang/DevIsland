@@ -53,6 +53,7 @@ hooks = true
 ```
 
 DevIsland uses `PermissionRequest` for approval. `PreToolUse` is status tracking only and returns `{}` so Codex continues without a DevIsland prompt.
+Codex does not emit `SessionEnd`; `SessionStart` may have `source` values `startup`, `resume`, or `clear`. DevIsland treats a new Codex `SessionStart` in the same terminal identity as an implicit end for older Codex sessions only. Claude, Gemini, and sub-agent sessions sharing the same tty are preserved.
 
 Deny output:
 
