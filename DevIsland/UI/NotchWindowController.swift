@@ -700,6 +700,10 @@ class NotchHostingView: NSHostingView<NotchView> {
     // 투명 픽셀 영역에서 OS 수준 click-through가 동작하도록 비불투명 처리
     override var isOpaque: Bool { false }
 
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard notchHitRect().contains(point) else { return nil }
         return super.hitTest(point) ?? self  // SwiftUI 내부 이벤트 라우팅 유지
