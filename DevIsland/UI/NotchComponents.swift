@@ -187,6 +187,21 @@ struct SessionRowView: View {
                                     .foregroundColor(Color(red: 1.0, green: 0.7, blue: 0.2))
                                     .lineLimit(1)
                             }
+
+                            if !session.lastToolName.isEmpty {
+                                Text(session.lastToolName)
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.55))
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        if !session.lastMessage.isEmpty {
+                            Text(session.lastMessage)
+                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.45))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
                     }
                 }
