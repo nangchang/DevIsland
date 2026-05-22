@@ -106,6 +106,37 @@ final class ToolMessageFormatterTests: XCTestCase {
         )
     }
 
+    func testSkipsDescriptionOnlyOptions() {
+        let input: [String: Any] = [
+            "question": "Which framework should I use?",
+            "options": [
+                ["description": "Native macOS UI"],
+                ["label": "AppKit", "description": "Classic macOS UI"]
+            ]
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "AskUserQuestion",
+            toolInput: input,
+            json: [
+                "hook_event_name": "PreToolUse",
+                "tool_name": "AskUserQuestion",
+                "tool_input": input
+            ],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertEqual(
+            message,
+            """
+            Which framework should I use?
+
+            Options:
+            1. AppKit - Classic macOS UI
+            """
+        )
+    }
+
     func testFormatsStringPostToolResponse() {
         let message = ToolMessageFormatter.displayMessage(
             for: "shell",

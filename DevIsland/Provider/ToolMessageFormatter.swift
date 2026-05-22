@@ -160,7 +160,7 @@ enum ToolMessageFormatter {
         let labels: [String]
         if let options = value as? [[String: Any]] {
             labels = options.compactMap { option in
-                let label = firstString(in: option, keys: ["label", "title", "value", "id", "description"])
+                let label = firstString(in: option, keys: ["label", "title", "value", "id"])
                 let description = firstString(in: option, keys: ["description", "detail", "help"])
                 guard let label else { return nil }
                 if let description, description != label {
