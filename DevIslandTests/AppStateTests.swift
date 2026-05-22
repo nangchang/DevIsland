@@ -1309,6 +1309,46 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-main" }))
     }
 
+    func testCodexSessionStartDoesNotSupersedeDifferentTmuxPaneWithSameTTY() {
+        let exp1 = XCTestExpectation(description: "codex tmux pane one started")
+        appState.handleMessage(
+            """
+            {
+                "hook_event_name": "SessionStart",
+                "source": "startup",
+                "cli_source": "codex",
+                "session_id": "codex-pane-one",
+                "terminal_tty": "/dev/ttys001",
+                "terminal_tmux_socket": "/tmp/tmux-501/default",
+                "terminal_tmux_client": "/dev/ttys001",
+                "terminal_tmux_pane": "%1"
+            }
+            """
+        ) { _ in exp1.fulfill() }
+        wait(for: [exp1], timeout: 1.0)
+
+        let exp2 = XCTestExpectation(description: "codex tmux pane two started")
+        appState.handleMessage(
+            """
+            {
+                "hook_event_name": "SessionStart",
+                "source": "startup",
+                "cli_source": "codex",
+                "session_id": "codex-pane-two",
+                "terminal_tty": "/dev/ttys001",
+                "terminal_tmux_socket": "/tmp/tmux-501/default",
+                "terminal_tmux_client": "/dev/ttys001",
+                "terminal_tmux_pane": "%2"
+            }
+            """
+        ) { _ in exp2.fulfill() }
+        wait(for: [exp2], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-pane-one" }))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-pane-two" }))
+    }
+
     // MARK: - ReplayRecorder
 
     func testApprovalEventIsRecordedInReplayLog() throws {

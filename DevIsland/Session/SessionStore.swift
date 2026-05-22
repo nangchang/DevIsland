@@ -159,6 +159,10 @@ final class SessionStore: ObservableObject {
             return true
         }
 
+        if !session.terminalTmuxPane.isEmpty || !terminalTmuxPane.isEmpty {
+            return false
+        }
+
         if !session.terminalTTY.isEmpty,
            !terminalTTY.isEmpty,
            session.terminalTTY == terminalTTY {
