@@ -784,7 +784,7 @@ class AppState: ObservableObject {
                     eventName: event,
                     message: sessionMessage,
                     isPending: hasPendingForSession,
-                    preserveMessage: (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse") || sessionMessage.isEmpty,
+                    preserveMessage: normalizedEvent == "posttooluse" || sessionMessage.isEmpty,
                     isLifecycleTracked: isStartEvent || agentKind != .claudeCode // Codex/Gemini는 기본적으로 추적 유지
                 )
 
