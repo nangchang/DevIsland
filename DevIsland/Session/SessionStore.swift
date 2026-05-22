@@ -27,7 +27,7 @@ final class SessionStore: ObservableObject {
 
     static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
 
-    init(timeoutDuration: Double = 120, lifecycleSessionTimeout: Double = 15 * 60) {
+    init(timeoutDuration: Double = 120, lifecycleSessionTimeout: Double = 24 * 60 * 60) {
         self.timeoutDuration = timeoutDuration
         self.lifecycleSessionTimeout = lifecycleSessionTimeout
     }
