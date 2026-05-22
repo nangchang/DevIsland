@@ -235,6 +235,10 @@ class AppState: ObservableObject {
             }
         }
 
+        if let proxy = approvalProxy {
+            restoreOpenSessions(from: proxy)
+        }
+
         if startServer {
             BridgeTokenManager.shared.generateIfNeeded()
 
@@ -1159,6 +1163,15 @@ class AppState: ObservableObject {
 
 
     func dismissSession(_ sessionId: String) {
+        let agentKind = sessionStore.activeSessions.first(where: { $0.id == sessionId })?.agentKind ?? .claudeCode
+        replayRecorder.recordHookEvent(
+            requestId: nil,
+            provider: providerKind(for: agentKind),
+            sessionId: sessionId,
+            eventName: "devisland_dismissed",
+            toolName: "",
+            payload: ["session_id": sessionId, "source": "user_dismissed"]
+        )
         DispatchQueue.main.async {
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
@@ -1848,6 +1861,54 @@ class AppState: ObservableObject {
                     }
                     self.sessionStore.sessionAutoApproveTypes[sessionId]?.insert(toolName)
                 }
+            }
+        }
+    }
+
+    private func restoreOpenSessions(from proxy: ApprovalProxyController) {
+        let since = Date().addingTimeInterval(-24 * 60 * 60)
+        let records: [OpenSessionRecord]
+        do {
+            records = try proxy.openSessions(since: since)
+        } catch {
+            print("[DevIsland] [RESTORE] Failed to query open sessions: \(error)")
+            return
+        }
+        guard !records.isEmpty else { return }
+        print("[DevIsland] [RESTORE] Restoring \(records.count) open session(s)")
+        for record in records {
+            guard let data = record.lastPayloadJSON.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            let terminalTitle: String
+            if let title = json["terminal_title"] as? String, !SessionStore.genericTitles.contains(title) {
+                terminalTitle = title
+            } else if let cwd = json["cwd"] as? String {
+                let label = URL(fileURLWithPath: cwd).lastPathComponent
+                terminalTitle = (!label.isEmpty && label != "/") ? label : "Session"
+            } else {
+                terminalTitle = "Session"
+            }
+            let agentKind = Self.agentKind(from: json, terminalTitle: terminalTitle)
+            sessionStore.updateActiveSession(
+                sessionId: record.sessionId,
+                terminalTitle: terminalTitle,
+                agentKind: agentKind,
+                terminalApp: json["terminal_app"] as? String ?? "",
+                terminalTTY: json["terminal_tty"] as? String ?? "",
+                terminalWindowId: json["terminal_window_id"] as? String ?? "",
+                terminalTabIndex: json["terminal_tab_index"] as? String ?? "",
+                terminalTmuxPane: json["terminal_tmux_pane"] as? String ?? "",
+                terminalTmuxSocket: json["terminal_tmux_socket"] as? String ?? "",
+                terminalTmuxClient: json["terminal_tmux_client"] as? String ?? "",
+                toolName: record.lastToolName,
+                eventName: record.lastEventName,
+                message: "",
+                isPending: false,
+                isLifecycleTracked: true
+            )
+            // Preserve the original start time and last active time from SQLite
+            if let index = sessionStore.activeSessions.firstIndex(where: { $0.id == record.sessionId }) {
+                sessionStore.activeSessions[index].lastActiveAt = record.lastActiveAt
             }
         }
     }
