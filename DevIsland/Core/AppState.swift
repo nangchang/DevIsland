@@ -108,6 +108,15 @@ class AppState: ObservableObject {
     private var currentHookEventId: Int64?
     private var isShowingRequest = false
     private var showingRequestId: UUID?
+    private var _previousSessionId: String?
+    private var previousSessionId: String? {
+        get {
+            guard let id = _previousSessionId,
+                  sessionStore.activeSessions.contains(where: { $0.id == id }) else { return nil }
+            return id
+        }
+        set { _previousSessionId = newValue }
+    }
     private var timeoutTimer: Timer?
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
@@ -812,6 +821,10 @@ class AppState: ObservableObject {
                             return
                         }
                         guard self.currentResponseHandler == nil else { return }
+                        if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
+                            self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
+                            self.previousSessionId = self.currentSessionId
+                        }
                         self.currentToolName = displayToolName
                         self.currentEventName = event
                         self.currentMessage = sessionMessage
@@ -1194,8 +1207,18 @@ class AppState: ObservableObject {
             currentHookEventId = nil
             currentMessage = ""
             currentSessionId = ""
-            sessionStore.selectedSessionId = nil
-            isNotchExpanded = false
+            if let prev = previousSessionId {
+                previousSessionId = nil
+                sessionStore.selectedSessionId = prev
+                sessionStore.setUnread(false, sessionId: prev)
+                currentSessionId = prev
+                syncDisplayToSelectedSession()
+                isExpandingFromRequest = true
+                isNotchExpanded = true
+            } else {
+                sessionStore.selectedSessionId = nil
+                isNotchExpanded = false
+            }
             return
         }
 
@@ -1221,6 +1244,10 @@ class AppState: ObservableObject {
             }
 
             print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
+            if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != next.sessionId {
+                self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
+                self.previousSessionId = self.currentSessionId
+            }
             self.currentResponseHandler = next.responseHandler
             self.currentEventName  = next.eventName
             self.currentToolName   = next.toolName
@@ -1614,8 +1641,10 @@ class AppState: ObservableObject {
             }
             self.showNextRequest()
             if status?.isTimeoutBypassed == true, self.sessionStore.pendingQueue.isEmpty, let completedSessionId {
-                self.sessionStore.selectedSessionId = completedSessionId
-                self.isNotchExpanded = false
+                if !self.isExpandingFromRequest {
+                    self.sessionStore.selectedSessionId = completedSessionId
+                    self.isNotchExpanded = false
+                }
             }
         }
     }
@@ -1825,6 +1854,10 @@ class AppState: ObservableObject {
 
     func showSessionDetail(_ sessionId: String) {
         guard currentResponseHandler == nil else { return }
+        if isExpandingFromRequest && !currentSessionId.isEmpty && currentSessionId != sessionId {
+            sessionStore.setUnread(false, sessionId: currentSessionId)
+            previousSessionId = currentSessionId
+        }
         sessionStore.selectedSessionId = sessionId
         sessionStore.setUnread(false, sessionId: sessionId)
         currentSessionId = sessionId
@@ -1836,16 +1869,24 @@ class AppState: ObservableObject {
         if currentResponseHandler != nil {
             sendDecision(approved: false, reason: "Dismissed", passToTerminal: true)
         } else if isExpandingFromRequest {
-            // Go back to session list instead of collapsing the notch
             if !currentSessionId.isEmpty {
                 sessionStore.setUnread(false, sessionId: currentSessionId)
             }
-            isExpandingFromRequest = false
-            currentSessionId = ""
-            currentMessage = ""
-            currentToolName = ""
-            currentEventName = ""
             notificationTimer?.invalidate()
+            if let prev = previousSessionId {
+                previousSessionId = nil
+                currentSessionId = ""
+                currentMessage = ""
+                currentToolName = ""
+                currentEventName = ""
+                showSessionDetail(prev)
+            } else {
+                isExpandingFromRequest = false
+                currentSessionId = ""
+                currentMessage = ""
+                currentToolName = ""
+                currentEventName = ""
+            }
         } else {
             isNotchExpanded = false
             notificationTimer?.invalidate()
