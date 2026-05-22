@@ -807,7 +807,11 @@ class AppState: ObservableObject {
                     let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
                     self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
                         guard let self else { return }
-                        guard !isFrontmost, self.currentResponseHandler == nil else { return }
+                        if isFrontmost {
+                            self.sessionStore.setUnread(false, sessionId: fullSessionId)
+                            return
+                        }
+                        guard self.currentResponseHandler == nil else { return }
                         self.currentToolName = displayToolName
                         self.currentEventName = event
                         self.currentMessage = sessionMessage
