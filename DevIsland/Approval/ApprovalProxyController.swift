@@ -64,6 +64,10 @@ final class ApprovalProxyController {
         try store.replayLog(limit: limit)
     }
 
+    func openSessions(since: Date) throws -> [OpenSessionRecord] {
+        try store.openSessions(since: since)
+    }
+
     @discardableResult
     func recordPTYMessage(
         sessionId: String,

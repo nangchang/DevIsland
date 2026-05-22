@@ -126,7 +126,7 @@ struct SessionRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Button(action: { AppState.shared.sessionStore.selectedSessionId = session.id }) {
+            Button(action: { AppState.shared.showSessionDetail(session.id) }) {
                 HStack(spacing: 12) {
                     ZStack(alignment: .topTrailing) {
                         AgentRequestBadge(
@@ -148,8 +148,14 @@ struct SessionRowView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
+                            if session.isUnread {
+                                Circle()
+                                    .fill(Color.blue.opacity(0.85))
+                                    .frame(width: 6, height: 6)
+                            }
+
                             Text(session.terminalTitle)
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 12, weight: session.isUnread ? .heavy : .bold))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
 
@@ -187,9 +193,26 @@ struct SessionRowView: View {
                                     .foregroundColor(Color(red: 1.0, green: 0.7, blue: 0.2))
                                     .lineLimit(1)
                             }
+
+                            if !session.lastToolName.isEmpty {
+                                Text(session.lastToolName)
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.55))
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        if !session.lastMessage.isEmpty {
+                            Text(session.lastMessage)
+                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.45))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 

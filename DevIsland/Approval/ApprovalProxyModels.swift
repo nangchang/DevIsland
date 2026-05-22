@@ -147,6 +147,16 @@ struct ReplayLogEntry: Identifiable, Equatable {
     var decidedAt: Date?
 }
 
+struct OpenSessionRecord {
+    let sessionId: String
+    let provider: ProviderKind
+    let lastPayloadJSON: String
+    let lastEventName: String
+    let lastToolName: String
+    let lastActiveAt: Date
+    let startAt: Date
+}
+
 // MARK: - PTY
 
 enum PTYDirection: String, Codable, CaseIterable {

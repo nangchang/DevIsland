@@ -255,6 +255,69 @@ final class SQLiteApprovalStore {
         )
     }
 
+    // Normalized form used for lifecycle event matching: lowercase, underscores/hyphens stripped.
+    // Matches HookEventNormalizer.normalizedName in Swift.
+    private static let sqlNormalize = "lower(replace(replace(event_name,'_',''),'-',''))"
+
+    func openSessions(since: Date) throws -> [OpenSessionRecord] {
+        let n = Self.sqlNormalize
+        let sql = """
+            WITH starts AS (
+                SELECT session_id, provider, MIN(received_at) AS start_at
+                FROM hook_events
+                WHERE \(n) IN ('sessionstart', 'startup', 'init')
+                  AND received_at > ?
+                GROUP BY session_id
+            ),
+            ended AS (
+                SELECT DISTINCT session_id FROM hook_events
+                WHERE \(n) IN ('exit', 'shutdown', 'sessionend', 'devislanddismissed')
+            ),
+            latest AS (
+                SELECT e.session_id, e.payload_json, e.event_name, e.tool_name, e.received_at,
+                       ROW_NUMBER() OVER (PARTITION BY e.session_id ORDER BY e.received_at DESC) AS rn
+                FROM hook_events e
+                JOIN starts s ON s.session_id = e.session_id
+                WHERE e.session_id NOT IN (SELECT session_id FROM ended)
+            )
+            SELECT s.session_id, s.provider, l.payload_json, l.event_name, l.tool_name,
+                   l.received_at, s.start_at
+            FROM starts s
+            JOIN latest l ON l.session_id = s.session_id AND l.rn = 1
+            ORDER BY s.start_at ASC
+            """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(statement) }
+        try bind([since.timeIntervalSince1970], to: statement)
+
+        var records: [OpenSessionRecord] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard
+                let sessionId = columnString(statement, 0),
+                let providerRaw = columnString(statement, 1),
+                let provider = ProviderKind(rawValue: providerRaw),
+                let payloadJSON = columnString(statement, 2),
+                let eventName = columnString(statement, 3),
+                let toolName = columnString(statement, 4)
+            else { continue }
+            let lastActiveAt = Date(timeIntervalSince1970: sqlite3_column_double(statement, 5))
+            let startAt = Date(timeIntervalSince1970: sqlite3_column_double(statement, 6))
+            records.append(OpenSessionRecord(
+                sessionId: sessionId,
+                provider: provider,
+                lastPayloadJSON: payloadJSON,
+                lastEventName: eventName,
+                lastToolName: toolName,
+                lastActiveAt: lastActiveAt,
+                startAt: startAt
+            ))
+        }
+        return records
+    }
+
     func deleteRule(id: UUID) throws {
         try execute("DELETE FROM rules WHERE id = ?", [id.uuidString])
     }

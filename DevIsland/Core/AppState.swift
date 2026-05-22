@@ -108,6 +108,15 @@ class AppState: ObservableObject {
     private var currentHookEventId: Int64?
     private var isShowingRequest = false
     private var showingRequestId: UUID?
+    private var _previousSessionId: String?
+    private var previousSessionId: String? {
+        get {
+            guard let id = _previousSessionId,
+                  sessionStore.activeSessions.contains(where: { $0.id == id }) else { return nil }
+            return id
+        }
+        set { _previousSessionId = newValue }
+    }
     private var timeoutTimer: Timer?
     private var notificationTimer: Timer?
     private var sessionPruningTimer: Timer?
@@ -224,6 +233,10 @@ class AppState: ObservableObject {
                     print("[DevIsland] [PRUNE] Failed to prune old logs: \(error)")
                 }
             }
+        }
+
+        if let proxy = approvalProxy {
+            restoreOpenSessions(from: proxy)
         }
 
         if startServer {
@@ -784,7 +797,7 @@ class AppState: ObservableObject {
                     eventName: event,
                     message: sessionMessage,
                     isPending: hasPendingForSession,
-                    preserveMessage: (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse") || sessionMessage.isEmpty,
+                    preserveMessage: normalizedEvent == "posttooluse" || sessionMessage.isEmpty,
                     isLifecycleTracked: isStartEvent || agentKind != .claudeCode // Codex/Gemini는 기본적으로 추적 유지
                 )
 
@@ -798,12 +811,25 @@ class AppState: ObservableObject {
                                      isUserQuestionTool ||
                                      (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode)))
 
+                let isCurrentlyViewed = self.isExpandingFromRequest && self.currentSessionId == fullSessionId
+                if isInformational && !isStartEvent && !sessionMessage.isEmpty && !isCurrentlyViewed {
+                    self.sessionStore.setUnread(true, sessionId: fullSessionId)
+                }
+
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
                     // 터미널이 포커스되어 있지 않을 때만 확장
                     let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
                     self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
                         guard let self else { return }
-                        guard !isFrontmost, self.currentResponseHandler == nil else { return }
+                        if isFrontmost {
+                            self.sessionStore.setUnread(false, sessionId: fullSessionId)
+                            return
+                        }
+                        guard self.currentResponseHandler == nil else { return }
+                        if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
+                            self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
+                            self.previousSessionId = self.currentSessionId
+                        }
                         self.currentToolName = displayToolName
                         self.currentEventName = event
                         self.currentMessage = sessionMessage
@@ -1138,6 +1164,15 @@ class AppState: ObservableObject {
 
 
     func dismissSession(_ sessionId: String) {
+        let agentKind = sessionStore.activeSessions.first(where: { $0.id == sessionId })?.agentKind ?? .claudeCode
+        replayRecorder.recordHookEvent(
+            requestId: nil,
+            provider: providerKind(for: agentKind),
+            sessionId: sessionId,
+            eventName: "devisland_dismissed",
+            toolName: "",
+            payload: ["session_id": sessionId, "source": "user_dismissed"]
+        )
         DispatchQueue.main.async {
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
@@ -1186,8 +1221,18 @@ class AppState: ObservableObject {
             currentHookEventId = nil
             currentMessage = ""
             currentSessionId = ""
-            sessionStore.selectedSessionId = nil
-            isNotchExpanded = false
+            if let prev = previousSessionId {
+                previousSessionId = nil
+                sessionStore.selectedSessionId = prev
+                sessionStore.setUnread(false, sessionId: prev)
+                currentSessionId = prev
+                syncDisplayToSelectedSession()
+                isExpandingFromRequest = true
+                isNotchExpanded = true
+            } else {
+                sessionStore.selectedSessionId = nil
+                isNotchExpanded = false
+            }
             return
         }
 
@@ -1213,6 +1258,10 @@ class AppState: ObservableObject {
             }
 
             print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
+            if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != next.sessionId {
+                self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
+                self.previousSessionId = self.currentSessionId
+            }
             self.currentResponseHandler = next.responseHandler
             self.currentEventName  = next.eventName
             self.currentToolName   = next.toolName
@@ -1606,8 +1655,10 @@ class AppState: ObservableObject {
             }
             self.showNextRequest()
             if status?.isTimeoutBypassed == true, self.sessionStore.pendingQueue.isEmpty, let completedSessionId {
-                self.sessionStore.selectedSessionId = completedSessionId
-                self.isNotchExpanded = false
+                if !self.isExpandingFromRequest {
+                    self.sessionStore.selectedSessionId = completedSessionId
+                    self.isNotchExpanded = false
+                }
             }
         }
     }
@@ -1815,12 +1866,96 @@ class AppState: ObservableObject {
         }
     }
 
+    private func restoreOpenSessions(from proxy: ApprovalProxyController) {
+        let since = Date().addingTimeInterval(-24 * 60 * 60)
+        let records: [OpenSessionRecord]
+        do {
+            records = try proxy.openSessions(since: since)
+        } catch {
+            print("[DevIsland] [RESTORE] Failed to query open sessions: \(error)")
+            return
+        }
+        guard !records.isEmpty else { return }
+        print("[DevIsland] [RESTORE] Restoring \(records.count) open session(s)")
+        for record in records {
+            guard let data = record.lastPayloadJSON.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            let terminalTitle: String
+            if let title = json["terminal_title"] as? String, !SessionStore.genericTitles.contains(title) {
+                terminalTitle = title
+            } else if let cwd = json["cwd"] as? String {
+                let label = URL(fileURLWithPath: cwd).lastPathComponent
+                terminalTitle = (!label.isEmpty && label != "/") ? label : "Session"
+            } else {
+                terminalTitle = "Session"
+            }
+            let agentKind = Self.agentKind(from: json, terminalTitle: terminalTitle)
+            sessionStore.updateActiveSession(
+                sessionId: record.sessionId,
+                terminalTitle: terminalTitle,
+                agentKind: agentKind,
+                terminalApp: json["terminal_app"] as? String ?? "",
+                terminalTTY: json["terminal_tty"] as? String ?? "",
+                terminalWindowId: json["terminal_window_id"] as? String ?? "",
+                terminalTabIndex: json["terminal_tab_index"] as? String ?? "",
+                terminalTmuxPane: json["terminal_tmux_pane"] as? String ?? "",
+                terminalTmuxSocket: json["terminal_tmux_socket"] as? String ?? "",
+                terminalTmuxClient: json["terminal_tmux_client"] as? String ?? "",
+                toolName: record.lastToolName,
+                eventName: record.lastEventName,
+                message: ToolMessageFormatter.displayMessage(
+                    for: record.lastToolName,
+                    toolInput: json["tool_input"] as? [String: Any],
+                    json: json,
+                    eventName: record.lastEventName
+                ),
+                isPending: false,
+                isLifecycleTracked: true
+            )
+            // Preserve the original start time and last active time from SQLite
+            if let index = sessionStore.activeSessions.firstIndex(where: { $0.id == record.sessionId }) {
+                sessionStore.activeSessions[index].lastActiveAt = record.lastActiveAt
+            }
+        }
+    }
+
+    func showSessionDetail(_ sessionId: String) {
+        guard currentResponseHandler == nil else { return }
+        if isExpandingFromRequest && !currentSessionId.isEmpty && currentSessionId != sessionId {
+            sessionStore.setUnread(false, sessionId: currentSessionId)
+            previousSessionId = currentSessionId
+        }
+        sessionStore.selectedSessionId = sessionId
+        sessionStore.setUnread(false, sessionId: sessionId)
+        currentSessionId = sessionId
+        syncDisplayToSelectedSession()
+        isExpandingFromRequest = true
+    }
+
     func dismissCurrentRequest() {
         if currentResponseHandler != nil {
             sendDecision(approved: false, reason: "Dismissed", passToTerminal: true)
+        } else if isExpandingFromRequest {
+            if !currentSessionId.isEmpty {
+                sessionStore.setUnread(false, sessionId: currentSessionId)
+            }
+            notificationTimer?.invalidate()
+            if let prev = previousSessionId {
+                previousSessionId = nil
+                currentSessionId = ""
+                currentMessage = ""
+                currentToolName = ""
+                currentEventName = ""
+                showSessionDetail(prev)
+            } else {
+                isExpandingFromRequest = false
+                currentSessionId = ""
+                currentMessage = ""
+                currentToolName = ""
+                currentEventName = ""
+            }
         } else {
             isNotchExpanded = false
-            isExpandingFromRequest = false
             notificationTimer?.invalidate()
         }
     }
