@@ -1,0 +1,47 @@
+name: CodeQL
+  on:
+    push:
+      branches: [main]
+    pull_request:
+      branches: [main]
+    schedule:
+      - cron: '0 9 * * 1'
+
+  jobs:
+    analyze:
+      name: Analyze Swift
+      runs-on: macos-15
+
+      permissions:
+        security-events: write
+        packages: read
+        actions: read
+        contents: read
+
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: Install XcodeGen
+          run: brew install xcodegen
+
+        - name: Generate Xcode project
+          run: xcodegen generate
+
+        - name: Initialize CodeQL
+          uses: github/codeql-action/init@v3
+          with:
+            languages: swift
+            build-mode: manual
+
+        - name: Build for CodeQL
+          run: |
+            xcodebuild build \
+              -project DevIsland.xcodeproj \
+              -scheme DevIsland \
+              -destination 'platform=macOS' \
+              CODE_SIGNING_ALLOWED=NO \
+              ONLY_ACTIVE_ARCH=YES
+
+        - name: Perform CodeQL Analysis
+          uses: github/codeql-action/analyze@v3
