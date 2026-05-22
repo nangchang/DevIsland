@@ -94,6 +94,7 @@ final class SessionStore: ObservableObject {
                 isPending: isPending,
                 isLifecycleTracked: isLifecycleTracked,
                 isAutoEditActive: false,
+                isUnread: false,
                 status: status ?? (isPending ? .pending : .idle)
             )
             activeSessions.insert(session, at: 0)
@@ -140,6 +141,11 @@ final class SessionStore: ObservableObject {
         pendingQueue.removeAll { $0.sessionId == sessionId }
         pendingItems.removeAll { $0.sessionId == sessionId }
         return removed
+    }
+
+    func setUnread(_ unread: Bool, sessionId: String) {
+        guard let index = activeSessions.firstIndex(where: { $0.id == sessionId }) else { return }
+        activeSessions[index].isUnread = unread
     }
 
     /// Removes `sessionId` from activeSessions and clears session-scoped auto-approve cache.

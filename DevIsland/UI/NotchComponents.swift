@@ -148,8 +148,14 @@ struct SessionRowView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
+                            if session.isUnread {
+                                Circle()
+                                    .fill(Color.blue.opacity(0.85))
+                                    .frame(width: 6, height: 6)
+                            }
+
                             Text(session.terminalTitle)
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 12, weight: session.isUnread ? .heavy : .bold))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
 

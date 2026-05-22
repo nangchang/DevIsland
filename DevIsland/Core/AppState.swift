@@ -798,6 +798,10 @@ class AppState: ObservableObject {
                                      isUserQuestionTool ||
                                      (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode)))
 
+                if isInformational && !isStartEvent && !sessionMessage.isEmpty {
+                    self.sessionStore.setUnread(true, sessionId: fullSessionId)
+                }
+
                 if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
                     // 터미널이 포커스되어 있지 않을 때만 확장
                     let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
@@ -1818,6 +1822,7 @@ class AppState: ObservableObject {
     func showSessionDetail(_ sessionId: String) {
         guard currentResponseHandler == nil else { return }
         sessionStore.selectedSessionId = sessionId
+        sessionStore.setUnread(false, sessionId: sessionId)
         currentSessionId = sessionId
         syncDisplayToSelectedSession()
         isExpandingFromRequest = true
@@ -1828,6 +1833,9 @@ class AppState: ObservableObject {
             sendDecision(approved: false, reason: "Dismissed", passToTerminal: true)
         } else if isExpandingFromRequest {
             // Go back to session list instead of collapsing the notch
+            if !currentSessionId.isEmpty {
+                sessionStore.setUnread(false, sessionId: currentSessionId)
+            }
             isExpandingFromRequest = false
             currentSessionId = ""
             currentMessage = ""

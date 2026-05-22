@@ -63,5 +63,6 @@ struct ActiveSession: Identifiable, Equatable {
     var isPending: Bool
     var isLifecycleTracked: Bool
     var isAutoEditActive: Bool
+    var isUnread: Bool
     var status: SessionStatus
 }
