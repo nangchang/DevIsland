@@ -19,7 +19,7 @@ struct MarkdownView: View {
             .textual.textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .foregroundStyle(.white.opacity(0.9))
-            .font(.system(size: 13))
+            .font(.system(size: 13, weight: .medium))
     }
 }
 
