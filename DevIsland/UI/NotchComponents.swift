@@ -89,6 +89,126 @@ struct AgentRequestBadge: View {
     }
 }
 
+// MARK: - Claude Question Form
+
+struct ClaudeQuestionFormView: View {
+    let request: ClaudeQuestionRequest
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(Array(request.questions.enumerated()), id: \.element.id) { index, question in
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if request.questions.count > 1 {
+                            Text("Question \(index + 1)")
+                                .font(.system(size: 9, weight: .black))
+                                .foregroundColor(.white.opacity(0.35))
+                        }
+
+                        if let title = question.title, title != question.prompt {
+                            Text(title)
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundColor(.white.opacity(0.75))
+                        }
+
+                        Text(question.prompt)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.92))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if !question.options.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(question.options) { option in
+                                ClaudeQuestionOptionRow(
+                                    option: option,
+                                    isSelected: isSelected(option.id, for: question.id),
+                                    allowsMultipleSelection: question.allowsMultipleSelection
+                                ) {
+                                    state.setClaudeQuestionOption(questionId: question.id, optionId: option.id)
+                                }
+                            }
+                        }
+                    }
+
+                    if question.allowsTextInput {
+                        TextField("", text: Binding(
+                            get: { state.currentClaudeQuestionAnswers[question.id]?.text ?? "" },
+                            set: { state.setClaudeQuestionText(questionId: question.id, text: $0) }
+                        ))
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .frame(height: 34)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(12)
+                .background(Color.white.opacity(0.045))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    private func isSelected(_ optionId: String, for questionId: String) -> Bool {
+        state.currentClaudeQuestionAnswers[questionId]?.selectedOptionIds.contains(optionId) == true
+    }
+}
+
+private struct ClaudeQuestionOptionRow: View {
+    let option: ClaudeQuestionRequest.Option
+    let isSelected: Bool
+    let allowsMultipleSelection: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: selectedIcon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(isSelected ? .green : .white.opacity(0.35))
+                    .frame(width: 18, height: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.label)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(2)
+
+                    if let detail = option.detail, !detail.isEmpty {
+                        Text(detail)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white.opacity(0.48))
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? Color.green.opacity(0.13) : Color.white.opacity(0.055))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.green.opacity(0.45) : Color.white.opacity(0.07), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var selectedIcon: String {
+        if allowsMultipleSelection {
+            return isSelected ? "checkmark.square.fill" : "square"
+        }
+        return isSelected ? "largecircle.fill.circle" : "circle"
+    }
+}
+
 // MARK: - Session Row View
 
 struct SessionRowView: View {

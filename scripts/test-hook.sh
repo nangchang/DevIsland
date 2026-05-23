@@ -174,7 +174,7 @@ send_claude_smoke() {
 
 send_claude_question() {
     local input
-    input=$(python3 -c 'import json; print(json.dumps({"questions":[{"header":"Framework","question":"Which framework should I use?","options":[{"label":"SwiftUI","description":"Native macOS UI"},{"label":"AppKit"}],"multiSelect":False}]}))')
+    input=$(python3 -c 'import json; print(json.dumps({"questions":[{"header":"Framework","question":"Which framework should I use?","options":[{"label":"SwiftUI","description":"Native macOS UI"},{"label":"AppKit"}],"multiSelect":False},{"header":"Checks","question":"Which checks should I run?","options":[{"label":"Unit tests"},{"label":"Build verification"},{"label":"YAML lint"}],"multiSelect":True},{"header":"Notes","question":"Any extra instruction?"}]}))')
     send_event "$(make_json hook_event_name PreToolUse session_id "$SESSION_ID" tool_name AskUserQuestion tool_input "$input" cwd "$(pwd)")" claude
 }
 

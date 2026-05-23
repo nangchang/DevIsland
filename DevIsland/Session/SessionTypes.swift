@@ -11,6 +11,7 @@ struct PendingRequest: Identifiable {
     let workspaceRoot: String?
     let isReplay: Bool
     let message: String
+    let claudeQuestion: ClaudeQuestionRequest?
     let responseHandler: (String) -> Void
     let receivedAt: Date
 }
