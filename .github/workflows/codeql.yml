@@ -42,13 +42,6 @@ jobs:
         if: steps.cache-xcodegen.outputs.cache-hit != 'true'
         run: brew install xcodegen
 
-      - name: Cache DerivedData
-        uses: actions/cache@v4
-        with:
-          path: /tmp/DevIsland-CodeQL-DerivedData
-          key: ${{ runner.os }}-codeql-deriveddata-${{ hashFiles('project.yml', 'DevIsland/**/*.swift') }}
-          restore-keys: ${{ runner.os }}-codeql-deriveddata-
-
       - name: Generate Xcode project
         run: xcodegen generate
 
@@ -61,7 +54,7 @@ jobs:
       - name: Build for CodeQL
         run: |
           HOST_ARCH="$(uname -m)"
-          xcodebuild build \
+          xcodebuild clean build \
             -project DevIsland.xcodeproj \
             -scheme DevIsland \
             -destination "platform=macOS,arch=${HOST_ARCH}" \
