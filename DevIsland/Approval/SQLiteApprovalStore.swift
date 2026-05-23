@@ -12,7 +12,7 @@ final class SQLiteApprovalStore {
         case unsupportedSchemaVersion(Int32)
     }
 
-    static let currentSchemaVersion: Int32 = 3
+    static let currentSchemaVersion: Int32 = 4
 
     static func deterministicRuleID(
         provider: ProviderKind,
@@ -476,6 +476,7 @@ final class SQLiteApprovalStore {
         try migrateToVersion1()
         if version < 2 { try migrateToVersion2() }
         if version < 3 { try migrateToVersion3() }
+        if version < 4 { try migrateToVersion4() }
         try execute("PRAGMA user_version = \(Self.currentSchemaVersion)")
     }
 
@@ -573,6 +574,55 @@ final class SQLiteApprovalStore {
         try execute("CREATE INDEX IF NOT EXISTS idx_decisions_hook_event_id ON approval_decisions(hook_event_id)")
         try execute("CREATE INDEX IF NOT EXISTS idx_decisions_decided_at ON approval_decisions(decided_at)")
         try execute("CREATE INDEX IF NOT EXISTS idx_pty_messages_created_at ON pty_messages(created_at)")
+    }
+
+    // Seeds built-in allow rules derived from historical approval data.
+    // INSERT OR IGNORE preserves any user-modified rule with the same ID.
+    // UUIDs use the A1B2C3D4-0001- prefix to identify seeded rules at a glance.
+    // created_at = 0 so user-created rules (later timestamps) take priority in deny-first ordering.
+    //
+    // Each rule is duplicated for both 'Bash' and 'shell' tool names so Claude Code
+    // and Codex (which uses 'shell') both benefit from the same defaults.
+    // gh patterns are scoped to read-only subcommands to avoid allowing gh pr create/merge etc.
+    private func migrateToVersion4() throws {
+        let seed: [(id: String, toolName: String, pattern: String)] = [
+            // Bash variants
+            ("A1B2C3D4-0001-0000-0000-000000000001", "Bash", "xcodebuild build"),
+            ("A1B2C3D4-0001-0000-0000-000000000002", "Bash", "xcodebuild test"),
+            ("A1B2C3D4-0001-0000-0000-000000000003", "Bash", "xcodegen generate"),
+            ("A1B2C3D4-0001-0000-0000-000000000004", "Bash", "bash scripts/"),
+            ("A1B2C3D4-0001-0000-0000-000000000005", "Bash", "gh pr list"),
+            ("A1B2C3D4-0001-0000-0000-000000000006", "Bash", "gh pr view"),
+            ("A1B2C3D4-0001-0000-0000-000000000007", "Bash", "gh pr diff"),
+            ("A1B2C3D4-0001-0000-0000-000000000008", "Bash", "gh pr checks"),
+            ("A1B2C3D4-0001-0000-0000-000000000009", "Bash", "gh issue list"),
+            ("A1B2C3D4-0001-0000-0000-00000000000A", "Bash", "gh issue view"),
+            ("A1B2C3D4-0001-0000-0000-00000000000B", "Bash", "screencapture /tmp/"),
+            // shell variants (Codex uses 'shell' as tool_name)
+            ("A1B2C3D4-0001-0000-0000-000000000011", "shell", "xcodebuild build"),
+            ("A1B2C3D4-0001-0000-0000-000000000012", "shell", "xcodebuild test"),
+            ("A1B2C3D4-0001-0000-0000-000000000013", "shell", "xcodegen generate"),
+            ("A1B2C3D4-0001-0000-0000-000000000014", "shell", "bash scripts/"),
+            ("A1B2C3D4-0001-0000-0000-000000000015", "shell", "gh pr list"),
+            ("A1B2C3D4-0001-0000-0000-000000000016", "shell", "gh pr view"),
+            ("A1B2C3D4-0001-0000-0000-000000000017", "shell", "gh pr diff"),
+            ("A1B2C3D4-0001-0000-0000-000000000018", "shell", "gh pr checks"),
+            ("A1B2C3D4-0001-0000-0000-000000000019", "shell", "gh issue list"),
+            ("A1B2C3D4-0001-0000-0000-00000000001A", "shell", "gh issue view"),
+            ("A1B2C3D4-0001-0000-0000-00000000001B", "shell", "screencapture /tmp/"),
+        ]
+        for entry in seed {
+            try execute(
+                """
+                INSERT OR IGNORE INTO rules
+                    (id, provider, tool_name, match_kind, pattern, action, scope,
+                     risk_floor, workspace_root, created_at, expires_at, enabled)
+                VALUES (?, 'any', ?, 'commandPrefix', ?, 'allow', 'persistent',
+                        NULL, NULL, 0, NULL, 1)
+                """,
+                [entry.id, entry.toolName, entry.pattern]
+            )
+        }
     }
 
     private func migrateToVersion2() throws {
