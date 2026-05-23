@@ -457,6 +457,7 @@ class AppState: ObservableObject {
     func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
         switch HookEventHandler.parse(message) {
         case .invalid:
+            responseHandler("{\"response\": \"approved\"}")
             return
         case .denied:
             responseHandler("{\"response\": \"denied\"}")
