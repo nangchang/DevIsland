@@ -455,97 +455,42 @@ class AppState: ObservableObject {
     }
 
     func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
-        guard let rawData = message.data(using: .utf8) else { return }
-
-        // Detect IPC protocol v1 envelope vs raw JSON.
-        // Raw JSON always starts with '{' (0x7B); the HookSocketServer strips the
-        // length-prefix before delivering framed payloads here as plain JSON strings.
-        let parsedJSON: [String: Any]?
-        let requestId: String?
-        if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData),
-           envelope.protocol == IPCEnvelope.protocolName {
-            guard BridgeTokenManager.shared.validate(envelope.token) else {
-                print("[DevIsland] IPC token validation failed – denying request")
-                responseHandler("{\"response\": \"denied\"}")
-                return
-            }
-            // Convert AnyJSON payload to [String: Any] directly — avoids encode+decode roundtrip.
-            parsedJSON = envelope.payload.mapValues { $0.rawValue } as [String: Any]
-            requestId = envelope.requestId
-        } else {
-            parsedJSON = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any]
-            requestId = nil
+        switch HookEventHandler.parse(message) {
+        case .invalid:
+            return
+        case .denied:
+            responseHandler("{\"response\": \"denied\"}")
+            return
+        case .parsed(let h):
+            handleParsedEvent(h, responseHandler: responseHandler)
         }
+    }
 
-        var event     = "Unknown"
-        var toolName  = ""
-        var sessionId = ""
-        var terminalTitle = "Terminal"
-        var agentKind = BuddyKind.claudeCode
-        var terminalApp = ""
-        var terminalTTY = ""
-        var terminalWindowId = ""
-        var terminalTabIndex = ""
-        var terminalTmuxPane = ""
-        var terminalTmuxSocket = ""
-        var terminalTmuxClient = ""
-        var displayMsg = ""
-        var notificationType = ""
-        var isPlanAction = false
-        var displayToolName = ""
-        var workspaceRoot: String?
-        var sessionStartSource = ""
-        var isReplayPayload = false
-        var isSubAgentSession = false
-        var parentSessionId: String?
-        var toolInput: [String: Any]?
-
-        if let json = parsedJSON {
-                event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
-                toolName  = json["tool_name"] as? String ?? ""
-                sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
-                if let parentId = json["parent_session_id"] as? String, !parentId.isEmpty {
-                    isSubAgentSession = true
-                    parentSessionId = parentId
-                }
-                print("[DevIsland] [MSG] Parsed JSON from \(sessionId.prefix(8))")
-                terminalTitle = json["terminal_title"] as? String ?? "Terminal"
-                terminalApp = json["terminal_app"] as? String ?? ""
-                terminalTTY = json["terminal_tty"] as? String ?? ""
-                terminalWindowId = json["terminal_window_id"] as? String ?? ""
-                terminalTabIndex = json["terminal_tab_index"] as? String ?? ""
-                terminalTmuxPane = json["terminal_tmux_pane"] as? String ?? ""
-                terminalTmuxSocket = json["terminal_tmux_socket"] as? String ?? ""
-                terminalTmuxClient = json["terminal_tmux_client"] as? String ?? ""
-                workspaceRoot = json["cwd"] as? String
-                sessionStartSource = json["source"] as? String ?? ""
-                notificationType = json["notification_type"] as? String ?? ""
-                isReplayPayload = json["replay_origin_event_id"] != nil
-                // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
-                if SessionStore.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
-                    let label = URL(fileURLWithPath: cwd).lastPathComponent
-                    if !label.isEmpty && label != "/" { terminalTitle = label }
-                }
-                agentKind = Self.agentKind(from: json, terminalTitle: terminalTitle)
-                toolInput = json["tool_input"] as? [String: Any]
-                
-                // 제미나이의 계획(Plan) 작성인지 일반 코드 수정인지 구분하여 UI에 표시
-                let filePath = toolInput?["file_path"] as? String ?? ""
-                isPlanAction = filePath.contains(".gemini/tmp/")
-                // UI 표시 전용 이름 — 로직 체크(auto-approve, ToolKnowledge 등)에는 toolName 원본 사용
-                displayToolName = isPlanAction && (toolName == "write_file" || toolName == "replace")
-                    ? toolName + " (Plan)"
-                    : toolName
-
-                print("Parsed Hook: event=\(event), session=\(sessionId), title=\(terminalTitle)")
-
-                displayMsg = ToolMessageFormatter.displayMessage(
-                    for: toolName,
-                    toolInput: toolInput,
-                    json: json,
-                    eventName: event
-                )
-        }
+    private func handleParsedEvent(_ h: ParsedHookEvent, responseHandler: @escaping (String) -> Void) {
+        let parsedJSON = h.parsedJSON as [String: Any]?
+        let requestId = h.requestId
+        let event = h.event
+        let toolName = h.toolName
+        let sessionId = h.sessionId
+        let terminalTitle = h.terminalTitle
+        let agentKind = h.agentKind
+        let terminalApp = h.terminalApp
+        let terminalTTY = h.terminalTTY
+        let terminalWindowId = h.terminalWindowId
+        let terminalTabIndex = h.terminalTabIndex
+        let terminalTmuxPane = h.terminalTmuxPane
+        let terminalTmuxSocket = h.terminalTmuxSocket
+        let terminalTmuxClient = h.terminalTmuxClient
+        let displayMsg = h.displayMsg
+        let notificationType = h.notificationType
+        let isPlanAction = h.isPlanAction
+        var displayToolName = h.displayToolName
+        let workspaceRoot = h.workspaceRoot
+        let sessionStartSource = h.sessionStartSource
+        let isReplayPayload = h.isReplayPayload
+        let isSubAgentSession = h.isSubAgentSession
+        let parentSessionId = h.parentSessionId
+        let toolInput = h.toolInput
 
         if isSubAgentSession {
             _ = recordReplayHookEvent(
