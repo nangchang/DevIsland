@@ -418,9 +418,7 @@ struct NotchView: View {
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
                         } else {
-                            Text(state.currentMessage)
-                                .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                .foregroundColor(.white.opacity(0.9))
+                            MarkdownView(text: state.currentMessage)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)

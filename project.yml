@@ -5,11 +5,15 @@ options:
   objectVersion: 56
 settings:
   SWIFT_VERSION: "5.9"
+packages:
+  Textual:
+    url: https://github.com/gonzalezreal/textual
+    from: "0.3.1"
 targets:
   DevIsland:
     type: application
     platform: macOS
-    deploymentTarget: "14.0"
+    deploymentTarget: "15.0"
     sources:
       - path: DevIsland
       - path: scripts/devisland-bridge.sh
@@ -33,6 +37,8 @@ targets:
         NSHighResolutionCapable: true
         NSAppleEventsUsageDescription: "Approve/Deny 후 터미널 앱을 포커스하기 위해 사용합니다."
         NSAccessibilityUsageDescription: "글로벌 단축키(⌘⇧Y/N) 사용을 위해 접근성 권한이 필요합니다."
+    dependencies:
+      - package: Textual
     settings:
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       PRODUCT_NAME: "$(TARGET_NAME)"
@@ -42,7 +48,7 @@ targets:
   DevIslandTests:
     type: bundle.unit-test
     platform: macOS
-    deploymentTarget: "14.0"
+    deploymentTarget: "15.0"
     sources:
       - path: DevIslandTests
     dependencies:
