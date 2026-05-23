@@ -1,6 +1,19 @@
 import SwiftUI
 import Textual
 
+private struct CompactHeadingStyle: StructuredText.HeadingStyle {
+    // H1~H6 fontScale — default값(2.35, 1.88, ...)보다 작게 조정
+    private static let fontScales: [CGFloat] = [1.3, 1.15, 1.05, 1.0, 1.0, 1.0]
+
+    func makeBody(configuration: Configuration) -> some View {
+        let level = min(configuration.headingLevel, 6)
+        configuration.label
+            .textual.fontScale(Self.fontScales[level - 1])
+            .textual.blockSpacing(.fontScaled(top: 1.2, bottom: 0.6))
+            .fontWeight(.semibold)
+    }
+}
+
 struct MarkdownView: View {
     let text: String
 
@@ -9,6 +22,7 @@ struct MarkdownView: View {
             .textual.imageAttachmentLoader(BlockedAttachmentLoader())
             .textual.emojiAttachmentLoader(BlockedAttachmentLoader())
             .environment(\.openURL, OpenURLAction { _ in .discarded })
+            .textual.headingStyle(CompactHeadingStyle())
             .textual.structuredTextStyle(.default)
             .textual.inlineStyle(
                 InlineStyle()
