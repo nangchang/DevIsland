@@ -4,13 +4,18 @@ import AppKit
 
 // MARK: - App State
 
-// AppState is the central hub: owns the IPC server, session list, pending approval queue,
-// and decision dispatch.
-//
-// gap-5 (done): GeminiSessionState extracted (emulateInteractiveMode + UserDefaults persistence).
-//   PTYSessionBuffer, ReplayRecorder, SessionStore were extracted in P4.
-//   Splitting reduces test surface and makes each concern independently testable.
-//   See AGENTS.md "Approval Proxy Architecture → Known Gaps" for the full gap list.
+/**
+ AppState is the central hub of the DevIsland application. It coordinates the lifecycle of
+ agent sessions, manages the IPC socket server, handles the pending approval queue, and
+ dispatches user or policy decisions back to the originating CLI bridge.
+ 
+ Architectural separation:
+ - `SessionStore`: Owns the list of active sessions and their metadata.
+ - `GeminiSessionState`: Manages Gemini-specific preferences and interactive emulation state.
+ - `PTYCoordinator`: Handles PTY I/O buffering and auto-injection pattern matching.
+ - `ReplayRecorder`: Manages durable logging of hook events and decisions in SQLite.
+ - `ApprovalProxyController`: Evaluates incoming requests against persistent and session-level rules.
+ */
 class AppState: ObservableObject {
     static let shared = AppState(
         startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1",
@@ -89,10 +94,10 @@ class AppState: ObservableObject {
         }
     }
     
-    // gap-3 (done): All providers now write to SQLiteApprovalStore via persistApprovalScope.
-    // These in-memory sets remain as a fast-path read cache for the current session only.
-    // globalAutoApproveTypes is also persisted to UserDefaults for backward compatibility
-    // with rules created before gap-3; new approvals are durable via SQLite.
+    // Durable Rule System:
+    // New approvals are persisted to SQLiteApprovalStore via the ApprovalProxyController.
+    // `globalAutoApproveTypes` serves as a fast-path in-memory cache for the current session.
+    // On startup, this set is warmed from SQLite or migrated from legacy UserDefaults keys.
     @Published var globalAutoApproveTypes: Set<String> = []
 
     private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
@@ -472,6 +477,9 @@ class AppState: ObservableObject {
     }
 
     private func handleParsedEvent(_ h: ParsedHookEvent, responseHandler: @escaping (String) -> Void) {
+        // --- Phase 1: Sub-Agent and Lifecycle Handling ---
+        // Sub-agents are tracked but their approval is usually delegated to the parent or
+        // auto-approved. We record them in replay and update session grouping.
         var displayToolName = h.displayToolName
 
         if h.isSubAgentSession {
@@ -521,7 +529,8 @@ class AppState: ObservableObject {
             return
         }
 
-        // PTY output events are handled before hook_events recording to avoid polluting the replay log.
+        // --- Phase 2: PTY and Classification ---
+        // PTY output is processed separately from hook events to avoid replay log pollution.
         if h.event == "PTYOutput" {
             ptyCoordinator.handleOutputEvent(
                 sessionId: h.sessionId,
@@ -913,6 +922,7 @@ class AppState: ObservableObject {
             return
         }
 
+        // --- Phase 3: Decision Logic ---
         let isGeminiNormalMode = h.agentKind == .gemini && !geminiState.emulateInteractiveMode
         
         guard isApproval && !isGeminiNormalMode else {
@@ -1019,6 +1029,9 @@ class AppState: ObservableObject {
             }
         }
 
+        // --- Phase 4: Evaluation Hierarchy ---
+        // 1. Terminal Focus Check: If the user is already in the terminal, we 'pass' to let
+        //    the CLI handle the prompt, avoiding double approval.
         isTerminalFrontmostAsync(
             appName: h.terminalApp,
             tty: h.terminalTTY,
@@ -1067,7 +1080,7 @@ class AppState: ObservableObject {
                 return
             }
 
-            // 2. SQLite policy rules (all providers)
+            // 2. Persistent Policy Check: Check SQLite for durable rules (Exact, Glob, Regex).
             let provider = self.providerKind(for: h.agentKind)
             if let policyDecision = self.policyDecision(
                 provider: provider,
@@ -1101,7 +1114,7 @@ class AppState: ObservableObject {
                 return
             }
 
-            // 3. In-memory auto-approve (global settings + session cache + auto-edit + safe-tool bypass)
+            // 3. Volatile/Cache Approval: Check in-memory fast-path and mode-based auto-approvals.
             if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
                 print("[DevIsland] [AUTO-APPROVE] Tool \(h.toolName) is auto-approved for session \(h.sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
                 self.respondWithReplay(
@@ -1167,7 +1180,7 @@ class AppState: ObservableObject {
                 print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Plan mode")
             }
 
-            // 5. 승인 대기 큐에 추가
+            // 4. Manual Approval Fallback: No rules matched, enqueue for user decision in the Notch.
             let newItem = PendingItem(
                 id: request.id,
                 toolName: request.toolName,

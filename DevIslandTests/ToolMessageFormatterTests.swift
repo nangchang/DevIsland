@@ -313,7 +313,7 @@ final class ToolMessageFormatterTests: XCTestCase {
             eventName: "PreToolUse"
         )
 
-        XCTAssertEqual(message, "/tmp/test.swift\n\nold:\nlet x = 0\n\nnew:\nlet x = 42")
+        XCTAssertEqual(message, "/tmp/test.swift\n\n```diff\n- let x = 0\n+ let x = 42\n```")
     }
 
     func testFormatsReadCommand() {
@@ -390,7 +390,7 @@ final class ToolMessageFormatterTests: XCTestCase {
             eventName: "PreToolUse"
         )
 
-        XCTAssertEqual(message, "src/main.py\n\n- old line\n+ new line")
+        XCTAssertEqual(message, "src/main.py\n\n```diff\n- old line\n+ new line\n```")
     }
 
     // MARK: - json 폴백 분기
