@@ -313,9 +313,7 @@ final class ToolMessageFormatterTests: XCTestCase {
             eventName: "PreToolUse"
         )
 
-        XCTAssertTrue(message.contains("/tmp/test.swift"))
-        XCTAssertTrue(message.contains("old:\nlet x = 0"))
-        XCTAssertTrue(message.contains("new:\nlet x = 42"))
+        XCTAssertEqual(message, "/tmp/test.swift\n\nold:\nlet x = 0\n\nnew:\nlet x = 42")
     }
 
     func testFormatsReadCommand() {
@@ -332,9 +330,7 @@ final class ToolMessageFormatterTests: XCTestCase {
             eventName: "PreToolUse"
         )
 
-        XCTAssertTrue(message.contains("/tmp/test.swift"))
-        XCTAssertTrue(message.contains("offset: 10"))
-        XCTAssertTrue(message.contains("limit: 50"))
+        XCTAssertEqual(message, "/tmp/test.swift\n\noffset: 10, limit: 50")
     }
 
     func testFormatsReadWithoutOffsetLimit() {
@@ -394,8 +390,7 @@ final class ToolMessageFormatterTests: XCTestCase {
             eventName: "PreToolUse"
         )
 
-        XCTAssertTrue(message.contains("src/main.py"))
-        XCTAssertTrue(message.contains("- old line\n+ new line"))
+        XCTAssertEqual(message, "src/main.py\n\n- old line\n+ new line")
     }
 
     // MARK: - json 폴백 분기
