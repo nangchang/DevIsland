@@ -402,31 +402,22 @@ class NotchWindowController: NSWindowController {
     }
 
     private static func notchCenterX(on screen: NSScreen) -> CGFloat {
-        // TODO: auxiliaryTopLeftArea is a private KVC key. Using it poses a risk for App Store submission
-        // and may break in future macOS updates. Ensure a robust fallback to screen center exists.
-        // macOS 15+ has private/new APIs for auxiliary areas.
-        // We check for them safely to avoid crashes on older versions.
-        let leftValue = (screen as NSObject).value(forKey: "auxiliaryTopLeftArea") as? NSValue
-        let rightValue = (screen as NSObject).value(forKey: "auxiliaryTopRightArea") as? NSValue
-
-        if let leftArea = leftValue?.rectValue,
-           let rightArea = rightValue?.rectValue,
-           !leftArea.isEmpty,
-           !rightArea.isEmpty {
-            let mid = (leftArea.maxX + rightArea.minX) / 2
-            
-            // 감지된 좌표가 화면 범위 밖이라면(로컬 좌표계라면) 화면 시작점을 더해준다.
-            if mid < screen.frame.minX || mid > screen.frame.maxX {
-                let globalX = screen.frame.minX + mid
-                print("[DevIsland] Using auxiliary areas (local->global): \(mid) -> \(globalX)")
-                return round(globalX)
-            }
-            
-            print("[DevIsland] Using auxiliary areas (global): \(mid)")
-            return round(mid)
+        // auxiliaryTopLeftArea/auxiliaryTopRightArea are public APIs since macOS 12.
+        // Nil or empty rects indicate a non-notched display — fall back to screen center.
+        guard let leftArea = screen.auxiliaryTopLeftArea,
+              let rightArea = screen.auxiliaryTopRightArea,
+              !leftArea.isEmpty, !rightArea.isEmpty else {
+            return round(screen.frame.midX)
         }
 
-        return round(screen.frame.midX)
+        let mid = (leftArea.maxX + rightArea.minX) / 2
+
+        // Coordinates may be in display-local space; shift to global if needed.
+        if mid < screen.frame.minX || mid > screen.frame.maxX {
+            return round(screen.frame.minX + mid)
+        }
+
+        return round(mid)
     }
 
     private func resetPinnedPosition() {
