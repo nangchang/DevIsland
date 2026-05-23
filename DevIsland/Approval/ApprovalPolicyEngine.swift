@@ -53,9 +53,11 @@ struct ApprovalPolicyEngine {
         case .regex:
             return regexMatches(pattern: rule.pattern, against: toolName)
         case .commandPrefix:
-            guard let command = toolInput?["command"] as? String else { return false }
+            guard rule.toolName == toolName,
+                  let command = toolInput?["command"] as? String else { return false }
             return command.hasPrefix(rule.pattern)
         case .pathPrefix:
+            guard rule.toolName == toolName else { return false }
             let path = (toolInput?["path"] as? String) ?? (toolInput?["file_path"] as? String)
             guard let path else { return false }
             return path.hasPrefix(rule.pattern)
