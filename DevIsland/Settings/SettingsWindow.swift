@@ -234,6 +234,8 @@ private struct DisplaySettingsPane: View {
                         Text(delay.label).tag(delay)
                     }
                 }
+
+                TextField(l10n.lblNotchCenterText, text: store.binding(\.notchCenterText))
             }
 
             Section(l10n.secNotchCharacters) {
