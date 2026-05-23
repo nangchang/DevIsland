@@ -72,7 +72,8 @@ Python 브리지에서 `obj.get("providerOutput") or None` 처리 시 빈 dict�
 
 ## 브랜치 규칙
 
-fix/feature 작업은 항상 브랜치를 생성한 후 PR로 작업한다. main에 직접 커밋하지 말 것.
+모든 작업(기능, 버그 수정, 문서, 설정 변경 포함)은 반드시 별도 브랜치를 만들어 PR로 작업한다.
+main에 직접 커밋하지 말 것 — 예외 없음.
 
 ## Xcode Project
 
