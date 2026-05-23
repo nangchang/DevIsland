@@ -231,12 +231,12 @@ enum ToolMessageFormatter {
 
     private static func diffBlock(old: String?, new: String?) -> String? {
         var lines: [String] = []
-        if let old, !old.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let old, !old.isEmpty {
             for line in old.components(separatedBy: "\n") {
                 lines.append("- \(line)")
             }
         }
-        if let new, !new.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let new, !new.isEmpty {
             for line in new.components(separatedBy: "\n") {
                 lines.append("+ \(line)")
             }
