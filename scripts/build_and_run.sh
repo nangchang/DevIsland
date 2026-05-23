@@ -3,11 +3,10 @@ set -euo pipefail
 
 APP_NAME="DevIsland"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="$ROOT_DIR/.build"
+APP_BUNDLE="$BUILD_DIR/Build/Products/Debug/$APP_NAME.app"
 DIST_DIR="$ROOT_DIR/dist"
-APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
-MACOS_DIR="$APP_BUNDLE/Contents/MacOS"
-RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
-EXECUTABLE="$MACOS_DIR/$APP_NAME"
+DIST_APP="$DIST_DIR/$APP_NAME.app"
 
 cd "$ROOT_DIR"
 
@@ -27,93 +26,29 @@ if [[ "$NO_KILL" == "false" ]]; then
   fi
 fi
 
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+# project.yml → .xcodeproj 동기화
+echo "Generating Xcode project..."
+xcodegen generate --quiet
 
-cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$RESOURCES_DIR/"
-cp "$ROOT_DIR/scripts/devisland_bridge.py" "$RESOURCES_DIR/"
-cp "$ROOT_DIR/scripts/install-bridge.sh" "$RESOURCES_DIR/"
+# xcodebuild: SPM 패키지 해소 + 컴파일 + 번들 조립 모두 처리
+echo "Building $APP_NAME..."
+xcodebuild build \
+  -scheme "$APP_NAME" \
+  -derivedDataPath "$BUILD_DIR" \
+  -configuration Debug \
+  -quiet
 
-# Compile assets
-echo "Compiling assets..."
-xcrun actool "$ROOT_DIR/DevIsland/Assets.xcassets" \
-  --compile "$RESOURCES_DIR" \
-  --platform macosx \
-  --minimum-deployment-target 14.0 \
-  --app-icon AppIcon \
-  --output-partial-info-plist "$DIST_DIR/Assets-Partial.plist"
-rm "$DIST_DIR/Assets-Partial.plist" # Clean up unused partial plist
-
-# Compile Swift sources
-SWIFT_SOURCES=()
-while IFS= read -r -d '' source; do
-  SWIFT_SOURCES+=("$source")
-done < <(find DevIsland -name "*.swift" -print0 | sort -z)
-
-swiftc \
-  "${SWIFT_SOURCES[@]}" \
-  -target "$(uname -m)-apple-macos14.0" \
-  -o "$EXECUTABLE"
-
-# Extract metadata from project.yml (robustly handle missing keys or missing quotes)
-VERSION=$(grep "CFBundleShortVersionString:" "$ROOT_DIR/project.yml" | head -n 1 | sed -E 's/.*: +"([^"]+)".*/\1/' | sed -E 's/.*: +([^ ]+).*/\1/' | head -n 1)
-BUILD=$(grep "CFBundleVersion:" "$ROOT_DIR/project.yml" | head -n 1 | sed -E 's/.*: +"([^"]+)".*/\1/' | sed -E 's/.*: +([^ ]+).*/\1/' | head -n 1)
-BUNDLE_ID_PREFIX=$(grep "bundleIdPrefix:" "$ROOT_DIR/project.yml" | head -n 1 | sed -E 's/.*: +"?([^"]+)"?/\1/' | head -n 1)
-BUNDLE_ID="${BUNDLE_ID_PREFIX:-com.hoin}.${APP_NAME}"
-
-if [[ -z "$VERSION" ]]; then VERSION="1.0.0"; fi
-if [[ -z "$BUILD" ]]; then BUILD="1"; fi
-
-echo "Building $APP_NAME $VERSION ($BUILD) with ID $BUNDLE_ID..."
-
-cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDevelopmentRegion</key>
-  <string>en</string>
-  <key>CFBundleExecutable</key>
-  <string>$APP_NAME</string>
-  <key>CFBundleIdentifier</key>
-  <string>$BUNDLE_ID</string>
-  <key>CFBundleInfoDictionaryVersion</key>
-  <string>6.0</string>
-  <key>CFBundleName</key>
-  <string>$APP_NAME</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleShortVersionString</key>
-  <string>$VERSION</string>
-  <key>CFBundleVersion</key>
-  <string>$BUILD</string>
-  <key>CFBundleIconFile</key>
-  <string>AppIcon</string>
-  <key>CFBundleIconName</key>
-  <string>AppIcon</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>14.0</string>
-  <key>LSUIElement</key>
-  <true/>
-  <key>NSAccessibilityUsageDescription</key>
-  <string>Global shortcuts require accessibility permission.</string>
-  <key>NSAppleEventsUsageDescription</key>
-  <string>DevIsland focuses Terminal after approve or deny actions.</string>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-  <key>NSPrincipalClass</key>
-  <string>NSApplication</string>
-</dict>
-</plist>
-PLIST
-
-chmod +x "$EXECUTABLE"
+# dist/ 에 복사 (기존 동작과 동일하게 유지)
+mkdir -p "$DIST_DIR"
+rm -rf "$DIST_APP"
+cp -R "$APP_BUNDLE" "$DIST_APP"
 
 echo "Ad-hoc signing..."
-xattr -cr "$APP_BUNDLE"
-codesign -s - --force --deep --arch arm64 "$APP_BUNDLE"
+xattr -cr "$DIST_APP"
+codesign -s - --force --deep --arch arm64 "$DIST_APP"
 
 if [[ "$NO_RUN" == "false" ]]; then
-  /usr/bin/open -n "$APP_BUNDLE"
+  /usr/bin/open -n "$DIST_APP"
   if [[ "$VERIFY" == "true" ]]; then
     sleep 1
     pgrep -x "$APP_NAME" >/dev/null
