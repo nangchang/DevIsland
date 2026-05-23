@@ -559,25 +559,34 @@ class AppState: ObservableObject {
             if !sessionId.isEmpty {
                 let fullSessionId = sessionId
                 let pid = parentSessionId
-                DispatchQueue.main.async {
-                    self.sessionStore.updateActiveSession(
-                        sessionId: fullSessionId,
-                        terminalTitle: terminalTitle,
-                        agentKind: agentKind,
-                        terminalApp: terminalApp,
-                        terminalTTY: terminalTTY,
-                        terminalWindowId: terminalWindowId,
-                        terminalTabIndex: terminalTabIndex,
-                        terminalTmuxPane: terminalTmuxPane,
-                        terminalTmuxSocket: terminalTmuxSocket,
-                        terminalTmuxClient: terminalTmuxClient,
-                        toolName: displayToolName,
-                        eventName: event,
-                        message: displayMsg,
-                        isPending: false,
-                        isLifecycleTracked: true,
-                        parentSessionId: pid
-                    )
+                let subAgentStopEvents: Set<String> = ["stop", "exit", "shutdown", "sessionend"]
+                let normalizedSubEvent = HookEventNormalizer.normalizedName(event)
+                if subAgentStopEvents.contains(normalizedSubEvent) {
+                    DispatchQueue.main.async {
+                        self.sessionStore.removeSession(id: fullSessionId)
+                        self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.sessionStore.updateActiveSession(
+                            sessionId: fullSessionId,
+                            terminalTitle: terminalTitle,
+                            agentKind: agentKind,
+                            terminalApp: terminalApp,
+                            terminalTTY: terminalTTY,
+                            terminalWindowId: terminalWindowId,
+                            terminalTabIndex: terminalTabIndex,
+                            terminalTmuxPane: terminalTmuxPane,
+                            terminalTmuxSocket: terminalTmuxSocket,
+                            terminalTmuxClient: terminalTmuxClient,
+                            toolName: displayToolName,
+                            eventName: event,
+                            message: displayMsg,
+                            isPending: false,
+                            isLifecycleTracked: true,
+                            parentSessionId: pid
+                        )
+                    }
                 }
             }
             responseHandler("{\"response\": \"approved\"}")
