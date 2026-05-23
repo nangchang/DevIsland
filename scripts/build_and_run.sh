@@ -34,6 +34,7 @@ xcodegen generate --quiet
 echo "Building $APP_NAME..."
 xcodebuild build \
   -scheme "$APP_NAME" \
+  -destination 'platform=macOS' \
   -derivedDataPath "$BUILD_DIR" \
   -configuration Debug \
   -quiet
