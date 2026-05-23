@@ -593,6 +593,34 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.sessionStore.pendingCount, 0)
     }
 
+    func testPatternedPersistentRulesDoNotWarmGlobalAutoApproveCache() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStatePatternRules-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = try SQLiteApprovalStore(databaseURL: tempDir.appendingPathComponent("approval-proxy.sqlite3"))
+        let controller = ApprovalProxyController(store: store)
+        try store.insertRule(ApprovalRule(
+            provider: .any,
+            toolName: "Bash",
+            matchKind: .commandPrefix,
+            pattern: "xcodebuild test",
+            action: .allow,
+            scope: .persistent
+        ))
+
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller,
+            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+        )
+
+        XCTAssertFalse(state.globalAutoApproveTypes.contains("Bash"))
+    }
+
     func testGeminiEmulationModeExplicitSessionApproveBypassesBlock() {
         appState.geminiState.emulateInteractiveMode = true
         let sessionId = "gemini-emulate-session"
