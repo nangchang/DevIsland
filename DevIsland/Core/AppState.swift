@@ -1922,6 +1922,9 @@ class AppState: ObservableObject {
     func setClaudeQuestionOption(questionId: String, optionId: String) {
         guard let question = currentClaudeQuestion?.questions.first(where: { $0.id == questionId }) else { return }
         var answer = currentClaudeQuestionAnswers[questionId] ?? ClaudeQuestionAnswer()
+        if !question.allowsMultipleSelection {
+            answer.usesCustomText = false
+        }
         if question.allowsMultipleSelection {
             if answer.selectedOptionIds.contains(optionId) {
                 answer.selectedOptionIds.remove(optionId)
@@ -1930,6 +1933,16 @@ class AppState: ObservableObject {
             }
         } else {
             answer.selectedOptionIds = [optionId]
+        }
+        currentClaudeQuestionAnswers[questionId] = answer
+    }
+
+    func setClaudeQuestionCustomAnswerEnabled(questionId: String, isEnabled: Bool) {
+        guard let question = currentClaudeQuestion?.questions.first(where: { $0.id == questionId }) else { return }
+        var answer = currentClaudeQuestionAnswers[questionId] ?? ClaudeQuestionAnswer()
+        answer.usesCustomText = isEnabled
+        if isEnabled && !question.allowsMultipleSelection {
+            answer.selectedOptionIds = []
         }
         currentClaudeQuestionAnswers[questionId] = answer
     }

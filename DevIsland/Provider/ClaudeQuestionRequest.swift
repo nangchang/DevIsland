@@ -63,18 +63,27 @@ struct ClaudeQuestionRequest: Equatable {
 
 struct ClaudeQuestionAnswer: Equatable {
     var selectedOptionIds: Set<String> = []
+    var usesCustomText = false
     var text: String = ""
 
     func jsonValue(for question: ClaudeQuestionRequest.Question) -> AnyJSON? {
-        if question.options.isEmpty || question.allowsTextInput {
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if question.options.isEmpty {
             return trimmed.isEmpty ? nil : .string(trimmed)
         }
 
         let selectedOptions = question.options.filter { selectedOptionIds.contains($0.id) }
         if question.allowsMultipleSelection {
-            guard !selectedOptions.isEmpty else { return nil }
-            return .array(selectedOptions.map { .string($0.value) })
+            var values = selectedOptions.map { AnyJSON.string($0.value) }
+            if usesCustomText && !trimmed.isEmpty {
+                values.append(.string(trimmed))
+            }
+            guard !values.isEmpty else { return nil }
+            return .array(values)
+        }
+
+        if usesCustomText {
+            return trimmed.isEmpty ? nil : .string(trimmed)
         }
 
         guard let selected = selectedOptions.first else { return nil }
@@ -99,7 +108,7 @@ extension ClaudeQuestionRequest.Question {
             ?? boolValue(raw["freeform"])
             ?? boolValue(raw["allowCustom"])
             ?? boolValue(raw["allow_custom"])
-        let allowsTextInput = explicitTextInput ?? options.isEmpty
+        let allowsTextInput = explicitTextInput ?? true
 
         return ClaudeQuestionRequest.Question(
             id: stableQuestionId(raw: raw, prompt: prompt, index: index),

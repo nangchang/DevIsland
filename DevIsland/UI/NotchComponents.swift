@@ -122,17 +122,32 @@ struct ClaudeQuestionFormView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(question.options) { option in
                                 ClaudeQuestionOptionRow(
-                                    option: option,
+                                    title: option.label,
+                                    detail: option.detail,
                                     isSelected: isSelected(option.id, for: question.id),
                                     allowsMultipleSelection: question.allowsMultipleSelection
                                 ) {
                                     state.setClaudeQuestionOption(questionId: question.id, optionId: option.id)
                                 }
                             }
+
+                            if question.allowsTextInput {
+                                ClaudeQuestionOptionRow(
+                                    title: "Other",
+                                    detail: "Type a custom answer",
+                                    isSelected: usesCustomText(for: question.id),
+                                    allowsMultipleSelection: question.allowsMultipleSelection
+                                ) {
+                                    state.setClaudeQuestionCustomAnswerEnabled(
+                                        questionId: question.id,
+                                        isEnabled: !usesCustomText(for: question.id)
+                                    )
+                                }
+                            }
                         }
                     }
 
-                    if question.allowsTextInput {
+                    if shouldShowTextInput(for: question) {
                         TextField("", text: Binding(
                             get: { state.currentClaudeQuestionAnswers[question.id]?.text ?? "" },
                             set: { state.setClaudeQuestionText(questionId: question.id, text: $0) }
@@ -156,10 +171,19 @@ struct ClaudeQuestionFormView: View {
     private func isSelected(_ optionId: String, for questionId: String) -> Bool {
         state.currentClaudeQuestionAnswers[questionId]?.selectedOptionIds.contains(optionId) == true
     }
+
+    private func usesCustomText(for questionId: String) -> Bool {
+        state.currentClaudeQuestionAnswers[questionId]?.usesCustomText == true
+    }
+
+    private func shouldShowTextInput(for question: ClaudeQuestionRequest.Question) -> Bool {
+        question.options.isEmpty || usesCustomText(for: question.id)
+    }
 }
 
 private struct ClaudeQuestionOptionRow: View {
-    let option: ClaudeQuestionRequest.Option
+    let title: String
+    let detail: String?
     let isSelected: Bool
     let allowsMultipleSelection: Bool
     let action: () -> Void
@@ -173,12 +197,12 @@ private struct ClaudeQuestionOptionRow: View {
                     .frame(width: 18, height: 18)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(option.label)
+                    Text(title)
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.white.opacity(0.9))
                         .lineLimit(2)
 
-                    if let detail = option.detail, !detail.isEmpty {
+                    if let detail, !detail.isEmpty {
                         Text(detail)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.white.opacity(0.48))
