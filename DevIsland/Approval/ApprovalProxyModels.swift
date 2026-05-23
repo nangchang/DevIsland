@@ -94,11 +94,12 @@ struct ApprovalRule: Identifiable, Codable, Equatable {
     }
 }
 
-struct ApprovalPolicyRequest: Equatable {
+struct ApprovalPolicyRequest {
     var provider: ProviderKind
     var sessionId: String
     var toolName: String
     var workspaceRoot: String?
+    var toolInput: [String: Any]?
     var now: Date
 
     init(
@@ -106,13 +107,25 @@ struct ApprovalPolicyRequest: Equatable {
         sessionId: String,
         toolName: String,
         workspaceRoot: String? = nil,
+        toolInput: [String: Any]? = nil,
         now: Date = Date()
     ) {
         self.provider = provider
         self.sessionId = sessionId
         self.toolName = toolName
         self.workspaceRoot = workspaceRoot
+        self.toolInput = toolInput
         self.now = now
+    }
+}
+
+extension ApprovalPolicyRequest: Equatable {
+    static func == (lhs: ApprovalPolicyRequest, rhs: ApprovalPolicyRequest) -> Bool {
+        lhs.provider == rhs.provider &&
+        lhs.sessionId == rhs.sessionId &&
+        lhs.toolName == rhs.toolName &&
+        lhs.workspaceRoot == rhs.workspaceRoot &&
+        lhs.now == rhs.now
     }
 }
 

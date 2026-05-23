@@ -2,39 +2,49 @@ import Foundation
 import Darwin
 
 // Policy Engine evaluates approval requests against stored rules.
-// Current evaluation order: persistent rules → session cache rules → prompt
-// Within persistent rules, deny-first ordering is applied via SQL ORDER BY.
-//
-// TODO: Implement strict cross-scope priority:
-//   persistent deny > session deny > persistent allow > session allow
-//   Currently a persistent allow can override a session deny.
+// Strict priority: persistent deny > session deny > persistent allow > session allow > prompt
 //
 // Rules are stored in SQLiteApprovalStore (rules + session_cache tables).
 // Persistent rules support exact, glob, regex, commandPrefix, and pathPrefix matching.
+// commandPrefix and pathPrefix match against toolInput when available.
 struct ApprovalPolicyEngine {
     let store: SQLiteApprovalStore
 
     func evaluate(_ request: ApprovalPolicyRequest) throws -> ApprovalPolicyDecision {
-        if let decision = try persistentDecision(for: request) {
-            return decision
+        let persistentMatches = try store.persistentCandidates(for: request)
+            .filter { Self.matches($0, request: request) }
+        let sessionDecision = try store.sessionDecision(for: request)
+
+        // 1. Persistent deny
+        if let deny = persistentMatches.first(where: { $0.action == .deny }) {
+            return ApprovalPolicyDecision(action: .deny, source: .persistentRule, ruleId: deny.id)
         }
-        if let sessionDecision = try store.sessionDecision(for: request) {
-            return sessionDecision
+        // 2. Session deny
+        if sessionDecision?.action == .deny {
+            return sessionDecision!
+        }
+        // 3. Persistent allow
+        if let allow = persistentMatches.first(where: { $0.action == .allow }) {
+            return ApprovalPolicyDecision(action: .allow, source: .persistentRule, ruleId: allow.id)
+        }
+        // 4. Session allow
+        if sessionDecision?.action == .allow {
+            return sessionDecision!
         }
         return .prompt
     }
 
     // MARK: - Matching
 
-    private func persistentDecision(for request: ApprovalPolicyRequest) throws -> ApprovalPolicyDecision? {
-        let candidates = try store.persistentCandidates(for: request)
-        guard let matched = candidates.first(where: { Self.matches($0, toolName: request.toolName) }) else {
-            return nil
-        }
-        return ApprovalPolicyDecision(action: matched.action, source: .persistentRule, ruleId: matched.id)
+    static func matches(_ rule: ApprovalRule, request: ApprovalPolicyRequest) -> Bool {
+        matches(rule, toolName: request.toolName, toolInput: request.toolInput)
     }
 
     static func matches(_ rule: ApprovalRule, toolName: String) -> Bool {
+        matches(rule, toolName: toolName, toolInput: nil)
+    }
+
+    private static func matches(_ rule: ApprovalRule, toolName: String, toolInput: [String: Any]?) -> Bool {
         switch rule.matchKind {
         case .exact:
             return rule.pattern == toolName
@@ -42,10 +52,13 @@ struct ApprovalPolicyEngine {
             return fnmatch(rule.pattern, toolName, FNM_PATHNAME) == 0
         case .regex:
             return regexMatches(pattern: rule.pattern, against: toolName)
-        case .commandPrefix, .pathPrefix:
-            // NOTE: matches against toolName only; full command/path matching requires
-            // toolInput in ApprovalPolicyRequest, which is not currently available.
-            return toolName.hasPrefix(rule.pattern)
+        case .commandPrefix:
+            guard let command = toolInput?["command"] as? String else { return false }
+            return command.hasPrefix(rule.pattern)
+        case .pathPrefix:
+            let path = (toolInput?["path"] as? String) ?? (toolInput?["file_path"] as? String)
+            guard let path else { return false }
+            return path.hasPrefix(rule.pattern)
         }
     }
 
