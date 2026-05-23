@@ -830,9 +830,7 @@ class AppState: ObservableObject {
                         self.currentToolName = ""
                         self.currentEventName = ""
                         self.currentMessage = ""
-                        if !self.sessionStore.pendingQueue.isEmpty {
-                            self.showNextRequest()
-                        }
+                        self.showNextRequest()
                     }
                 }
 
