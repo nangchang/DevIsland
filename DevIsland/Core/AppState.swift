@@ -455,112 +455,35 @@ class AppState: ObservableObject {
     }
 
     func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
-        guard let rawData = message.data(using: .utf8) else { return }
-
-        // Detect IPC protocol v1 envelope vs raw JSON.
-        // Raw JSON always starts with '{' (0x7B); the HookSocketServer strips the
-        // length-prefix before delivering framed payloads here as plain JSON strings.
-        let parsedJSON: [String: Any]?
-        let requestId: String?
-        if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData),
-           envelope.protocol == IPCEnvelope.protocolName {
-            guard BridgeTokenManager.shared.validate(envelope.token) else {
-                print("[DevIsland] IPC token validation failed – denying request")
-                responseHandler("{\"response\": \"denied\"}")
-                return
-            }
-            // Convert AnyJSON payload to [String: Any] directly — avoids encode+decode roundtrip.
-            parsedJSON = envelope.payload.mapValues { $0.rawValue } as [String: Any]
-            requestId = envelope.requestId
-        } else {
-            parsedJSON = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any]
-            requestId = nil
+        switch HookEventHandler.parse(message) {
+        case .invalid:
+            responseHandler("{\"response\": \"approved\"}")
+            return
+        case .denied:
+            responseHandler("{\"response\": \"denied\"}")
+            return
+        case .parsed(let h):
+            handleParsedEvent(h, responseHandler: responseHandler)
         }
+    }
 
-        var event     = "Unknown"
-        var toolName  = ""
-        var sessionId = ""
-        var terminalTitle = "Terminal"
-        var agentKind = BuddyKind.claudeCode
-        var terminalApp = ""
-        var terminalTTY = ""
-        var terminalWindowId = ""
-        var terminalTabIndex = ""
-        var terminalTmuxPane = ""
-        var terminalTmuxSocket = ""
-        var terminalTmuxClient = ""
-        var displayMsg = ""
-        var notificationType = ""
-        var isPlanAction = false
-        var displayToolName = ""
-        var workspaceRoot: String?
-        var sessionStartSource = ""
-        var isReplayPayload = false
-        var isSubAgentSession = false
-        var parentSessionId: String?
-        var toolInput: [String: Any]?
+    private func handleParsedEvent(_ h: ParsedHookEvent, responseHandler: @escaping (String) -> Void) {
+        var displayToolName = h.displayToolName
 
-        if let json = parsedJSON {
-                event     = (json["hook_event_name"] as? String) ?? (json["event"] as? String) ?? "Unknown"
-                toolName  = json["tool_name"] as? String ?? ""
-                sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
-                if let parentId = json["parent_session_id"] as? String, !parentId.isEmpty {
-                    isSubAgentSession = true
-                    parentSessionId = parentId
-                }
-                print("[DevIsland] [MSG] Parsed JSON from \(sessionId.prefix(8))")
-                terminalTitle = json["terminal_title"] as? String ?? "Terminal"
-                terminalApp = json["terminal_app"] as? String ?? ""
-                terminalTTY = json["terminal_tty"] as? String ?? ""
-                terminalWindowId = json["terminal_window_id"] as? String ?? ""
-                terminalTabIndex = json["terminal_tab_index"] as? String ?? ""
-                terminalTmuxPane = json["terminal_tmux_pane"] as? String ?? ""
-                terminalTmuxSocket = json["terminal_tmux_socket"] as? String ?? ""
-                terminalTmuxClient = json["terminal_tmux_client"] as? String ?? ""
-                workspaceRoot = json["cwd"] as? String
-                sessionStartSource = json["source"] as? String ?? ""
-                notificationType = json["notification_type"] as? String ?? ""
-                isReplayPayload = json["replay_origin_event_id"] != nil
-                // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
-                if SessionStore.genericTitles.contains(terminalTitle), let cwd = json["cwd"] as? String {
-                    let label = URL(fileURLWithPath: cwd).lastPathComponent
-                    if !label.isEmpty && label != "/" { terminalTitle = label }
-                }
-                agentKind = Self.agentKind(from: json, terminalTitle: terminalTitle)
-                toolInput = json["tool_input"] as? [String: Any]
-                
-                // 제미나이의 계획(Plan) 작성인지 일반 코드 수정인지 구분하여 UI에 표시
-                let filePath = toolInput?["file_path"] as? String ?? ""
-                isPlanAction = filePath.contains(".gemini/tmp/")
-                // UI 표시 전용 이름 — 로직 체크(auto-approve, ToolKnowledge 등)에는 toolName 원본 사용
-                displayToolName = isPlanAction && (toolName == "write_file" || toolName == "replace")
-                    ? toolName + " (Plan)"
-                    : toolName
-
-                print("Parsed Hook: event=\(event), session=\(sessionId), title=\(terminalTitle)")
-
-                displayMsg = ToolMessageFormatter.displayMessage(
-                    for: toolName,
-                    toolInput: toolInput,
-                    json: json,
-                    eventName: event
-                )
-        }
-
-        if isSubAgentSession {
+        if h.isSubAgentSession {
             _ = recordReplayHookEvent(
-                requestId: requestId,
-                provider: providerKind(for: agentKind),
-                sessionId: sessionId,
-                eventName: event,
-                toolName: toolName,
-                payload: parsedJSON
+                requestId: h.requestId,
+                provider: providerKind(for: h.agentKind),
+                sessionId: h.sessionId,
+                eventName: h.event,
+                toolName: h.toolName,
+                payload: h.parsedJSON
             )
-            if !sessionId.isEmpty {
-                let fullSessionId = sessionId
-                let pid = parentSessionId
+            if !h.sessionId.isEmpty {
+                let fullSessionId = h.sessionId
+                let pid = h.parentSessionId
                 let subAgentStopEvents: Set<String> = ["stop", "exit", "shutdown", "sessionend"]
-                let normalizedSubEvent = HookEventNormalizer.normalizedName(event)
+                let normalizedSubEvent = HookEventNormalizer.normalizedName(h.event)
                 if subAgentStopEvents.contains(normalizedSubEvent) {
                     DispatchQueue.main.async {
                         self.sessionStore.removeSession(id: fullSessionId)
@@ -570,18 +493,18 @@ class AppState: ObservableObject {
                     DispatchQueue.main.async {
                         self.sessionStore.updateActiveSession(
                             sessionId: fullSessionId,
-                            terminalTitle: terminalTitle,
-                            agentKind: agentKind,
-                            terminalApp: terminalApp,
-                            terminalTTY: terminalTTY,
-                            terminalWindowId: terminalWindowId,
-                            terminalTabIndex: terminalTabIndex,
-                            terminalTmuxPane: terminalTmuxPane,
-                            terminalTmuxSocket: terminalTmuxSocket,
-                            terminalTmuxClient: terminalTmuxClient,
+                            terminalTitle: h.terminalTitle,
+                            agentKind: h.agentKind,
+                            terminalApp: h.terminalApp,
+                            terminalTTY: h.terminalTTY,
+                            terminalWindowId: h.terminalWindowId,
+                            terminalTabIndex: h.terminalTabIndex,
+                            terminalTmuxPane: h.terminalTmuxPane,
+                            terminalTmuxSocket: h.terminalTmuxSocket,
+                            terminalTmuxClient: h.terminalTmuxClient,
                             toolName: displayToolName,
-                            eventName: event,
-                            message: displayMsg,
+                            eventName: h.event,
+                            message: h.displayMsg,
                             isPending: false,
                             isLifecycleTracked: true,
                             isSubAgentSession: true,
@@ -595,28 +518,28 @@ class AppState: ObservableObject {
         }
 
         // PTY output events are handled before hook_events recording to avoid polluting the replay log.
-        if event == "PTYOutput" {
+        if h.event == "PTYOutput" {
             ptyCoordinator.handleOutputEvent(
-                sessionId: sessionId,
-                provider: providerKind(for: agentKind),
-                content: (parsedJSON?["content"] as? String) ?? "",
+                sessionId: h.sessionId,
+                provider: providerKind(for: h.agentKind),
+                content: (h.parsedJSON["content"] as? String) ?? "",
                 responseHandler: responseHandler
             )
             return
         }
 
-        let normalizedEvent = HookEventNormalizer.normalizedName(event)
+        let normalizedEvent = HookEventNormalizer.normalizedName(h.event)
         let hookEventId = recordReplayHookEvent(
-            requestId: requestId,
-            provider: providerKind(for: agentKind),
-            sessionId: sessionId,
-            eventName: event,
-            toolName: toolName,
-            payload: parsedJSON
+            requestId: h.requestId,
+            provider: providerKind(for: h.agentKind),
+            sessionId: h.sessionId,
+            eventName: h.event,
+            toolName: h.toolName,
+            payload: h.parsedJSON
         )
         if displayToolName.isEmpty {
             if normalizedEvent == "elicitation" {
-                if let serverName = parsedJSON?["mcp_server_name"] as? String, !serverName.isEmpty {
+                if let serverName = h.parsedJSON["mcp_server_name"] as? String, !serverName.isEmpty {
                     displayToolName = "Elicitation (\(serverName))"
                 } else {
                     displayToolName = "Elicitation"
@@ -624,7 +547,7 @@ class AppState: ObservableObject {
             } else if normalizedEvent == "userpromptsubmit" {
                 displayToolName = "User Prompt"
             } else {
-                displayToolName = toolName
+                displayToolName = h.toolName
             }
         }
         let stopEvents = ["exit", "shutdown", "sessionend"]
@@ -632,43 +555,43 @@ class AppState: ObservableObject {
             "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
             "startup", "init", "afteragent"
         ]
-        let isUserQuestionTool = HookEventNormalizer.isUserQuestionTool(toolName)
+        let isUserQuestionTool = HookEventNormalizer.isUserQuestionTool(h.toolName)
         // approval:
         // - Claude/Codex: PermissionRequest only
         // - Gemini: BeforeTool only
         // User-question tools are shown as notifications even when delivered through an approval-capable hook.
         let isStop = stopEvents.contains(normalizedEvent)
-        let isApproval = Self.isApprovalEvent(normalizedEvent, for: agentKind) && !isUserQuestionTool
+        let isApproval = Self.isApprovalEvent(normalizedEvent, for: h.agentKind) && !isUserQuestionTool
         let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
-        let replayToolName = toolName.isEmpty ? displayToolName : toolName
+        let replayToolName = h.toolName.isEmpty ? displayToolName : h.toolName
         let cespCategory = CESPEventMapper.category(
-            event: event,
+            event: h.event,
             normalizedEvent: normalizedEvent,
-            agentKind: agentKind,
-            toolName: toolName,
-            notificationType: notificationType,
-            message: displayMsg,
-            payload: parsedJSON
+            agentKind: h.agentKind,
+            toolName: h.toolName,
+            notificationType: h.notificationType,
+            message: h.displayMsg,
+            payload: h.parsedJSON
         )
 
         if isStop {
             playOpenPeonSound(cespCategory)
-            guard !sessionId.isEmpty else {
+            guard !h.sessionId.isEmpty else {
                 respondWithReplay(
                     "{\"response\": \"approved\"}",
                     responseHandler: responseHandler,
                     hookEventId: hookEventId,
-                    agentKind: agentKind,
-                    sessionId: sessionId,
+                    agentKind: h.agentKind,
+                    sessionId: h.sessionId,
                     toolName: replayToolName,
-                    workspaceRoot: workspaceRoot,
+                    workspaceRoot: h.workspaceRoot,
                     action: .allow,
                     source: .automatic,
-                    reason: "stop event"
+                    reason: "stop h.event"
                 )
                 return
             }
-            let fullSessionId = sessionId
+            let fullSessionId = h.sessionId
             DispatchQueue.main.async {
                 let removedRequests = self.sessionStore.removeAllPending(sessionId: fullSessionId)
                 removedRequests.forEach {
@@ -711,19 +634,19 @@ class AppState: ObservableObject {
                 "{\"response\": \"approved\"}",
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
-                agentKind: agentKind,
-                sessionId: sessionId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
                 toolName: replayToolName,
-                workspaceRoot: workspaceRoot,
+                workspaceRoot: h.workspaceRoot,
                 action: .allow,
                 source: .automatic,
-                reason: "stop event"
+                reason: "stop h.event"
             )
             return
         }
 
-        if normalizedEvent == "userpromptsubmit", agentKind == .claudeCode,
-           let prompt = parsedJSON?["prompt"] as? String,
+        if normalizedEvent == "userpromptsubmit", h.agentKind == .claudeCode,
+           let prompt = h.parsedJSON["prompt"] as? String,
            let denialReason = ClaudePromptPolicy.denialReason(for: prompt) {
             print("[DevIsland] Claude UserPromptSubmit blocked by prompt policy")
             let responsePayload: [String: Any] = [
@@ -736,10 +659,10 @@ class AppState: ObservableObject {
                     payload,
                     responseHandler: responseHandler,
                     hookEventId: hookEventId,
-                    agentKind: agentKind,
-                    sessionId: sessionId,
+                    agentKind: h.agentKind,
+                    sessionId: h.sessionId,
                     toolName: replayToolName,
-                    workspaceRoot: workspaceRoot,
+                    workspaceRoot: h.workspaceRoot,
                     action: .deny,
                     source: .automatic,
                     reason: denialReason
@@ -749,10 +672,10 @@ class AppState: ObservableObject {
                     "{\"response\":\"denied\"}",
                     responseHandler: responseHandler,
                     hookEventId: hookEventId,
-                    agentKind: agentKind,
-                    sessionId: sessionId,
+                    agentKind: h.agentKind,
+                    sessionId: h.sessionId,
                     toolName: replayToolName,
-                    workspaceRoot: workspaceRoot,
+                    workspaceRoot: h.workspaceRoot,
                     action: .deny,
                     source: .automatic,
                     reason: denialReason
@@ -762,22 +685,22 @@ class AppState: ObservableObject {
         }
 
         if isNotification {
-            let passClaudeUserQuestion = agentKind == .claudeCode && isUserQuestionTool
+            let passClaudeUserQuestion = h.agentKind == .claudeCode && isUserQuestionTool
             let notification = passClaudeUserQuestion
                 ? (response: "pass", action: RuleAction.prompt, reason: "Claude user question passthrough")
                 : (response: "approved", action: RuleAction.allow, reason: "notification")
 
-            print("[DevIsland] notification event: \(event) for \(toolName) → \(notification.response)")
+            print("[DevIsland] notification event: \(h.event) for \(h.toolName) → \(notification.response)")
             playOpenPeonSound(cespCategory)
-            guard !sessionId.isEmpty else {
+            guard !h.sessionId.isEmpty else {
                 respondWithReplay(
                     "{\"response\": \"\(notification.response)\"}",
                     responseHandler: responseHandler,
                     hookEventId: hookEventId,
-                    agentKind: agentKind,
-                    sessionId: sessionId,
+                    agentKind: h.agentKind,
+                    sessionId: h.sessionId,
                     toolName: replayToolName,
-                    workspaceRoot: workspaceRoot,
+                    workspaceRoot: h.workspaceRoot,
                     action: notification.action,
                     source: .automatic,
                     reason: notification.reason
@@ -785,56 +708,56 @@ class AppState: ObservableObject {
                 return
             }
             if normalizedEvent == "notification",
-               notificationType == "permission_prompt" || displayMsg.lowercased().contains("needs your permission") {
+               h.notificationType == "permission_prompt" || h.displayMsg.lowercased().contains("needs your permission") {
                 respondWithReplay(
                     "{\"response\": \"approved\"}",
                     responseHandler: responseHandler,
                     hookEventId: hookEventId,
-                    agentKind: agentKind,
-                    sessionId: sessionId,
+                    agentKind: h.agentKind,
+                    sessionId: h.sessionId,
                     toolName: replayToolName,
-                    workspaceRoot: workspaceRoot,
+                    workspaceRoot: h.workspaceRoot,
                     action: .allow,
                     source: .automatic,
                     reason: "permission prompt notification"
                 )
                 return
             }
-            let fullSessionId = sessionId
+            let fullSessionId = h.sessionId
             let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "startup" || normalizedEvent == "init")
 
             // [UX] 에이전트 작업 완료 대기 상태(Idle Prompt) 판별 로직
             // - Claude Code: notification 훅에 idle_prompt 또는 input_required 타입으로 전달됨
             // - Gemini CLI: afteragent, aftermodel 등 턴 종료 시 발생하는 훅을 대기 상태로 간주
             // - Codex CLI: posttooluse를 쓰면 툴 연속 자동 실행 시 스팸 알림이 생기므로 제외함. 대신 stop 이벤트를 통해 완료됨을 알림
-            let isIdlePrompt = (normalizedEvent == "notification" && (notificationType == "idle_prompt" || notificationType == "input_required")) ||
+            let isIdlePrompt = (normalizedEvent == "notification" && (h.notificationType == "idle_prompt" || h.notificationType == "input_required")) ||
                                normalizedEvent == "afteragent"
 
             let sessionMessage: String
             if isStartEvent {
                 sessionMessage = "Session Started"
-            } else if isIdlePrompt && displayMsg.isEmpty {
+            } else if isIdlePrompt && h.displayMsg.isEmpty {
                 sessionMessage = "Waiting for next prompt..."
-            } else if (normalizedEvent == "stop" && displayMsg.isEmpty) {
+            } else if (normalizedEvent == "stop" && h.displayMsg.isEmpty) {
                 sessionMessage = "Task Completed"
             } else {
-                sessionMessage = displayMsg
+                sessionMessage = h.displayMsg
             }
 
             DispatchQueue.main.async {
                 // sessionStore 뮤테이션은 항상 메인 스레드에서 수행 (@Published → SwiftUI 업데이트)
                 if isStartEvent &&
-                    agentKind == .codex &&
-                    Self.shouldSupersedeCodexSessionsOnStart(source: sessionStartSource) {
+                    h.agentKind == .codex &&
+                    Self.shouldSupersedeCodexSessionsOnStart(source: h.sessionStartSource) {
                     let removedSessionIds = self.sessionStore.removeSupersededCodexSessions(
                         newSessionId: fullSessionId,
-                        terminalApp: terminalApp,
-                        terminalTTY: terminalTTY,
-                        terminalWindowId: terminalWindowId,
-                        terminalTabIndex: terminalTabIndex,
-                        terminalTmuxPane: terminalTmuxPane,
-                        terminalTmuxSocket: terminalTmuxSocket,
-                        terminalTmuxClient: terminalTmuxClient
+                        terminalApp: h.terminalApp,
+                        terminalTTY: h.terminalTTY,
+                        terminalWindowId: h.terminalWindowId,
+                        terminalTabIndex: h.terminalTabIndex,
+                        terminalTmuxPane: h.terminalTmuxPane,
+                        terminalTmuxSocket: h.terminalTmuxSocket,
+                        terminalTmuxClient: h.terminalTmuxClient
                     )
 
                     var removedCurrentRequest = false
@@ -877,22 +800,22 @@ class AppState: ObservableObject {
                 let hasPendingForSession = self.sessionStore.pendingQueue.contains { $0.sessionId == fullSessionId }
                 self.sessionStore.updateActiveSession(
                     sessionId: fullSessionId,
-                    terminalTitle: terminalTitle,
-                    agentKind: agentKind,
-                    terminalApp: terminalApp,
-                    terminalTTY: terminalTTY,
-                    terminalWindowId: terminalWindowId,
-                    terminalTabIndex: terminalTabIndex,
-                    terminalTmuxPane: terminalTmuxPane,
-                    terminalTmuxSocket: terminalTmuxSocket,
-                    terminalTmuxClient: terminalTmuxClient,
+                    terminalTitle: h.terminalTitle,
+                    agentKind: h.agentKind,
+                    terminalApp: h.terminalApp,
+                    terminalTTY: h.terminalTTY,
+                    terminalWindowId: h.terminalWindowId,
+                    terminalTabIndex: h.terminalTabIndex,
+                    terminalTmuxPane: h.terminalTmuxPane,
+                    terminalTmuxSocket: h.terminalTmuxSocket,
+                    terminalTmuxClient: h.terminalTmuxClient,
                     toolName: displayToolName,
-                    eventName: event,
+                    eventName: h.event,
                     message: sessionMessage,
                     isPending: hasPendingForSession,
                     preserveMessage: normalizedEvent == "posttooluse" || sessionMessage.isEmpty,
-                    isLifecycleTracked: isStartEvent || agentKind != .claudeCode, // Codex/Gemini는 기본적으로 추적 유지
-                    isSubAgentSession: isSubAgentSession
+                    isLifecycleTracked: isStartEvent || h.agentKind != .claudeCode, // Codex/Gemini는 기본적으로 추적 유지
+                    isSubAgentSession: h.isSubAgentSession
                 )
 
                 if isStartEvent || (self.sessionStore.selectedSessionId == nil) {
@@ -900,10 +823,10 @@ class AppState: ObservableObject {
                 }
 
                 // 알림 확장 로직 (질문이나 작업 완료 시)
-                let isCodexPostToolUse = agentKind == .codex && normalizedEvent == "posttooluse"
+                let isCodexPostToolUse = h.agentKind == .codex && normalizedEvent == "posttooluse"
                 let isInformational = !isCodexPostToolUse && ((normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
                                      isUserQuestionTool ||
-                                     (displayMsg.contains("?") && (normalizedEvent == "notification" || agentKind != .claudeCode)))
+                                     (h.displayMsg.contains("?") && (normalizedEvent == "notification" || h.agentKind != .claudeCode)))
 
                 let isCurrentlyViewed = self.isExpandingFromRequest && self.currentSessionId == fullSessionId
                 if isInformational && !isStartEvent && !sessionMessage.isEmpty && !isCurrentlyViewed {
@@ -925,7 +848,7 @@ class AppState: ObservableObject {
                             self.previousSessionId = self.currentSessionId
                         }
                         self.currentToolName = displayToolName
-                        self.currentEventName = event
+                        self.currentEventName = h.event
                         self.currentMessage = sessionMessage
                         self.currentSessionId = fullSessionId
                         self.isNotchExpanded = true
@@ -948,10 +871,10 @@ class AppState: ObservableObject {
                 "{\"response\": \"\(notification.response)\"}",
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
-                agentKind: agentKind,
-                sessionId: sessionId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
                 toolName: replayToolName,
-                workspaceRoot: workspaceRoot,
+                workspaceRoot: h.workspaceRoot,
                 action: notification.action,
                 source: .automatic,
                 reason: notification.reason
@@ -959,35 +882,35 @@ class AppState: ObservableObject {
             return
         }
 
-        let isGeminiNormalMode = agentKind == .gemini && !geminiState.emulateInteractiveMode
+        let isGeminiNormalMode = h.agentKind == .gemini && !geminiState.emulateInteractiveMode
         
         guard isApproval && !isGeminiNormalMode else {
-            print("[DevIsland] ignoring non-approval event (or Gemini normal mode): \(event)")
+            print("[DevIsland] ignoring non-approval h.event (or Gemini normal mode): \(h.event)")
             respondWithReplay(
                 "{\"response\": \"approved\"}",
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
-                agentKind: agentKind,
-                sessionId: sessionId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
                 toolName: replayToolName,
-                workspaceRoot: workspaceRoot,
+                workspaceRoot: h.workspaceRoot,
                 action: .allow,
                 source: .automatic,
-                reason: isGeminiNormalMode ? "Gemini normal mode notification" : "non-approval event"
+                reason: isGeminiNormalMode ? "Gemini normal mode notification" : "non-approval h.event"
             )
             return
         }
 
-        guard !toolName.isEmpty || !displayMsg.isEmpty else {
+        guard !h.toolName.isEmpty || !h.displayMsg.isEmpty else {
             print("[DevIsland] ignoring empty approval request")
             respondWithReplay(
                 "{\"response\": \"approved\"}",
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
-                agentKind: agentKind,
-                sessionId: sessionId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
                 toolName: replayToolName,
-                workspaceRoot: workspaceRoot,
+                workspaceRoot: h.workspaceRoot,
                 action: .allow,
                 source: .automatic,
                 reason: "empty approval request"
@@ -997,14 +920,14 @@ class AppState: ObservableObject {
 
         let request = PendingRequest(
             hookEventId: hookEventId,
-            sessionId: sessionId,
-            agentKind: agentKind,
-            eventName: event,
+            sessionId: h.sessionId,
+            agentKind: h.agentKind,
+            eventName: h.event,
             toolName: displayToolName,
-            rawToolName: toolName,
-            workspaceRoot: workspaceRoot,
-            isReplay: isReplayPayload,
-            message: displayMsg,
+            rawToolName: h.toolName,
+            workspaceRoot: h.workspaceRoot,
+            isReplay: h.isReplayPayload,
+            message: h.displayMsg,
             responseHandler: responseHandler,
             receivedAt: Date()
         )
@@ -1022,73 +945,73 @@ class AppState: ObservableObject {
         //           노치 UI를 펼쳐 사용자에게 터미널로 돌아가야 함을 알립니다.
         //    - 대상: 직접 입력(ask_user), 계획 승인(exit_plan_mode), 자체 보안 정책상 터미널 확인이 강제되는 툴(run_shell_command),
         //           그리고 계획 단계에서 발생하는 임시 파일 작업들(.gemini/tmp/).
-        let isInteractive = GeminiPromptPolicy.isInteractiveTool(toolName, isPlanAction: isPlanAction)
+        let isInteractive = GeminiPromptPolicy.isInteractiveTool(h.toolName, isPlanAction: h.isPlanAction)
         
         // 자동 승인 여부 판단 (전역 설정 + 세션별 툴 등록 + 현재가 자동 편집 모드인지 + Safe 등급 툴 자동 승인 옵션)
-        var isAutoApprovedGlobal = globalAutoApproveTypes.contains(toolName) || bypassTools.contains(toolName) || isInteractive
-        let isAutoApprovedSession = sessionStore.sessionAutoApproveTypes[sessionId]?.contains(toolName) == true
+        var isAutoApprovedGlobal = globalAutoApproveTypes.contains(h.toolName) || bypassTools.contains(h.toolName) || isInteractive
+        let isAutoApprovedSession = sessionStore.sessionAutoApproveTypes[h.sessionId]?.contains(h.toolName) == true
 
         var isAutoEditActive = false
-        if let session = sessionStore.activeSessions.first(where: { $0.id == sessionId }) {
+        if let session = sessionStore.activeSessions.first(where: { $0.id == h.sessionId }) {
             isAutoEditActive = session.isAutoEditActive
         }
 
         // 사용자가 메뉴에서 설정한 "Safe 등급 툴 자동 승인" 옵션 적용
-        let isSafeAutoApprove = autoApproveSafeTools && (ToolKnowledge.risk(for: toolName) == .safe)
+        let isSafeAutoApprove = autoApproveSafeTools && (ToolKnowledge.risk(for: h.toolName) == .safe)
 
         // [핵심] 제미나이 일반 모드 에뮬레이션 로직
         // 제미나이 CLI가 --auto-approve나 --yolo로 실행되어 터미널 프롬프트가 뜨지 않는 상황일 때,
         // DevIsland가 'Interactive 모드'처럼 위험한 툴을 선별해서 승인 창을 띄웁니다.
-        if geminiState.emulateInteractiveMode && agentKind == .gemini {
-            let isExplicitlyApproved = globalAutoApproveTypes.contains(toolName) || isAutoApprovedSession
-            if GeminiPromptPolicy.emulationShouldForceApproval(toolName: toolName, isExplicitlyApproved: isExplicitlyApproved) {
+        if geminiState.emulateInteractiveMode && h.agentKind == .gemini {
+            let isExplicitlyApproved = globalAutoApproveTypes.contains(h.toolName) || isAutoApprovedSession
+            if GeminiPromptPolicy.emulationShouldForceApproval(toolName: h.toolName, isExplicitlyApproved: isExplicitlyApproved) {
                 isAutoApprovedGlobal = false
                 isAutoEditActive = false
-                print("[DevIsland] [EMULATION] Gemini interactive emulation forced for tool: \(toolName)")
+                print("[DevIsland] [EMULATION] Gemini interactive emulation forced for tool: \(h.toolName)")
             }
         }
 
         isTerminalFrontmostAsync(
-            appName: terminalApp,
-            tty: terminalTTY,
-            windowId: terminalWindowId,
-            tabIndex: terminalTabIndex,
-            tmuxPane: terminalTmuxPane,
-            tmuxSocket: terminalTmuxSocket,
-            tmuxClient: terminalTmuxClient
+            appName: h.terminalApp,
+            tty: h.terminalTTY,
+            windowId: h.terminalWindowId,
+            tabIndex: h.terminalTabIndex,
+            tmuxPane: h.terminalTmuxPane,
+            tmuxSocket: h.terminalTmuxSocket,
+            tmuxClient: h.terminalTmuxClient
         ) { [weak self] isFrontmost in
             guard let self = self else { return }
 
             // 1. 터미널 포커스 최우선 — 사용자가 이미 터미널에 있으면 CLI가 자체 처리하도록 pass
-            if !isReplayPayload && isFrontmost {
-                print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(sessionId.prefix(8))")
+            if !h.isReplayPayload && isFrontmost {
+                print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(h.sessionId.prefix(8))")
                 self.respondWithReplay(
                     "{\"response\": \"pass\"}",
                     responseHandler: request.responseHandler,
                     hookEventId: hookEventId,
-                    agentKind: agentKind,
-                    sessionId: sessionId,
+                    agentKind: h.agentKind,
+                    sessionId: h.sessionId,
                     toolName: replayToolName,
-                    workspaceRoot: workspaceRoot,
+                    workspaceRoot: h.workspaceRoot,
                     action: .prompt,
                     source: .automatic,
                     reason: "terminal focused"
                 )
-                if !sessionId.isEmpty {
+                if !h.sessionId.isEmpty {
                     self.sessionStore.updateActiveSession(
-                        sessionId: sessionId,
-                        terminalTitle: terminalTitle,
-                        agentKind: agentKind,
-                        terminalApp: terminalApp,
-                        terminalTTY: terminalTTY,
-                        terminalWindowId: terminalWindowId,
-                        terminalTabIndex: terminalTabIndex,
-                        terminalTmuxPane: terminalTmuxPane,
-                        terminalTmuxSocket: terminalTmuxSocket,
-                        terminalTmuxClient: terminalTmuxClient,
+                        sessionId: h.sessionId,
+                        terminalTitle: h.terminalTitle,
+                        agentKind: h.agentKind,
+                        terminalApp: h.terminalApp,
+                        terminalTTY: h.terminalTTY,
+                        terminalWindowId: h.terminalWindowId,
+                        terminalTabIndex: h.terminalTabIndex,
+                        terminalTmuxPane: h.terminalTmuxPane,
+                        terminalTmuxSocket: h.terminalTmuxSocket,
+                        terminalTmuxClient: h.terminalTmuxClient,
                         toolName: displayToolName,
-                        eventName: event,
-                        message: displayMsg,
+                        eventName: h.event,
+                        message: h.displayMsg,
                         isPending: false,
                         status: SessionStatus.timeoutBypassed(Date())
                     )
@@ -1097,30 +1020,30 @@ class AppState: ObservableObject {
             }
 
             // 2. SQLite policy rules (all providers)
-            let provider = self.providerKind(for: agentKind)
+            let provider = self.providerKind(for: h.agentKind)
             if let policyDecision = self.policyDecision(
                 provider: provider,
                 hookEventId: hookEventId,
-                sessionId: sessionId,
-                toolName: toolName,
-                workspaceRoot: workspaceRoot,
-                toolInput: toolInput
+                sessionId: h.sessionId,
+                toolName: h.toolName,
+                workspaceRoot: h.workspaceRoot,
+                toolInput: h.toolInput
             ) {
-                print("[DevIsland] [POLICY] \(provider.rawValue) \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
+                print("[DevIsland] [POLICY] \(provider.rawValue) \(h.toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
                 request.responseHandler(self.responsePayload(approved: policyDecision.action == .allow))
                 self.sessionStore.updateActiveSession(
-                    sessionId: sessionId,
-                    terminalTitle: terminalTitle,
-                    agentKind: agentKind,
-                    terminalApp: terminalApp,
-                    terminalTTY: terminalTTY,
-                    terminalWindowId: terminalWindowId,
-                    terminalTabIndex: terminalTabIndex,
-                    terminalTmuxPane: terminalTmuxPane,
-                    terminalTmuxSocket: terminalTmuxSocket,
-                    terminalTmuxClient: terminalTmuxClient,
+                    sessionId: h.sessionId,
+                    terminalTitle: h.terminalTitle,
+                    agentKind: h.agentKind,
+                    terminalApp: h.terminalApp,
+                    terminalTTY: h.terminalTTY,
+                    terminalWindowId: h.terminalWindowId,
+                    terminalTabIndex: h.terminalTabIndex,
+                    terminalTmuxPane: h.terminalTmuxPane,
+                    terminalTmuxSocket: h.terminalTmuxSocket,
+                    terminalTmuxClient: h.terminalTmuxClient,
                     toolName: displayToolName,
-                    eventName: event,
+                    eventName: h.event,
                     message: "Policy \(policyDecision.action.rawValue): \(displayToolName)",
                     isPending: false,
                     preserveMessage: true,
@@ -1132,53 +1055,53 @@ class AppState: ObservableObject {
 
             // 3. In-memory auto-approve (global settings + session cache + auto-edit + safe-tool bypass)
             if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
-                print("[DevIsland] [AUTO-APPROVE] Tool \(toolName) is auto-approved for session \(sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
+                print("[DevIsland] [AUTO-APPROVE] Tool \(h.toolName) is auto-approved for session \(h.sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
                 self.respondWithReplay(
                     "{\"response\": \"approved\"}",
                     responseHandler: request.responseHandler,
                     hookEventId: hookEventId,
-                    agentKind: agentKind,
-                    sessionId: sessionId,
+                    agentKind: h.agentKind,
+                    sessionId: h.sessionId,
                     toolName: replayToolName,
-                    workspaceRoot: workspaceRoot,
+                    workspaceRoot: h.workspaceRoot,
                     action: .allow,
                     source: .automatic,
                     reason: "auto-approved"
                 )
 
                 // Interactive 툴: 이미 포커스 체크 후 여기 도달했으므로 터미널이 비포커스 상태 → 알림 표시
-                if isInteractive && !isReplayPayload {
+                if isInteractive && !h.isReplayPayload {
                     self.isNotchExpanded = true
                     self.isExpandingFromRequest = true
-                    self.currentSessionId = sessionId
+                    self.currentSessionId = h.sessionId
                     self.currentMessage = "터미널 창을 확인해 주세요 (\(displayToolName))"
                 }
 
-                if toolName == "exit_plan_mode",
-                   let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                if h.toolName == "exit_plan_mode",
+                   let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
                     self.sessionStore.activeSessions[index].isAutoEditActive = true
-                    print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Auto-Edit mode")
+                    print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Auto-Edit mode")
                 }
-                if toolName == "enter_plan_mode",
-                   let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+                if h.toolName == "enter_plan_mode",
+                   let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
                     self.sessionStore.activeSessions[index].isAutoEditActive = false
-                    print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
+                    print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Plan mode")
                 }
 
-                if !sessionId.isEmpty {
+                if !h.sessionId.isEmpty {
                     self.sessionStore.updateActiveSession(
-                        sessionId: sessionId,
-                        terminalTitle: terminalTitle,
-                        agentKind: agentKind,
-                        terminalApp: terminalApp,
-                        terminalTTY: terminalTTY,
-                        terminalWindowId: terminalWindowId,
-                        terminalTabIndex: terminalTabIndex,
-                        terminalTmuxPane: terminalTmuxPane,
-                        terminalTmuxSocket: terminalTmuxSocket,
-                        terminalTmuxClient: terminalTmuxClient,
+                        sessionId: h.sessionId,
+                        terminalTitle: h.terminalTitle,
+                        agentKind: h.agentKind,
+                        terminalApp: h.terminalApp,
+                        terminalTTY: h.terminalTTY,
+                        terminalWindowId: h.terminalWindowId,
+                        terminalTabIndex: h.terminalTabIndex,
+                        terminalTmuxPane: h.terminalTmuxPane,
+                        terminalTmuxSocket: h.terminalTmuxSocket,
+                        terminalTmuxClient: h.terminalTmuxClient,
                         toolName: displayToolName,
-                        eventName: event,
+                        eventName: h.event,
                         message: isInteractive ? "터미널 확인 대기 중..." : "Auto-approved: \(displayToolName)",
                         isPending: false,
                         preserveMessage: true,
@@ -1190,10 +1113,10 @@ class AppState: ObservableObject {
             }
 
             // 4. enter_plan_mode가 자동 승인 없이 UI로 넘어갈 때 Auto-Edit 해제
-            if toolName == "enter_plan_mode",
-               let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+            if h.toolName == "enter_plan_mode",
+               let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
                 self.sessionStore.activeSessions[index].isAutoEditActive = false
-                print("[DevIsland] [MODE] Session \(sessionId.prefix(8)) switched to Plan mode")
+                print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Plan mode")
             }
 
             // 5. 승인 대기 큐에 추가
@@ -1202,12 +1125,12 @@ class AppState: ObservableObject {
                 toolName: request.toolName,
                 message: request.message,
                 sessionId: request.sessionId,
-                terminalTitle: terminalTitle,
-                terminalWindowId: terminalWindowId,
-                terminalTabIndex: terminalTabIndex,
-                terminalTmuxPane: terminalTmuxPane,
-                terminalTmuxSocket: terminalTmuxSocket,
-                terminalTmuxClient: terminalTmuxClient,
+                terminalTitle: h.terminalTitle,
+                terminalWindowId: h.terminalWindowId,
+                terminalTabIndex: h.terminalTabIndex,
+                terminalTmuxPane: h.terminalTmuxPane,
+                terminalTmuxSocket: h.terminalTmuxSocket,
+                terminalTmuxClient: h.terminalTmuxClient,
                 receivedAt: request.receivedAt
             )
             self.sessionStore.appendPending(request: request, item: newItem)
@@ -1216,20 +1139,20 @@ class AppState: ObservableObject {
             if !request.sessionId.isEmpty {
                 self.sessionStore.updateActiveSession(
                     sessionId: request.sessionId,
-                    terminalTitle: terminalTitle,
-                    agentKind: agentKind,
-                    terminalApp: terminalApp,
-                    terminalTTY: terminalTTY,
-                    terminalWindowId: terminalWindowId,
-                    terminalTabIndex: terminalTabIndex,
-                    terminalTmuxPane: terminalTmuxPane,
-                    terminalTmuxSocket: terminalTmuxSocket,
-                    terminalTmuxClient: terminalTmuxClient,
+                    terminalTitle: h.terminalTitle,
+                    agentKind: h.agentKind,
+                    terminalApp: h.terminalApp,
+                    terminalTTY: h.terminalTTY,
+                    terminalWindowId: h.terminalWindowId,
+                    terminalTabIndex: h.terminalTabIndex,
+                    terminalTmuxPane: h.terminalTmuxPane,
+                    terminalTmuxSocket: h.terminalTmuxSocket,
+                    terminalTmuxClient: h.terminalTmuxClient,
                     toolName: request.toolName,
                     eventName: request.eventName,
                     message: request.message,
                     isPending: true,
-                    isLifecycleTracked: agentKind != .claudeCode
+                    isLifecycleTracked: h.agentKind != .claudeCode
                 )
 
                 self.sessionStore.selectedSessionId = request.sessionId
