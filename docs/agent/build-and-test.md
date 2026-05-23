@@ -41,6 +41,6 @@ For environments without Xcode project workflows, use:
 ./scripts/build_and_run.sh --no-kill --no-run
 ```
 
-The script compiles all Swift sources under `DevIsland/`, assembles `dist/DevIsland.app`, and can launch it. Pass `--verify` to assert the process started.
+The script runs `xcodegen generate` then `xcodebuild build`, copies the result to `dist/DevIsland.app`, and can launch it. Pass `--verify` to assert the process started.
 
 Release builds are produced by CI on version tags. The release workflow runs `xcodebuild archive` unsigned and packages a DMG via `hdiutil`.
