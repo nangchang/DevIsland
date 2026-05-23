@@ -6,7 +6,7 @@ private struct CompactHeadingStyle: StructuredText.HeadingStyle {
     private static let fontScales: [CGFloat] = [1.3, 1.15, 1.05, 1.0, 1.0, 1.0]
 
     func makeBody(configuration: Configuration) -> some View {
-        let level = min(configuration.headingLevel, 6)
+        let level = max(1, min(configuration.headingLevel, 6))
         configuration.label
             .textual.fontScale(Self.fontScales[level - 1])
             .textual.blockSpacing(.fontScaled(top: 1.2, bottom: 0.6))
