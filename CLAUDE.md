@@ -3,7 +3,10 @@
 This file provides Claude Code–specific guidance for this repository.
 For general project documentation (architecture, build, key files), see [AGENTS.md](AGENTS.md).
 
-## AI Attribution
+## 커밋 메시지 및 AI Attribution
+
+커밋 바디는 한국어로 작성하고 변경 이유(Why)에 집중할 것.
+제목(첫 줄)은 영어 conventional commit 형식 유지.
 
 커밋, GitHub 코멘트, 이슈 등 AI가 작성한 내용에는 반드시 출처를 표시한다.
 
@@ -84,12 +87,7 @@ main에 직접 커밋하지 말 것 — 예외 없음.
 `sources: path: DevIsland`가 하위 디렉토리를 재귀 포함하므로
 파일 생성 후 `xcodegen generate`만 실행하면 됨.
 
-빌드 결과 확인 grep: `BUILD SUCCEEDED` / `BUILD FAILED` (대문자, `-quiet` 시 출력 없음).
-
-## 커밋 메시지
-
-커밋 바디는 한국어로 작성하고 변경 이유(Why)에 집중할 것.
-제목(첫 줄)은 영어 conventional commit 형식 유지.
+빌드 결과 확인: 종료 코드(`$?`)가 가장 정확함. grep 사용 시 `BUILD SUCCEEDED` / `BUILD FAILED` (대문자, `-quiet` 시 출력 없음).
 
 ## Swift SourceKit 진단 오류
 
