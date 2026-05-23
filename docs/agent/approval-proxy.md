@@ -71,7 +71,7 @@ If `providerOutput` is present, the bridge writes it to stdout verbatim. Otherwi
 
 ## AppState Session Model
 
-- `ActiveSession`: one per full `session_id`, displayed by first 8 chars. Tracks last event/tool/message, pending state, terminal metadata, lifecycle state, and Gemini auto-edit mode.
+- `ActiveSession`: one per full `session_id`, displayed by first 8 chars. Tracks last event/tool/message, pending state, terminal metadata, lifecycle state, Gemini auto-edit mode, and `parentSessionId` for sub-agent hierarchy.
 - `PendingRequest`: queued approval with a `responseHandler` closure for the open TCP connection. Processed FIFO; timeout auto-denies.
 - `selectedSessionId`: controls which session appears in the expanded notch. It does not affect pending queue order.
 
@@ -130,7 +130,8 @@ PRAGMAs: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`
 
 | # | Location | Description |
 |---|---|---|
-| 1 | `ApprovalPolicyEngine.swift` | Only exact tool-name matching; Glob/Regex/Prefix modes are not implemented |
-| 2 | `ProviderAdapter.swift` | `GeminiPromptPolicy.swift` does not exist; Gemini logic is minimal hardcoded formatter |
-| 3 | `AppState.swift` | Large class still owns too many concerns; `GeminiSessionState` is not extracted |
-| 4 | `HookSocketServer.swift` | `NWListener` initialization failure path needs stronger user-facing retry/port-occupied UX |
+| 1 | `ApprovalPolicyEngine.swift` | ~~Only exact tool-name matching~~ **Done** — Glob, Regex, commandPrefix, pathPrefix matching implemented; strict priority (persistent deny > session deny > persistent allow > session allow) enforced (PR #149) |
+| 2 | `ProviderAdapter.swift` | ~~`GeminiPromptPolicy.swift` does not exist~~ **Done** — `GeminiPromptPolicy` and `GeminiSessionState` are implemented |
+| 3 | `AppState.swift` | ~~Large class; `GeminiSessionState` not extracted~~ **Partially done** — `GeminiSessionState`, `SessionStore`, `PTYSessionBuffer`, `ReplayRecorder` extracted. `HookEventHandler` (JSON parsing + event classification) extraction still pending (issue #147) |
+| 4 | `HookSocketServer.swift` | ~~No retry UX~~ **Done** — `onServerFailed` now passes the `Error`; AppState shows a Retry/Exit dialog instead of force-quitting (PR #146) |
+| 5 | `SessionTypes.swift` / `NotchView.swift` | Sub-agent session tracking implemented — `parentSessionId` in `ActiveSession`, grouped list UI, vertical accent bar for child rows. Sub-agent audio distinction (`CESPCategory.subAgentAction`) not yet done (PR #150) |
