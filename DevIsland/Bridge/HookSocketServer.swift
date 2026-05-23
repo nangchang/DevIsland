@@ -25,7 +25,7 @@ class HookSocketServer {
     ///   - responseHandler: Call with the response string. The server automatically
     ///     frames the response if the request was framed.
     var onMessageReceived: ((String, String?, @escaping (String) -> Void) -> Void)?
-    var onServerFailed: (() -> Void)?
+    var onServerFailed: ((Error) -> Void)?
 
     deinit {
         stopUnixListener()
@@ -51,7 +51,7 @@ class HookSocketServer {
                     print("Server listening on port \(port)")
                 case .failed(let error):
                     print("Server failed: \(error)")
-                    DispatchQueue.main.async { self.onServerFailed?() }
+                    DispatchQueue.main.async { self.onServerFailed?(error) }
                 default:
                     break
                 }
@@ -64,7 +64,7 @@ class HookSocketServer {
             listener?.start(queue: .global())
         } catch {
             print("Failed to start server: \(error)")
-            DispatchQueue.main.async { self.onServerFailed?() }
+            DispatchQueue.main.async { self.onServerFailed?(error) }
         }
     }
 
@@ -135,7 +135,7 @@ class HookSocketServer {
             print("Server listening on Unix socket \(path)")
         } catch {
             print("Failed to start Unix socket server: \(error)")
-            DispatchQueue.main.async { self.onServerFailed?() }
+            DispatchQueue.main.async { self.onServerFailed?(error) }
         }
     }
 
