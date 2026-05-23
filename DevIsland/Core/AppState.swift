@@ -497,6 +497,7 @@ class AppState: ObservableObject {
         var sessionStartSource = ""
         var isReplayPayload = false
         var isSubAgentSession = false
+        var parentSessionId: String?
         var toolInput: [String: Any]?
 
         if let json = parsedJSON {
@@ -505,6 +506,7 @@ class AppState: ObservableObject {
                 sessionId = (json["session_id"] as? String) ?? (json["sessionId"] as? String) ?? ""
                 if let parentId = json["parent_session_id"] as? String, !parentId.isEmpty {
                     isSubAgentSession = true
+                    parentSessionId = parentId
                 }
                 print("[DevIsland] [MSG] Parsed JSON from \(sessionId.prefix(8))")
                 terminalTitle = json["terminal_title"] as? String ?? "Terminal"
@@ -545,7 +547,6 @@ class AppState: ObservableObject {
                 )
         }
 
-        // TODO: 서브 에이전트 이벤트 처리 — parent_session_id 기반 세션 관계 추적, UI 표시, 소리 구분 등
         if isSubAgentSession {
             _ = recordReplayHookEvent(
                 requestId: requestId,
@@ -555,6 +556,40 @@ class AppState: ObservableObject {
                 toolName: toolName,
                 payload: parsedJSON
             )
+            if !sessionId.isEmpty {
+                let fullSessionId = sessionId
+                let pid = parentSessionId
+                let subAgentStopEvents: Set<String> = ["stop", "exit", "shutdown", "sessionend"]
+                let normalizedSubEvent = HookEventNormalizer.normalizedName(event)
+                if subAgentStopEvents.contains(normalizedSubEvent) {
+                    DispatchQueue.main.async {
+                        self.sessionStore.removeSession(id: fullSessionId)
+                        self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.sessionStore.updateActiveSession(
+                            sessionId: fullSessionId,
+                            terminalTitle: terminalTitle,
+                            agentKind: agentKind,
+                            terminalApp: terminalApp,
+                            terminalTTY: terminalTTY,
+                            terminalWindowId: terminalWindowId,
+                            terminalTabIndex: terminalTabIndex,
+                            terminalTmuxPane: terminalTmuxPane,
+                            terminalTmuxSocket: terminalTmuxSocket,
+                            terminalTmuxClient: terminalTmuxClient,
+                            toolName: displayToolName,
+                            eventName: event,
+                            message: displayMsg,
+                            isPending: false,
+                            isLifecycleTracked: true,
+                            isSubAgentSession: true,
+                            parentSessionId: pid
+                        )
+                    }
+                }
+            }
             responseHandler("{\"response\": \"approved\"}")
             return
         }

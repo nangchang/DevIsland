@@ -66,4 +66,5 @@ struct ActiveSession: Identifiable, Equatable {
     var isAutoEditActive: Bool
     var isUnread: Bool
     var status: SessionStatus
+    var parentSessionId: String?
 }
