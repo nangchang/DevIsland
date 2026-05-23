@@ -29,7 +29,9 @@ usage() {
     echo "  $0 [옵션] claude-question   # Claude AskUserQuestion 표시 테스트"
     echo "  $0 [옵션] claude-pretool    # Claude PreToolUse 상태 이벤트"
     echo "  $0 [옵션] claude-posttool   # Claude PostToolUse 상태 이벤트"
-    echo "  $0 [옵션] claude-smoke      # Claude 주요 훅 세트 재생"
+    echo "  $0 [옵션] claude-smoke      # Claude 주요 훅 세트 재생
+  $0 [옵션] claude-subagent [parent_id]  # 서브에이전트 세션 시작 (parent_session_id 포함)
+  $0 [옵션] claude-subagent-smoke        # 부모→서브에이전트 그룹핑 시나리오 재생"
     echo "  $0 [옵션] idle              # 입력 대기 알림"
     echo "  $0 [옵션] finish            # 작업 완료 알림"
     echo "  $0 [옵션] stop              # 세션 종료"
@@ -176,6 +178,28 @@ send_claude_question() {
     send_event "$(make_json hook_event_name PreToolUse session_id "$SESSION_ID" tool_name AskUserQuestion tool_input "$input" cwd "$(pwd)")" claude
 }
 
+send_claude_subagent_smoke() {
+    local parent_id="$SESSION_ID"
+    local child_id="subagent-$(date +%s | cut -c 6-10)"
+
+    echo "👤 부모 세션 시작: $parent_id"
+    send_event "$(make_json hook_event_name SessionStart session_id "$parent_id" cwd "$(pwd)")" claude
+    local input
+    input=$(make_json command "ls -la")
+    send_event "$(make_json hook_event_name PreToolUse session_id "$parent_id" tool_name Bash tool_input "$input" cwd "$(pwd)")" claude
+
+    echo ""
+    echo "🤖 서브에이전트 세션 시작: $child_id (parent: $parent_id)"
+    send_event "$(make_json hook_event_name SessionStart session_id "$child_id" parent_session_id "$parent_id" cwd "$(pwd)")" claude
+    input=$(make_json file_path "src/main.swift" content "// generated")
+    send_event "$(make_json hook_event_name PermissionRequest session_id "$child_id" parent_session_id "$parent_id" tool_name Write tool_input "$input" cwd "$(pwd)")" claude
+    send_event "$(make_json hook_event_name Stop session_id "$child_id" parent_session_id "$parent_id" last_assistant_message "서브에이전트 작업 완료")" claude
+
+    echo ""
+    echo "👤 부모 세션 완료: $parent_id"
+    send_event "$(make_json hook_event_name Stop session_id "$parent_id" last_assistant_message "모든 작업 완료")" claude
+}
+
 # ── Codex CLI 이벤트 빌더 ────────────────────────────────────────────────
 
 make_codex_event() {
@@ -248,6 +272,7 @@ interactive_claude() {
         echo "8) 세션 종료 (SessionEnd)"
         echo "9) Claude 주요 훅 세트 재생"
         echo "a) AskUserQuestion 표시 테스트"
+        echo "s) 서브에이전트 시나리오 (부모→자식 그룹핑)"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 그냥 종료"
         read -p "선택: " choice
@@ -278,6 +303,8 @@ interactive_claude() {
                 send_claude_smoke ;;
             a|A)
                 send_claude_question ;;
+            s|S)
+                send_claude_subagent_smoke ;;
             d|D)
                 if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
                 echo "지연 모드가 $([ "$DELAY" -eq 1 ] && echo "켜졌습니다" || echo "꺼졌습니다")." ;;
@@ -451,6 +478,13 @@ case "$COMMAND" in
         send_claude_posttool "${1:-Bash}" "${2:-ls -la}" ;;
     claude-smoke)
         send_claude_smoke ;;
+    claude-subagent)
+        PARENT_ID=${1:-$SESSION_ID}
+        CHILD_ID="subagent-$(date +%s | cut -c 6-10)"
+        echo "🤖 서브에이전트 세션 시작: $CHILD_ID (parent: $PARENT_ID)"
+        send_event "$(make_json hook_event_name SessionStart session_id "$CHILD_ID" parent_session_id "$PARENT_ID" cwd "$(pwd)")" claude ;;
+    claude-subagent-smoke)
+        send_claude_subagent_smoke ;;
     notification)
         MSG=${1:-"Hello from CLI"}
         send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "$MSG")" claude ;;
