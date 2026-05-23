@@ -1068,7 +1068,8 @@ class AppState: ObservableObject {
                 hookEventId: hookEventId,
                 sessionId: sessionId,
                 toolName: toolName,
-                workspaceRoot: workspaceRoot
+                workspaceRoot: workspaceRoot,
+                toolInput: toolInput
             ) {
                 print("[DevIsland] [POLICY] \(provider.rawValue) \(toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
                 request.responseHandler(self.responsePayload(approved: policyDecision.action == .allow))
@@ -1480,7 +1481,8 @@ class AppState: ObservableObject {
         hookEventId: Int64?,
         sessionId: String,
         toolName: String,
-        workspaceRoot: String?
+        workspaceRoot: String?,
+        toolInput: [String: Any]? = nil
     ) -> ApprovalPolicyDecision? {
         guard let approvalProxy, !sessionId.isEmpty, !toolName.isEmpty else { return nil }
         do {
@@ -1488,7 +1490,8 @@ class AppState: ObservableObject {
                 provider: provider,
                 sessionId: sessionId,
                 toolName: toolName,
-                workspaceRoot: workspaceRoot
+                workspaceRoot: workspaceRoot,
+                toolInput: toolInput
             )
             let decision = try approvalProxy.evaluate(request)
             guard decision.action != .prompt else { return nil }
