@@ -125,6 +125,14 @@ struct SessionRowView: View {
 
     private static let sharedTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+    private var badgeSize: CGFloat    { isSubAgent ? 24 : 32 }
+    private var badgeFrame: CGFloat   { isSubAgent ? 28 : 36 }
+    private var titleFont: CGFloat    { isSubAgent ? 10 : 12 }
+    private var metaFont: CGFloat     { isSubAgent ? 8 : 9 }
+    private var messageFont: CGFloat  { isSubAgent ? 9 : 10 }
+    private var buttonSize: CGFloat   { isSubAgent ? 22 : 28 }
+    private var vertPadding: CGFloat  { isSubAgent ? 6 : 10 }
+
     var body: some View {
         HStack(spacing: 8) {
             if isSubAgent {
@@ -134,76 +142,76 @@ struct SessionRowView: View {
                     .padding(.leading, 8)
             }
             Button(action: { AppState.shared.showSessionDetail(session.id) }) {
-                HStack(spacing: 12) {
+                HStack(spacing: isSubAgent ? 8 : 12) {
                     ZStack(alignment: .topTrailing) {
                         AgentRequestBadge(
                             kind: session.agentKind,
                             tool: tool,
                             isActive: session.isPending,
-                            size: 32
+                            size: badgeSize
                         )
 
                         if session.isPending {
                             Circle()
                                 .fill(Color.orange)
-                                .frame(width: 10, height: 10)
+                                .frame(width: isSubAgent ? 8 : 10, height: isSubAgent ? 8 : 10)
                                 .overlay(Circle().stroke(Color.black, lineWidth: 2))
                                 .offset(x: 4, y: -4)
                         }
                     }
-                    .frame(width: 36, height: 36)
+                    .frame(width: badgeFrame, height: badgeFrame)
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
                             if session.isUnread {
                                 Circle()
                                     .fill(Color.blue.opacity(0.85))
-                                    .frame(width: 6, height: 6)
+                                    .frame(width: isSubAgent ? 5 : 6, height: isSubAgent ? 5 : 6)
                             }
 
                             Text(session.terminalTitle)
-                                .font(.system(size: 12, weight: session.isUnread ? .heavy : .bold))
+                                .font(.system(size: titleFont, weight: session.isUnread ? .heavy : .bold))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
 
                             Spacer()
 
                             Text(timeAgo)
-                                .font(.system(size: 9, weight: .medium))
+                                .font(.system(size: metaFont - 1, weight: .medium))
                                 .foregroundColor(.white.opacity(0.3))
                         }
 
                         HStack(spacing: 6) {
                             Text(String(session.id.prefix(8)))
-                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .font(.system(size: metaFont, weight: .medium, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.4))
 
                             Text("•")
-                                .font(.system(size: 8))
+                                .font(.system(size: metaFont - 1))
                                 .foregroundColor(.white.opacity(0.2))
 
                             Text(session.lastEventName)
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.system(size: metaFont, weight: .bold))
                                 .foregroundColor(tool.color.opacity(0.8))
                                 .lineLimit(1)
 
                             if let statusLabel = statusLabel {
                                 Text(statusLabel)
-                                    .font(.system(size: 8, weight: .black))
+                                    .font(.system(size: metaFont - 1, weight: .black))
                                     .foregroundColor(statusColor)
                                     .lineLimit(1)
                             }
 
                             if session.isAutoEditActive {
                                 Text(l10n.statusAutoEdit)
-                                    .font(.system(size: 8, weight: .black))
+                                    .font(.system(size: metaFont - 1, weight: .black))
                                     .foregroundColor(Color(red: 1.0, green: 0.7, blue: 0.2))
                                     .lineLimit(1)
                             }
 
                             if !session.lastToolName.isEmpty {
                                 Text(session.lastToolName)
-                                    .font(.system(size: 9, weight: .semibold))
+                                    .font(.system(size: metaFont, weight: .semibold))
                                     .foregroundColor(.white.opacity(0.55))
                                     .lineLimit(1)
                             }
@@ -211,7 +219,7 @@ struct SessionRowView: View {
 
                         if !session.lastMessage.isEmpty {
                             Text(session.lastMessage)
-                                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                                .font(.system(size: messageFont, weight: .regular, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.45))
                                 .lineLimit(1)
                                 .truncationMode(.tail)
@@ -225,28 +233,28 @@ struct SessionRowView: View {
 
             Button(action: { AppState.shared.focusTerminal(for: session.id) }) {
                 Image(systemName: "arrow.up.forward.app.fill")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: isSubAgent ? 10 : 12, weight: .bold))
                     .foregroundColor(.white.opacity(0.75))
-                    .frame(width: 28, height: 28)
+                    .frame(width: buttonSize, height: buttonSize)
                     .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: isSubAgent ? 6 : 8))
             }
             .buttonStyle(.plain)
             .help("Focus terminal")
 
             Button(action: { AppState.shared.dismissSession(session.id) }) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: isSubAgent ? 10 : 12, weight: .bold))
                     .foregroundColor(.white.opacity(0.65))
-                    .frame(width: 28, height: 28)
+                    .frame(width: buttonSize, height: buttonSize)
                     .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: isSubAgent ? 6 : 8))
             }
             .buttonStyle(.plain)
             .help(session.isPending ? l10n.helpDismissPending : l10n.helpDismissSession)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, vertPadding)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(isCurrent ? Color.white.opacity(0.1) : Color.white.opacity(0.03))
