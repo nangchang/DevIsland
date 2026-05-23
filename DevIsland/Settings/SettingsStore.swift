@@ -170,6 +170,7 @@ struct AppSettings: Equatable {
     var notchRightCharacterMode: NotchCharacterMode
     var notchRightCharacterKind: BuddyKind
     var notchRightRandomCharacterKinds: Set<BuddyKind>
+    var notchCenterText: String
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -238,7 +239,8 @@ struct AppSettings: Equatable {
         notchLeftRandomCharacterKinds: Set(BuddyKind.defaultRandomCases),
         notchRightCharacterMode: .random,
         notchRightCharacterKind: .gemini,
-        notchRightRandomCharacterKinds: Set(BuddyKind.defaultRandomCases)
+        notchRightRandomCharacterKinds: Set(BuddyKind.defaultRandomCases),
+        notchCenterText: "DevIsland"
     )
 }
 
@@ -304,6 +306,7 @@ final class SettingsStore: ObservableObject {
         static let notchRightCharacterMode = "notchRightCharacterMode"
         static let notchRightCharacterKind = "notchRightCharacterKind"
         static let notchRightRandomCharacterKinds = "notchRightRandomCharacterKinds"
+        static let notchCenterText = "notchCenterText"
     }
 
     private let userDefaults: UserDefaults
@@ -366,6 +369,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.notchRightCharacterMode.rawValue, forKey: DefaultsKey.notchRightCharacterMode)
         userDefaults.set(settings.notchRightCharacterKind.rawValue, forKey: DefaultsKey.notchRightCharacterKind)
         userDefaults.set(settings.notchRightRandomCharacterKinds.map(\.rawValue).sorted(), forKey: DefaultsKey.notchRightRandomCharacterKinds)
+        userDefaults.set(settings.notchCenterText, forKey: DefaultsKey.notchCenterText)
         writeBridgeConfig(settings)
     }
 
@@ -601,7 +605,8 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.notchRightRandomCharacterKinds,
                 from: userDefaults,
                 default: defaults.notchRightRandomCharacterKinds
-            )
+            ),
+            notchCenterText: userDefaults.string(forKey: DefaultsKey.notchCenterText) ?? defaults.notchCenterText
         )
     }
 

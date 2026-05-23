@@ -208,6 +208,7 @@ extension L10n {
     var lblRandomIncludes:   String { s("Random includes",               "랜덤 포함 캐릭터") }
     func lblCharacterHorizontalInset(_ px: Int) -> String { s("Character horizontal position: \(px) px", "캐릭터 가로 위치: \(px) px") }
     func lblCharacterVerticalOffset(_ px: Int) -> String { s("Character vertical position: \(px) px", "캐릭터 세로 위치: \(px) px") }
+    var lblNotchCenterText:  String { s("Center text",                   "가운데 텍스트") }
     var secRequests:         String { s("Requests",                      "요청") }
     var lblRequestDisplay:   String { s("Request display",               "요청 표시") }
 

@@ -66,9 +66,11 @@ struct NotchCollapsedView: View {
                     collapsedBackground
 
                     ZStack {
-                        Text("DevIsland")
-                            .foregroundColor(.white.opacity(0.6))
-                            .font(.system(size: 11, weight: .semibold))
+                        if !settingsStore.settings.notchCenterText.isEmpty {
+                            Text(settingsStore.settings.notchCenterText)
+                                .foregroundColor(.white.opacity(0.6))
+                                .font(.system(size: 11, weight: .semibold))
+                        }
 
                         if settingsStore.settings.notchLeftCharacterMode != .hidden {
                             CLIBuddyView(
