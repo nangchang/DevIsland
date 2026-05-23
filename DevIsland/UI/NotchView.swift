@@ -591,13 +591,33 @@ struct NotchView: View {
 
     // MARK: Session List
 
+    private var groupedSessions: [(session: ActiveSession, isSubAgent: Bool)] {
+        let all = sessionStore.activeSessions
+        let parents = all.filter { $0.parentSessionId == nil }
+        var result: [(ActiveSession, Bool)] = []
+        for parent in parents {
+            result.append((parent, false))
+            let children = all.filter { $0.parentSessionId == parent.id }
+            for child in children {
+                result.append((child, true))
+            }
+        }
+        // Orphaned sub-agents (parent already removed from list)
+        let accounted = Set(result.map { $0.0.id })
+        for session in all where !accounted.contains(session.id) {
+            result.append((session, session.parentSessionId != nil))
+        }
+        return result
+    }
+
     private var sessionList: some View {
         ScrollView {
             VStack(spacing: 8) {
-                ForEach(sessionStore.activeSessions) { session in
+                ForEach(groupedSessions, id: \.session.id) { item in
                     SessionRowView(
-                        session: session,
-                        isCurrent: session.id == displayedSessionId
+                        session: item.session,
+                        isCurrent: item.session.id == displayedSessionId,
+                        isSubAgent: item.isSubAgent
                     )
                 }
             }

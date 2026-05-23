@@ -94,6 +94,7 @@ struct AgentRequestBadge: View {
 struct SessionRowView: View {
     let session: ActiveSession
     let isCurrent: Bool
+    var isSubAgent: Bool = false
 
     @ObservedObject private var l10n = L10n.shared
     @State private var timeAgo: String = ""
@@ -126,6 +127,12 @@ struct SessionRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            if isSubAgent {
+                Rectangle()
+                    .fill(Color.white.opacity(0.12))
+                    .frame(width: 2)
+                    .padding(.leading, 8)
+            }
             Button(action: { AppState.shared.showSessionDetail(session.id) }) {
                 HStack(spacing: 12) {
                     ZStack(alignment: .topTrailing) {

@@ -52,6 +52,7 @@ final class SessionStore: ObservableObject {
         preserveMessage: Bool = false,
         isLifecycleTracked: Bool = false,
         isSubAgentSession: Bool = false,
+        parentSessionId: String? = nil,
         status: SessionStatus? = nil
     ) {
         if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) {
@@ -76,6 +77,7 @@ final class SessionStore: ObservableObject {
             activeSessions[index].status = status ?? (isPending ? .pending : .idle)
             if isLifecycleTracked { activeSessions[index].isLifecycleTracked = true }
             if isSubAgentSession { activeSessions[index].isSubAgentSession = true }
+            if let pid = parentSessionId { activeSessions[index].parentSessionId = pid }
         } else {
             let session = ActiveSession(
                 id: sessionId,
@@ -98,7 +100,8 @@ final class SessionStore: ObservableObject {
                 isSubAgentSession: isSubAgentSession,
                 isAutoEditActive: false,
                 isUnread: false,
-                status: status ?? (isPending ? .pending : .idle)
+                status: status ?? (isPending ? .pending : .idle),
+                parentSessionId: parentSessionId
             )
             activeSessions.insert(session, at: 0)
         }
