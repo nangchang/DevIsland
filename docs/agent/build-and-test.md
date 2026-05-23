@@ -25,7 +25,7 @@ open DevIsland.xcodeproj
 xcodebuild test -project DevIsland.xcodeproj -scheme DevIsland -destination 'platform=macOS'
 ```
 
-Build target: macOS 14.0+, Xcode 15+.
+Build target: macOS 15.0+, Xcode 16+.
 
 AI agents must run the existing unit tests before committing code changes. Prefer `./scripts/run-tests.sh` because it uses isolated mode and will not interfere with a running DevIsland instance.
 
