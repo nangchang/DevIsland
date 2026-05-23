@@ -2050,11 +2050,7 @@ class AppState: ObservableObject {
                 currentEventName = ""
                 showSessionDetail(prev)
             } else {
-                isExpandingFromRequest = false
-                currentSessionId = ""
-                currentMessage = ""
-                currentToolName = ""
-                currentEventName = ""
+                showNextRequest()
             }
         } else {
             isNotchExpanded = false
