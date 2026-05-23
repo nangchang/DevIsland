@@ -97,7 +97,7 @@ extension ClaudeQuestionRequest.Question {
         let prompt = firstString(in: raw, keys: ["question", "prompt", "message", "description", "text"])
             ?? title
             ?? "Question \(index + 1)"
-        let answerKey = firstString(in: raw, keys: ["id", "key", "name"]) ?? prompt
+        let answerKey = prompt
         let options = parseOptions(raw["options"] ?? raw["choices"])
         let allowsMultipleSelection = boolValue(raw["multiSelect"])
             ?? boolValue(raw["multi_select"])

@@ -845,7 +845,8 @@ final class AppStateTests: XCTestCase {
             XCTAssertEqual(json?["response"] as? String, "approved")
             let toolInput = json?["tool_input"] as? [String: Any]
             let answers = toolInput?["answers"] as? [String: Any]
-            XCTAssertEqual(answers?["q1"] as? String, "Yes")
+            XCTAssertEqual(answers?["Proceed?"] as? String, "Yes")
+            XCTAssertNil(answers?["q1"])
             expectation.fulfill()
         }
 
@@ -967,6 +968,58 @@ final class AppStateTests: XCTestCase {
         appState.submitClaudeQuestion()
 
         wait(for: [preToolExpectation], timeout: 1.0)
+    }
+
+    func testClaudeAskUserQuestionPreservesExistingSessionTracking() {
+        let sessionId = "claude-question-existing-session"
+        let startExpectation = XCTestExpectation(description: "Claude session start")
+        let questionExpectation = XCTestExpectation(description: "Claude question response")
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SessionStart","cli_source":"claude","session_id":"\(sessionId)"}
+            """
+        ) { _ in startExpectation.fulfill() }
+        wait(for: [startExpectation], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertTrue(appState.sessionStore.activeSessions.first { $0.id == sessionId }?.isLifecycleTracked ?? false)
+
+        appState.handleMessage(
+            """
+            {
+                "hook_event_name": "PreToolUse",
+                "cli_source": "claude",
+                "session_id": "\(sessionId)",
+                "tool_name": "AskUserQuestion",
+                "tool_input": {
+                    "questions": [
+                        {"question": "Proceed?"}
+                    ]
+                }
+            }
+            """
+        ) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            questionExpectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.sessionStore.activeSessions.first { $0.id == sessionId }?.isLifecycleTracked ?? false)
+
+        guard let questionId = appState.currentClaudeQuestion?.questions.first?.id else {
+            XCTFail("Expected queued Claude question")
+            return
+        }
+        var answer = ClaudeQuestionAnswer()
+        answer.text = "Yes"
+        appState.currentClaudeQuestionAnswers[questionId] = answer
+        appState.submitClaudeQuestion()
+
+        wait(for: [questionExpectation], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == sessionId }))
     }
 
     func testClaudeAskUserQuestionPostToolUseWithAnswersPassesThrough() {

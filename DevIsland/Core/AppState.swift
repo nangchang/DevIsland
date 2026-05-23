@@ -1243,6 +1243,8 @@ class AppState: ObservableObject {
         playOpenPeonSound(cespCategory)
 
         if !request.sessionId.isEmpty {
+            let isLifecycleTracked = sessionStore.activeSessions.first { $0.id == request.sessionId }?.isLifecycleTracked
+                ?? (request.agentKind != .claudeCode)
             sessionStore.updateActiveSession(
                 sessionId: request.sessionId,
                 terminalTitle: terminalTitle,
@@ -1258,7 +1260,7 @@ class AppState: ObservableObject {
                 eventName: request.eventName,
                 message: request.message,
                 isPending: true,
-                isLifecycleTracked: request.agentKind != .claudeCode
+                isLifecycleTracked: isLifecycleTracked
             )
 
             sessionStore.selectedSessionId = request.sessionId

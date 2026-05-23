@@ -72,7 +72,12 @@ enum AnyJSON: Codable, Equatable {
         case let value as String:
             return .string(value)
         case let value as [Any]:
-            return .array(value.compactMap { AnyJSON.value(from: $0) })
+            var output: [AnyJSON] = []
+            for item in value {
+                guard let json = AnyJSON.value(from: item) else { return nil }
+                output.append(json)
+            }
+            return .array(output)
         case let value as [String: Any]:
             return AnyJSON.object(from: value).map { .object($0) }
         default:
