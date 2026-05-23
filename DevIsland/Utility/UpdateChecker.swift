@@ -287,10 +287,7 @@ final class UpdateChecker: ObservableObject {
 
     @discardableResult
     private func runModal(_ alert: NSAlert) -> NSApplication.ModalResponse {
-        // 노치 패널(mainMenu+2)이 알림창을 가리지 않도록 노치를 접고 윈도우 레벨을 올림
-        AppState.shared.isNotchExpanded = false
-        alert.window.level = .init(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
-        return alert.runModal()
+        ModalPresenter.run(alert)
     }
 }
 

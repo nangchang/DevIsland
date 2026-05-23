@@ -64,9 +64,12 @@ private final class NotchPanel: NSPanel {
 }
 
 class NotchWindowController: NSWindowController {
+    static weak var current: NotchWindowController?
+
     private var cancellables = Set<AnyCancellable>()
     private var pendingSettle: DispatchWorkItem?
     private var mouseMonitor: Any?
+    private var isShowingModal = false
 
     deinit {
         if let monitor = mouseMonitor {
@@ -119,6 +122,7 @@ class NotchWindowController: NSWindowController {
 
         self.init(window: collapsedPanel)
         self.expandedPanel = expandedPanel
+        Self.current = self
 
         let collapsedView = NotchCollapsedHostingView(rootView: NotchCollapsedView())
         collapsedView.wantsLayer = true
@@ -304,6 +308,7 @@ class NotchWindowController: NSWindowController {
     }
 
     private func handleExpansionChange(_ expanded: Bool) {
+        guard !isShowingModal else { return }
         pendingSettle?.cancel()
         let settings = SettingsStore.shared.settings
         let usesTransparentPanel = settings.notchPanelOpacity < 0.999
@@ -398,6 +403,19 @@ class NotchWindowController: NSWindowController {
         expandedPanel.setFrame(NSRect(origin: NSPoint(x: expX, y: expY), size: expandedWindowSize), display: true, animate: animate)
         
         updateFullScreenVisibility()
+    }
+
+    func hideForModal() {
+        isShowingModal = true
+        pendingSettle?.cancel()
+        pendingSettle = nil
+        window?.orderOut(nil)
+        expandedPanel.orderOut(nil)
+    }
+
+    func restoreAfterModal() {
+        isShowingModal = false
+        window?.orderFrontRegardless()
     }
 
     func expandFromCollapsedWindow() {
@@ -684,6 +702,10 @@ fileprivate extension CGRect {
 class NotchCollapsedHostingView: NSHostingView<NotchCollapsedView> {
     override var isOpaque: Bool { false }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard notchHitRect().contains(point) else { return nil }
         return super.hitTest(point) ?? self
@@ -710,6 +732,10 @@ class NotchCollapsedHostingView: NSHostingView<NotchCollapsedView> {
 class NotchHostingView: NSHostingView<NotchView> {
     // 투명 픽셀 영역에서 OS 수준 click-through가 동작하도록 비불투명 처리
     override var isOpaque: Bool { false }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
 
     override func mouseDown(with event: NSEvent) {
         super.mouseDown(with: event)

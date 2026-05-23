@@ -281,8 +281,7 @@ class AppState: ObservableObject {
                     alert.alertStyle = .critical
                     alert.addButton(withTitle: "Retry")
                     alert.addButton(withTitle: "Exit")
-                    NSApp.activate(ignoringOtherApps: true)
-                    if alert.runModal() == .alertFirstButtonReturn {
+                    if ModalPresenter.run(alert) == .alertFirstButtonReturn {
                         self?.server.start(transport: Self.currentBridgeTransport())
                     } else {
                         NSApplication.shared.terminate(nil)
@@ -2050,12 +2049,11 @@ class AppState: ObservableObject {
             alert.informativeText = "모든 세션에서 자동 승인할 툴 이름(예: read_file)을 입력하세요."
             alert.addButton(withTitle: "추가")
             alert.addButton(withTitle: "취소")
-            
+
             let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
             alert.accessoryView = input
-            NSApp.activate(ignoringOtherApps: true)
-            
-            if alert.runModal() == .alertFirstButtonReturn {
+
+            if ModalPresenter.run(alert) == .alertFirstButtonReturn {
                 let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !toolName.isEmpty {
                     self.insertGlobalPersistentRule(toolName)
@@ -2071,12 +2069,11 @@ class AppState: ObservableObject {
             alert.informativeText = "현재 세션(\(sessionId.prefix(8)))에서 자동 승인할 툴 이름을 입력하세요."
             alert.addButton(withTitle: "추가")
             alert.addButton(withTitle: "취소")
-            
+
             let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
             alert.accessoryView = input
-            NSApp.activate(ignoringOtherApps: true)
-            
-            if alert.runModal() == .alertFirstButtonReturn {
+
+            if ModalPresenter.run(alert) == .alertFirstButtonReturn {
                 let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !toolName.isEmpty {
                     if self.sessionStore.sessionAutoApproveTypes[sessionId] == nil {
