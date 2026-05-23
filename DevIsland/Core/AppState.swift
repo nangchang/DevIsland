@@ -80,6 +80,8 @@ class AppState: ObservableObject {
     @Published var currentSessionId: String = ""
     @Published var currentToolName: String = ""
     @Published var currentEventName: String = ""
+    @Published var currentClaudeQuestion: ClaudeQuestionRequest?
+    @Published var currentClaudeQuestionAnswers: [String: ClaudeQuestionAnswer] = [:]
     @Published var timeoutProgress: Double = 1.0
     @Published var autoApproveSafeTools = false {
         didSet {
@@ -310,6 +312,8 @@ class AppState: ObservableObject {
         let parsed = try? JSONSerialization.jsonObject(with: Data(rawResponse.utf8)) as? [String: Any]
         let decision = parsed?["response"] as? String
         let approvalScope = (parsed?["approval_scope"] as? String).flatMap(RuleScope.init(rawValue:))
+        let responseToolInput = (parsed?["tool_input"] as? [String: Any])
+            .flatMap { AnyJSON.object(from: $0) }
         let providerOutput: [String: AnyJSON]?
         if let source, let event {
             let denialMessage = parsed?["reason"] as? String ?? ProviderAdapter.denialMessage
@@ -320,7 +324,7 @@ class AppState: ObservableObject {
                 approvalScope: approvalScope,
                 toolName: (parsed?["tool_name"] as? String) ?? toolName,
                 ruleContent: (parsed?["rule_content"] as? String) ?? ruleContent,
-                toolInput: toolInput,
+                toolInput: responseToolInput ?? toolInput,
                 claudeSessionApprovalMode: claudeSessionApprovalMode,
                 claudePersistentApprovalDestination: claudePersistentApprovalDestination,
                 denialMessage: denialMessage
@@ -556,12 +560,16 @@ class AppState: ObservableObject {
             "startup", "init", "afteragent"
         ]
         let isUserQuestionTool = HookEventNormalizer.isUserQuestionTool(h.toolName)
+        let claudeQuestion = (h.agentKind == .claudeCode && normalizedEvent == "pretooluse" && isUserQuestionTool)
+            ? ClaudeQuestionRequest.parse(toolInput: h.toolInput)
+            : nil
+        let isClaudeQuestionRequest = claudeQuestion != nil
         // approval:
         // - Claude/Codex: PermissionRequest only
         // - Gemini: BeforeTool only
-        // User-question tools are shown as notifications even when delivered through an approval-capable hook.
+        // - Claude AskUserQuestion is handled as a structured reply request from PreToolUse.
         let isStop = stopEvents.contains(normalizedEvent)
-        let isApproval = Self.isApprovalEvent(normalizedEvent, for: h.agentKind) && !isUserQuestionTool
+        let isApproval = isClaudeQuestionRequest || (Self.isApprovalEvent(normalizedEvent, for: h.agentKind) && !isUserQuestionTool)
         let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
         let replayToolName = h.toolName.isEmpty ? displayToolName : h.toolName
         let cespCategory = CESPEventMapper.category(
@@ -621,6 +629,8 @@ class AppState: ObservableObject {
                     self.currentToolName = ""
                     self.currentEventName = ""
                     self.currentMessage = ""
+                    self.currentClaudeQuestion = nil
+                    self.currentClaudeQuestionAnswers = [:]
                 }
 
                 if self.sessionStore.pendingQueue.isEmpty {
@@ -681,6 +691,25 @@ class AppState: ObservableObject {
                     reason: denialReason
                 )
             }
+            return
+        }
+
+        if h.agentKind == .claudeCode,
+           (normalizedEvent == "permissionrequest" || normalizedEvent == "posttooluse"),
+           isUserQuestionTool {
+            print("[DevIsland] passing Claude user-question \(h.event) without notification: \(h.toolName)")
+            respondWithReplay(
+                "{\"response\": \"pass\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
+                toolName: replayToolName,
+                workspaceRoot: h.workspaceRoot,
+                action: .prompt,
+                source: .automatic,
+                reason: "Claude user question follow-up passthrough"
+            )
             return
         }
 
@@ -793,6 +822,8 @@ class AppState: ObservableObject {
                         self.currentToolName = ""
                         self.currentEventName = ""
                         self.currentMessage = ""
+                        self.currentClaudeQuestion = nil
+                        self.currentClaudeQuestionAnswers = [:]
                         self.showNextRequest()
                     }
                 }
@@ -928,9 +959,26 @@ class AppState: ObservableObject {
             workspaceRoot: h.workspaceRoot,
             isReplay: h.isReplayPayload,
             message: h.displayMsg,
+            claudeQuestion: claudeQuestion,
             responseHandler: responseHandler,
             receivedAt: Date()
         )
+
+        if isClaudeQuestionRequest {
+            enqueueManualRequest(
+                request,
+                terminalTitle: h.terminalTitle,
+                terminalApp: h.terminalApp,
+                terminalTTY: h.terminalTTY,
+                terminalWindowId: h.terminalWindowId,
+                terminalTabIndex: h.terminalTabIndex,
+                terminalTmuxPane: h.terminalTmuxPane,
+                terminalTmuxSocket: h.terminalTmuxSocket,
+                terminalTmuxClient: h.terminalTmuxClient,
+                cespCategory: cespCategory
+            )
+            return
+        }
 
         // [디자인 결정] 툴 필터링 및 자동 승인 전략
         // -------------------------------------------------------------------
@@ -1166,6 +1214,65 @@ class AppState: ObservableObject {
         }
     }
 
+    private func enqueueManualRequest(
+        _ request: PendingRequest,
+        terminalTitle: String,
+        terminalApp: String,
+        terminalTTY: String,
+        terminalWindowId: String,
+        terminalTabIndex: String,
+        terminalTmuxPane: String,
+        terminalTmuxSocket: String,
+        terminalTmuxClient: String,
+        cespCategory: CESPCategory?
+    ) {
+        let newItem = PendingItem(
+            id: request.id,
+            toolName: request.toolName,
+            message: request.message,
+            sessionId: request.sessionId,
+            terminalTitle: terminalTitle,
+            terminalWindowId: terminalWindowId,
+            terminalTabIndex: terminalTabIndex,
+            terminalTmuxPane: terminalTmuxPane,
+            terminalTmuxSocket: terminalTmuxSocket,
+            terminalTmuxClient: terminalTmuxClient,
+            receivedAt: request.receivedAt
+        )
+        sessionStore.appendPending(request: request, item: newItem)
+        playOpenPeonSound(cespCategory)
+
+        if !request.sessionId.isEmpty {
+            let isLifecycleTracked = sessionStore.activeSessions.first { $0.id == request.sessionId }?.isLifecycleTracked
+                ?? (request.agentKind != .claudeCode)
+            sessionStore.updateActiveSession(
+                sessionId: request.sessionId,
+                terminalTitle: terminalTitle,
+                agentKind: request.agentKind,
+                terminalApp: terminalApp,
+                terminalTTY: terminalTTY,
+                terminalWindowId: terminalWindowId,
+                terminalTabIndex: terminalTabIndex,
+                terminalTmuxPane: terminalTmuxPane,
+                terminalTmuxSocket: terminalTmuxSocket,
+                terminalTmuxClient: terminalTmuxClient,
+                toolName: request.toolName,
+                eventName: request.eventName,
+                message: request.message,
+                isPending: true,
+                isLifecycleTracked: isLifecycleTracked
+            )
+
+            sessionStore.selectedSessionId = request.sessionId
+        }
+
+        if currentResponseHandler == nil {
+            showNextRequest()
+        } else {
+            syncDisplayToSelectedSession()
+        }
+    }
+
     private static func isApprovalEvent(_ normalizedEvent: String, for agentKind: BuddyKind) -> Bool {
         HookEventNormalizer.isApprovalEvent(normalizedEvent, for: agentKind)
     }
@@ -1213,6 +1320,8 @@ class AppState: ObservableObject {
                 self.currentToolName = ""
                 self.currentEventName = ""
                 self.currentMessage = ""
+                self.currentClaudeQuestion = nil
+                self.currentClaudeQuestionAnswers = [:]
             }
 
             if self.sessionStore.pendingQueue.isEmpty {
@@ -1243,6 +1352,8 @@ class AppState: ObservableObject {
             currentWorkspaceRoot = nil
             currentHookEventId = nil
             currentMessage = ""
+            currentClaudeQuestion = nil
+            currentClaudeQuestionAnswers = [:]
             currentSessionId = ""
             if let prev = previousSessionId {
                 previousSessionId = nil
@@ -1268,7 +1379,7 @@ class AppState: ObservableObject {
             guard let self else { return }
             guard self.showingRequestId == next.id else { return }
 
-            if isFrontmost && !next.isReplay {
+            if isFrontmost && !next.isReplay && next.claudeQuestion == nil {
                 print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
                 self.currentResponseHandler = next.responseHandler
                 self.currentSessionId = next.sessionId
@@ -1293,6 +1404,8 @@ class AppState: ObservableObject {
             self.currentWorkspaceRoot = next.workspaceRoot
             self.currentHookEventId = next.hookEventId
             self.currentMessage    = next.message
+            self.currentClaudeQuestion = next.claudeQuestion
+            self.currentClaudeQuestionAnswers = next.claudeQuestion.map(Self.defaultAnswers(for:)) ?? [:]
             self.currentSessionId  = next.sessionId
 
             self.isExpandingFromRequest = true
@@ -1351,8 +1464,26 @@ class AppState: ObservableObject {
     }
 
     private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
+        if request.claudeQuestion != nil {
+            return request.agentKind == .claudeCode &&
+                HookEventNormalizer.normalizedName(request.eventName) == "pretooluse" &&
+                HookEventNormalizer.isUserQuestionTool(request.rawToolName)
+        }
         return Self.isApprovalEvent(HookEventNormalizer.normalizedName(request.eventName), for: request.agentKind)
             && (!request.toolName.isEmpty || !request.message.isEmpty)
+    }
+
+    private static func defaultAnswers(for request: ClaudeQuestionRequest) -> [String: ClaudeQuestionAnswer] {
+        var answers: [String: ClaudeQuestionAnswer] = [:]
+        for question in request.questions {
+            var answer = ClaudeQuestionAnswer()
+            if !question.allowsMultipleSelection, !question.allowsTextInput,
+               let firstOption = question.options.first {
+                answer.selectedOptionIds = [firstOption.id]
+            }
+            answers[question.id] = answer
+        }
+        return answers
     }
 
     private func recordReplayHookEvent(
@@ -1621,7 +1752,8 @@ class AppState: ObservableObject {
         reason: String? = nil,
         status: SessionStatus? = nil,
         passToTerminal: Bool = false,
-        approvalScope: RuleScope? = nil
+        approvalScope: RuleScope? = nil,
+        toolInput: [String: AnyJSON]? = nil
     ) {
         let response = passToTerminal ? "pass" : approved ? "approved" : "denied"
         var responsePayload: [String: Any] = ["response": response]
@@ -1630,6 +1762,9 @@ class AppState: ObservableObject {
         }
         if let approvalScope {
             responsePayload["approval_scope"] = approvalScope.rawValue
+        }
+        if let toolInput {
+            responsePayload["tool_input"] = toolInput.mapValues { $0.rawValue }
         }
         let data = try? JSONSerialization.data(withJSONObject: responsePayload)
         let payload = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"response\":\"\(response)\"}"
@@ -1649,6 +1784,8 @@ class AppState: ObservableObject {
         persistApprovalScope(approved: approved, approvalScope: approvalScope)
         currentResponseHandler = nil
         currentHookEventId = nil
+        currentClaudeQuestion = nil
+        currentClaudeQuestionAnswers = [:]
         isShowingRequest = false
         showingRequestId = nil
         timeoutTimer?.invalidate()
@@ -1782,6 +1919,53 @@ class AppState: ObservableObject {
         
         let approvalScope: RuleScope? = sessionAlways ? .session : globalAlways ? .persistent : nil
         sendDecision(approved: true, approvalScope: approvalScope)
+    }
+
+    func setClaudeQuestionOption(questionId: String, optionId: String) {
+        guard let question = currentClaudeQuestion?.questions.first(where: { $0.id == questionId }) else { return }
+        var answer = currentClaudeQuestionAnswers[questionId] ?? ClaudeQuestionAnswer()
+        if !question.allowsMultipleSelection {
+            answer.usesCustomText = false
+        }
+        if question.allowsMultipleSelection {
+            if answer.selectedOptionIds.contains(optionId) {
+                answer.selectedOptionIds.remove(optionId)
+            } else {
+                answer.selectedOptionIds.insert(optionId)
+            }
+        } else {
+            answer.selectedOptionIds = [optionId]
+        }
+        currentClaudeQuestionAnswers[questionId] = answer
+    }
+
+    func setClaudeQuestionCustomAnswerEnabled(questionId: String, isEnabled: Bool) {
+        guard let question = currentClaudeQuestion?.questions.first(where: { $0.id == questionId }) else { return }
+        var answer = currentClaudeQuestionAnswers[questionId] ?? ClaudeQuestionAnswer()
+        answer.usesCustomText = isEnabled
+        if isEnabled && !question.allowsMultipleSelection {
+            answer.selectedOptionIds = []
+        }
+        currentClaudeQuestionAnswers[questionId] = answer
+    }
+
+    func setClaudeQuestionText(questionId: String, text: String) {
+        var answer = currentClaudeQuestionAnswers[questionId] ?? ClaudeQuestionAnswer()
+        answer.text = text
+        currentClaudeQuestionAnswers[questionId] = answer
+    }
+
+    func canSubmitClaudeQuestion() -> Bool {
+        guard let questionRequest = currentClaudeQuestion else { return false }
+        return questionRequest.updatedInput(answers: currentClaudeQuestionAnswers) != nil
+    }
+
+    func submitClaudeQuestion() {
+        guard let questionRequest = currentClaudeQuestion,
+              let updatedInput = questionRequest.updatedInput(answers: currentClaudeQuestionAnswers) else {
+            return
+        }
+        sendDecision(approved: true, toolInput: updatedInput)
     }
 
     func deny() {
@@ -1971,6 +2155,8 @@ class AppState: ObservableObject {
                 currentMessage = ""
                 currentToolName = ""
                 currentEventName = ""
+                currentClaudeQuestion = nil
+                currentClaudeQuestionAnswers = [:]
                 showSessionDetail(prev)
             } else {
                 showNextRequest()

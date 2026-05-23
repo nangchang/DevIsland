@@ -155,6 +155,45 @@ final class ProviderAdapterTests: XCTestCase {
         XCTAssertEqual(answers?["q1"] as? String, "Yes")
     }
 
+    func testRichResponseUsesSubmittedQuestionAnswersForProviderOutput() throws {
+        let rawResponse = """
+        {
+            "response": "approved",
+            "tool_input": {
+                "questions": [
+                    {
+                        "question": "Which framework?",
+                        "options": [
+                            { "label": "SwiftUI" },
+                            { "label": "AppKit" }
+                        ]
+                    }
+                ],
+                "answers": {
+                    "Which framework?": "SwiftUI"
+                }
+            }
+        }
+        """
+
+        let rich = AppState.richResponseString(
+            fromLegacyResponse: rawResponse,
+            requestId: "question-request",
+            source: "claude",
+            event: "PreToolUse",
+            toolName: "AskUserQuestion"
+        )
+        let data = try XCTUnwrap(rich.data(using: .utf8))
+        let decoded = try JSONDecoder().decode(IPCRichResponse.self, from: data)
+        let hookOutput = decoded.providerOutput?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        let updatedInput = hookOutput?["updatedInput"] as? [String: Any]
+        let answers = updatedInput?["answers"] as? [String: Any]
+
+        XCTAssertEqual(hookOutput?["hookEventName"] as? String, "PreToolUse")
+        XCTAssertEqual(hookOutput?["permissionDecision"] as? String, "allow")
+        XCTAssertEqual(answers?["Which framework?"] as? String, "SwiftUI")
+    }
+
     func testClaudeExitPlanModePreToolUseReturnsUpdatedInput() {
         let output = ProviderAdapter.providerOutput(
             decision: "approved",

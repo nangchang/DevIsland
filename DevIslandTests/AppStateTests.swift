@@ -121,6 +121,55 @@ final class AppStateTests: XCTestCase {
         wait(for: [expectation], timeout: 2.0)
     }
 
+    func testClaudeAskUserQuestionQueuesStructuredReply() {
+        let expectation = XCTestExpectation(description: "Question response")
+        let message = """
+        {
+            "hook_event_name": "PreToolUse",
+            "session_id": "claude-question-session",
+            "cli_source": "claude",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "question": "Which framework?",
+                        "options": [
+                            { "label": "SwiftUI" },
+                            { "label": "AppKit" }
+                        ]
+                    }
+                ]
+            }
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            let toolInput = json?["tool_input"] as? [String: Any]
+            let answers = toolInput?["answers"] as? [String: Any]
+            XCTAssertEqual(answers?["Which framework?"] as? String, "AppKit")
+            expectation.fulfill()
+        }
+
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertNotNil(appState.currentClaudeQuestion)
+
+        guard let question = appState.currentClaudeQuestion?.questions.first,
+              let appKit = question.options.last else {
+            XCTFail("Expected parsed question options")
+            return
+        }
+        appState.setClaudeQuestionOption(questionId: question.id, optionId: appKit.id)
+        appState.submitClaudeQuestion()
+
+        wait(for: [expectation], timeout: 2.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertNil(appState.currentClaudeQuestion)
+    }
+
     func testPendingRequestQueue() {
         let expectation = XCTestExpectation(description: "Response handler called for approval")
         let message = """
@@ -775,8 +824,8 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.currentMessage, "")
     }
 
-    func testClaudeAskUserQuestionPreToolUsePassesToNativePrompt() {
-        let expectation = XCTestExpectation(description: "Claude AskUserQuestion passes through")
+    func testClaudeAskUserQuestionPreToolUseQueuesStructuredReply() {
+        let expectation = XCTestExpectation(description: "Claude AskUserQuestion submits updated input")
         let message = """
         {
             "hook_event_name": "PreToolUse",
@@ -793,11 +842,28 @@ final class AppStateTests: XCTestCase {
 
         appState.handleMessage(message) { response in
             let json = self.parseResponse(response)
-            XCTAssertEqual(json?["response"] as? String, "pass")
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            let toolInput = json?["tool_input"] as? [String: Any]
+            let answers = toolInput?["answers"] as? [String: Any]
+            XCTAssertEqual(answers?["Proceed?"] as? String, "Yes")
+            XCTAssertNil(answers?["q1"])
             expectation.fulfill()
         }
 
-        wait(for: [expectation], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
+        var answer = ClaudeQuestionAnswer()
+        answer.text = "Yes"
+        guard let questionId = appState.currentClaudeQuestion?.questions.first?.id else {
+            XCTFail("Expected current Claude question")
+            return
+        }
+        appState.currentClaudeQuestionAnswers[questionId] = answer
+        appState.submitClaudeQuestion()
+
+        wait(for: [expectation], timeout: 2.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
     }
@@ -825,8 +891,135 @@ final class AppStateTests: XCTestCase {
         }
 
         wait(for: [expectation], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
         XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertNil(appState.currentClaudeQuestion)
+        XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "claude-question-permission" }))
+        XCTAssertFalse(appState.isNotchExpanded)
+        XCTAssertEqual(appState.currentMessage, "")
+    }
+
+    func testClaudeAskUserQuestionPermissionRequestDoesNotReplaceQueuedQuestion() {
+        let preToolExpectation = XCTestExpectation(description: "Claude AskUserQuestion queues structured reply")
+        let permissionExpectation = XCTestExpectation(description: "Claude AskUserQuestion PermissionRequest passes through quietly")
+        let preToolMessage = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "claude",
+            "session_id": "claude-question-duplicate",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {"id": "q1", "prompt": "Choose the first option?"}
+                ]
+            }
+        }
+        """
+        let permissionMessage = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "cli_source": "claude",
+            "session_id": "claude-question-duplicate",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {"id": "q1", "prompt": "This should not replace the visible question"}
+                ]
+            }
+        }
+        """
+
+        appState.handleMessage(preToolMessage) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            preToolExpectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
+        XCTAssertEqual(appState.currentEventName, "PreToolUse")
+        XCTAssertTrue(appState.currentMessage.contains("Choose the first option?"))
+        XCTAssertEqual(appState.currentClaudeQuestion?.questions.first?.prompt, "Choose the first option?")
+
+        appState.handleMessage(permissionMessage) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "pass")
+            permissionExpectation.fulfill()
+        }
+        wait(for: [permissionExpectation], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
+        XCTAssertEqual(appState.currentEventName, "PreToolUse")
+        XCTAssertTrue(appState.currentMessage.contains("Choose the first option?"))
+        XCTAssertFalse(appState.currentMessage.contains("This should not replace"))
+        XCTAssertEqual(appState.currentClaudeQuestion?.questions.first?.prompt, "Choose the first option?")
+
+        guard let questionId = appState.currentClaudeQuestion?.questions.first?.id else {
+            XCTFail("Expected queued Claude question")
+            return
+        }
+        var answer = ClaudeQuestionAnswer()
+        answer.text = "Yes"
+        appState.currentClaudeQuestionAnswers[questionId] = answer
+        appState.submitClaudeQuestion()
+
+        wait(for: [preToolExpectation], timeout: 1.0)
+    }
+
+    func testClaudeAskUserQuestionPreservesExistingSessionTracking() {
+        let sessionId = "claude-question-existing-session"
+        let startExpectation = XCTestExpectation(description: "Claude session start")
+        let questionExpectation = XCTestExpectation(description: "Claude question response")
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SessionStart","cli_source":"claude","session_id":"\(sessionId)"}
+            """
+        ) { _ in startExpectation.fulfill() }
+        wait(for: [startExpectation], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertTrue(appState.sessionStore.activeSessions.first { $0.id == sessionId }?.isLifecycleTracked ?? false)
+
+        appState.handleMessage(
+            """
+            {
+                "hook_event_name": "PreToolUse",
+                "cli_source": "claude",
+                "session_id": "\(sessionId)",
+                "tool_name": "AskUserQuestion",
+                "tool_input": {
+                    "questions": [
+                        {"question": "Proceed?"}
+                    ]
+                }
+            }
+            """
+        ) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            questionExpectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.sessionStore.activeSessions.first { $0.id == sessionId }?.isLifecycleTracked ?? false)
+
+        guard let questionId = appState.currentClaudeQuestion?.questions.first?.id else {
+            XCTFail("Expected queued Claude question")
+            return
+        }
+        var answer = ClaudeQuestionAnswer()
+        answer.text = "Yes"
+        appState.currentClaudeQuestionAnswers[questionId] = answer
+        appState.submitClaudeQuestion()
+
+        wait(for: [questionExpectation], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == sessionId }))
     }
 
     func testClaudeAskUserQuestionPostToolUseWithAnswersPassesThrough() {
@@ -860,8 +1053,13 @@ final class AppStateTests: XCTestCase {
         }
 
         wait(for: [expectation], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
         XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertNil(appState.currentClaudeQuestion)
+        XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "claude-question-answered" }))
+        XCTAssertFalse(appState.isNotchExpanded)
+        XCTAssertEqual(appState.currentMessage, "")
     }
 
     func testClaudeAskUserQuestionPassDoesNotBecomeAllowProviderOutput() {

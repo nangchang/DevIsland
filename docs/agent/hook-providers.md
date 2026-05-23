@@ -28,6 +28,8 @@ Claude Code may block security-sensitive operations in Auto Mode before DevIslan
 
 DevIsland uses `PermissionRequest` for standard tool approval. `PostToolUse` is audit/replay tracking for successful tool completion, and `PostToolUseFailure` is the failure signal used for error sound feedback. Claude `PreToolUse` is mostly status tracking, but selected tools such as `AskUserQuestion` and `ExitPlanMode` can return Claude-specific hook output to preserve or update tool input.
 
+`AskUserQuestion` is handled directly in the DevIsland notch UI when possible. The app supports single-choice questions, multi-select questions, multiple questions in one payload, and free-form text questions. Option questions also offer an "Other" path so users can submit a custom text answer. Submitted answers are returned through Claude `PreToolUse` output as `updatedInput`, preserving the original `questions` payload and adding an `answers` object. Follow-up `PermissionRequest` and `PostToolUse` events for the same user-question tools are passed through without a second notification.
+
 Approval output:
 
 ```json

@@ -27,6 +27,11 @@ final class AnyJSONTests: XCTestCase {
         XCTAssertEqual(raw?["a"] as? Bool, true)
         XCTAssertEqual(raw?["b"] as? Int, 2)
     }
+
+    func testArrayConversionFailsWhenAnyElementIsUnsupported() {
+        let value = AnyJSON.value(from: ["ok", Date()] as [Any])
+        XCTAssertNil(value)
+    }
 }
 
 // MARK: - IPCEnvelope Tests

@@ -56,6 +56,43 @@ enum AnyJSON: Codable, Equatable {
         case .object(let v):  return v.mapValues { $0.rawValue }
         }
     }
+
+    static func value(from rawValue: Any) -> AnyJSON? {
+        switch rawValue {
+        case _ as NSNull:
+            return .null
+        case let value as Bool:
+            return .bool(value)
+        case let value as Int:
+            return .int(value)
+        case let value as Double:
+            return .double(value)
+        case let value as NSNumber:
+            return .double(value.doubleValue)
+        case let value as String:
+            return .string(value)
+        case let value as [Any]:
+            var output: [AnyJSON] = []
+            for item in value {
+                guard let json = AnyJSON.value(from: item) else { return nil }
+                output.append(json)
+            }
+            return .array(output)
+        case let value as [String: Any]:
+            return AnyJSON.object(from: value).map { .object($0) }
+        default:
+            return nil
+        }
+    }
+
+    static func object(from rawObject: [String: Any]) -> [String: AnyJSON]? {
+        var output: [String: AnyJSON] = [:]
+        for (key, value) in rawObject {
+            guard let json = AnyJSON.value(from: value) else { return nil }
+            output[key] = json
+        }
+        return output
+    }
 }
 
 // MARK: - IPC Envelope (bridge → app)

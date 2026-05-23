@@ -58,6 +58,11 @@ private struct NotchAppearanceSnapshot: Equatable {
     let shadowEnabled: Bool
 }
 
+private final class NotchPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 class NotchWindowController: NSWindowController {
     private var cancellables = Set<AnyCancellable>()
     private var pendingSettle: DispatchWorkItem?
@@ -76,7 +81,7 @@ class NotchWindowController: NSWindowController {
     private var expandedPanel: NSPanel!
 
     convenience init() {
-        let collapsedPanel = NSPanel(
+        let collapsedPanel = NotchPanel(
             contentRect: NSRect(origin: .zero, size: NotchLayout.windowSize(expanded: false, settings: SettingsStore.shared.settings)),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
@@ -94,7 +99,7 @@ class NotchWindowController: NSWindowController {
         collapsedPanel.animationBehavior = .none
         collapsedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
 
-        let expandedPanel = NSPanel(
+        let expandedPanel = NotchPanel(
             contentRect: NSRect(origin: .zero, size: NotchLayout.windowSize(expanded: true, settings: SettingsStore.shared.settings)),
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
@@ -162,6 +167,14 @@ class NotchWindowController: NSWindowController {
                 // 만약 현재 요청을 보여주는 중이라면 새로운 설정에 맞춰 화면을 이동시킨다.
                 let override = AppState.shared.isNotchExpanded ? Self.requestTargetScreen() : nil
                 self?.updateWindowFrame(animate: false, targetScreenOverride: override)
+            }
+            .store(in: &cancellables)
+
+        AppState.shared.$currentClaudeQuestion
+            .receive(on: RunLoop.main)
+            .sink { [weak self] question in
+                guard question != nil, AppState.shared.isNotchExpanded else { return }
+                self?.focusExpandedPanelForTextInput()
             }
             .store(in: &cancellables)
 
@@ -316,6 +329,7 @@ class NotchWindowController: NSWindowController {
             }
             
             expandedPanel.orderFrontRegardless()
+            focusExpandedPanelForTextInput()
 
             if usesTransparentPanel {
                 window?.orderOut(nil)
@@ -353,6 +367,11 @@ class NotchWindowController: NSWindowController {
                 DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration, execute: work)
             }
         }
+    }
+
+    private func focusExpandedPanelForTextInput() {
+        guard AppState.shared.currentClaudeQuestion != nil else { return }
+        expandedPanel.makeKey()
     }
 
     func updateWindowFrame(animate: Bool = true, sizeOverride: NSSize? = nil, targetScreenOverride: NSScreen? = nil) {
