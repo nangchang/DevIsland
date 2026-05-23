@@ -90,7 +90,8 @@ enum ToolMessageFormatter {
             case "shell":
                 return input["command"] as? String ?? ""
             case "apply_patch":
-                if let patch = input["patch"] as? String {
+                if let patch = input["patch"] as? String,
+                   !patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     return joinedMessageLines([
                         input["path"] as? String,
                         "```diff\n\(patch)\n```"
