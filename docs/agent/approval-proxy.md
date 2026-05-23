@@ -126,12 +126,3 @@ PRAGMAs: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`
 | `/tmp/DevIsland.log` | App (LaunchAgent mode) | General app stdout |
 | `/tmp/DevIsland.error.log` | App (LaunchAgent mode) | App stderr and crash output |
 
-## Known Gaps
-
-| # | Location | Description |
-|---|---|---|
-| 1 | `ApprovalPolicyEngine.swift` | ~~Only exact tool-name matching~~ **Done** — Glob, Regex, commandPrefix, pathPrefix matching implemented; strict priority (persistent deny > session deny > persistent allow > session allow) enforced (PR #149) |
-| 2 | `ProviderAdapter.swift` | ~~`GeminiPromptPolicy.swift` does not exist~~ **Done** — `GeminiPromptPolicy` and `GeminiSessionState` are implemented |
-| 3 | `AppState.swift` | ~~Large class; `GeminiSessionState` not extracted~~ **Partially done** — `GeminiSessionState`, `SessionStore`, `PTYSessionBuffer`, `ReplayRecorder` extracted. `HookEventHandler` (JSON parsing + event classification) extraction still pending (issue #147) |
-| 4 | `HookSocketServer.swift` | ~~No retry UX~~ **Done** — `onServerFailed` now passes the `Error`; AppState shows a Retry/Exit dialog instead of force-quitting (PR #146) |
-| 5 | `SessionTypes.swift` / `NotchView.swift` | Sub-agent session tracking implemented — `parentSessionId` in `ActiveSession`, grouped list UI, vertical accent bar for child rows. Sub-agent audio distinction (`CESPCategory.subAgentAction`) not yet done (PR #150) |
