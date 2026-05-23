@@ -584,6 +584,7 @@ class AppState: ObservableObject {
                             message: displayMsg,
                             isPending: false,
                             isLifecycleTracked: true,
+                            isSubAgentSession: true,
                             parentSessionId: pid
                         )
                     }

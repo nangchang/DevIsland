@@ -593,18 +593,30 @@ struct NotchView: View {
 
     private var groupedSessions: [(session: ActiveSession, isSubAgent: Bool)] {
         let all = sessionStore.activeSessions
-        let parents = all.filter { $0.parentSessionId == nil }
+        guard !all.isEmpty else { return [] }
+
+        var childrenByParent: [String: [ActiveSession]] = [:]
+        var parents: [ActiveSession] = []
+        for session in all {
+            if let pid = session.parentSessionId {
+                childrenByParent[pid, default: []].append(session)
+            } else {
+                parents.append(session)
+            }
+        }
+
         var result: [(ActiveSession, Bool)] = []
+        var accountedIds = Set<String>()
         for parent in parents {
             result.append((parent, false))
-            let children = all.filter { $0.parentSessionId == parent.id }
-            for child in children {
+            accountedIds.insert(parent.id)
+            for child in childrenByParent[parent.id] ?? [] {
                 result.append((child, true))
+                accountedIds.insert(child.id)
             }
         }
         // Orphaned sub-agents (parent already removed from list)
-        let accounted = Set(result.map { $0.0.id })
-        for session in all where !accounted.contains(session.id) {
+        for session in all where !accountedIds.contains(session.id) {
             result.append((session, session.parentSessionId != nil))
         }
         return result
