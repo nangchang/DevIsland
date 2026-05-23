@@ -2055,6 +2055,11 @@ class AppState: ObservableObject {
                 currentMessage = ""
                 currentToolName = ""
                 currentEventName = ""
+                if sessionStore.pendingQueue.isEmpty {
+                    isNotchExpanded = false
+                } else {
+                    showNextRequest()
+                }
             }
         } else {
             isNotchExpanded = false
