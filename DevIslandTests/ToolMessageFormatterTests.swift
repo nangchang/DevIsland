@@ -216,4 +216,256 @@ final class ToolMessageFormatterTests: XCTestCase {
 
         XCTAssertEqual(message, "Actual assistant response")
     }
+
+    // MARK: - UserPromptSubmit
+
+    func testFormatsUserPromptSubmitEvent() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "",
+            toolInput: nil,
+            json: ["prompt": "What is Swift?"],
+            eventName: "UserPromptSubmit"
+        )
+
+        XCTAssertEqual(message, "What is Swift?")
+    }
+
+    // MARK: - multiSelect
+
+    func testMultiSelectQuestionIncludesLabel() {
+        let input: [String: Any] = [
+            "question": "Pick all that apply",
+            "options": ["Swift", "Python"],
+            "multiSelect": true
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "AskUserQuestion",
+            toolInput: input,
+            json: ["hook_event_name": "PreToolUse"],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertTrue(message.contains("Multiple selections allowed"))
+    }
+
+    // MARK: - PostToolUse fallback
+
+    func testPostToolFallsBackToCompleted() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "shell",
+            toolInput: nil,
+            json: [
+                "hook_event_name": "PostToolUse",
+                "tool_name": "shell"
+            ],
+            eventName: "PostToolUse"
+        )
+
+        XCTAssertEqual(message, "Completed")
+    }
+
+    // MARK: - Claude Code 도구별 포맷팅
+
+    func testFormatsBashCommand() {
+        let input: [String: Any] = [
+            "description": "List files",
+            "command": "ls -la"
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "bash",
+            toolInput: input,
+            json: [:],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertEqual(message, "List files\n\nls -la")
+    }
+
+    func testFormatsWriteCommand() {
+        let input: [String: Any] = [
+            "file_path": "/tmp/test.swift",
+            "content": "let x = 42"
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "write",
+            toolInput: input,
+            json: [:],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertEqual(message, "/tmp/test.swift\n\nlet x = 42")
+    }
+
+    func testFormatsEditCommand() {
+        let input: [String: Any] = [
+            "file_path": "/tmp/test.swift",
+            "old_string": "let x = 0",
+            "new_string": "let x = 42"
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "edit",
+            toolInput: input,
+            json: [:],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertTrue(message.contains("/tmp/test.swift"))
+        XCTAssertTrue(message.contains("old:\nlet x = 0"))
+        XCTAssertTrue(message.contains("new:\nlet x = 42"))
+    }
+
+    func testFormatsReadCommand() {
+        let input: [String: Any] = [
+            "file_path": "/tmp/test.swift",
+            "offset": 10,
+            "limit": 50
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "read",
+            toolInput: input,
+            json: [:],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertTrue(message.contains("/tmp/test.swift"))
+        XCTAssertTrue(message.contains("offset: 10"))
+        XCTAssertTrue(message.contains("limit: 50"))
+    }
+
+    func testFormatsReadWithoutOffsetLimit() {
+        let input: [String: Any] = ["file_path": "/tmp/test.swift"]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "read",
+            toolInput: input,
+            json: [:],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertEqual(message, "/tmp/test.swift")
+    }
+
+    func testFormatsWebfetchCommand() {
+        let input: [String: Any] = [
+            "url": "https://example.com",
+            "prompt": "Summarize this page"
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "webfetch",
+            toolInput: input,
+            json: [:],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertEqual(message, "https://example.com\n\nSummarize this page")
+    }
+
+    // MARK: - Codex 도구별 포맷팅
+
+    func testFormatsCodexShellCommand() {
+        let input: [String: Any] = ["command": "git log --oneline"]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "shell",
+            toolInput: input,
+            json: [:],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertEqual(message, "git log --oneline")
+    }
+
+    func testFormatsApplyPatch() {
+        let input: [String: Any] = [
+            "path": "src/main.py",
+            "patch": "- old line\n+ new line"
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "apply_patch",
+            toolInput: input,
+            json: [:],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertTrue(message.contains("src/main.py"))
+        XCTAssertTrue(message.contains("- old line\n+ new line"))
+    }
+
+    // MARK: - json 폴백 분기
+
+    func testFormatsJsonMessageFallback() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: ["message": "Processing complete"],
+            eventName: "SomeEvent"
+        )
+
+        XCTAssertEqual(message, "Processing complete")
+    }
+
+    func testFormatsPermissionSuggestions() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "",
+            toolInput: nil,
+            json: [
+                "permission_suggestions": [
+                    ["behavior": "npm install"],
+                    ["behavior": "git commit"]
+                ]
+            ],
+            eventName: "SomeEvent"
+        )
+
+        XCTAssertEqual(message, "Suggested: npm install\nSuggested: git commit")
+    }
+
+    func testReturnsEmptyStringWhenNoData() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: [:],
+            eventName: "SomeEvent"
+        )
+
+        XCTAssertEqual(message, "")
+    }
+
+    // MARK: - 엣지 케이스
+
+    func testEmptyQuestionsArrayFallsBackToTopLevel() {
+        let input: [String: Any] = [
+            "questions": [] as [[String: Any]],
+            "question": "Fallback question"
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "ask_user",
+            toolInput: input,
+            json: ["hook_event_name": "PreToolUse"],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertEqual(message, "Fallback question")
+    }
+
+    func testCaseInsensitiveToolMatching() {
+        let input: [String: Any] = ["command": "echo test"]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "BASH",
+            toolInput: input,
+            json: [:],
+            eventName: "PreToolUse"
+        )
+
+        XCTAssertEqual(message, "echo test")
+    }
 }
