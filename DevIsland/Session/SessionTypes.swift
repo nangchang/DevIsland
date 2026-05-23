@@ -62,6 +62,7 @@ struct ActiveSession: Identifiable, Equatable {
     var lastActiveAt: Date
     var isPending: Bool
     var isLifecycleTracked: Bool
+    var isSubAgentSession: Bool
     var isAutoEditActive: Bool
     var isUnread: Bool
     var status: SessionStatus

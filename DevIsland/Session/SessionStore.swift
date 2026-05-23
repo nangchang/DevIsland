@@ -51,6 +51,7 @@ final class SessionStore: ObservableObject {
         isPending: Bool,
         preserveMessage: Bool = false,
         isLifecycleTracked: Bool = false,
+        isSubAgentSession: Bool = false,
         status: SessionStatus? = nil
     ) {
         if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) {
@@ -74,6 +75,7 @@ final class SessionStore: ObservableObject {
             activeSessions[index].isPending = isPending
             activeSessions[index].status = status ?? (isPending ? .pending : .idle)
             if isLifecycleTracked { activeSessions[index].isLifecycleTracked = true }
+            if isSubAgentSession { activeSessions[index].isSubAgentSession = true }
         } else {
             let session = ActiveSession(
                 id: sessionId,
@@ -93,12 +95,91 @@ final class SessionStore: ObservableObject {
                 lastActiveAt: Date(),
                 isPending: isPending,
                 isLifecycleTracked: isLifecycleTracked,
+                isSubAgentSession: isSubAgentSession,
                 isAutoEditActive: false,
                 isUnread: false,
                 status: status ?? (isPending ? .pending : .idle)
             )
             activeSessions.insert(session, at: 0)
         }
+    }
+
+    /// Removes older Codex sessions that belong to the same terminal identity as a new SessionStart.
+    /// Codex does not emit SessionEnd, so a new start in the same terminal is the best lifecycle boundary.
+    @discardableResult
+    func removeSupersededCodexSessions(
+        newSessionId: String,
+        terminalApp: String,
+        terminalTTY: String,
+        terminalWindowId: String,
+        terminalTabIndex: String,
+        terminalTmuxPane: String,
+        terminalTmuxSocket: String,
+        terminalTmuxClient: String
+    ) -> [String] {
+        let ids = activeSessions
+            .filter { session in
+                session.agentKind == .codex &&
+                    session.id != newSessionId &&
+                    !session.isSubAgentSession &&
+                    Self.sameTerminalIdentity(
+                        session,
+                        terminalApp: terminalApp,
+                        terminalTTY: terminalTTY,
+                        terminalWindowId: terminalWindowId,
+                        terminalTabIndex: terminalTabIndex,
+                        terminalTmuxPane: terminalTmuxPane,
+                        terminalTmuxSocket: terminalTmuxSocket,
+                        terminalTmuxClient: terminalTmuxClient
+                    )
+            }
+            .map(\.id)
+
+        guard !ids.isEmpty else { return [] }
+        ids.forEach { sessionAutoApproveTypes.removeValue(forKey: $0) }
+        activeSessions.removeAll { ids.contains($0.id) }
+        return ids
+    }
+
+    private static func sameTerminalIdentity(
+        _ session: ActiveSession,
+        terminalApp: String,
+        terminalTTY: String,
+        terminalWindowId: String,
+        terminalTabIndex: String,
+        terminalTmuxPane: String,
+        terminalTmuxSocket: String,
+        terminalTmuxClient: String
+    ) -> Bool {
+        if !session.terminalTmuxPane.isEmpty,
+           !terminalTmuxPane.isEmpty,
+           session.terminalTmuxPane == terminalTmuxPane,
+           session.terminalTmuxSocket == terminalTmuxSocket,
+           session.terminalTmuxClient == terminalTmuxClient {
+            return true
+        }
+
+        if !session.terminalTmuxPane.isEmpty || !terminalTmuxPane.isEmpty {
+            return false
+        }
+
+        if !session.terminalTTY.isEmpty,
+           !terminalTTY.isEmpty,
+           session.terminalTTY == terminalTTY {
+            return true
+        }
+
+        if !session.terminalApp.isEmpty,
+           !terminalApp.isEmpty,
+           !session.terminalWindowId.isEmpty,
+           !terminalWindowId.isEmpty,
+           session.terminalApp == terminalApp,
+           session.terminalWindowId == terminalWindowId,
+           session.terminalTabIndex == terminalTabIndex {
+            return true
+        }
+
+        return false
     }
 
     /// Prunes sessions that have been inactive beyond their threshold.

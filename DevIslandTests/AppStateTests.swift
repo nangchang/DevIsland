@@ -1223,6 +1223,132 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.sessionStore.selectedSessionId, "session-b", "selectedSessionId must fall back to remaining session")
     }
 
+    func testCodexSessionStartSupersedesPreviousCodexSessionInSameTTY() {
+        let exp1 = XCTestExpectation(description: "old codex session started")
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SessionStart","source":"startup","cli_source":"codex","session_id":"codex-old","terminal_tty":"/dev/ttys001"}
+            """
+        ) { _ in exp1.fulfill() }
+        wait(for: [exp1], timeout: 1.0)
+
+        let exp2 = XCTestExpectation(description: "new codex session started")
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SessionStart","source":"clear","cli_source":"codex","session_id":"codex-new","terminal_tty":"/dev/ttys001"}
+            """
+        ) { _ in exp2.fulfill() }
+        wait(for: [exp2], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-old" }))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-new" }))
+    }
+
+    func testCodexSessionStartDoesNotSupersedeOtherProvidersOrDifferentTTY() {
+        let claudeExp = XCTestExpectation(description: "claude session started")
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SessionStart","source":"startup","cli_source":"claude","session_id":"claude-parent","terminal_tty":"/dev/ttys001"}
+            """
+        ) { _ in claudeExp.fulfill() }
+        wait(for: [claudeExp], timeout: 1.0)
+
+        let codexExp = XCTestExpectation(description: "codex session on another tty started")
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SessionStart","source":"startup","cli_source":"codex","session_id":"codex-other","terminal_tty":"/dev/ttys002"}
+            """
+        ) { _ in codexExp.fulfill() }
+        wait(for: [codexExp], timeout: 1.0)
+
+        let newExp = XCTestExpectation(description: "nested codex session started")
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SessionStart","source":"startup","cli_source":"codex","session_id":"codex-nested","terminal_tty":"/dev/ttys001"}
+            """
+        ) { _ in newExp.fulfill() }
+        wait(for: [newExp], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "claude-parent" }))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-other" }))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-nested" }))
+    }
+
+    func testCodexSessionStartDoesNotSupersedeSubAgentSession() {
+        appState.sessionStore.updateActiveSession(
+            sessionId: "codex-subagent",
+            terminalTitle: "Terminal",
+            agentKind: .codex,
+            terminalApp: "",
+            terminalTTY: "/dev/ttys001",
+            terminalWindowId: "",
+            terminalTabIndex: "",
+            terminalTmuxPane: "",
+            terminalTmuxSocket: "",
+            terminalTmuxClient: "",
+            toolName: "",
+            eventName: "SessionStart",
+            message: "Session Started",
+            isPending: false,
+            isLifecycleTracked: true,
+            isSubAgentSession: true
+        )
+
+        let exp = XCTestExpectation(description: "main codex session started")
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SessionStart","source":"clear","cli_source":"codex","session_id":"codex-main","terminal_tty":"/dev/ttys001"}
+            """
+        ) { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-subagent" }))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-main" }))
+    }
+
+    func testCodexSessionStartDoesNotSupersedeDifferentTmuxPaneWithSameTTY() {
+        let exp1 = XCTestExpectation(description: "codex tmux pane one started")
+        appState.handleMessage(
+            """
+            {
+                "hook_event_name": "SessionStart",
+                "source": "startup",
+                "cli_source": "codex",
+                "session_id": "codex-pane-one",
+                "terminal_tty": "/dev/ttys001",
+                "terminal_tmux_socket": "/tmp/tmux-501/default",
+                "terminal_tmux_client": "/dev/ttys001",
+                "terminal_tmux_pane": "%1"
+            }
+            """
+        ) { _ in exp1.fulfill() }
+        wait(for: [exp1], timeout: 1.0)
+
+        let exp2 = XCTestExpectation(description: "codex tmux pane two started")
+        appState.handleMessage(
+            """
+            {
+                "hook_event_name": "SessionStart",
+                "source": "startup",
+                "cli_source": "codex",
+                "session_id": "codex-pane-two",
+                "terminal_tty": "/dev/ttys001",
+                "terminal_tmux_socket": "/tmp/tmux-501/default",
+                "terminal_tmux_client": "/dev/ttys001",
+                "terminal_tmux_pane": "%2"
+            }
+            """
+        ) { _ in exp2.fulfill() }
+        wait(for: [exp2], timeout: 1.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-pane-one" }))
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-pane-two" }))
+    }
+
     // MARK: - ReplayRecorder
 
     func testApprovalEventIsRecordedInReplayLog() throws {
