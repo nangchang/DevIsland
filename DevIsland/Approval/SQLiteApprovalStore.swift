@@ -12,7 +12,7 @@ final class SQLiteApprovalStore {
         case unsupportedSchemaVersion(Int32)
     }
 
-    static let currentSchemaVersion: Int32 = 3
+    static let currentSchemaVersion: Int32 = 4
 
     static func deterministicRuleID(
         provider: ProviderKind,
@@ -476,6 +476,7 @@ final class SQLiteApprovalStore {
         try migrateToVersion1()
         if version < 2 { try migrateToVersion2() }
         if version < 3 { try migrateToVersion3() }
+        if version < 4 { try migrateToVersion4() }
         try execute("PRAGMA user_version = \(Self.currentSchemaVersion)")
     }
 
@@ -573,6 +574,34 @@ final class SQLiteApprovalStore {
         try execute("CREATE INDEX IF NOT EXISTS idx_decisions_hook_event_id ON approval_decisions(hook_event_id)")
         try execute("CREATE INDEX IF NOT EXISTS idx_decisions_decided_at ON approval_decisions(decided_at)")
         try execute("CREATE INDEX IF NOT EXISTS idx_pty_messages_created_at ON pty_messages(created_at)")
+    }
+
+    // Seeds built-in allow rules derived from historical approval data.
+    // INSERT OR IGNORE preserves any user-modified rule with the same ID.
+    // UUIDs use the A1B2C3D4-0001- prefix to identify seeded rules at a glance.
+    // created_at = 0 so user-created rules (later timestamps) take priority in deny-first ordering.
+    private func migrateToVersion4() throws {
+        let seed: [(id: String, pattern: String)] = [
+            ("A1B2C3D4-0001-0000-0000-000000000001", "xcodebuild build"),
+            ("A1B2C3D4-0001-0000-0000-000000000002", "xcodebuild test"),
+            ("A1B2C3D4-0001-0000-0000-000000000003", "xcodegen generate"),
+            ("A1B2C3D4-0001-0000-0000-000000000004", "bash scripts/"),
+            ("A1B2C3D4-0001-0000-0000-000000000005", "gh pr"),
+            ("A1B2C3D4-0001-0000-0000-000000000006", "gh issue"),
+            ("A1B2C3D4-0001-0000-0000-000000000007", "screencapture /tmp/"),
+        ]
+        for entry in seed {
+            try execute(
+                """
+                INSERT OR IGNORE INTO rules
+                    (id, provider, tool_name, match_kind, pattern, action, scope,
+                     risk_floor, workspace_root, created_at, expires_at, enabled)
+                VALUES (?, 'any', 'Bash', 'commandPrefix', ?, 'allow', 'persistent',
+                        NULL, NULL, 0, NULL, 1)
+                """,
+                [entry.id, entry.pattern]
+            )
+        }
     }
 
     private func migrateToVersion2() throws {
