@@ -42,8 +42,7 @@ enum ToolMessageFormatter {
             case "edit":
                 return joinedMessageLines([
                     input["file_path"] as? String,
-                    prefixedBlock("old", input["old_string"] as? String),
-                    prefixedBlock("new", input["new_string"] as? String)
+                    diffBlock(old: input["old_string"] as? String, new: input["new_string"] as? String)
                 ])
             case "multiedit":
                 return multiEditMessage(from: input)
@@ -75,8 +74,7 @@ enum ToolMessageFormatter {
                 return joinedMessageLines([
                     input["file_path"] as? String,
                     input["instruction"] as? String,
-                    prefixedBlock("old", input["old_string"] as? String),
-                    prefixedBlock("new", input["new_string"] as? String)
+                    diffBlock(old: input["old_string"] as? String, new: input["new_string"] as? String)
                 ])
             case "grep_search":
                 return joinedMessageLines([
@@ -92,10 +90,14 @@ enum ToolMessageFormatter {
             case "shell":
                 return input["command"] as? String ?? ""
             case "apply_patch":
-                return joinedMessageLines([
-                    input["path"] as? String,
-                    input["patch"] as? String
-                ])
+                if let patch = input["patch"] as? String,
+                   !patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return joinedMessageLines([
+                        input["path"] as? String,
+                        "```diff\n\(patch)\n```"
+                    ])
+                }
+                return input["path"] as? String ?? ""
 
             default:
                 return input.keys.sorted().map { key in
@@ -200,22 +202,17 @@ enum ToolMessageFormatter {
     }
 
     private static func multiEditMessage(from input: [String: Any]) -> String {
-        var lines: [String] = []
+        var parts: [String?] = []
         if let filePath = input["file_path"] as? String {
-            lines.append(filePath)
+            parts.append(filePath)
         }
         if let edits = input["edits"] as? [[String: Any]] {
             for (index, edit) in edits.enumerated() {
-                lines.append("edit \(index + 1)")
-                if let oldBlock = prefixedBlock("old", edit["old_string"] as? String) {
-                    lines.append(oldBlock)
-                }
-                if let newBlock = prefixedBlock("new", edit["new_string"] as? String) {
-                    lines.append(newBlock)
-                }
+                parts.append("Edit \(index + 1)")
+                parts.append(diffBlock(old: edit["old_string"] as? String, new: edit["new_string"] as? String))
             }
         }
-        return joinedMessageLines(lines)
+        return joinedMessageLines(parts)
     }
 
     private static func readMessage(from input: [String: Any]) -> String {
@@ -231,6 +228,22 @@ enum ToolMessageFormatter {
             lines.append(details)
         }
         return joinedMessageLines(lines)
+    }
+
+    private static func diffBlock(old: String?, new: String?) -> String? {
+        var lines: [String] = []
+        if let old, !old.isEmpty {
+            for line in old.components(separatedBy: "\n") {
+                lines.append("- \(line)")
+            }
+        }
+        if let new, !new.isEmpty {
+            for line in new.components(separatedBy: "\n") {
+                lines.append("+ \(line)")
+            }
+        }
+        guard !lines.isEmpty else { return nil }
+        return "```diff\n\(lines.joined(separator: "\n"))\n```"
     }
 
     private static func prefixedBlock(_ label: String, _ value: String?) -> String? {

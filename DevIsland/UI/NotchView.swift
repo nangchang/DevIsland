@@ -418,7 +418,7 @@ struct NotchView: View {
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
                         } else {
-                            MarkdownView(text: state.currentMessage)
+                            DiffAwareMarkdownView(text: state.currentMessage)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
