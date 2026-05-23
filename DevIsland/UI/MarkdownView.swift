@@ -32,7 +32,7 @@ private struct BlockedAttachmentLoader: AttachmentLoader {
         func sizeThatFits(_: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize { .zero }
     }
 
-    func attachment(for _: URL, text _: String, environment _: ColorEnvironmentValues) async throws -> NoAttachment {
-        throw URLError(.unsupportedURL)
+    func attachment(for _: URL, text _: String, environment _: ColorEnvironmentValues) async -> NoAttachment {
+        NoAttachment()
     }
 }
