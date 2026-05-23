@@ -207,7 +207,8 @@ enum ToolMessageFormatter {
             parts.append(filePath)
         }
         if let edits = input["edits"] as? [[String: Any]] {
-            for edit in edits {
+            for (index, edit) in edits.enumerated() {
+                parts.append("Edit \(index + 1)")
                 parts.append(diffBlock(old: edit["old_string"] as? String, new: edit["new_string"] as? String))
             }
         }
