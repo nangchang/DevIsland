@@ -70,6 +70,26 @@ Python 브리지에서 `obj.get("providerOutput") or None` 처리 시 빈 dict�
 `final_output`의 fallback 로직이 실행된다. Swift 응답 형식을 바꿀 때 `devisland_bridge.py`의
 `final_output` 함수도 같이 확인할 것.
 
+## 브랜치 규칙
+
+fix/feature 작업은 항상 브랜치를 생성한 후 PR로 작업한다. main에 직접 커밋하지 말 것.
+
+## Xcode Project
+
+`*.xcodeproj`는 gitignore 대상 — CI와 로컬 모두 XcodeGen으로 생성함.
+빌드 설정 변경은 `project.yml`에서 하고 `xcodegen generate`로 재생성.
+
+새 Swift 파일 추가 시 `project.pbxproj` 수동 편집 금지. `project.yml`의
+`sources: path: DevIsland`가 하위 디렉토리를 재귀 포함하므로
+파일 생성 후 `xcodegen generate`만 실행하면 됨.
+
+빌드 결과 확인 grep: `BUILD SUCCEEDED` / `BUILD FAILED` (대문자, `-quiet` 시 출력 없음).
+
+## 커밋 메시지
+
+커밋 바디는 한국어로 작성하고 변경 이유(Why)에 집중할 것.
+제목(첫 줄)은 영어 conventional commit 형식 유지.
+
 ## Swift SourceKit 진단 오류
 
 `xcode-build-server`를 설정하면 cross-file 참조 오류가 사라진다 (AGENTS.md "One-Time Local Setup" 참고). 설정 전이거나 DerivedData 초기화 후에는 "Cannot find 'AppState' in scope" 류의 오류가 표시될 수 있으나 빌드 오류가 아님 — `xcodebuild build`로 실제 오류 여부 확인.
