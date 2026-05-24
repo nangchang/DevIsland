@@ -578,6 +578,7 @@ class AppState: ObservableObject {
         let isStop = stopEvents.contains(normalizedEvent)
         let isApproval = isClaudeQuestionRequest || (Self.isApprovalEvent(normalizedEvent, for: h.agentKind) && !isUserQuestionTool)
         let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
+        let isCodexStatusOnlyLifecycleEvent = h.agentKind == .codex && (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse")
         let replayToolName = h.toolName.isEmpty ? displayToolName : h.toolName
         let cespCategory = CESPEventMapper.category(
             event: h.event,
@@ -727,7 +728,9 @@ class AppState: ObservableObject {
                 : (response: "approved", action: RuleAction.allow, reason: "notification")
 
             print("[DevIsland] notification event: \(h.event) for \(h.toolName) → \(notification.response)")
-            playOpenPeonSound(cespCategory)
+            if !isCodexStatusOnlyLifecycleEvent {
+                playOpenPeonSound(cespCategory)
+            }
             guard !h.sessionId.isEmpty else {
                 respondWithReplay(
                     "{\"response\": \"\(notification.response)\"}",
@@ -861,8 +864,7 @@ class AppState: ObservableObject {
                 }
 
                 // 알림 확장 로직 (질문이나 작업 완료 시)
-                let isCodexPostToolUse = h.agentKind == .codex && normalizedEvent == "posttooluse"
-                let isInformational = !isCodexPostToolUse && ((normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
+                let isInformational = !isCodexStatusOnlyLifecycleEvent && ((normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
                                      isUserQuestionTool ||
                                      (h.displayMsg.contains("?") && (normalizedEvent == "notification" || h.agentKind != .claudeCode)))
 

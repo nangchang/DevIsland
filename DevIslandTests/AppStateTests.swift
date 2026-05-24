@@ -727,7 +727,7 @@ final class AppStateTests: XCTestCase {
     }
 
     func testOnlySourceSpecificEventsBecomeApprovalRequests() {
-        let codexPreToolExpectation = XCTestExpectation(description: "Codex PreToolUse is notification")
+        let codexPreToolExpectation = XCTestExpectation(description: "Codex PreToolUse is status only")
         let claudeBeforeToolExpectation = XCTestExpectation(description: "Claude BeforeTool is notification")
         let geminiPreToolExpectation = XCTestExpectation(description: "Gemini PreToolUse is notification")
 
@@ -781,6 +781,8 @@ final class AppStateTests: XCTestCase {
         wait(for: [codexPreToolExpectation, claudeBeforeToolExpectation, geminiPreToolExpectation], timeout: 1.0)
         XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertFalse(appState.isNotchExpanded)
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-pretool" }))
     }
 
     func testClaudeToolLifecycleEventsAreStatusNotifications() {
