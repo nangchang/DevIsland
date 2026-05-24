@@ -73,7 +73,7 @@ docs: refresh README
 - `./scripts/run-tests.sh`를 실행했나요?
 - `project.yml` 변경 후 `xcodegen generate`를 실행했나요?
 - 사용자-facing 동작, 설정, 명령이 바뀌었다면 README 또는 `docs/agent/*`를 업데이트했나요?
-- 릴리즈에 포함될 사용자-visible 변경이라면 `CHANGELOG.md` 업데이트가 필요한지 확인했나요?
+- 릴리즈에 포함될 사용자-visible 변경이라면 `CHANGELOG.md`를 업데이트했나요? 릴리즈 워크플로우는 해당 버전 섹션을 GitHub Release 본문으로 사용합니다.
 
 ## 참고 문서
 
