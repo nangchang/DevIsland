@@ -88,6 +88,8 @@ class AppState: ObservableObject {
     @Published var currentClaudeQuestion: ClaudeQuestionRequest?
     @Published var currentClaudeQuestionAnswers: [String: ClaudeQuestionAnswer] = [:]
     @Published var timeoutProgress: Double = 1.0
+    @Published var notificationAutoCollapseProgress: Double = 1.0
+    @Published var isNotificationAutoCollapseActive = false
     @Published var autoApproveSafeTools = false {
         didSet {
             userDefaults.set(autoApproveSafeTools, forKey: DefaultsKey.autoApproveSafeTools)
@@ -437,6 +439,7 @@ class AppState: ObservableObject {
                 self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
             } else {
                 print("[DevIsland] [AUTO] User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "")")
+                self?.stopNotificationAutoCollapseTimer()
                 self?.isNotchExpanded = false
                 self?.isExpandingFromRequest = false
             }
@@ -889,14 +892,9 @@ class AppState: ObservableObject {
                         self.isNotchExpanded = true
                         self.isExpandingFromRequest = true
                         
-                        self.notificationTimer?.invalidate()
+                        self.stopNotificationAutoCollapseTimer()
                         if let delay = self.notificationAutoCollapseDelay {
-                            self.notificationTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-                                if self?.currentResponseHandler == nil && self?.isNotchExpanded == true {
-                                    self?.isNotchExpanded = false
-                                    self?.isExpandingFromRequest = false
-                                }
-                            }
+                            self.startNotificationAutoCollapseTimer(delay: delay)
                         }
                     }
                 }
@@ -1755,6 +1753,38 @@ class AppState: ObservableObject {
         }
     }
 
+    private func startNotificationAutoCollapseTimer(delay: TimeInterval) {
+        stopNotificationAutoCollapseTimer()
+        notificationAutoCollapseProgress = 1.0
+        isNotificationAutoCollapseActive = true
+
+        let interval: Double = 0.1
+        var elapsed: Double = 0
+
+        notificationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            elapsed += interval
+            self.notificationAutoCollapseProgress = max(0, 1.0 - (elapsed / delay))
+
+            guard elapsed >= delay else { return }
+            timer.invalidate()
+            self.notificationTimer = nil
+            self.isNotificationAutoCollapseActive = false
+            self.notificationAutoCollapseProgress = 1.0
+            if self.currentResponseHandler == nil && self.isNotchExpanded {
+                self.isNotchExpanded = false
+                self.isExpandingFromRequest = false
+            }
+        }
+    }
+
+    private func stopNotificationAutoCollapseTimer() {
+        notificationTimer?.invalidate()
+        notificationTimer = nil
+        isNotificationAutoCollapseActive = false
+        notificationAutoCollapseProgress = 1.0
+    }
+
     private func sendDecision(
         approved: Bool,
         reason: String? = nil,
@@ -2154,7 +2184,7 @@ class AppState: ObservableObject {
             if !currentSessionId.isEmpty {
                 sessionStore.setUnread(false, sessionId: currentSessionId)
             }
-            notificationTimer?.invalidate()
+            stopNotificationAutoCollapseTimer()
             if let prev = previousSessionId {
                 previousSessionId = nil
                 currentSessionId = ""
@@ -2169,7 +2199,7 @@ class AppState: ObservableObject {
             }
         } else {
             isNotchExpanded = false
-            notificationTimer?.invalidate()
+            stopNotificationAutoCollapseTimer()
         }
     }
 
@@ -2180,8 +2210,7 @@ class AppState: ObservableObject {
         }
 
         if isExpandingFromRequest {
-            notificationTimer?.invalidate()
-            notificationTimer = nil
+            stopNotificationAutoCollapseTimer()
         }
     }
 
