@@ -96,8 +96,8 @@ class AppState: ObservableObject {
     
     // Durable Rule System:
     // New approvals are persisted to SQLiteApprovalStore via the ApprovalProxyController.
-    // `globalAutoApproveTypes` serves as a fast-path in-memory cache for the current session.
-    // On startup, this set is warmed from SQLite or migrated from legacy UserDefaults keys.
+    // `globalAutoApproveTypes` serves as a fast-path in-memory cache for explicit
+    // whole-tool approvals. Patterned SQLite rules stay in ApprovalPolicyEngine.
     @Published var globalAutoApproveTypes: Set<String> = []
 
     private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
@@ -220,10 +220,6 @@ class AppState: ObservableObject {
                     userDefaults.set(Array(remaining), forKey: DefaultsKey.globalAutoApproveTypes)
                 }
             }
-        } else if let proxy = approvalProxy,
-                  let rules = try? proxy.store.rules(provider: .any, scope: .persistent) {
-            // Warm the in-memory cache from SQLite on startup (no legacy UserDefaults key).
-            globalAutoApproveTypes = Set(rules.map(\.toolName))
         }
         autoApproveSafeTools = userDefaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
         ensureSelectedDisplay()
