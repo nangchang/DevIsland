@@ -105,7 +105,7 @@ Gemini CLI를 `--yolo` 또는 `--auto-approve` 모드로 실행한 뒤 DevIsland
 
 ```bash
 PLIST=~/Library/LaunchAgents/kr.or.nes.DevIsland.plist
-launchctl unload "$PLIST" && rm "$PLIST"
+launchctl unload "$PLIST" 2>/dev/null; rm -f "$PLIST"
 ```
 
 ### OpenPeon CESP 사운드팩
