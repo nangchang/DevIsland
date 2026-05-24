@@ -2254,5 +2254,8 @@ class AppState: ObservableObject {
             tmuxSocket: session?.terminalTmuxSocket,
             tmuxClient: session?.terminalTmuxClient
         )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            self.passIfTerminalFocused()
+        }
     }
 }
