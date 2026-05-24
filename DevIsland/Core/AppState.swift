@@ -2253,9 +2253,10 @@ class AppState: ObservableObject {
             tmuxPane: session?.terminalTmuxPane,
             tmuxSocket: session?.terminalTmuxSocket,
             tmuxClient: session?.terminalTmuxClient
-        )
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            self.passIfTerminalFocused()
+        ) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self?.passIfTerminalFocused()
+            }
         }
     }
 }

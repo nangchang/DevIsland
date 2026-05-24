@@ -376,7 +376,8 @@ class TerminalFocuser {
         tabIndex: String? = nil,
         tmuxPane: String? = nil,
         tmuxSocket: String? = nil,
-        tmuxClient: String? = nil
+        tmuxClient: String? = nil,
+        completion: (() -> Void)? = nil
     ) {
         let targetName = normalizedAppName(appName)
         let match = targetName.flatMap { name in
@@ -398,6 +399,9 @@ class TerminalFocuser {
                 if !switchTmuxClient(socket: tmuxSocket, client: tmuxClient, pane: tmuxPane) {
                     print("[DevIsland] tmux switch failed for pane=\(tmuxPane)")
                 }
+            }
+            DispatchQueue.main.async {
+                completion?()
             }
         }
     }
