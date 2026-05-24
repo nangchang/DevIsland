@@ -22,15 +22,15 @@ gh pr view --json number -q .number
 PR=${ARGUMENTS:-$(gh pr view --json number -q .number)}
 
 echo "=== Inline comments ==="
-gh api "repos/nangchang/DevIsland/pulls/${PR}/comments" \
+gh api "repos/{owner}/{repo}/pulls/${PR}/comments" \
   --jq '.[] | "[inline] \(.user.login) \(.path):\(.line // "?") — \(.body)"'
 
 echo "=== Issue comments ==="
-gh api "repos/nangchang/DevIsland/issues/${PR}/comments" \
+gh api "repos/{owner}/{repo}/issues/${PR}/comments" \
   --jq '.[] | "[comment] \(.user.login): \(.body)"'
 
 echo "=== Reviews ==="
-gh api "repos/nangchang/DevIsland/pulls/${PR}/reviews" \
+gh api "repos/{owner}/{repo}/pulls/${PR}/reviews" \
   --jq '.[] | "[review] \(.user.login) (\(.state)): \(.body)"'
 ```
 

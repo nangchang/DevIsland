@@ -34,7 +34,7 @@ git commit -m "$(cat <<'EOF'
 
 <왜 변경했는지 한국어로>
 
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude <모델-버전> <noreply@anthropic.com>
 EOF
 )"
 ```
