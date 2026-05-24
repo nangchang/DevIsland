@@ -712,6 +712,7 @@ class NotchCollapsedHostingView: NSHostingView<NotchCollapsedView> {
     }
 
     override func mouseDown(with event: NSEvent) {
+        AppState.shared.pauseAutoTimersForUserViewing()
         (window?.windowController as? NotchWindowController)?.expandFromCollapsedWindow()
         super.mouseDown(with: event)
     }
@@ -738,6 +739,7 @@ class NotchHostingView: NSHostingView<NotchView> {
     }
 
     override func mouseDown(with event: NSEvent) {
+        AppState.shared.pauseAutoTimersForUserViewing()
         super.mouseDown(with: event)
     }
 

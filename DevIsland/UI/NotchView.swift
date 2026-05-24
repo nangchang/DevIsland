@@ -428,22 +428,29 @@ struct NotchView: View {
                     }
                     .background(Color.white.opacity(0.04))
                     .cornerRadius(12)
+                    .overlay {
+                        MessageMouseDownMonitor {
+                            state.pauseAutoTimersForUserViewing()
+                        }
+                        .allowsHitTesting(false)
+                    }
                     .padding(.horizontal, 16)
                     .frame(maxHeight: .infinity)
                 }
                 .frame(maxHeight: .infinity)
 
                 VStack(spacing: 12) {
-                    if state.hasResponseHandler {
+                    if state.hasResponseHandler || state.isNotificationAutoCollapseActive {
                         GeometryReader { geo in
+                            let progress = state.hasResponseHandler ? state.timeoutProgress : state.notificationAutoCollapseProgress
                             ZStack(alignment: .leading) {
                                 Capsule()
                                     .fill(Color.white.opacity(0.07))
                                 Capsule()
                                     .fill(
-                                        LinearGradient(colors: [progressColor.opacity(0.8), progressColor], startPoint: .leading, endPoint: .trailing)
+                                        LinearGradient(colors: [progressColor(for: progress).opacity(0.8), progressColor(for: progress)], startPoint: .leading, endPoint: .trailing)
                                     )
-                                    .frame(width: geo.size.width * state.timeoutProgress)
+                                    .frame(width: geo.size.width * progress)
                             }
                         }
                         .frame(height: 4)
@@ -560,6 +567,7 @@ struct NotchView: View {
                     }
                     .padding(.horizontal, 16)
                 }
+                .padding(.top, 12)
                 .padding(.bottom, 20)
             }
             .frame(width: approvalPrimaryColumnWidth, height: approvalLeftColumnHeight)
@@ -653,9 +661,64 @@ struct NotchView: View {
         }
     }
 
-    private var progressColor: Color {
-        if state.timeoutProgress > 0.5  { return .green }
-        if state.timeoutProgress > 0.25 { return .orange }
+    private func progressColor(for progress: Double) -> Color {
+        if progress > 0.5  { return .green }
+        if progress > 0.25 { return .orange }
         return .red
+    }
+}
+
+private struct MessageMouseDownMonitor: NSViewRepresentable {
+    let onMouseDown: () -> Void
+
+    func makeNSView(context: Context) -> MouseDownMonitorView {
+        let view = MouseDownMonitorView()
+        view.onMouseDown = onMouseDown
+        return view
+    }
+
+    func updateNSView(_ nsView: MouseDownMonitorView, context: Context) {
+        nsView.onMouseDown = onMouseDown
+    }
+
+    static func dismantleNSView(_ nsView: MouseDownMonitorView, coordinator: ()) {
+        nsView.removeMonitor()
+    }
+}
+
+private final class MouseDownMonitorView: NSView {
+    var onMouseDown: (() -> Void)?
+    private var monitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            removeMonitor()
+        } else {
+            installMonitorIfNeeded()
+        }
+    }
+
+    func removeMonitor() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+
+    private func installMonitorIfNeeded() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
+            let point = self.convert(event.locationInWindow, from: nil)
+            if self.bounds.contains(point) {
+                self.onMouseDown?()
+            }
+            return event
+        }
+    }
+
+    deinit {
+        removeMonitor()
     }
 }

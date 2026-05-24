@@ -88,6 +88,8 @@ class AppState: ObservableObject {
     @Published var currentClaudeQuestion: ClaudeQuestionRequest?
     @Published var currentClaudeQuestionAnswers: [String: ClaudeQuestionAnswer] = [:]
     @Published var timeoutProgress: Double = 1.0
+    @Published var notificationAutoCollapseProgress: Double = 1.0
+    @Published var isNotificationAutoCollapseActive = false
     @Published var autoApproveSafeTools = false {
         didSet {
             userDefaults.set(autoApproveSafeTools, forKey: DefaultsKey.autoApproveSafeTools)
@@ -437,6 +439,7 @@ class AppState: ObservableObject {
                 self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
             } else {
                 print("[DevIsland] [AUTO] User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "")")
+                self?.stopNotificationAutoCollapseTimer()
                 self?.isNotchExpanded = false
                 self?.isExpandingFromRequest = false
             }
@@ -575,6 +578,7 @@ class AppState: ObservableObject {
         let isStop = stopEvents.contains(normalizedEvent)
         let isApproval = isClaudeQuestionRequest || (Self.isApprovalEvent(normalizedEvent, for: h.agentKind) && !isUserQuestionTool)
         let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
+        let isCodexStatusOnlyLifecycleEvent = h.agentKind == .codex && (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse")
         let replayToolName = h.toolName.isEmpty ? displayToolName : h.toolName
         let cespCategory = CESPEventMapper.category(
             event: h.event,
@@ -724,7 +728,9 @@ class AppState: ObservableObject {
                 : (response: "approved", action: RuleAction.allow, reason: "notification")
 
             print("[DevIsland] notification event: \(h.event) for \(h.toolName) → \(notification.response)")
-            playOpenPeonSound(cespCategory)
+            if !isCodexStatusOnlyLifecycleEvent {
+                playOpenPeonSound(cespCategory)
+            }
             guard !h.sessionId.isEmpty else {
                 respondWithReplay(
                     "{\"response\": \"\(notification.response)\"}",
@@ -858,8 +864,7 @@ class AppState: ObservableObject {
                 }
 
                 // 알림 확장 로직 (질문이나 작업 완료 시)
-                let isCodexPostToolUse = h.agentKind == .codex && normalizedEvent == "posttooluse"
-                let isInformational = !isCodexPostToolUse && ((normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
+                let isInformational = !isCodexStatusOnlyLifecycleEvent && ((normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
                                      isUserQuestionTool ||
                                      (h.displayMsg.contains("?") && (normalizedEvent == "notification" || h.agentKind != .claudeCode)))
 
@@ -889,14 +894,9 @@ class AppState: ObservableObject {
                         self.isNotchExpanded = true
                         self.isExpandingFromRequest = true
                         
-                        self.notificationTimer?.invalidate()
+                        self.stopNotificationAutoCollapseTimer()
                         if let delay = self.notificationAutoCollapseDelay {
-                            self.notificationTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-                                if self?.currentResponseHandler == nil && self?.isNotchExpanded == true {
-                                    self?.isNotchExpanded = false
-                                    self?.isExpandingFromRequest = false
-                                }
-                            }
+                            self.startNotificationAutoCollapseTimer(delay: delay)
                         }
                     }
                 }
@@ -1300,18 +1300,33 @@ class AppState: ObservableObject {
         HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)
     }
 
+    private func recordDismissedSession(sessionId: String, agentKind: BuddyKind, completion: @escaping () -> Void) {
+        guard let approvalProxy else {
+            completion()
+            return
+        }
+        let payloadJSON = ReplayRecorder.payloadString(from: ["session_id": sessionId, "source": "user_dismissed"])
+        approvalPersistenceQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                try approvalProxy.recordHookEvent(
+                    requestId: nil,
+                    provider: self.providerKind(for: agentKind),
+                    sessionId: sessionId,
+                    eventName: "devisland_dismissed",
+                    toolName: "",
+                    payloadJSON: payloadJSON
+                )
+            } catch {
+                print("[DevIsland] [REPLAY] Failed to record dismissed session: \(error)")
+            }
+            DispatchQueue.main.async(execute: completion)
+        }
+    }
 
     func dismissSession(_ sessionId: String) {
         let agentKind = sessionStore.activeSessions.first(where: { $0.id == sessionId })?.agentKind ?? .claudeCode
-        replayRecorder.recordHookEvent(
-            requestId: nil,
-            provider: providerKind(for: agentKind),
-            sessionId: sessionId,
-            eventName: "devisland_dismissed",
-            toolName: "",
-            payload: ["session_id": sessionId, "source": "user_dismissed"]
-        )
-        DispatchQueue.main.async {
+        recordDismissedSession(sessionId: sessionId, agentKind: agentKind) {
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
             self.sessionStore.removeSession(id: sessionId)
@@ -1755,6 +1770,38 @@ class AppState: ObservableObject {
         }
     }
 
+    private func startNotificationAutoCollapseTimer(delay: TimeInterval) {
+        stopNotificationAutoCollapseTimer()
+        notificationAutoCollapseProgress = 1.0
+        isNotificationAutoCollapseActive = true
+
+        let interval: Double = 0.1
+        var elapsed: Double = 0
+
+        notificationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            elapsed += interval
+            self.notificationAutoCollapseProgress = max(0, 1.0 - (elapsed / delay))
+
+            guard elapsed >= delay else { return }
+            timer.invalidate()
+            self.notificationTimer = nil
+            self.isNotificationAutoCollapseActive = false
+            self.notificationAutoCollapseProgress = 1.0
+            if self.currentResponseHandler == nil && self.isNotchExpanded {
+                self.isNotchExpanded = false
+                self.isExpandingFromRequest = false
+            }
+        }
+    }
+
+    private func stopNotificationAutoCollapseTimer() {
+        notificationTimer?.invalidate()
+        notificationTimer = nil
+        isNotificationAutoCollapseActive = false
+        notificationAutoCollapseProgress = 1.0
+    }
+
     private func sendDecision(
         approved: Bool,
         reason: String? = nil,
@@ -2154,7 +2201,7 @@ class AppState: ObservableObject {
             if !currentSessionId.isEmpty {
                 sessionStore.setUnread(false, sessionId: currentSessionId)
             }
-            notificationTimer?.invalidate()
+            stopNotificationAutoCollapseTimer()
             if let prev = previousSessionId {
                 previousSessionId = nil
                 currentSessionId = ""
@@ -2169,12 +2216,27 @@ class AppState: ObservableObject {
             }
         } else {
             isNotchExpanded = false
-            notificationTimer?.invalidate()
+            stopNotificationAutoCollapseTimer()
+        }
+    }
+
+    func pauseAutoTimersForUserViewing() {
+        if currentResponseHandler != nil {
+            timeoutTimer?.invalidate()
+            timeoutTimer = nil
+            timeoutProgress = 1.0
+        }
+
+        if isExpandingFromRequest {
+            stopNotificationAutoCollapseTimer()
         }
     }
 
     func focusTerminal(for sessionId: String? = nil) {
         let targetId = sessionId ?? (currentSessionId.isEmpty ? sessionStore.selectedSessionId : currentSessionId)
+        if let targetId {
+            sessionStore.setUnread(false, sessionId: targetId)
+        }
         let session = targetId.flatMap { id in
             sessionStore.activeSessions.first { $0.id == id }
         }

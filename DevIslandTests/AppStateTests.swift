@@ -727,7 +727,7 @@ final class AppStateTests: XCTestCase {
     }
 
     func testOnlySourceSpecificEventsBecomeApprovalRequests() {
-        let codexPreToolExpectation = XCTestExpectation(description: "Codex PreToolUse is notification")
+        let codexPreToolExpectation = XCTestExpectation(description: "Codex PreToolUse is status only")
         let claudeBeforeToolExpectation = XCTestExpectation(description: "Claude BeforeTool is notification")
         let geminiPreToolExpectation = XCTestExpectation(description: "Gemini PreToolUse is notification")
 
@@ -781,6 +781,8 @@ final class AppStateTests: XCTestCase {
         wait(for: [codexPreToolExpectation, claudeBeforeToolExpectation, geminiPreToolExpectation], timeout: 1.0)
         XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertFalse(appState.isNotchExpanded)
+        XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-pretool" }))
     }
 
     func testClaudeToolLifecycleEventsAreStatusNotifications() {
@@ -1248,6 +1250,75 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.sessionStore.pendingCount, 0)
         XCTAssertFalse(appState.hasResponseHandler)
         XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "dismiss-session" }))
+    }
+
+    func testDismissSessionImmediatelyExcludesSessionFromRestore() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateDismissRestoreTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let controller = try ApprovalProxyController(databaseURL: tempDir.appendingPathComponent("approval-proxy.sqlite3"))
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller,
+            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+        )
+        let expectation = XCTestExpectation(description: "Session start recorded")
+        let message = """
+        {
+            "hook_event_name": "SessionStart",
+            "cli_source": "codex",
+            "session_id": "dismiss-restore",
+            "terminal_title": "Dismiss Restore"
+        }
+        """
+
+        state.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        wait(for: [expectation], timeout: 1.0)
+        state.flushApprovalPersistenceForTesting()
+
+        XCTAssertEqual(try controller.openSessions(since: Date().addingTimeInterval(-60)).map(\.sessionId), ["dismiss-restore"])
+
+        state.dismissSession("dismiss-restore")
+        let dismissed = XCTestExpectation(description: "Dismissed session removed")
+        waitUntil(timeout: 1.0, expectation: dismissed) {
+            !state.sessionStore.activeSessions.contains { $0.id == "dismiss-restore" }
+        }
+        wait(for: [dismissed], timeout: 1.0)
+
+        XCTAssertTrue(try controller.openSessions(since: Date().addingTimeInterval(-60)).isEmpty)
+    }
+
+    func testFocusTerminalMarksSessionRead() {
+        appState.sessionStore.updateActiveSession(
+            sessionId: "focus-read",
+            terminalTitle: "Focus Read",
+            agentKind: .codex,
+            terminalApp: "",
+            terminalTTY: "",
+            terminalWindowId: "",
+            terminalTabIndex: "",
+            terminalTmuxPane: "",
+            terminalTmuxSocket: "",
+            terminalTmuxClient: "",
+            toolName: "shell",
+            eventName: "Stop",
+            message: "Task completed",
+            isPending: false
+        )
+        appState.sessionStore.setUnread(true, sessionId: "focus-read")
+
+        appState.focusTerminal(for: "focus-read")
+
+        XCTAssertFalse(appState.sessionStore.activeSessions.first { $0.id == "focus-read" }?.isUnread ?? true)
     }
 
     func testDismissSessionClearsPTYOutputBuffer() throws {
