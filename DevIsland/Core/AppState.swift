@@ -2229,6 +2229,9 @@ class AppState: ObservableObject {
 
     func focusTerminal(for sessionId: String? = nil) {
         let targetId = sessionId ?? (currentSessionId.isEmpty ? sessionStore.selectedSessionId : currentSessionId)
+        if let targetId {
+            sessionStore.setUnread(false, sessionId: targetId)
+        }
         let session = targetId.flatMap { id in
             sessionStore.activeSessions.first { $0.id == id }
         }

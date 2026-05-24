@@ -1292,6 +1292,30 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(try controller.openSessions(since: Date().addingTimeInterval(-60)).isEmpty)
     }
 
+    func testFocusTerminalMarksSessionRead() {
+        appState.sessionStore.updateActiveSession(
+            sessionId: "focus-read",
+            terminalTitle: "Focus Read",
+            agentKind: .codex,
+            terminalApp: "",
+            terminalTTY: "",
+            terminalWindowId: "",
+            terminalTabIndex: "",
+            terminalTmuxPane: "",
+            terminalTmuxSocket: "",
+            terminalTmuxClient: "",
+            toolName: "shell",
+            eventName: "Stop",
+            message: "Task completed",
+            isPending: false
+        )
+        appState.sessionStore.setUnread(true, sessionId: "focus-read")
+
+        appState.focusTerminal(for: "focus-read")
+
+        XCTAssertFalse(appState.sessionStore.activeSessions.first { $0.id == "focus-read" }?.isUnread ?? true)
+    }
+
     func testDismissSessionClearsPTYOutputBuffer() throws {
         let patterns = [PTYAutoInjectPattern(pattern: "password:", response: "secret\n")]
         let data = try JSONEncoder().encode(patterns)
