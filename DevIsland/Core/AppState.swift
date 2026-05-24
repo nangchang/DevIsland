@@ -1857,8 +1857,9 @@ class AppState: ObservableObject {
                     if stillPending {
                         self.sessionStore.activeSessions[index].isPending = true
                         self.sessionStore.activeSessions[index].status = .pending
-                    } else if status?.isTimeoutBypassed == true {
+                    } else if case .timeoutBypassed? = status {
                         self.sessionStore.activeSessions[index].isPending = false
+                        self.sessionStore.activeSessions[index].hasMissedApproval = true
                         self.sessionStore.activeSessions[index].status = status ?? .idle
                         self.sessionStore.activeSessions[index].lastActiveAt = Date()
                     } else if !self.sessionStore.activeSessions[index].isLifecycleTracked {
@@ -2189,6 +2190,7 @@ class AppState: ObservableObject {
         }
         sessionStore.selectedSessionId = sessionId
         sessionStore.setUnread(false, sessionId: sessionId)
+        sessionStore.setMissedApproval(false, sessionId: sessionId)
         currentSessionId = sessionId
         syncDisplayToSelectedSession()
         isExpandingFromRequest = true
@@ -2200,6 +2202,7 @@ class AppState: ObservableObject {
         } else if isExpandingFromRequest {
             if !currentSessionId.isEmpty {
                 sessionStore.setUnread(false, sessionId: currentSessionId)
+                sessionStore.setMissedApproval(false, sessionId: currentSessionId)
             }
             stopNotificationAutoCollapseTimer()
             if let prev = previousSessionId {
@@ -2236,6 +2239,7 @@ class AppState: ObservableObject {
         let targetId = sessionId ?? (currentSessionId.isEmpty ? sessionStore.selectedSessionId : currentSessionId)
         if let targetId {
             sessionStore.setUnread(false, sessionId: targetId)
+            sessionStore.setMissedApproval(false, sessionId: targetId)
         }
         let session = targetId.flatMap { id in
             sessionStore.activeSessions.first { $0.id == id }

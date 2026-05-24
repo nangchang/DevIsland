@@ -39,8 +39,6 @@ enum SessionStatus: Equatable {
 
     var isTimeoutBypassed: Bool {
         if case .timeoutBypassed = self { return true }
-        if case .autoApproved = self { return true }
-        if case .policyApproved = self { return true }
         return false
     }
 }
@@ -66,6 +64,7 @@ struct ActiveSession: Identifiable, Equatable {
     var isSubAgentSession: Bool
     var isAutoEditActive: Bool
     var isUnread: Bool
+    var hasMissedApproval: Bool
     var status: SessionStatus
     var parentSessionId: String?
 }
