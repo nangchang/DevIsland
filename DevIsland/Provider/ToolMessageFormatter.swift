@@ -17,7 +17,7 @@ enum ToolMessageFormatter {
             return firstString(
                 in: json,
                 keys: ["last_assistant_message", "message", "summary", "output", "result"]
-            ) ?? ""
+            ) ?? "Task Completed"
         }
 
         if let input = toolInput {
@@ -29,7 +29,7 @@ enum ToolMessageFormatter {
             let lowerToolName = toolName.lowercased()
             switch lowerToolName {
             // Claude Code
-            case "bash":
+            case "bash", "shell":
                 return joinedMessageLines([
                     input["description"] as? String,
                     input["command"] as? String
@@ -86,9 +86,6 @@ enum ToolMessageFormatter {
             case "web_fetch":
                 return "prompt: \(input["prompt"] ?? "")"
 
-            // Codex CLI
-            case "shell":
-                return input["command"] as? String ?? ""
             case "apply_patch":
                 if let patch = input["patch"] as? String,
                    !patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -97,13 +94,20 @@ enum ToolMessageFormatter {
                         "```diff\n\(patch)\n```"
                     ])
                 }
-                return input["path"] as? String ?? ""
+                return joinedMessageLines([
+                    input["path"] as? String,
+                    input["command"] as? String
+                ])
 
             default:
                 return input.keys.sorted().map { key in
                     "\(key): \(input[key] ?? "")"
                 }.joined(separator: "\n")
             }
+        }
+
+        if let toolInput = displayString(json["tool_input"]) {
+            return toolInput
         }
 
         if let message = firstString(in: json, keys: ["message", "last_assistant_message"]) {
@@ -265,6 +269,8 @@ enum ToolMessageFormatter {
         let string: String
         if let value = value as? String {
             string = value
+        } else if value is [AnyHashable: Any] || value is [Any] {
+            return nil
         } else if let value = value as? CustomStringConvertible {
             string = value.description
         } else {

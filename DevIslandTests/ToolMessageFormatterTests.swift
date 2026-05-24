@@ -217,6 +217,24 @@ final class ToolMessageFormatterTests: XCTestCase {
         XCTAssertEqual(message, "Actual assistant response")
     }
 
+    func testStopDoesNotRenderObjectMessagePayload() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "",
+            toolInput: nil,
+            json: [
+                "hook_event_name": "Stop",
+                "session_id": "codex-session",
+                "message": [
+                    "type": "final",
+                    "content": "Nested payload should not be rendered via Dictionary.description"
+                ]
+            ],
+            eventName: "Stop"
+        )
+
+        XCTAssertEqual(message, "Task Completed")
+    }
+
     // MARK: - UserPromptSubmit
 
     func testFormatsUserPromptSubmitEvent() {
@@ -377,6 +395,44 @@ final class ToolMessageFormatterTests: XCTestCase {
         XCTAssertEqual(message, "git log --oneline")
     }
 
+    func testFormatsCodexBashPermissionDescriptionAndCommand() {
+        let input: [String: Any] = [
+            "description": "Xcode/Swift 캐시에 접근해 macOS 앱 컴파일 검증을 실행하도록 허용할까요?",
+            "command": "./scripts/build_and_run.sh --no-kill --no-run"
+        ]
+
+        let message = ToolMessageFormatter.displayMessage(
+            for: "Bash",
+            toolInput: input,
+            json: [
+                "hook_event_name": "PermissionRequest",
+                "tool_name": "Bash",
+                "tool_input": input
+            ],
+            eventName: "PermissionRequest"
+        )
+
+        XCTAssertEqual(
+            message,
+            "Xcode/Swift 캐시에 접근해 macOS 앱 컴파일 검증을 실행하도록 허용할까요?\n\n./scripts/build_and_run.sh --no-kill --no-run"
+        )
+    }
+
+    func testFormatsCodexStringToolInputFallback() {
+        let message = ToolMessageFormatter.displayMessage(
+            for: "rm",
+            toolInput: nil,
+            json: [
+                "hook_event_name": "PermissionRequest",
+                "tool_name": "rm",
+                "tool_input": "-rf /"
+            ],
+            eventName: "PermissionRequest"
+        )
+
+        XCTAssertEqual(message, "-rf /")
+    }
+
     func testFormatsApplyPatch() {
         let input: [String: Any] = [
             "path": "src/main.py",
@@ -404,6 +460,42 @@ final class ToolMessageFormatterTests: XCTestCase {
         )
 
         XCTAssertEqual(message, "Processing complete")
+    }
+
+    func testFormatsScalarJsonMessageFallbacks() {
+        let boolMessage = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: ["message": true],
+            eventName: "SomeEvent"
+        )
+        XCTAssertEqual(boolMessage, "true")
+
+        let numberMessage = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: ["message": 42],
+            eventName: "SomeEvent"
+        )
+        XCTAssertEqual(numberMessage, "42")
+    }
+
+    func testDoesNotFormatCollectionJsonMessageFallbacks() {
+        let dictionaryMessage = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: ["message": ["content": "Nested payload"]],
+            eventName: "SomeEvent"
+        )
+        XCTAssertEqual(dictionaryMessage, "")
+
+        let arrayMessage = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: ["message": ["Nested payload"]],
+            eventName: "SomeEvent"
+        )
+        XCTAssertEqual(arrayMessage, "")
     }
 
     func testFormatsPermissionSuggestions() {
