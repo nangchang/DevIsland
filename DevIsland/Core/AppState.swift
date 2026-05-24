@@ -436,6 +436,9 @@ class AppState: ObservableObject {
             guard isFrontmost else { return }
             if self?.currentResponseHandler != nil {
                 print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
+                if let sessionId = self?.currentSessionId, !sessionId.isEmpty {
+                    self?.sessionStore.setMissedApproval(true, sessionId: sessionId)
+                }
                 self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
             } else {
                 print("[DevIsland] [AUTO] User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "")")
@@ -1071,6 +1074,7 @@ class AppState: ObservableObject {
                         isPending: false,
                         status: SessionStatus.timeoutBypassed(Date())
                     )
+                    self.sessionStore.setMissedApproval(true, sessionId: h.sessionId)
                 }
                 return
             }
@@ -1404,6 +1408,7 @@ class AppState: ObservableObject {
 
             if isFrontmost && !next.isReplay && next.claudeQuestion == nil {
                 print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
+                self.sessionStore.setMissedApproval(true, sessionId: next.sessionId)
                 self.currentResponseHandler = next.responseHandler
                 self.currentSessionId = next.sessionId
                 self.currentRawToolName = next.rawToolName
@@ -1859,6 +1864,7 @@ class AppState: ObservableObject {
                         self.sessionStore.activeSessions[index].status = .pending
                     } else if status?.isTimeoutBypassed == true {
                         self.sessionStore.activeSessions[index].isPending = false
+                        self.sessionStore.activeSessions[index].hasMissedApproval = true
                         self.sessionStore.activeSessions[index].status = status ?? .idle
                         self.sessionStore.activeSessions[index].lastActiveAt = Date()
                     } else if !self.sessionStore.activeSessions[index].isLifecycleTracked {
@@ -2185,10 +2191,12 @@ class AppState: ObservableObject {
         guard currentResponseHandler == nil else { return }
         if isExpandingFromRequest && !currentSessionId.isEmpty && currentSessionId != sessionId {
             sessionStore.setUnread(false, sessionId: currentSessionId)
+            sessionStore.setMissedApproval(false, sessionId: currentSessionId)
             previousSessionId = currentSessionId
         }
         sessionStore.selectedSessionId = sessionId
         sessionStore.setUnread(false, sessionId: sessionId)
+        sessionStore.setMissedApproval(false, sessionId: sessionId)
         currentSessionId = sessionId
         syncDisplayToSelectedSession()
         isExpandingFromRequest = true
@@ -2200,6 +2208,7 @@ class AppState: ObservableObject {
         } else if isExpandingFromRequest {
             if !currentSessionId.isEmpty {
                 sessionStore.setUnread(false, sessionId: currentSessionId)
+                sessionStore.setMissedApproval(false, sessionId: currentSessionId)
             }
             stopNotificationAutoCollapseTimer()
             if let prev = previousSessionId {
@@ -2236,6 +2245,7 @@ class AppState: ObservableObject {
         let targetId = sessionId ?? (currentSessionId.isEmpty ? sessionStore.selectedSessionId : currentSessionId)
         if let targetId {
             sessionStore.setUnread(false, sessionId: targetId)
+            sessionStore.setMissedApproval(false, sessionId: targetId)
         }
         let session = targetId.flatMap { id in
             sessionStore.activeSessions.first { $0.id == id }

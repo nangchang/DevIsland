@@ -307,14 +307,18 @@ struct SessionRowView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
-                            if session.isUnread {
+                            if session.hasMissedApproval {
+                                Circle()
+                                    .fill(Color.red.opacity(0.9))
+                                    .frame(width: isSubAgent ? 6 : 7, height: isSubAgent ? 6 : 7)
+                            } else if session.isUnread {
                                 Circle()
                                     .fill(Color.blue.opacity(0.85))
                                     .frame(width: isSubAgent ? 5 : 6, height: isSubAgent ? 5 : 6)
                             }
 
                             Text(session.terminalTitle)
-                                .font(.system(size: titleFont, weight: session.isUnread ? .heavy : .bold))
+                                .font(.system(size: titleFont, weight: (session.hasMissedApproval || session.isUnread) ? .heavy : .bold))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
 

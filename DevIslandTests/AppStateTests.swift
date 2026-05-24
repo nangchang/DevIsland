@@ -1321,6 +1321,59 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.sessionStore.activeSessions.first { $0.id == "focus-read" }?.isUnread ?? true)
     }
 
+    func testFocusTerminalClearsMissedApproval() {
+        appState.sessionStore.updateActiveSession(
+            sessionId: "focus-missed",
+            terminalTitle: "Focus Missed",
+            agentKind: .codex,
+            terminalApp: "",
+            terminalTTY: "",
+            terminalWindowId: "",
+            terminalTabIndex: "",
+            terminalTmuxPane: "",
+            terminalTmuxSocket: "",
+            terminalTmuxClient: "",
+            toolName: "shell",
+            eventName: "PermissionRequest",
+            message: "Approve shell?",
+            isPending: false
+        )
+        appState.sessionStore.setMissedApproval(true, sessionId: "focus-missed")
+
+        appState.focusTerminal(for: "focus-missed")
+
+        XCTAssertFalse(appState.sessionStore.activeSessions.first { $0.id == "focus-missed" }?.hasMissedApproval ?? true)
+    }
+
+    func testTerminalFocusedApprovalPassMarksMissedApproval() {
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in true },
+            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+        )
+        let expectation = XCTestExpectation(description: "Frontmost approval passed")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "cli_source": "codex",
+            "session_id": "missed-frontmost",
+            "tool_name": "shell",
+            "tool_input": {"command": "rm -rf build"}
+        }
+        """
+
+        state.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "pass")
+            expectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertTrue(state.sessionStore.activeSessions.first { $0.id == "missed-frontmost" }?.hasMissedApproval ?? false)
+    }
+
     func testDismissSessionClearsPTYOutputBuffer() throws {
         let patterns = [PTYAutoInjectPattern(pattern: "password:", response: "secret\n")]
         let data = try JSONEncoder().encode(patterns)

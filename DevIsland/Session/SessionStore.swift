@@ -100,6 +100,7 @@ final class SessionStore: ObservableObject {
                 isSubAgentSession: isSubAgentSession,
                 isAutoEditActive: false,
                 isUnread: false,
+                hasMissedApproval: false,
                 status: status ?? (isPending ? .pending : .idle),
                 parentSessionId: parentSessionId
             )
@@ -230,6 +231,11 @@ final class SessionStore: ObservableObject {
     func setUnread(_ unread: Bool, sessionId: String) {
         guard let index = activeSessions.firstIndex(where: { $0.id == sessionId }) else { return }
         activeSessions[index].isUnread = unread
+    }
+
+    func setMissedApproval(_ missed: Bool, sessionId: String) {
+        guard let index = activeSessions.firstIndex(where: { $0.id == sessionId }) else { return }
+        activeSessions[index].hasMissedApproval = missed
     }
 
     /// Removes `sessionId` from activeSessions and clears session-scoped auto-approve cache.
