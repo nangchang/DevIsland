@@ -4,6 +4,7 @@ import Darwin
 class TerminalFocuser {
     private static let tmuxCommandTimeout: TimeInterval = 1.0
     private static let appleScriptTimeout: TimeInterval = 1.5
+    private static let cmuxFocusSettleDelay = "0.05"
 
     private static let candidates: [(bundleId: String, name: String)] = [
         ("com.cmuxterm.app",        "cmux"),
@@ -376,7 +377,8 @@ class TerminalFocuser {
         tabIndex: String? = nil,
         tmuxPane: String? = nil,
         tmuxSocket: String? = nil,
-        tmuxClient: String? = nil
+        tmuxClient: String? = nil,
+        completion: (() -> Void)? = nil
     ) {
         let targetName = normalizedAppName(appName)
         let match = targetName.flatMap { name in
@@ -385,10 +387,18 @@ class TerminalFocuser {
             !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
         })
 
-        guard let match else { return }
+        guard let match else {
+            if let completion {
+                DispatchQueue.main.async {
+                    completion()
+                }
+            }
+            return
+        }
 
         let name = match.name
         DispatchQueue.global(qos: .userInitiated).async {
+            // This launches /usr/bin/osascript as a child process, so keep it off the main thread.
             let (_, error) = executeAppleScript(focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))
             if let error {
                 print("[DevIsland] terminal focus AppleScript error: \(error)")
@@ -397,6 +407,11 @@ class TerminalFocuser {
                 print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
                 if !switchTmuxClient(socket: tmuxSocket, client: tmuxClient, pane: tmuxPane) {
                     print("[DevIsland] tmux switch failed for pane=\(tmuxPane)")
+                }
+            }
+            if let completion {
+                DispatchQueue.main.async {
+                    completion()
                 }
             }
         }
@@ -529,6 +544,10 @@ class TerminalFocuser {
                       repeat with aTerm in terminals of aTab
                         if (id of aTerm as text) is wantedTermId then
                           focus aTerm
+                          -- cmux can report the tab selected before the terminal panel accepts key focus.
+                          delay \(cmuxFocusSettleDelay)
+                          activate window aWindow
+                          activate
                           return
                         end if
                       end repeat
