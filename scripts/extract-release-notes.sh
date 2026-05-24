@@ -16,21 +16,22 @@ if [[ ! -f "$CHANGELOG" ]]; then
   exit 1
 fi
 
+mkdir -p "$(dirname "$OUTPUT_FILE")"
+
 awk -v tag="$TAG_NAME" -v version="$VERSION" '
   /^##[[:space:]]+/ {
     if (found) {
       exit
     }
-    found = ($0 ~ ("^##[[:space:]]+" tag "([[:space:]-]|$)") || $0 ~ ("^##[[:space:]]+v?" version "([[:space:]-]|$)"))
+    heading = $0
+    sub(/^##[[:space:]]+/, "", heading)
+    split(heading, parts, /[[:space:]]+/)
+    release = parts[1]
+    found = (release == tag || release == version || release == "v" version)
     next
   }
   found {
     print
-  }
-  END {
-    if (!found) {
-      exit 3
-    }
   }
 ' "$CHANGELOG" > "$OUTPUT_FILE"
 
