@@ -39,8 +39,6 @@ enum SessionStatus: Equatable {
 
     var isTimeoutBypassed: Bool {
         if case .timeoutBypassed = self { return true }
-        if case .autoApproved = self { return true }
-        if case .policyApproved = self { return true }
         return false
     }
 }

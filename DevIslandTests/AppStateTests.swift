@@ -74,6 +74,14 @@ final class AppStateTests: XCTestCase {
         // Test terminal title fallback
         XCTAssertEqual(AppState.agentKind(from: [:], terminalTitle: "Claude"), .claudeCode)
     }
+
+    func testOnlyTimeoutBypassedStatusCountsAsTimeoutBypassed() {
+        XCTAssertTrue(SessionStatus.timeoutBypassed(Date()).isTimeoutBypassed)
+        XCTAssertFalse(SessionStatus.autoApproved(Date()).isTimeoutBypassed)
+        XCTAssertFalse(SessionStatus.policyApproved(Date()).isTimeoutBypassed)
+        XCTAssertFalse(SessionStatus.pending.isTimeoutBypassed)
+        XCTAssertFalse(SessionStatus.idle.isTimeoutBypassed)
+    }
     
     func testHandleMessageNotification() {
         let expectation = XCTestExpectation(description: "Response handler called")
