@@ -1345,7 +1345,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.sessionStore.activeSessions.first { $0.id == "focus-missed" }?.hasMissedApproval ?? true)
     }
 
-    func testTerminalFocusedApprovalPassMarksMissedApproval() {
+    func testTerminalFocusedApprovalPassDoesNotMarkMissedApproval() {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
@@ -1371,7 +1371,7 @@ final class AppStateTests: XCTestCase {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
 
         wait(for: [expectation], timeout: 1.0)
-        XCTAssertTrue(state.sessionStore.activeSessions.first { $0.id == "missed-frontmost" }?.hasMissedApproval ?? false)
+        XCTAssertFalse(state.sessionStore.activeSessions.first { $0.id == "missed-frontmost" }?.hasMissedApproval ?? true)
     }
 
     func testDismissSessionClearsPTYOutputBuffer() throws {

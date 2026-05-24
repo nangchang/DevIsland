@@ -436,9 +436,6 @@ class AppState: ObservableObject {
             guard isFrontmost else { return }
             if self?.currentResponseHandler != nil {
                 print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
-                if let sessionId = self?.currentSessionId, !sessionId.isEmpty {
-                    self?.sessionStore.setMissedApproval(true, sessionId: sessionId)
-                }
                 self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
             } else {
                 print("[DevIsland] [AUTO] User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "")")
@@ -1074,7 +1071,6 @@ class AppState: ObservableObject {
                         isPending: false,
                         status: SessionStatus.timeoutBypassed(Date())
                     )
-                    self.sessionStore.setMissedApproval(true, sessionId: h.sessionId)
                 }
                 return
             }
@@ -1408,7 +1404,6 @@ class AppState: ObservableObject {
 
             if isFrontmost && !next.isReplay && next.claudeQuestion == nil {
                 print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
-                self.sessionStore.setMissedApproval(true, sessionId: next.sessionId)
                 self.currentResponseHandler = next.responseHandler
                 self.currentSessionId = next.sessionId
                 self.currentRawToolName = next.rawToolName
