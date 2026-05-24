@@ -1857,7 +1857,7 @@ class AppState: ObservableObject {
                     if stillPending {
                         self.sessionStore.activeSessions[index].isPending = true
                         self.sessionStore.activeSessions[index].status = .pending
-                    } else if status?.isTimeoutBypassed == true {
+                    } else if case .timeoutBypassed? = status {
                         self.sessionStore.activeSessions[index].isPending = false
                         self.sessionStore.activeSessions[index].hasMissedApproval = true
                         self.sessionStore.activeSessions[index].status = status ?? .idle
@@ -2186,7 +2186,6 @@ class AppState: ObservableObject {
         guard currentResponseHandler == nil else { return }
         if isExpandingFromRequest && !currentSessionId.isEmpty && currentSessionId != sessionId {
             sessionStore.setUnread(false, sessionId: currentSessionId)
-            sessionStore.setMissedApproval(false, sessionId: currentSessionId)
             previousSessionId = currentSessionId
         }
         sessionStore.selectedSessionId = sessionId
