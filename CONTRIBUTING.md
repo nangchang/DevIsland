@@ -65,9 +65,7 @@ fix: prevent patterned rules from entering global cache
 docs: refresh README
 ```
 
-커밋 본문에는 변경 이유와 의사결정 배경을 한국어로 적어 주세요. 한 커밋에는 하나의 논리적 변경만 담는 것을 권장합니다.
-
-AI 도구를 사용해 커밋을 작성했다면 커밋 메시지 마지막에 `Co-Authored-By:` 트레일러를 추가해 주세요. GitHub PR, 이슈, 코멘트 작성에 AI 도구를 사용했다면 본문 마지막에 어떤 도구로 생성했는지 알 수 있는 footer를 포함해 주세요.
+커밋 본문에는 변경 이유와 의사결정 배경을 한국어로 적어 주세요. 한 커밋에는 하나의 논리적 변경만 담는 것을 권장합니다. AI 도구를 사용해 커밋을 작성했다면 커밋 메시지 마지막에 `Co-Authored-By:` 트레일러를 추가하고, GitHub PR, 이슈, 코멘트 작성에 AI 도구를 사용했다면 본문 마지막에 어떤 도구 또는 모델로 생성했는지 알 수 있는 footer를 포함해 주세요.
 
 ## Pull Request 체크리스트
 
