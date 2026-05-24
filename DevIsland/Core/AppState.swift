@@ -21,6 +21,7 @@ class AppState: ObservableObject {
         startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1",
         approvalProxy: AppState.makeApprovalProxy()
     )
+    private static let terminalFocusRecheckDelay: TimeInterval = 0.05
 
     private static func makeApprovalProxy() -> ApprovalProxyController? {
         do {
@@ -2254,7 +2255,7 @@ class AppState: ObservableObject {
             tmuxSocket: session?.terminalTmuxSocket,
             tmuxClient: session?.terminalTmuxClient
         ) { [weak self] in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.terminalFocusRecheckDelay) {
                 self?.passIfTerminalFocused()
             }
         }
