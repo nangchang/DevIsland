@@ -2173,6 +2173,18 @@ class AppState: ObservableObject {
         }
     }
 
+    func pauseAutoTimersForUserViewing() {
+        if currentResponseHandler != nil {
+            timeoutTimer?.invalidate()
+            timeoutTimer = nil
+        }
+
+        if isExpandingFromRequest {
+            notificationTimer?.invalidate()
+            notificationTimer = nil
+        }
+    }
+
     func focusTerminal(for sessionId: String? = nil) {
         let targetId = sessionId ?? (currentSessionId.isEmpty ? sessionStore.selectedSessionId : currentSessionId)
         let session = targetId.flatMap { id in
