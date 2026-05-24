@@ -1300,17 +1300,28 @@ class AppState: ObservableObject {
         HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)
     }
 
+    private func recordDismissedSession(sessionId: String, agentKind: BuddyKind) {
+        guard let approvalProxy else { return }
+        let payloadJSON = ReplayRecorder.payloadString(from: ["session_id": sessionId, "source": "user_dismissed"])
+        approvalPersistenceQueue.sync {
+            do {
+                try approvalProxy.recordHookEvent(
+                    requestId: nil,
+                    provider: providerKind(for: agentKind),
+                    sessionId: sessionId,
+                    eventName: "devisland_dismissed",
+                    toolName: "",
+                    payloadJSON: payloadJSON
+                )
+            } catch {
+                print("[DevIsland] [REPLAY] Failed to record dismissed session: \(error)")
+            }
+        }
+    }
 
     func dismissSession(_ sessionId: String) {
         let agentKind = sessionStore.activeSessions.first(where: { $0.id == sessionId })?.agentKind ?? .claudeCode
-        replayRecorder.recordHookEvent(
-            requestId: nil,
-            provider: providerKind(for: agentKind),
-            sessionId: sessionId,
-            eventName: "devisland_dismissed",
-            toolName: "",
-            payload: ["session_id": sessionId, "source": "user_dismissed"]
-        )
+        recordDismissedSession(sessionId: sessionId, agentKind: agentKind)
         DispatchQueue.main.async {
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }

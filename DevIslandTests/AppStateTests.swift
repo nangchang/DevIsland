@@ -1252,6 +1252,46 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "dismiss-session" }))
     }
 
+    func testDismissSessionImmediatelyExcludesSessionFromRestore() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateDismissRestoreTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let controller = try ApprovalProxyController(databaseURL: tempDir.appendingPathComponent("approval-proxy.sqlite3"))
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller,
+            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+        )
+        let expectation = XCTestExpectation(description: "Session start recorded")
+        let message = """
+        {
+            "hook_event_name": "SessionStart",
+            "cli_source": "codex",
+            "session_id": "dismiss-restore",
+            "terminal_title": "Dismiss Restore"
+        }
+        """
+
+        state.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        wait(for: [expectation], timeout: 1.0)
+        state.flushApprovalPersistenceForTesting()
+
+        XCTAssertEqual(try controller.openSessions(since: Date().addingTimeInterval(-60)).map(\.sessionId), ["dismiss-restore"])
+
+        state.dismissSession("dismiss-restore")
+
+        XCTAssertTrue(try controller.openSessions(since: Date().addingTimeInterval(-60)).isEmpty)
+    }
+
     func testDismissSessionClearsPTYOutputBuffer() throws {
         let patterns = [PTYAutoInjectPattern(pattern: "password:", response: "secret\n")]
         let data = try JSONEncoder().encode(patterns)
