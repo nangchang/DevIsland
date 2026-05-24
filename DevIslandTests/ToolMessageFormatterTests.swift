@@ -462,6 +462,42 @@ final class ToolMessageFormatterTests: XCTestCase {
         XCTAssertEqual(message, "Processing complete")
     }
 
+    func testFormatsScalarJsonMessageFallbacks() {
+        let boolMessage = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: ["message": true],
+            eventName: "SomeEvent"
+        )
+        XCTAssertEqual(boolMessage, "true")
+
+        let numberMessage = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: ["message": 42],
+            eventName: "SomeEvent"
+        )
+        XCTAssertEqual(numberMessage, "42")
+    }
+
+    func testDoesNotFormatCollectionJsonMessageFallbacks() {
+        let dictionaryMessage = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: ["message": ["content": "Nested payload"]],
+            eventName: "SomeEvent"
+        )
+        XCTAssertEqual(dictionaryMessage, "")
+
+        let arrayMessage = ToolMessageFormatter.displayMessage(
+            for: "unknown_tool",
+            toolInput: nil,
+            json: ["message": ["Nested payload"]],
+            eventName: "SomeEvent"
+        )
+        XCTAssertEqual(arrayMessage, "")
+    }
+
     func testFormatsPermissionSuggestions() {
         let message = ToolMessageFormatter.displayMessage(
             for: "",

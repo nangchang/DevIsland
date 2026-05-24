@@ -269,7 +269,9 @@ enum ToolMessageFormatter {
         let string: String
         if let value = value as? String {
             string = value
-        } else if let value = value as? NSNumber {
+        } else if value is [AnyHashable: Any] || value is [Any] {
+            return nil
+        } else if let value = value as? CustomStringConvertible {
             string = value.description
         } else {
             return nil
