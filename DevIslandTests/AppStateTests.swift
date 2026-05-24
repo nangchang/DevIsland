@@ -1288,6 +1288,11 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(try controller.openSessions(since: Date().addingTimeInterval(-60)).map(\.sessionId), ["dismiss-restore"])
 
         state.dismissSession("dismiss-restore")
+        let dismissed = XCTestExpectation(description: "Dismissed session removed")
+        waitUntil(timeout: 1.0, expectation: dismissed) {
+            !state.sessionStore.activeSessions.contains { $0.id == "dismiss-restore" }
+        }
+        wait(for: [dismissed], timeout: 1.0)
 
         XCTAssertTrue(try controller.openSessions(since: Date().addingTimeInterval(-60)).isEmpty)
     }

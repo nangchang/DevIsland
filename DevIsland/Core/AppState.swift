@@ -1300,14 +1300,18 @@ class AppState: ObservableObject {
         HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)
     }
 
-    private func recordDismissedSession(sessionId: String, agentKind: BuddyKind) {
-        guard let approvalProxy else { return }
+    private func recordDismissedSession(sessionId: String, agentKind: BuddyKind, completion: @escaping () -> Void) {
+        guard let approvalProxy else {
+            completion()
+            return
+        }
         let payloadJSON = ReplayRecorder.payloadString(from: ["session_id": sessionId, "source": "user_dismissed"])
-        approvalPersistenceQueue.sync {
+        approvalPersistenceQueue.async { [weak self] in
+            guard let self else { return }
             do {
                 try approvalProxy.recordHookEvent(
                     requestId: nil,
-                    provider: providerKind(for: agentKind),
+                    provider: self.providerKind(for: agentKind),
                     sessionId: sessionId,
                     eventName: "devisland_dismissed",
                     toolName: "",
@@ -1316,13 +1320,13 @@ class AppState: ObservableObject {
             } catch {
                 print("[DevIsland] [REPLAY] Failed to record dismissed session: \(error)")
             }
+            DispatchQueue.main.async(execute: completion)
         }
     }
 
     func dismissSession(_ sessionId: String) {
         let agentKind = sessionStore.activeSessions.first(where: { $0.id == sessionId })?.agentKind ?? .claudeCode
-        recordDismissedSession(sessionId: sessionId, agentKind: agentKind)
-        DispatchQueue.main.async {
+        recordDismissedSession(sessionId: sessionId, agentKind: agentKind) {
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
             self.sessionStore.removeSession(id: sessionId)
@@ -2220,6 +2224,7 @@ class AppState: ObservableObject {
         if currentResponseHandler != nil {
             timeoutTimer?.invalidate()
             timeoutTimer = nil
+            timeoutProgress = 1.0
         }
 
         if isExpandingFromRequest {
