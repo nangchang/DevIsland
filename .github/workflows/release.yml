@@ -51,6 +51,10 @@ jobs:
       - name: Build and Create DMG
         run: ./scripts/create-dmg.sh
 
+      - name: Extract Release Notes
+        if: github.event.inputs.dry-run != 'true'
+        run: bash scripts/extract-release-notes.sh "${{ inputs.tag_name }}" release-notes.md
+
       - name: Create Release
         if: github.event.inputs.dry-run != 'true'
         uses: softprops/action-gh-release@v2
@@ -58,9 +62,9 @@ jobs:
           files: DevIsland-*.dmg
           tag_name: ${{ inputs.tag_name }}
           name: ${{ inputs.tag_name }}
+          body_path: release-notes.md
           draft: false
           prerelease: false
-          generate_release_notes: true
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
