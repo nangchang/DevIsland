@@ -428,6 +428,12 @@ struct NotchView: View {
                     }
                     .background(Color.white.opacity(0.04))
                     .cornerRadius(12)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            state.pauseAutoTimersForUserViewing()
+                        }
+                    )
                     .padding(.horizontal, 16)
                     .frame(maxHeight: .infinity)
                 }
