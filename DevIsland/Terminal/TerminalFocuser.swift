@@ -529,6 +529,9 @@ class TerminalFocuser {
                       repeat with aTerm in terminals of aTab
                         if (id of aTerm as text) is wantedTermId then
                           focus aTerm
+                          delay 0.05
+                          activate window aWindow
+                          activate
                           return
                         end if
                       end repeat
