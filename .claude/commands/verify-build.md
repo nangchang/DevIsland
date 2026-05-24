@@ -12,6 +12,7 @@ SourceKit 진단 오류와 실제 빌드 오류는 다르다 — 종료 코드�
 
 ```bash
 SCHEME=${ARGUMENTS:-DevIsland}
+set -o pipefail
 xcodebuild build -scheme "$SCHEME" -quiet 2>&1 | tail -10
 echo "Exit: $?"
 ```
