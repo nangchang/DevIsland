@@ -72,7 +72,7 @@ If `providerOutput` is present, the bridge writes it to stdout verbatim. Otherwi
 ## AppState Session Model
 
 - `ActiveSession`: one per full `session_id`, displayed by first 8 chars. Tracks last event/tool/message, pending state, terminal metadata, lifecycle state, Gemini auto-edit mode, and `parentSessionId` for sub-agent hierarchy.
-- `PendingRequest`: queued approval with a `responseHandler` closure for the open TCP connection. Processed FIFO; timeout auto-denies.
+- `PendingRequest`: queued manual response with a `responseHandler` closure for the open TCP connection. Approval requests display before notification-priority requests, and each category is processed FIFO. Claude `AskUserQuestion` replies use notification priority. Timeout auto-denies/passes the displayed request.
 - `selectedSessionId`: controls which session appears in the expanded notch. It does not affect pending queue order.
 
 ## Hook Event Handling
@@ -125,4 +125,3 @@ PRAGMAs: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`
 | `/tmp/DevIsland.bridge.log` | Bridge script | Per-event IPC send/receive trace |
 | `/tmp/DevIsland.log` | App (LaunchAgent mode) | General app stdout |
 | `/tmp/DevIsland.error.log` | App (LaunchAgent mode) | App stderr and crash output |
-
