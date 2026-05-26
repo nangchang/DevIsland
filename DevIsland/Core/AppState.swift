@@ -971,18 +971,65 @@ class AppState: ObservableObject {
         )
 
         if isClaudeQuestionRequest {
-            enqueueManualRequest(
-                request,
-                terminalTitle: h.terminalTitle,
-                terminalApp: h.terminalApp,
-                terminalTTY: h.terminalTTY,
-                terminalWindowId: h.terminalWindowId,
-                terminalTabIndex: h.terminalTabIndex,
-                terminalTmuxPane: h.terminalTmuxPane,
-                terminalTmuxSocket: h.terminalTmuxSocket,
-                terminalTmuxClient: h.terminalTmuxClient,
-                cespCategory: cespCategory
-            )
+            isTerminalFrontmostAsync(
+                appName: h.terminalApp,
+                tty: h.terminalTTY,
+                windowId: h.terminalWindowId,
+                tabIndex: h.terminalTabIndex,
+                tmuxPane: h.terminalTmuxPane,
+                tmuxSocket: h.terminalTmuxSocket,
+                tmuxClient: h.terminalTmuxClient
+            ) { [weak self] isFrontmost in
+                guard let self else { return }
+                if !h.isReplayPayload && isFrontmost {
+                    print("[DevIsland] [PASS] Terminal is frontmost, passing Claude question for session \(h.sessionId.prefix(8))")
+                    self.respondWithReplay(
+                        "{\"response\": \"pass\"}",
+                        responseHandler: request.responseHandler,
+                        hookEventId: hookEventId,
+                        agentKind: h.agentKind,
+                        sessionId: h.sessionId,
+                        toolName: replayToolName,
+                        workspaceRoot: h.workspaceRoot,
+                        action: .prompt,
+                        source: .automatic,
+                        reason: "terminal focused"
+                    )
+                    if !h.sessionId.isEmpty {
+                        self.sessionStore.updateActiveSession(
+                            sessionId: h.sessionId,
+                            terminalTitle: h.terminalTitle,
+                            agentKind: h.agentKind,
+                            terminalApp: h.terminalApp,
+                            terminalTTY: h.terminalTTY,
+                            terminalWindowId: h.terminalWindowId,
+                            terminalTabIndex: h.terminalTabIndex,
+                            terminalTmuxPane: h.terminalTmuxPane,
+                            terminalTmuxSocket: h.terminalTmuxSocket,
+                            terminalTmuxClient: h.terminalTmuxClient,
+                            toolName: displayToolName,
+                            eventName: h.event,
+                            message: h.displayMsg,
+                            isPending: false,
+                            status: SessionStatus.timeoutBypassed(Date())
+                        )
+                    }
+                    return
+                }
+
+                self.enqueueManualRequest(
+                    request,
+                    terminalTitle: h.terminalTitle,
+                    terminalApp: h.terminalApp,
+                    terminalTTY: h.terminalTTY,
+                    terminalWindowId: h.terminalWindowId,
+                    terminalTabIndex: h.terminalTabIndex,
+                    terminalTmuxPane: h.terminalTmuxPane,
+                    terminalTmuxSocket: h.terminalTmuxSocket,
+                    terminalTmuxClient: h.terminalTmuxClient,
+                    cespCategory: cespCategory
+                )
+            }
             return
         }
 
@@ -1403,8 +1450,50 @@ class AppState: ObservableObject {
             guard let self else { return }
             guard self.showingRequestId == next.id else { return }
 
-            if isFrontmost && !next.isReplay && next.claudeQuestion == nil {
+            if isFrontmost && !next.isReplay {
                 print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
+                if next.claudeQuestion != nil {
+                    self.respondWithReplay(
+                        "{\"response\": \"pass\"}",
+                        responseHandler: next.responseHandler,
+                        hookEventId: next.hookEventId,
+                        agentKind: next.agentKind,
+                        sessionId: next.sessionId,
+                        toolName: next.rawToolName.isEmpty ? next.toolName : next.rawToolName,
+                        workspaceRoot: next.workspaceRoot,
+                        action: .prompt,
+                        source: .automatic,
+                        reason: "terminal focused"
+                    )
+                    _ = self.sessionStore.removePending(id: next.id)
+                    if !next.sessionId.isEmpty {
+                        self.sessionStore.updateActiveSession(
+                            sessionId: next.sessionId,
+                            terminalTitle: session?.terminalTitle ?? "",
+                            agentKind: next.agentKind,
+                            terminalApp: session?.terminalApp ?? "",
+                            terminalTTY: session?.terminalTTY ?? "",
+                            terminalWindowId: session?.terminalWindowId ?? "",
+                            terminalTabIndex: session?.terminalTabIndex ?? "",
+                            terminalTmuxPane: session?.terminalTmuxPane ?? "",
+                            terminalTmuxSocket: session?.terminalTmuxSocket ?? "",
+                            terminalTmuxClient: session?.terminalTmuxClient ?? "",
+                            toolName: next.toolName,
+                            eventName: next.eventName,
+                            message: next.message,
+                            isPending: false,
+                            status: SessionStatus.timeoutBypassed(Date())
+                        )
+                    }
+                    self.currentClaudeQuestion = nil
+                    self.currentClaudeQuestionAnswers = [:]
+                    self.isShowingRequest = false
+                    self.showingRequestId = nil
+                    self.timeoutTimer?.invalidate()
+                    self.timeoutProgress = 1.0
+                    self.showNextRequest()
+                    return
+                }
                 self.currentResponseHandler = next.responseHandler
                 self.currentSessionId = next.sessionId
                 self.currentRawToolName = next.rawToolName

@@ -178,6 +178,90 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(appState.currentClaudeQuestion)
     }
 
+    func testClaudeAskUserQuestionPassesWhenTerminalFocused() {
+        appState = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in true },
+            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+        )
+
+        let expectation = XCTestExpectation(description: "Focused terminal receives native Claude question")
+        let message = """
+        {
+            "hook_event_name": "PreToolUse",
+            "session_id": "claude-question-focused",
+            "cli_source": "claude",
+            "terminal_app": "iTerm2",
+            "terminal_tty": "/dev/ttys001",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    { "id": "q1", "prompt": "Proceed?" }
+                ]
+            }
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "pass")
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertNil(appState.currentClaudeQuestion)
+        XCTAssertFalse(appState.isNotchExpanded)
+    }
+
+    func testQueuedClaudeAskUserQuestionPassesWithoutMissedBadgeWhenTerminalBecomesFocused() {
+        let lock = NSLock()
+        var frontmostCheckCount = 0
+        appState = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in
+                lock.lock()
+                defer { lock.unlock() }
+                frontmostCheckCount += 1
+                return frontmostCheckCount >= 2
+            },
+            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+        )
+
+        let expectation = XCTestExpectation(description: "Queued Claude question passes after terminal focus")
+        let message = """
+        {
+            "hook_event_name": "PreToolUse",
+            "session_id": "claude-question-focus-later",
+            "cli_source": "claude",
+            "terminal_app": "iTerm2",
+            "terminal_tty": "/dev/ttys001",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    { "id": "q1", "prompt": "Proceed?" }
+                ]
+            }
+        }
+        """
+
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "pass")
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertNil(appState.currentClaudeQuestion)
+        XCTAssertFalse(appState.isNotchExpanded)
+        XCTAssertFalse(appState.sessionStore.activeSessions.first { $0.id == "claude-question-focus-later" }?.hasMissedApproval ?? true)
+    }
+
     func testPendingRequestQueue() {
         let expectation = XCTestExpectation(description: "Response handler called for approval")
         let message = """
