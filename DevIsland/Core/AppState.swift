@@ -971,18 +971,65 @@ class AppState: ObservableObject {
         )
 
         if isClaudeQuestionRequest {
-            enqueueManualRequest(
-                request,
-                terminalTitle: h.terminalTitle,
-                terminalApp: h.terminalApp,
-                terminalTTY: h.terminalTTY,
-                terminalWindowId: h.terminalWindowId,
-                terminalTabIndex: h.terminalTabIndex,
-                terminalTmuxPane: h.terminalTmuxPane,
-                terminalTmuxSocket: h.terminalTmuxSocket,
-                terminalTmuxClient: h.terminalTmuxClient,
-                cespCategory: cespCategory
-            )
+            isTerminalFrontmostAsync(
+                appName: h.terminalApp,
+                tty: h.terminalTTY,
+                windowId: h.terminalWindowId,
+                tabIndex: h.terminalTabIndex,
+                tmuxPane: h.terminalTmuxPane,
+                tmuxSocket: h.terminalTmuxSocket,
+                tmuxClient: h.terminalTmuxClient
+            ) { [weak self] isFrontmost in
+                guard let self else { return }
+                if !h.isReplayPayload && isFrontmost {
+                    print("[DevIsland] [PASS] Terminal is frontmost, passing Claude question for session \(h.sessionId.prefix(8))")
+                    self.respondWithReplay(
+                        "{\"response\": \"pass\"}",
+                        responseHandler: request.responseHandler,
+                        hookEventId: hookEventId,
+                        agentKind: h.agentKind,
+                        sessionId: h.sessionId,
+                        toolName: replayToolName,
+                        workspaceRoot: h.workspaceRoot,
+                        action: .prompt,
+                        source: .automatic,
+                        reason: "terminal focused"
+                    )
+                    if !h.sessionId.isEmpty {
+                        self.sessionStore.updateActiveSession(
+                            sessionId: h.sessionId,
+                            terminalTitle: h.terminalTitle,
+                            agentKind: h.agentKind,
+                            terminalApp: h.terminalApp,
+                            terminalTTY: h.terminalTTY,
+                            terminalWindowId: h.terminalWindowId,
+                            terminalTabIndex: h.terminalTabIndex,
+                            terminalTmuxPane: h.terminalTmuxPane,
+                            terminalTmuxSocket: h.terminalTmuxSocket,
+                            terminalTmuxClient: h.terminalTmuxClient,
+                            toolName: displayToolName,
+                            eventName: h.event,
+                            message: h.displayMsg,
+                            isPending: false,
+                            status: SessionStatus.timeoutBypassed(Date())
+                        )
+                    }
+                    return
+                }
+
+                self.enqueueManualRequest(
+                    request,
+                    terminalTitle: h.terminalTitle,
+                    terminalApp: h.terminalApp,
+                    terminalTTY: h.terminalTTY,
+                    terminalWindowId: h.terminalWindowId,
+                    terminalTabIndex: h.terminalTabIndex,
+                    terminalTmuxPane: h.terminalTmuxPane,
+                    terminalTmuxSocket: h.terminalTmuxSocket,
+                    terminalTmuxClient: h.terminalTmuxClient,
+                    cespCategory: cespCategory
+                )
+            }
             return
         }
 
@@ -1403,7 +1450,7 @@ class AppState: ObservableObject {
             guard let self else { return }
             guard self.showingRequestId == next.id else { return }
 
-            if isFrontmost && !next.isReplay && next.claudeQuestion == nil {
+            if isFrontmost && !next.isReplay {
                 print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
                 self.currentResponseHandler = next.responseHandler
                 self.currentSessionId = next.sessionId
