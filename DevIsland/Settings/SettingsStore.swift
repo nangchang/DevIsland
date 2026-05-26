@@ -196,6 +196,8 @@ struct AppSettings: Equatable {
     var expandOnQuestionResponse: Bool
     var preferredTerminal: String?
     var checkForUpdatesOnStartup: Bool
+    var focusVSCodeEnabled: Bool
+    var focusClaudeDesktopEnabled: Bool
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -273,7 +275,9 @@ struct AppSettings: Equatable {
         expandOnApprovalRequest: true,
         expandOnQuestionResponse: true,
         preferredTerminal: nil,
-        checkForUpdatesOnStartup: true
+        checkForUpdatesOnStartup: true,
+        focusVSCodeEnabled: true,
+        focusClaudeDesktopEnabled: true
     )
 }
 
@@ -348,6 +352,8 @@ final class SettingsStore: ObservableObject {
         static let expandOnQuestionResponse = "expandOnQuestionResponse"
         static let preferredTerminal = "preferredTerminal"
         static let checkForUpdatesOnStartup = "checkForUpdatesOnStartup"
+        static let focusVSCodeEnabled = "focusVSCodeEnabled"
+        static let focusClaudeDesktopEnabled = "focusClaudeDesktopEnabled"
     }
 
     private let userDefaults: UserDefaults
@@ -419,6 +425,8 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.expandOnQuestionResponse, forKey: DefaultsKey.expandOnQuestionResponse)
         userDefaults.set(settings.preferredTerminal, forKey: DefaultsKey.preferredTerminal)
         userDefaults.set(settings.checkForUpdatesOnStartup, forKey: DefaultsKey.checkForUpdatesOnStartup)
+        userDefaults.set(settings.focusVSCodeEnabled, forKey: DefaultsKey.focusVSCodeEnabled)
+        userDefaults.set(settings.focusClaudeDesktopEnabled, forKey: DefaultsKey.focusClaudeDesktopEnabled)
         writeBridgeConfig(settings)
     }
 
@@ -692,6 +700,16 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.checkForUpdatesOnStartup,
                 from: userDefaults,
                 default: defaults.checkForUpdatesOnStartup
+            ),
+            focusVSCodeEnabled: bool(
+                key: DefaultsKey.focusVSCodeEnabled,
+                from: userDefaults,
+                default: defaults.focusVSCodeEnabled
+            ),
+            focusClaudeDesktopEnabled: bool(
+                key: DefaultsKey.focusClaudeDesktopEnabled,
+                from: userDefaults,
+                default: defaults.focusClaudeDesktopEnabled
             )
         )
     }

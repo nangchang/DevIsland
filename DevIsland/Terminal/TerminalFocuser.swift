@@ -7,11 +7,13 @@ class TerminalFocuser {
     private static let cmuxFocusSettleDelay = "0.05"
 
     private static let candidates: [(bundleId: String, name: String)] = [
-        ("com.cmuxterm.app",        "cmux"),
-        ("com.mitchellh.ghostty",   "Ghostty"),
-        ("com.googlecode.iterm2",   "iTerm"),
-        ("dev.warp.Warp-Stable",    "Warp"),
-        ("com.apple.Terminal",      "Terminal"),
+        ("com.cmuxterm.app",                "cmux"),
+        ("com.mitchellh.ghostty",           "Ghostty"),
+        ("com.googlecode.iterm2",           "iTerm"),
+        ("dev.warp.Warp-Stable",            "Warp"),
+        ("com.apple.Terminal",              "Terminal"),
+        ("com.microsoft.VSCode",            "VSCode"),
+        ("com.anthropic.claudefordesktop",  "ClaudeDesktop"),
     ]
 
     static func isSessionFrontmost(
@@ -429,6 +431,10 @@ class TerminalFocuser {
             return "Warp"
         case "cmux":
             return "cmux"
+        case "vscode", "code", "visual studio code":
+            return "VSCode"
+        case "claudedesktop", "claude desktop":
+            return "ClaudeDesktop"
         default:
             return nil
         }

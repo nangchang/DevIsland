@@ -2459,6 +2459,15 @@ class AppState: ObservableObject {
         let session = targetId.flatMap { id in
             sessionStore.activeSessions.first { $0.id == id }
         }
+        let settings = SettingsStore.shared.settings
+        switch session?.terminalApp {
+        case "VSCode" where !settings.focusVSCodeEnabled:
+            return
+        case "ClaudeDesktop" where !settings.focusClaudeDesktopEnabled:
+            return
+        default:
+            break
+        }
         TerminalFocuser.focusTerminal(
             appName: session?.terminalApp,
             title: session?.terminalTitle,

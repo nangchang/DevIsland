@@ -186,6 +186,14 @@ extension L10n {
     var tabBridge:           String { s("Bridge / IPC", "브리지 / IPC") }
     var tabOpenPeon:         String { s("OpenPeon",     "OpenPeon") }
     var tabExperimental:     String { s("Experimental", "실험적") }
+    var tabIntegrations:     String { s("Integrations", "통합") }
+
+    // Integrations tab
+    var secAppFocus:               String { s("App Focus",                                                    "앱 포커스") }
+    var lblFocusVSCode:            String { s("Focus VS Code on request",                                     "요청 시 VS Code 포커스") }
+    var descFocusVSCode:           String { s("Bring VS Code to the foreground when a session is waiting for approval.", "세션이 승인 대기 중일 때 VS Code를 포커스합니다.") }
+    var lblFocusClaudeDesktop:     String { s("Focus Claude Desktop on request",                              "요청 시 Claude 데스크탑 포커스") }
+    var descFocusClaudeDesktop:    String { s("Bring Claude Desktop to the foreground when a session is waiting for approval.", "세션이 승인 대기 중일 때 Claude 데스크탑 앱을 포커스합니다.") }
 
     // General tab
     var btnResetAllSettings:          String { s("Reset All Settings to Defaults",          "모든 설정 초기화") }

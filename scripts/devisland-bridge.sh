@@ -187,6 +187,31 @@ if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "WarpTermi
   fi
 fi
 
+# VS Code integrated terminal (TERM_PROGRAM=vscode, has TTY)
+if [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "vscode" ]; then
+  if osascript -e 'return (application "Code" is running)' 2>/dev/null | grep -q "true"; then
+    TERM_APP="VSCode"
+    _dir=$(basename "$PWD" 2>/dev/null)
+    TERM_TITLE="${_dir:-VS Code}"
+  fi
+fi
+
+# VS Code extension host (no TTY, VSCODE_PID / VSCODE_IPC_HOOK / VSCODE_IPC_HOOK_CLI)
+if [ -z "$TERM_APP" ] && { [ -n "${VSCODE_PID:-}" ] || [ -n "${VSCODE_IPC_HOOK:-}" ] || [ -n "${VSCODE_IPC_HOOK_CLI:-}" ]; }; then
+  if osascript -e 'return (application "Code" is running)' 2>/dev/null | grep -q "true"; then
+    TERM_APP="VSCode"
+    _dir=$(basename "$PWD" 2>/dev/null)
+    TERM_TITLE="${_dir:-VS Code}"
+  fi
+fi
+
+# Claude desktop app (CLAUDE_CODE_DESKTOP 환경변수로 식별)
+if [ -z "$TERM_APP" ] && [ -n "${CLAUDE_CODE_DESKTOP:-}" ]; then
+  TERM_APP="ClaudeDesktop"
+  _dir=$(basename "$PWD" 2>/dev/null)
+  TERM_TITLE="${_dir:-Claude}"
+fi
+
 if [ -z "$TERM_APP" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ignoring non-terminal hook source: TERM_PROGRAM=${TERM_PROGRAM:-} TERM_TTY=${CURRENT_TTY:-}" >> /tmp/DevIsland.bridge.log
   exit 0
