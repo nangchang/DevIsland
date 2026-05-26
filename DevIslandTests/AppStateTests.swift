@@ -1036,6 +1036,13 @@ final class AppStateTests: XCTestCase {
 
         XCTAssertEqual(appState.currentSessionId, "claude-question-priority")
         XCTAssertNotNil(appState.currentClaudeQuestion)
+        guard let preemptedQuestionId = appState.currentClaudeQuestion?.questions.first?.id else {
+            XCTFail("Expected visible Claude question")
+            return
+        }
+        var draftAnswer = ClaudeQuestionAnswer()
+        draftAnswer.text = "Draft answer"
+        appState.currentClaudeQuestionAnswers[preemptedQuestionId] = draftAnswer
 
         appState.handleMessage(firstApproval) { response in
             firstApprovalResponse = response
@@ -1065,6 +1072,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(self.parseResponse(secondApprovalResponse ?? "")?["response"] as? String, "approved")
         XCTAssertEqual(appState.currentSessionId, "claude-question-priority")
         XCTAssertNotNil(appState.currentClaudeQuestion)
+        XCTAssertEqual(appState.currentClaudeQuestionAnswers[preemptedQuestionId]?.text, "Draft answer")
         XCTAssertNil(questionResponse)
 
         guard let questionId = appState.currentClaudeQuestion?.questions.first?.id else {
