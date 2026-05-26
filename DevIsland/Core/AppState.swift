@@ -1264,6 +1264,9 @@ class AppState: ObservableObject {
 
             if self.currentResponseHandler == nil {
                 self.showNextRequest()
+            } else if self.isShowingLowerPriorityPendingRequest(than: request) {
+                self.preemptCurrentPendingDisplay()
+                self.showNextRequest()
             } else {
                 self.syncDisplayToSelectedSession()
             }
@@ -1323,6 +1326,9 @@ class AppState: ObservableObject {
         }
 
         if currentResponseHandler == nil {
+            showNextRequest()
+        } else if isShowingLowerPriorityPendingRequest(than: request) {
+            preemptCurrentPendingDisplay()
             showNextRequest()
         } else {
             syncDisplayToSelectedSession()
@@ -1410,7 +1416,7 @@ class AppState: ObservableObject {
     private func showNextRequest() {
         discardInvalidPendingRequests()
 
-        guard let next = sessionStore.pendingQueue.first else {
+        guard let next = nextPendingRequestToDisplay() else {
             currentResponseHandler = nil
             isShowingRequest = false
             showingRequestId = nil
@@ -1527,6 +1533,35 @@ class AppState: ObservableObject {
         }
     }
 
+    private func nextPendingRequestToDisplay() -> PendingRequest? {
+        sessionStore.pendingQueue.first(where: Self.isApprovalPriorityRequest)
+            ?? sessionStore.pendingQueue.first
+    }
+
+    private static func isApprovalPriorityRequest(_ request: PendingRequest) -> Bool {
+        request.claudeQuestion == nil
+    }
+
+    private func isShowingLowerPriorityPendingRequest(than request: PendingRequest) -> Bool {
+        guard Self.isApprovalPriorityRequest(request),
+              let showingRequestId,
+              let showingRequest = sessionStore.pendingQueue.first(where: { $0.id == showingRequestId }) else {
+            return false
+        }
+        return !Self.isApprovalPriorityRequest(showingRequest)
+    }
+
+    private func preemptCurrentPendingDisplay() {
+        currentResponseHandler = nil
+        currentHookEventId = nil
+        currentClaudeQuestion = nil
+        currentClaudeQuestionAnswers = [:]
+        isShowingRequest = false
+        showingRequestId = nil
+        timeoutTimer?.invalidate()
+        timeoutProgress = 1.0
+    }
+
     private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
         isTerminalFrontmostAsync(
             appName: session?.terminalApp,
@@ -1569,8 +1604,8 @@ class AppState: ObservableObject {
     }
 
     private func discardInvalidPendingRequests() {
-        while let next = sessionStore.pendingQueue.first, !isValidApprovalRequest(next) {
-            if let removed = sessionStore.removeFirstPending() {
+        while let next = sessionStore.pendingQueue.first(where: { !isValidApprovalRequest($0) }) {
+            if let removed = sessionStore.removePending(id: next.id) {
                 removed.responseHandler("{\"response\": \"approved\"}")
             }
         }
@@ -1927,6 +1962,7 @@ class AppState: ObservableObject {
             reason: reason
         )
         persistApprovalScope(approved: approved, approvalScope: approvalScope)
+        let completedRequestId = showingRequestId
         currentResponseHandler = nil
         currentHookEventId = nil
         currentClaudeQuestion = nil
@@ -1938,7 +1974,9 @@ class AppState: ObservableObject {
         DispatchQueue.main.async {
             self.timeoutProgress = 1.0
             var completedSessionId: String?
-            if let removed = self.sessionStore.removeFirstPending() {
+            let removedRequest = completedRequestId.flatMap { self.sessionStore.removePending(id: $0) }
+                ?? self.sessionStore.removeFirstPending()
+            if let removed = removedRequest {
                 completedSessionId = removed.sessionId
 
                 // Update session state to not pending

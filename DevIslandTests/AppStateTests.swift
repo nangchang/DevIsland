@@ -990,6 +990,99 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.hasResponseHandler)
     }
 
+    func testApprovalRequestsPreemptClaudeQuestionsButPreserveCategoryFIFO() {
+        var questionResponse: String?
+        var firstApprovalResponse: String?
+        var secondApprovalResponse: String?
+        let questionExpectation = XCTestExpectation(description: "Claude question response")
+        let firstApprovalExpectation = XCTestExpectation(description: "First approval response")
+        let secondApprovalExpectation = XCTestExpectation(description: "Second approval response")
+
+        let question = """
+        {
+            "hook_event_name": "PreToolUse",
+            "cli_source": "claude",
+            "session_id": "claude-question-priority",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {"id": "q1", "prompt": "Answer after approvals?"}
+                ]
+            }
+        }
+        """
+        let firstApproval = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "cli_source": "claude",
+            "session_id": "approval-priority-1",
+            "tool_name": "Write"
+        }
+        """
+        let secondApproval = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "cli_source": "claude",
+            "session_id": "approval-priority-2",
+            "tool_name": "Bash"
+        }
+        """
+
+        appState.handleMessage(question) { response in
+            questionResponse = response
+            questionExpectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+
+        XCTAssertEqual(appState.currentSessionId, "claude-question-priority")
+        XCTAssertNotNil(appState.currentClaudeQuestion)
+
+        appState.handleMessage(firstApproval) { response in
+            firstApprovalResponse = response
+            firstApprovalExpectation.fulfill()
+        }
+        appState.handleMessage(secondApproval) { response in
+            secondApprovalResponse = response
+            secondApprovalExpectation.fulfill()
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.8))
+
+        XCTAssertEqual(appState.sessionStore.pendingCount, 3)
+        XCTAssertEqual(appState.currentSessionId, "approval-priority-1")
+        XCTAssertNil(appState.currentClaudeQuestion)
+
+        appState.approve()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        XCTAssertEqual(self.parseResponse(firstApprovalResponse ?? "")?["response"] as? String, "approved")
+        XCTAssertEqual(appState.currentSessionId, "approval-priority-2")
+        XCTAssertNil(appState.currentClaudeQuestion)
+        XCTAssertNil(questionResponse)
+
+        appState.approve()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+
+        XCTAssertEqual(self.parseResponse(secondApprovalResponse ?? "")?["response"] as? String, "approved")
+        XCTAssertEqual(appState.currentSessionId, "claude-question-priority")
+        XCTAssertNotNil(appState.currentClaudeQuestion)
+        XCTAssertNil(questionResponse)
+
+        guard let questionId = appState.currentClaudeQuestion?.questions.first?.id else {
+            XCTFail("Expected queued Claude question")
+            return
+        }
+        var answer = ClaudeQuestionAnswer()
+        answer.text = "Done"
+        appState.currentClaudeQuestionAnswers[questionId] = answer
+        appState.submitClaudeQuestion()
+
+        wait(for: [firstApprovalExpectation, secondApprovalExpectation, questionExpectation], timeout: 2.0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        XCTAssertEqual(self.parseResponse(questionResponse ?? "")?["response"] as? String, "approved")
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+    }
+
     func testClaudeAskUserQuestionPermissionRequestPassesToNativePrompt() {
         let expectation = XCTestExpectation(description: "Claude AskUserQuestion permission request passes through")
         let message = """
