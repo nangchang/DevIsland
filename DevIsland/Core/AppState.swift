@@ -1452,6 +1452,48 @@ class AppState: ObservableObject {
 
             if isFrontmost && !next.isReplay {
                 print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
+                if next.claudeQuestion != nil {
+                    self.respondWithReplay(
+                        "{\"response\": \"pass\"}",
+                        responseHandler: next.responseHandler,
+                        hookEventId: next.hookEventId,
+                        agentKind: next.agentKind,
+                        sessionId: next.sessionId,
+                        toolName: next.rawToolName.isEmpty ? next.toolName : next.rawToolName,
+                        workspaceRoot: next.workspaceRoot,
+                        action: .prompt,
+                        source: .automatic,
+                        reason: "terminal focused"
+                    )
+                    _ = self.sessionStore.removePending(id: next.id)
+                    if !next.sessionId.isEmpty {
+                        self.sessionStore.updateActiveSession(
+                            sessionId: next.sessionId,
+                            terminalTitle: session?.terminalTitle ?? "",
+                            agentKind: next.agentKind,
+                            terminalApp: session?.terminalApp ?? "",
+                            terminalTTY: session?.terminalTTY ?? "",
+                            terminalWindowId: session?.terminalWindowId ?? "",
+                            terminalTabIndex: session?.terminalTabIndex ?? "",
+                            terminalTmuxPane: session?.terminalTmuxPane ?? "",
+                            terminalTmuxSocket: session?.terminalTmuxSocket ?? "",
+                            terminalTmuxClient: session?.terminalTmuxClient ?? "",
+                            toolName: next.toolName,
+                            eventName: next.eventName,
+                            message: next.message,
+                            isPending: false,
+                            status: SessionStatus.timeoutBypassed(Date())
+                        )
+                    }
+                    self.currentClaudeQuestion = nil
+                    self.currentClaudeQuestionAnswers = [:]
+                    self.isShowingRequest = false
+                    self.showingRequestId = nil
+                    self.timeoutTimer?.invalidate()
+                    self.timeoutProgress = 1.0
+                    self.showNextRequest()
+                    return
+                }
                 self.currentResponseHandler = next.responseHandler
                 self.currentSessionId = next.sessionId
                 self.currentRawToolName = next.rawToolName

@@ -220,6 +220,15 @@ final class SessionStore: ObservableObject {
         return request
     }
 
+    /// Removes and returns the pending request with the matching ID.
+    @discardableResult
+    func removePending(id: UUID) -> PendingRequest? {
+        guard let index = pendingQueue.firstIndex(where: { $0.id == id }) else { return nil }
+        let request = pendingQueue.remove(at: index)
+        pendingItems.removeAll { $0.id == id }
+        return request
+    }
+
     /// Removes all pending requests for `sessionId`. Returns the removed requests.
     func removeAllPending(sessionId: String) -> [PendingRequest] {
         let removed = pendingQueue.filter { $0.sessionId == sessionId }
