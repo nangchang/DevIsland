@@ -229,6 +229,8 @@ private struct DisplaySettingsPane: View {
                     step: 1
                 )
 
+                Toggle(l10n.lblNotchAutoExpand, isOn: store.binding(\.notchAutoExpandEnabled))
+
                 Picker(l10n.lblNotchAutoCollapse, selection: store.binding(\.notchAutoCollapseDelay)) {
                     ForEach(NotchAutoCollapseDelay.allCases) { delay in
                         Text(delay.label).tag(delay)

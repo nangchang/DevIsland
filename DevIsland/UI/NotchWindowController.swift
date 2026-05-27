@@ -377,6 +377,7 @@ class NotchWindowController: NSWindowController {
     private func focusExpandedPanelForTextInput() {
         guard AppState.shared.currentClaudeQuestion != nil else { return }
         expandedPanel.makeKey()
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func updateWindowFrame(animate: Bool = true, sizeOverride: NSSize? = nil, targetScreenOverride: NSScreen? = nil) {

@@ -877,7 +877,8 @@ class AppState: ObservableObject {
                     self.sessionStore.setUnread(true, sessionId: fullSessionId)
                 }
 
-                if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
+                if isInformational && !hasPendingForSession && self.currentResponseHandler == nil
+                    && SettingsStore.shared.settings.notchAutoExpandEnabled {
                     // 터미널이 포커스되어 있지 않을 때만 확장
                     let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
                     self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
@@ -897,7 +898,7 @@ class AppState: ObservableObject {
                         self.currentSessionId = fullSessionId
                         self.isNotchExpanded = true
                         self.isExpandingFromRequest = true
-                        
+
                         self.stopNotificationAutoCollapseTimer()
                         if let delay = self.notificationAutoCollapseDelay {
                             self.startNotificationAutoCollapseTimer(delay: delay)
