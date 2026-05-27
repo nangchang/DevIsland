@@ -881,9 +881,8 @@ class AppState: ObservableObject {
                     SettingsStore.shared.settings.notchAutoExpandEnabled
                         && SettingsStore.shared.settings.expandOnNotification
                 }
-                if isInformational && !isStartEvent && !hasPendingForSession && self.currentResponseHandler == nil
-                    && expandEnabled {
-                    // 터미널이 포커스되어 있지 않을 때만 확장
+                if isInformational && !isStartEvent && !hasPendingForSession && self.currentResponseHandler == nil {
+                    // expandEnabled 여부와 무관하게 포커스된 터미널의 unread 해제는 항상 수행
                     let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
                     self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
                         guard let self else { return }
@@ -891,6 +890,7 @@ class AppState: ObservableObject {
                             self.sessionStore.setUnread(false, sessionId: fullSessionId)
                             return
                         }
+                        guard expandEnabled else { return }
                         guard self.currentResponseHandler == nil else { return }
                         if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
                             self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
