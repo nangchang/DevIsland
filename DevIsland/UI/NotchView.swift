@@ -240,7 +240,6 @@ struct NotchView: View {
                     isExpanded = true
                 }
             }
-            DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
         }
         .onChange(of: state.isNotchExpanded) { _, newValue in
             if newValue {
