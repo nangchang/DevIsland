@@ -23,7 +23,7 @@ These settings are managed in `SettingsStore` and applied in `NotchView` / `Notc
 | `notchBackdropShadowEnabled` | Bool | `true` | `true / false` | Whether to draw a soft shadow behind the notch. |
 | `collapsedNotchWidth` | Double | `260` | `180...420` | Base width of the collapsed notch. |
 | `collapsedNotchHeight` | Double | `32` | `24...56` | Base height of the collapsed notch. |
-| `expandedNotchWidth` | Double | `692` | `560...1200` | Width of the expanded dashboard window. |
+| `expandedNotchWidth` | Double | `692` | `610...1200` | Width of the expanded dashboard window. |
 | `expandedNotchHeight` | Double | `300` | `240...720` | Height of the expanded dashboard window. |
 | `notchCharacterVerticalOffset` | Double | `4` | `-8...12` | Vertical alignment of characters in the collapsed notch. |
 
