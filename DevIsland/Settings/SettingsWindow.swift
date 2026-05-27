@@ -293,14 +293,46 @@ private struct SettingsSliderRow: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
+    private let formatter: NumberFormatter
+
+    init(title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double) {
+        self.title = title
+        self._value = value
+        self.range = range
+        self.step = step
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = step < 1 ? 2 : 0
+        self.formatter = formatter
+    }
+
+    private var clampedValue: Binding<Double> {
+        Binding(
+            get: { value },
+            set: { value = clamped($0) }
+        )
+    }
 
     var body: some View {
         HStack(spacing: 12) {
             Text(title)
                 .foregroundStyle(.primary)
                 .frame(width: 220, alignment: .leading)
-            Slider(value: $value, in: range, step: step)
+            Slider(value: clampedValue, in: range, step: step)
+            TextField("", value: clampedValue, formatter: formatter)
+                .multilineTextAlignment(.trailing)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 72)
+                .accessibilityLabel(title)
         }
+    }
+
+    private func clamped(_ newValue: Double) -> Double {
+        guard newValue.isFinite else { return value }
+        let stepped = step > 0 ? (newValue / step).rounded() * step : newValue
+        return min(max(stepped, range.lowerBound), range.upperBound)
     }
 }
 
