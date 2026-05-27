@@ -161,6 +161,7 @@ struct AppSettings: Equatable {
     var collapsedNotchHeight: Double
     var expandedNotchWidth: Double
     var expandedNotchHeight: Double
+    var notchAutoExpandEnabled: Bool
     var notchAutoCollapseDelay: NotchAutoCollapseDelay
     var notchCharacterHorizontalInset: Double
     var notchCharacterVerticalOffset: Double
@@ -231,6 +232,7 @@ struct AppSettings: Equatable {
         collapsedNotchHeight: 32,
         expandedNotchWidth: 692,
         expandedNotchHeight: 300,
+        notchAutoExpandEnabled: true,
         notchAutoCollapseDelay: .seconds5,
         notchCharacterHorizontalInset: 24,
         notchCharacterVerticalOffset: 4,
@@ -297,6 +299,7 @@ final class SettingsStore: ObservableObject {
         static let collapsedNotchHeight = "collapsedNotchHeight"
         static let expandedNotchWidth = "expandedNotchWidth"
         static let expandedNotchHeight = "expandedNotchHeight"
+        static let notchAutoExpandEnabled = "notchAutoExpandEnabled"
         static let notchAutoCollapseDelay = "notchAutoCollapseDelay"
         static let notchCharacterHorizontalInset = "notchCharacterHorizontalInset"
         static let notchCharacterVerticalOffset = "notchCharacterVerticalOffset"
@@ -360,6 +363,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.collapsedNotchHeight, forKey: DefaultsKey.collapsedNotchHeight)
         userDefaults.set(settings.expandedNotchWidth, forKey: DefaultsKey.expandedNotchWidth)
         userDefaults.set(settings.expandedNotchHeight, forKey: DefaultsKey.expandedNotchHeight)
+        userDefaults.set(settings.notchAutoExpandEnabled, forKey: DefaultsKey.notchAutoExpandEnabled)
         userDefaults.set(settings.notchAutoCollapseDelay.rawValue, forKey: DefaultsKey.notchAutoCollapseDelay)
         userDefaults.set(settings.notchCharacterHorizontalInset, forKey: DefaultsKey.notchCharacterHorizontalInset)
         userDefaults.set(settings.notchCharacterVerticalOffset, forKey: DefaultsKey.notchCharacterVerticalOffset)
@@ -553,6 +557,11 @@ final class SettingsStore: ObservableObject {
                 from: userDefaults,
                 default: defaults.expandedNotchHeight,
                 range: 240...720
+            ),
+            notchAutoExpandEnabled: bool(
+                key: DefaultsKey.notchAutoExpandEnabled,
+                from: userDefaults,
+                default: defaults.notchAutoExpandEnabled
             ),
             notchAutoCollapseDelay: enumValue(
                 NotchAutoCollapseDelay.self,

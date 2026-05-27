@@ -887,6 +887,8 @@ class AppState: ObservableObject {
                             return
                         }
                         guard self.currentResponseHandler == nil else { return }
+                        let autoExpandEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notchAutoExpandEnabled }
+                        guard autoExpandEnabled else { return }
                         if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
                             self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
                             self.previousSessionId = self.currentSessionId
@@ -1537,8 +1539,11 @@ class AppState: ObservableObject {
             self.currentSessionId  = next.sessionId
 
             self.isExpandingFromRequest = true
-            self.isNotchExpanded = true
-            self.startTimeout()
+            let autoExpand = MainActor.assumeIsolated { SettingsStore.shared.settings.notchAutoExpandEnabled }
+            if autoExpand || self.isNotchExpanded {
+                self.isNotchExpanded = true
+                self.startTimeout()
+            }
         }
     }
 
