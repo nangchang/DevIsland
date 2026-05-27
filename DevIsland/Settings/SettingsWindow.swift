@@ -113,6 +113,9 @@ struct SettingsWindowView: View {
             DisplaySettingsPane(appState: appState, store: store)
                 .tabItem { Label(l10n.tabDisplay, systemImage: "display") }
 
+            ExpandSettingsPane(store: store)
+                .tabItem { Label(l10n.tabExpand, systemImage: "arrow.up.left.and.arrow.down.right") }
+
             ApprovalSettingsPane(appState: appState, store: store)
                 .tabItem { Label(l10n.tabApproval, systemImage: "hand.raised") }
 
@@ -228,14 +231,6 @@ private struct DisplaySettingsPane: View {
                     range: 240...720,
                     step: 1
                 )
-
-                Toggle(l10n.lblNotchAutoExpand, isOn: store.binding(\.notchAutoExpandEnabled))
-
-                Picker(l10n.lblUnreadDotPosition, selection: store.binding(\.notchUnreadDotPosition)) {
-                    ForEach(NotchUnreadDotPosition.allCases) { pos in
-                        Text(pos.label).tag(pos)
-                    }
-                }
 
                 Picker(l10n.lblNotchAutoCollapse, selection: store.binding(\.notchAutoCollapseDelay)) {
                     ForEach(NotchAutoCollapseDelay.allCases) { delay in
@@ -392,6 +387,67 @@ private struct NotchCharacterControl: View {
                 }
             }
         )
+    }
+}
+
+private struct ExpandSettingsPane: View {
+    @ObservedObject var store: SettingsStore
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        Form {
+            Section(l10n.secNotchAutoExpand) {
+                Toggle(l10n.lblNotchAutoExpand, isOn: store.binding(\.notchAutoExpandEnabled))
+
+                Picker(l10n.lblUnreadDotPosition, selection: store.binding(\.notchUnreadDotPosition)) {
+                    ForEach(NotchUnreadDotPosition.allCases) { pos in
+                        Text(pos.label).tag(pos)
+                    }
+                }
+                .disabled(store.settings.notchAutoExpandEnabled)
+            }
+
+            Section(l10n.secNotchExpandTriggers) {
+                let enabled = store.settings.notchAutoExpandEnabled
+                triggerRow(
+                    label: l10n.lblExpandOnNotification,
+                    hint: l10n.hintExpandOnNotification,
+                    binding: store.binding(\.expandOnNotification),
+                    enabled: enabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnApprovalRequest,
+                    hint: l10n.hintExpandOnApprovalRequest,
+                    binding: store.binding(\.expandOnApprovalRequest),
+                    enabled: enabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnQuestionResponse,
+                    hint: l10n.hintExpandOnQuestionResponse,
+                    binding: store.binding(\.expandOnQuestionResponse),
+                    enabled: enabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnInteractiveTool,
+                    hint: l10n.hintExpandOnInteractiveTool,
+                    binding: store.binding(\.expandOnInteractiveTool),
+                    enabled: enabled
+                )
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func triggerRow(label: String, hint: String, binding: Binding<Bool>, enabled: Bool) -> some View {
+        Toggle(isOn: binding) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                Text(hint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .disabled(!enabled)
     }
 }
 

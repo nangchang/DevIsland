@@ -190,6 +190,10 @@ struct AppSettings: Equatable {
     var notchRightCharacterKind: BuddyKind
     var notchRightRandomCharacterKinds: Set<BuddyKind>
     var notchCenterText: String
+    var expandOnNotification: Bool
+    var expandOnInteractiveTool: Bool
+    var expandOnApprovalRequest: Bool
+    var expandOnQuestionResponse: Bool
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -261,7 +265,11 @@ struct AppSettings: Equatable {
         notchRightCharacterMode: .random,
         notchRightCharacterKind: .gemini,
         notchRightRandomCharacterKinds: Set(BuddyKind.defaultRandomCases),
-        notchCenterText: "DevIsland"
+        notchCenterText: "DevIsland",
+        expandOnNotification: true,
+        expandOnInteractiveTool: true,
+        expandOnApprovalRequest: true,
+        expandOnQuestionResponse: true
     )
 }
 
@@ -330,6 +338,10 @@ final class SettingsStore: ObservableObject {
         static let notchRightCharacterKind = "notchRightCharacterKind"
         static let notchRightRandomCharacterKinds = "notchRightRandomCharacterKinds"
         static let notchCenterText = "notchCenterText"
+        static let expandOnNotification = "expandOnNotification"
+        static let expandOnInteractiveTool = "expandOnInteractiveTool"
+        static let expandOnApprovalRequest = "expandOnApprovalRequest"
+        static let expandOnQuestionResponse = "expandOnQuestionResponse"
     }
 
     private let userDefaults: UserDefaults
@@ -395,6 +407,10 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.notchRightCharacterKind.rawValue, forKey: DefaultsKey.notchRightCharacterKind)
         userDefaults.set(settings.notchRightRandomCharacterKinds.map(\.rawValue).sorted(), forKey: DefaultsKey.notchRightRandomCharacterKinds)
         userDefaults.set(settings.notchCenterText, forKey: DefaultsKey.notchCenterText)
+        userDefaults.set(settings.expandOnNotification, forKey: DefaultsKey.expandOnNotification)
+        userDefaults.set(settings.expandOnInteractiveTool, forKey: DefaultsKey.expandOnInteractiveTool)
+        userDefaults.set(settings.expandOnApprovalRequest, forKey: DefaultsKey.expandOnApprovalRequest)
+        userDefaults.set(settings.expandOnQuestionResponse, forKey: DefaultsKey.expandOnQuestionResponse)
         writeBridgeConfig(settings)
     }
 
@@ -642,7 +658,27 @@ final class SettingsStore: ObservableObject {
                 from: userDefaults,
                 default: defaults.notchRightRandomCharacterKinds
             ),
-            notchCenterText: userDefaults.string(forKey: DefaultsKey.notchCenterText) ?? defaults.notchCenterText
+            notchCenterText: userDefaults.string(forKey: DefaultsKey.notchCenterText) ?? defaults.notchCenterText,
+            expandOnNotification: bool(
+                key: DefaultsKey.expandOnNotification,
+                from: userDefaults,
+                default: defaults.expandOnNotification
+            ),
+            expandOnInteractiveTool: bool(
+                key: DefaultsKey.expandOnInteractiveTool,
+                from: userDefaults,
+                default: defaults.expandOnInteractiveTool
+            ),
+            expandOnApprovalRequest: bool(
+                key: DefaultsKey.expandOnApprovalRequest,
+                from: userDefaults,
+                default: defaults.expandOnApprovalRequest
+            ),
+            expandOnQuestionResponse: bool(
+                key: DefaultsKey.expandOnQuestionResponse,
+                from: userDefaults,
+                default: defaults.expandOnQuestionResponse
+            )
         )
     }
 

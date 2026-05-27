@@ -178,6 +178,7 @@ extension L10n {
     // Tab labels
     var tabGeneral:          String { s("General",      "일반") }
     var tabDisplay:          String { s("Display",      "디스플레이") }
+    var tabExpand:           String { s("Expand",       "펼침") }
     var tabApproval:         String { s("Approval",     "승인") }
     var tabProviders:        String { s("Providers",    "공급자") }
     var tabBridge:           String { s("Bridge / IPC", "브리지 / IPC") }
@@ -206,6 +207,20 @@ extension L10n {
     var posCenter: String { s("Center", "가운데") }
     var posRight:  String { s("Right",  "오른쪽") }
     var lblNotchAutoCollapse: String { s("Auto-collapse",                "자동 닫힘") }
+    var secNotchAutoExpand:      String { s("Auto-expand",               "자동 펼침") }
+    var secNotchExpandTriggers: String { s("When to expand",              "자동 펼침 조건") }
+    var lblExpandOnNotification: String { s("On notification",                 "알림 수신 시") }
+    var lblExpandOnInteractiveTool: String { s("On interactive input (Gemini only)", "Gemini 인터랙티브 입력 시") }
+    var lblExpandOnApprovalRequest: String { s("On approval request",            "승인 요청 시") }
+    var lblExpandOnQuestionResponse: String { s("On question response",           "질문 응답 대기 시") }
+    var hintExpandOnNotification: String { s("When a notification arrives (e.g. task end, input prompt).",
+                                             "작업 종료·입력 대기 등 알림이 발생할 때") }
+    var hintExpandOnInteractiveTool: String { s("Gemini only — when an interactive tool (e.g. bash) is waiting for terminal input.",
+                                                "Gemini 전용 — 터미널 입력을 기다리는 인터랙티브 툴이 실행될 때") }
+    var hintExpandOnApprovalRequest: String { s("When a tool approval request is received.",
+                                                "도구 사용 승인 요청이 수신될 때") }
+    var hintExpandOnQuestionResponse: String { s("When the agent sends a question and waits for a response.",
+                                               "에이전트가 사용자에게 질문을 보내고 응답을 기다릴 때") }
     var secNotchCharacters:  String { s("Notch characters",              "노치 캐릭터") }
     var lblLeftCharacter:    String { s("Left character",                "왼쪽 캐릭터") }
     var lblRightCharacter:   String { s("Right character",               "오른쪽 캐릭터") }
