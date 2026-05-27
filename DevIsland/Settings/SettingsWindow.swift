@@ -218,7 +218,7 @@ private struct DisplaySettingsPane: View {
                 SettingsSliderRow(
                     title: l10n.lblExpandedNotchWidth(Int(store.settings.expandedNotchWidth)),
                     value: store.binding(\.expandedNotchWidth),
-                    range: 560...1200,
+                    range: 610...1200,
                     step: 1
                 )
 
@@ -294,13 +294,38 @@ private struct SettingsSliderRow: View {
     let range: ClosedRange<Double>
     let step: Double
 
+    private var clampedValue: Binding<Double> {
+        Binding(
+            get: { value },
+            set: { value = clamped($0) }
+        )
+    }
+
+    private var formatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = step < 1 ? 2 : 0
+        return formatter
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Text(title)
                 .foregroundStyle(.primary)
                 .frame(width: 220, alignment: .leading)
-            Slider(value: $value, in: range, step: step)
+            Slider(value: clampedValue, in: range, step: step)
+            TextField("", value: clampedValue, formatter: formatter)
+                .multilineTextAlignment(.trailing)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 72)
         }
+    }
+
+    private func clamped(_ newValue: Double) -> Double {
+        guard newValue.isFinite else { return value }
+        let stepped = step > 0 ? (newValue / step).rounded() * step : newValue
+        return min(max(stepped, range.lowerBound), range.upperBound)
     }
 }
 

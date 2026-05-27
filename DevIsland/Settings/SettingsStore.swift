@@ -546,7 +546,7 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.expandedNotchWidth,
                 from: userDefaults,
                 default: defaults.expandedNotchWidth,
-                range: 560...1200
+                range: 610...1200
             ),
             expandedNotchHeight: boundedDouble(
                 key: DefaultsKey.expandedNotchHeight,
