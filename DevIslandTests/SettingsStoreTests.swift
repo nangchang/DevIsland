@@ -173,6 +173,24 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings, .defaults)
     }
 
+    func testExpandedNotchWidthBelowMinimumFallsBackToDefault() {
+        defaults.set(609, forKey: SettingsStore.DefaultsKey.expandedNotchWidth)
+
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+
+        XCTAssertEqual(store.settings.expandedNotchWidth, AppSettings.defaults.expandedNotchWidth)
+    }
+
+    func testExpandedNotchWidthAtAndAboveMinimumIsPreserved() {
+        defaults.set(610, forKey: SettingsStore.DefaultsKey.expandedNotchWidth)
+        var store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+        XCTAssertEqual(store.settings.expandedNotchWidth, 610)
+
+        defaults.set(611, forKey: SettingsStore.DefaultsKey.expandedNotchWidth)
+        store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+        XCTAssertEqual(store.settings.expandedNotchWidth, 611)
+    }
+
     func testLegacyNotchBackgroundOpacityMigratesToPanelOpacity() {
         defaults.set(0.7, forKey: SettingsStore.DefaultsKey.notchBackgroundOpacity)
 

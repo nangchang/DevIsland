@@ -218,7 +218,7 @@ private struct DisplaySettingsPane: View {
                 SettingsSliderRow(
                     title: l10n.lblExpandedNotchWidth(Int(store.settings.expandedNotchWidth)),
                     value: store.binding(\.expandedNotchWidth),
-                    range: 560...1200,
+                    range: 610...1200,
                     step: 1
                 )
 
