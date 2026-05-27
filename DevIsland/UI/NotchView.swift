@@ -51,10 +51,24 @@ class MascotState: ObservableObject {
 struct NotchCollapsedView: View {
     @ObservedObject private var settingsStore = SettingsStore.shared
     @ObservedObject private var mascotState = MascotState.shared
+    @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @State private var buddyPulse = false
+    @State private var notifPulse = false
 
     private var notchSize: NSSize {
         NotchLayout.collapsedSize(settings: settingsStore.settings)
+    }
+
+    private var hasDotIndicator: Bool {
+        sessionStore.pendingCount > 0 || sessionStore.activeSessions.contains { $0.isUnread }
+    }
+
+    private var unreadDotX: CGFloat {
+        switch settingsStore.settings.notchUnreadDotPosition {
+        case .left:   return 18
+        case .center: return notchSize.width / 2
+        case .right:  return notchSize.width - 18
+        }
     }
 
     var body: some View {
@@ -89,6 +103,19 @@ struct NotchCollapsedView: View {
                             .frame(width: 24, height: 24)
                             .position(x: notchSize.width - characterHorizontalInset, y: characterCenterY)
                         }
+
+                        ZStack {
+                            Circle()
+                                .fill(Color.orange.opacity(notifPulse ? 0.0 : 0.65))
+                                .frame(width: notifPulse ? 22 : 7, height: notifPulse ? 22 : 7)
+                            Circle()
+                                .fill(Color.orange)
+                                .frame(width: 7, height: 7)
+                                .shadow(color: .orange, radius: 3)
+                        }
+                        .position(x: unreadDotX, y: notchSize.height - 6)
+                        .opacity(hasDotIndicator ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.3), value: hasDotIndicator)
                     }
                     .frame(width: notchSize.width, height: notchSize.height)
                 }
@@ -105,6 +132,9 @@ struct NotchCollapsedView: View {
         .onAppear {
             withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
                 buddyPulse = true
+            }
+            withAnimation(.easeOut(duration: 1.2).repeatForever(autoreverses: false)) {
+                notifPulse = true
             }
             mascotState.refresh(settings: settingsStore.settings, forceRandomize: true)
         }

@@ -421,6 +421,11 @@ class NotchWindowController: NSWindowController {
     func expandFromCollapsedWindow() {
         guard !AppState.shared.isNotchExpanded else { return }
 
+        let store = AppState.shared.sessionStore
+        for session in store.activeSessions where session.isUnread {
+            store.setUnread(false, sessionId: session.id)
+        }
+
         isManualExpand = true
         updateWindowFrame(animate: false)
         AppState.shared.isNotchExpanded = true
