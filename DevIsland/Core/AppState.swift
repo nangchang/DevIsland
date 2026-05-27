@@ -877,8 +877,12 @@ class AppState: ObservableObject {
                     self.sessionStore.setUnread(true, sessionId: fullSessionId)
                 }
 
+                let expandEnabled = MainActor.assumeIsolated {
+                    SettingsStore.shared.settings.notchAutoExpandEnabled
+                        && SettingsStore.shared.settings.expandOnNotification
+                }
                 if isInformational && !isStartEvent && !hasPendingForSession && self.currentResponseHandler == nil
-                    && SettingsStore.shared.settings.expandOnNotification {
+                    && expandEnabled {
                     // 터미널이 포커스되어 있지 않을 때만 확장
                     let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
                     self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
@@ -888,8 +892,6 @@ class AppState: ObservableObject {
                             return
                         }
                         guard self.currentResponseHandler == nil else { return }
-                        let autoExpandEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notchAutoExpandEnabled }
-                        guard autoExpandEnabled else { return }
                         if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
                             self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
                             self.previousSessionId = self.currentSessionId
@@ -900,7 +902,7 @@ class AppState: ObservableObject {
                         self.currentSessionId = fullSessionId
                         self.isNotchExpanded = true
                         self.isExpandingFromRequest = true
-                        
+
                         self.stopNotificationAutoCollapseTimer()
                         if let delay = self.notificationAutoCollapseDelay {
                             self.startNotificationAutoCollapseTimer(delay: delay)
