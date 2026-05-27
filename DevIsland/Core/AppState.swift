@@ -877,7 +877,8 @@ class AppState: ObservableObject {
                     self.sessionStore.setUnread(true, sessionId: fullSessionId)
                 }
 
-                if isInformational && !hasPendingForSession && self.currentResponseHandler == nil {
+                if isInformational && !hasPendingForSession && self.currentResponseHandler == nil
+                    && SettingsStore.shared.settings.expandOnNotification {
                     // 터미널이 포커스되어 있지 않을 때만 확장
                     let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
                     self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
@@ -1179,7 +1180,11 @@ class AppState: ObservableObject {
                 )
 
                 // Interactive 툴: 이미 포커스 체크 후 여기 도달했으므로 터미널이 비포커스 상태 → 알림 표시
-                if isInteractive && !h.isReplayPayload {
+                let interactiveExpandEnabled = MainActor.assumeIsolated {
+                    SettingsStore.shared.settings.notchAutoExpandEnabled
+                        && SettingsStore.shared.settings.expandOnInteractiveTool
+                }
+                if isInteractive && !h.isReplayPayload && interactiveExpandEnabled {
                     self.isNotchExpanded = true
                     self.isExpandingFromRequest = true
                     self.currentSessionId = h.sessionId
@@ -1445,7 +1450,13 @@ class AppState: ObservableObject {
                 currentSessionId = prev
                 syncDisplayToSelectedSession()
                 isExpandingFromRequest = true
-                isNotchExpanded = true
+                let sessionReturnExpandEnabled = MainActor.assumeIsolated {
+                    SettingsStore.shared.settings.notchAutoExpandEnabled
+                        && SettingsStore.shared.settings.expandOnSessionReturn
+                }
+                if sessionReturnExpandEnabled {
+                    isNotchExpanded = true
+                }
             } else {
                 sessionStore.selectedSessionId = nil
                 isNotchExpanded = false
@@ -1539,8 +1550,11 @@ class AppState: ObservableObject {
             self.currentSessionId  = next.sessionId
 
             self.isExpandingFromRequest = true
-            let autoExpand = MainActor.assumeIsolated { SettingsStore.shared.settings.notchAutoExpandEnabled }
-            if autoExpand || self.isNotchExpanded {
+            let approvalExpandEnabled = MainActor.assumeIsolated {
+                SettingsStore.shared.settings.notchAutoExpandEnabled
+                    && SettingsStore.shared.settings.expandOnApprovalRequest
+            }
+            if approvalExpandEnabled || self.isNotchExpanded {
                 self.isNotchExpanded = true
                 self.startTimeout()
             }
