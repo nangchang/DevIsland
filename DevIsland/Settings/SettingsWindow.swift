@@ -415,25 +415,22 @@ private struct ExpandSettingsPane: View {
                     binding: store.binding(\.expandOnNotification),
                     enabled: enabled
                 )
-                Divider()
-                triggerRow(
-                    label: l10n.lblExpandOnInteractiveTool,
-                    hint: l10n.hintExpandOnInteractiveTool,
-                    binding: store.binding(\.expandOnInteractiveTool),
-                    enabled: enabled
-                )
-                Divider()
-                triggerRow(
-                    label: l10n.lblExpandOnSessionReturn,
-                    hint: l10n.hintExpandOnSessionReturn,
-                    binding: store.binding(\.expandOnSessionReturn),
-                    enabled: enabled
-                )
-                Divider()
                 triggerRow(
                     label: l10n.lblExpandOnApprovalRequest,
                     hint: l10n.hintExpandOnApprovalRequest,
                     binding: store.binding(\.expandOnApprovalRequest),
+                    enabled: enabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnQuestionResponse,
+                    hint: l10n.hintExpandOnQuestionResponse,
+                    binding: store.binding(\.expandOnQuestionResponse),
+                    enabled: enabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnInteractiveTool,
+                    hint: l10n.hintExpandOnInteractiveTool,
+                    binding: store.binding(\.expandOnInteractiveTool),
                     enabled: enabled
                 )
             }
@@ -441,13 +438,16 @@ private struct ExpandSettingsPane: View {
         .formStyle(.grouped)
     }
 
-    @ViewBuilder
     private func triggerRow(label: String, hint: String, binding: Binding<Bool>, enabled: Bool) -> some View {
-        Toggle(label, isOn: binding)
-            .disabled(!enabled)
-        Text(hint)
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        Toggle(isOn: binding) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                Text(hint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .disabled(!enabled)
     }
 }
 

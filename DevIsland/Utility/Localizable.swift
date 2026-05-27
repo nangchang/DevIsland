@@ -208,19 +208,19 @@ extension L10n {
     var posRight:  String { s("Right",  "오른쪽") }
     var lblNotchAutoCollapse: String { s("Auto-collapse",                "자동 닫힘") }
     var secNotchAutoExpand:      String { s("Auto-expand",               "자동 펼침") }
-    var secNotchExpandTriggers: String { s("Expand triggers",            "펼침 트리거") }
-    var lblExpandOnNotification: String { s("Expand on notification",       "알림 이벤트 시") }
-    var lblExpandOnInteractiveTool: String { s("Expand on interactive tool", "인터랙티브 툴 실행 시") }
-    var lblExpandOnSessionReturn: String { s("Expand on session return",     "이전 세션 복귀 시") }
-    var lblExpandOnApprovalRequest: String { s("Expand on approval request", "승인 요청 시") }
-    var hintExpandOnNotification: String { s("Session stop / start / idle events when the terminal is not focused.",
-                                             "터미널 비포커스 상태에서 세션 종료/시작/유휴 이벤트 수신 시") }
-    var hintExpandOnInteractiveTool: String { s("Auto-approved interactive tools that require terminal attention.",
-                                                "터미널 확인이 필요한 인터랙티브 툴이 자동 승인될 때") }
-    var hintExpandOnSessionReturn: String { s("After handling a request, when returning to a previous session.",
-                                              "요청 처리 완료 후 이전 세션으로 복귀할 때") }
-    var hintExpandOnApprovalRequest: String { s("When a tool-use approval request is shown.",
-                                                "툴 사용 승인 요청이 표시될 때") }
+    var secNotchExpandTriggers: String { s("When to expand",              "자동 펼침 조건") }
+    var lblExpandOnNotification: String { s("On notification",                 "알림 수신 시") }
+    var lblExpandOnInteractiveTool: String { s("On interactive input (Gemini only)", "Gemini 인터랙티브 입력 시") }
+    var lblExpandOnApprovalRequest: String { s("On approval request",            "승인 요청 시") }
+    var lblExpandOnQuestionResponse: String { s("On question response",           "질문 응답 대기 시") }
+    var hintExpandOnNotification: String { s("When a notification arrives (e.g. task end, input prompt).",
+                                             "작업 종료·입력 대기 등 알림이 발생할 때") }
+    var hintExpandOnInteractiveTool: String { s("Gemini only — when an interactive tool (e.g. bash) is waiting for terminal input.",
+                                                "Gemini 전용 — 터미널 입력을 기다리는 인터랙티브 툴이 실행될 때") }
+    var hintExpandOnApprovalRequest: String { s("When a tool approval request is received.",
+                                                "도구 사용 승인 요청이 수신될 때") }
+    var hintExpandOnQuestionResponse: String { s("When the agent sends a question and waits for a response.",
+                                               "에이전트가 사용자에게 질문을 보내고 응답을 기다릴 때") }
     var secNotchCharacters:  String { s("Notch characters",              "노치 캐릭터") }
     var lblLeftCharacter:    String { s("Left character",                "왼쪽 캐릭터") }
     var lblRightCharacter:   String { s("Right character",               "오른쪽 캐릭터") }

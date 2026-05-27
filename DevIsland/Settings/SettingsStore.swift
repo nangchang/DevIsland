@@ -192,8 +192,8 @@ struct AppSettings: Equatable {
     var notchCenterText: String
     var expandOnNotification: Bool
     var expandOnInteractiveTool: Bool
-    var expandOnSessionReturn: Bool
     var expandOnApprovalRequest: Bool
+    var expandOnQuestionResponse: Bool
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -268,8 +268,8 @@ struct AppSettings: Equatable {
         notchCenterText: "DevIsland",
         expandOnNotification: true,
         expandOnInteractiveTool: true,
-        expandOnSessionReturn: true,
-        expandOnApprovalRequest: true
+        expandOnApprovalRequest: true,
+        expandOnQuestionResponse: true
     )
 }
 
@@ -340,8 +340,8 @@ final class SettingsStore: ObservableObject {
         static let notchCenterText = "notchCenterText"
         static let expandOnNotification = "expandOnNotification"
         static let expandOnInteractiveTool = "expandOnInteractiveTool"
-        static let expandOnSessionReturn = "expandOnSessionReturn"
         static let expandOnApprovalRequest = "expandOnApprovalRequest"
+        static let expandOnQuestionResponse = "expandOnQuestionResponse"
     }
 
     private let userDefaults: UserDefaults
@@ -409,8 +409,8 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.notchCenterText, forKey: DefaultsKey.notchCenterText)
         userDefaults.set(settings.expandOnNotification, forKey: DefaultsKey.expandOnNotification)
         userDefaults.set(settings.expandOnInteractiveTool, forKey: DefaultsKey.expandOnInteractiveTool)
-        userDefaults.set(settings.expandOnSessionReturn, forKey: DefaultsKey.expandOnSessionReturn)
         userDefaults.set(settings.expandOnApprovalRequest, forKey: DefaultsKey.expandOnApprovalRequest)
+        userDefaults.set(settings.expandOnQuestionResponse, forKey: DefaultsKey.expandOnQuestionResponse)
         writeBridgeConfig(settings)
     }
 
@@ -669,15 +669,15 @@ final class SettingsStore: ObservableObject {
                 from: userDefaults,
                 default: defaults.expandOnInteractiveTool
             ),
-            expandOnSessionReturn: bool(
-                key: DefaultsKey.expandOnSessionReturn,
-                from: userDefaults,
-                default: defaults.expandOnSessionReturn
-            ),
             expandOnApprovalRequest: bool(
                 key: DefaultsKey.expandOnApprovalRequest,
                 from: userDefaults,
                 default: defaults.expandOnApprovalRequest
+            ),
+            expandOnQuestionResponse: bool(
+                key: DefaultsKey.expandOnQuestionResponse,
+                from: userDefaults,
+                default: defaults.expandOnQuestionResponse
             )
         )
     }

@@ -877,7 +877,7 @@ class AppState: ObservableObject {
                     self.sessionStore.setUnread(true, sessionId: fullSessionId)
                 }
 
-                if isInformational && !hasPendingForSession && self.currentResponseHandler == nil
+                if isInformational && !isStartEvent && !hasPendingForSession && self.currentResponseHandler == nil
                     && SettingsStore.shared.settings.expandOnNotification {
                     // 터미널이 포커스되어 있지 않을 때만 확장
                     let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
@@ -1450,11 +1450,8 @@ class AppState: ObservableObject {
                 currentSessionId = prev
                 syncDisplayToSelectedSession()
                 isExpandingFromRequest = true
-                let sessionReturnExpandEnabled = MainActor.assumeIsolated {
-                    SettingsStore.shared.settings.notchAutoExpandEnabled
-                        && SettingsStore.shared.settings.expandOnSessionReturn
-                }
-                if sessionReturnExpandEnabled {
+                let autoExpandEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notchAutoExpandEnabled }
+                if autoExpandEnabled {
                     isNotchExpanded = true
                 }
             } else {
@@ -1550,11 +1547,13 @@ class AppState: ObservableObject {
             self.currentSessionId  = next.sessionId
 
             self.isExpandingFromRequest = true
-            let approvalExpandEnabled = MainActor.assumeIsolated {
-                SettingsStore.shared.settings.notchAutoExpandEnabled
-                    && SettingsStore.shared.settings.expandOnApprovalRequest
+            let isQuestion = next.claudeQuestion != nil
+            let expandEnabled = MainActor.assumeIsolated {
+                let s = SettingsStore.shared.settings
+                guard s.notchAutoExpandEnabled else { return false }
+                return isQuestion ? s.expandOnQuestionResponse : s.expandOnApprovalRequest
             }
-            if approvalExpandEnabled || self.isNotchExpanded {
+            if expandEnabled || self.isNotchExpanded {
                 self.isNotchExpanded = true
                 self.startTimeout()
             }

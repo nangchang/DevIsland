@@ -66,8 +66,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings.notchRightRandomCharacterKinds, Set(BuddyKind.defaultRandomCases))
         XCTAssertTrue(store.settings.expandOnNotification)
         XCTAssertTrue(store.settings.expandOnInteractiveTool)
-        XCTAssertTrue(store.settings.expandOnSessionReturn)
         XCTAssertTrue(store.settings.expandOnApprovalRequest)
+        XCTAssertTrue(store.settings.expandOnQuestionResponse)
     }
 
     func testSettingsPersistAndReload() {
@@ -107,8 +107,8 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.notchRightRandomCharacterKinds = [.gemini]
         store.settings.expandOnNotification = false
         store.settings.expandOnInteractiveTool = false
-        store.settings.expandOnSessionReturn = false
         store.settings.expandOnApprovalRequest = false
+        store.settings.expandOnQuestionResponse = false
 
         let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
@@ -147,8 +147,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.settings.notchRightRandomCharacterKinds, [.gemini])
         XCTAssertFalse(reloaded.settings.expandOnNotification)
         XCTAssertFalse(reloaded.settings.expandOnInteractiveTool)
-        XCTAssertFalse(reloaded.settings.expandOnSessionReturn)
         XCTAssertFalse(reloaded.settings.expandOnApprovalRequest)
+        XCTAssertFalse(reloaded.settings.expandOnQuestionResponse)
     }
 
     func testInvalidPersistedValuesFallBackToDefaults() {
