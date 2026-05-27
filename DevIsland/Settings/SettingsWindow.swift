@@ -231,6 +231,12 @@ private struct DisplaySettingsPane: View {
 
                 Toggle(l10n.lblNotchAutoExpand, isOn: store.binding(\.notchAutoExpandEnabled))
 
+                Picker(l10n.lblUnreadDotPosition, selection: store.binding(\.notchUnreadDotPosition)) {
+                    ForEach(NotchUnreadDotPosition.allCases) { pos in
+                        Text(pos.label).tag(pos)
+                    }
+                }
+
                 Picker(l10n.lblNotchAutoCollapse, selection: store.binding(\.notchAutoCollapseDelay)) {
                     ForEach(NotchAutoCollapseDelay.allCases) { delay in
                         Text(delay.label).tag(delay)

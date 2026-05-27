@@ -201,6 +201,10 @@ extension L10n {
     func lblExpandedNotchWidth(_ px: Int) -> String { s("Expanded width: \(px) px", "확장 윈도우 너비: \(px) px") }
     func lblExpandedNotchHeight(_ px: Int) -> String { s("Expanded height: \(px) px", "확장 윈도우 높이: \(px) px") }
     var lblNotchAutoExpand:   String { s("Auto-expand on events",        "이벤트 시 자동 펼침") }
+    var lblUnreadDotPosition: String { s("Unread dot position",          "알림 dot 위치") }
+    var posLeft:   String { s("Left",   "왼쪽") }
+    var posCenter: String { s("Center", "가운데") }
+    var posRight:  String { s("Right",  "오른쪽") }
     var lblNotchAutoCollapse: String { s("Auto-collapse",                "자동 닫힘") }
     var secNotchCharacters:  String { s("Notch characters",              "노치 캐릭터") }
     var lblLeftCharacter:    String { s("Left character",                "왼쪽 캐릭터") }

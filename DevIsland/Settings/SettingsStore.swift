@@ -102,6 +102,23 @@ enum NotchCharacterMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum NotchUnreadDotPosition: String, CaseIterable, Identifiable {
+    case left
+    case center
+    case right
+
+    var id: String { rawValue }
+
+    var label: String {
+        let l = L10n.shared
+        switch self {
+        case .left:   return l.posLeft
+        case .center: return l.posCenter
+        case .right:  return l.posRight
+        }
+    }
+}
+
 enum NotchAutoCollapseDelay: String, CaseIterable, Identifiable {
     case off
     case seconds3
@@ -162,6 +179,7 @@ struct AppSettings: Equatable {
     var expandedNotchWidth: Double
     var expandedNotchHeight: Double
     var notchAutoExpandEnabled: Bool
+    var notchUnreadDotPosition: NotchUnreadDotPosition
     var notchAutoCollapseDelay: NotchAutoCollapseDelay
     var notchCharacterHorizontalInset: Double
     var notchCharacterVerticalOffset: Double
@@ -233,6 +251,7 @@ struct AppSettings: Equatable {
         expandedNotchWidth: 692,
         expandedNotchHeight: 300,
         notchAutoExpandEnabled: true,
+        notchUnreadDotPosition: .right,
         notchAutoCollapseDelay: .seconds5,
         notchCharacterHorizontalInset: 24,
         notchCharacterVerticalOffset: 4,
@@ -300,6 +319,7 @@ final class SettingsStore: ObservableObject {
         static let expandedNotchWidth = "expandedNotchWidth"
         static let expandedNotchHeight = "expandedNotchHeight"
         static let notchAutoExpandEnabled = "notchAutoExpandEnabled"
+        static let notchUnreadDotPosition = "notchUnreadDotPosition"
         static let notchAutoCollapseDelay = "notchAutoCollapseDelay"
         static let notchCharacterHorizontalInset = "notchCharacterHorizontalInset"
         static let notchCharacterVerticalOffset = "notchCharacterVerticalOffset"
@@ -364,6 +384,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.expandedNotchWidth, forKey: DefaultsKey.expandedNotchWidth)
         userDefaults.set(settings.expandedNotchHeight, forKey: DefaultsKey.expandedNotchHeight)
         userDefaults.set(settings.notchAutoExpandEnabled, forKey: DefaultsKey.notchAutoExpandEnabled)
+        userDefaults.set(settings.notchUnreadDotPosition.rawValue, forKey: DefaultsKey.notchUnreadDotPosition)
         userDefaults.set(settings.notchAutoCollapseDelay.rawValue, forKey: DefaultsKey.notchAutoCollapseDelay)
         userDefaults.set(settings.notchCharacterHorizontalInset, forKey: DefaultsKey.notchCharacterHorizontalInset)
         userDefaults.set(settings.notchCharacterVerticalOffset, forKey: DefaultsKey.notchCharacterVerticalOffset)
@@ -562,6 +583,12 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.notchAutoExpandEnabled,
                 from: userDefaults,
                 default: defaults.notchAutoExpandEnabled
+            ),
+            notchUnreadDotPosition: enumValue(
+                NotchUnreadDotPosition.self,
+                key: DefaultsKey.notchUnreadDotPosition,
+                from: userDefaults,
+                default: defaults.notchUnreadDotPosition
             ),
             notchAutoCollapseDelay: enumValue(
                 NotchAutoCollapseDelay.self,
