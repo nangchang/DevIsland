@@ -520,7 +520,8 @@ class AppState: ObservableObject {
                             isPending: false,
                             isLifecycleTracked: true,
                             isSubAgentSession: true,
-                            parentSessionId: pid
+                            parentSessionId: pid,
+                            workspaceRoot: h.workspaceRoot
                         )
                     }
                 }
@@ -860,7 +861,8 @@ class AppState: ObservableObject {
                     isPending: hasPendingForSession,
                     preserveMessage: normalizedEvent == "posttooluse" || sessionMessage.isEmpty,
                     isLifecycleTracked: isStartEvent || h.agentKind != .claudeCode, // Codex/Gemini는 기본적으로 추적 유지
-                    isSubAgentSession: h.isSubAgentSession
+                    isSubAgentSession: h.isSubAgentSession,
+                    workspaceRoot: h.workspaceRoot
                 )
 
                 if isStartEvent || (self.sessionStore.selectedSessionId == nil) {
@@ -1019,7 +1021,8 @@ class AppState: ObservableObject {
                             eventName: h.event,
                             message: h.displayMsg,
                             isPending: false,
-                            status: SessionStatus.timeoutBypassed(Date())
+                            status: SessionStatus.timeoutBypassed(Date()),
+                            workspaceRoot: h.workspaceRoot
                         )
                     }
                     return
@@ -1125,7 +1128,8 @@ class AppState: ObservableObject {
                         eventName: h.event,
                         message: h.displayMsg,
                         isPending: false,
-                        status: SessionStatus.timeoutBypassed(Date())
+                        status: SessionStatus.timeoutBypassed(Date()),
+                        workspaceRoot: h.workspaceRoot
                     )
                 }
                 return
@@ -1160,7 +1164,8 @@ class AppState: ObservableObject {
                     isPending: false,
                     preserveMessage: true,
                     isLifecycleTracked: true,
-                    status: .policyApproved(Date())
+                    status: .policyApproved(Date()),
+                    workspaceRoot: h.workspaceRoot
                 )
                 return
             }
@@ -1222,7 +1227,8 @@ class AppState: ObservableObject {
                         isPending: false,
                         preserveMessage: true,
                         isLifecycleTracked: true,
-                        status: .autoApproved(Date())
+                        status: .autoApproved(Date()),
+                        workspaceRoot: h.workspaceRoot
                     )
                 }
                 return
@@ -1268,7 +1274,8 @@ class AppState: ObservableObject {
                     eventName: request.eventName,
                     message: request.message,
                     isPending: true,
-                    isLifecycleTracked: h.agentKind != .claudeCode
+                    isLifecycleTracked: h.agentKind != .claudeCode,
+                    workspaceRoot: h.workspaceRoot
                 )
 
                 self.sessionStore.selectedSessionId = request.sessionId
@@ -1331,7 +1338,8 @@ class AppState: ObservableObject {
                 eventName: request.eventName,
                 message: request.message,
                 isPending: true,
-                isLifecycleTracked: isLifecycleTracked
+                isLifecycleTracked: isLifecycleTracked,
+                workspaceRoot: request.workspaceRoot
             )
 
             sessionStore.selectedSessionId = request.sessionId
@@ -1504,7 +1512,8 @@ class AppState: ObservableObject {
                             eventName: next.eventName,
                             message: next.message,
                             isPending: false,
-                            status: SessionStatus.timeoutBypassed(Date())
+                            status: SessionStatus.timeoutBypassed(Date()),
+                            workspaceRoot: next.workspaceRoot
                         )
                     }
                     self.currentClaudeQuestion = nil
@@ -2341,7 +2350,8 @@ class AppState: ObservableObject {
                     eventName: record.lastEventName
                 ),
                 isPending: false,
-                isLifecycleTracked: true
+                isLifecycleTracked: true,
+                workspaceRoot: json["cwd"] as? String
             )
             // Preserve the original start time and last active time from SQLite
             if let index = sessionStore.activeSessions.firstIndex(where: { $0.id == record.sessionId }) {

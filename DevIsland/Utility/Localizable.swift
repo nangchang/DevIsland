@@ -186,9 +186,13 @@ extension L10n {
     var tabExperimental:     String { s("Experimental", "실험적") }
 
     // General tab
-    var btnResetAllSettings: String { s("Reset All Settings to Defaults", "모든 설정 초기화") }
-    var secLanguage:         String { s("Language",                      "언어") }
-    var lblLanguage:         String { s("Language",                      "언어") }
+    var btnResetAllSettings:    String { s("Reset All Settings to Defaults", "모든 설정 초기화") }
+    var secLanguage:            String { s("Language",                      "언어") }
+    var lblLanguage:            String { s("Language",                      "언어") }
+    var secPreferredTerminal:   String { s("Default Terminal",              "기본 터미널") }
+    var lblPreferredTerminal:   String { s("Open sessions in",              "세션 열기") }
+    var optTerminalSessionDefault: String { s("Session's terminal (automatic)", "세션 터미널 자동 선택") }
+    var hintPreferredTerminal:  String { s("Used when opening a session in a new terminal window. Falls back to the session's original terminal app if not set.", "새 터미널 창에서 세션을 열 때 사용합니다. 설정하지 않으면 세션이 실행된 터미널 앱을 사용합니다.") }
 
     // Display tab
     var secNotch:            String { s("Notch",                         "노치") }
@@ -418,6 +422,10 @@ extension L10n {
     var helpOpenSettings:       String { s("Open settings",     "설정 열기") }
     var helpFocusTerminal:     String { s("Focus terminal",    "터미널 포커스") }
     var helpDismissSession:    String { s("Dismiss session",   "세션 닫기") }
+    var menuOpenInFinder:      String { s("Open in Finder",    "Finder에서 열기") }
+    var menuCopyPath:          String { s("Copy Path",         "경로 복사") }
+    var menuCopyResumeCommand: String { s("Copy Resume Command", "재시작 명령 복사") }
+    var menuOpenInTerminal:    String { s("Open in Terminal",  "터미널에서 열기") }
     var helpDismissPending:    String { s("Dismiss session and pass pending request to terminal",
                                           "세션을 닫고 대기 중인 요청을 터미널로 전달") }
     func tasksQueued(_ n: Int) -> String { s("\(n) tasks queued", "\(n)개 대기 중") }

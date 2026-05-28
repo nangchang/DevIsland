@@ -67,4 +67,5 @@ struct ActiveSession: Identifiable, Equatable {
     var hasMissedApproval: Bool
     var status: SessionStatus
     var parentSessionId: String?
+    var workspaceRoot: String?
 }

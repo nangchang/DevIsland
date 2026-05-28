@@ -243,6 +243,22 @@ struct SessionRowView: View {
     @ObservedObject private var l10n = L10n.shared
     @State private var timeAgo: String = ""
     private var tool: ToolInfo { toolInfo(for: session.lastToolName) }
+
+    private var resumeCommand: String {
+        let cd = session.workspaceRoot.map { "cd \($0.contains(" ") ? "\"\($0)\"" : $0) && " } ?? ""
+        switch session.agentKind {
+        case .claudeCode: return "\(cd)claude --resume \(session.id)"
+        case .codex:      return "\(cd)codex --resume \(session.id)"
+        case .gemini:     return "\(cd)gemini"
+        case .island:     return cd.isEmpty ? "" : String(cd.dropLast(4)) // cd only
+        }
+    }
+
+    private func openInTerminal() {
+        let preferred = TerminalFocuser.normalizedAppName(SettingsStore.shared.settings.preferredTerminal)
+        let fallback  = TerminalFocuser.normalizedAppName(session.terminalApp)
+        TerminalFocuser.openNewWindow(appName: preferred ?? fallback, command: resumeCommand)
+    }
     private var statusLabel: String? {
         switch session.status {
         case .pending:       return l10n.statusPending
@@ -413,6 +429,50 @@ struct SessionRowView: View {
         )
         .onAppear { updateTimeAgo() }
         .onReceive(Self.sharedTimer) { _ in updateTimeAgo() }
+        .contextMenu {
+            if let path = session.workspaceRoot {
+                Button {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                } label: {
+                    Label(l10n.menuOpenInFinder, systemImage: "folder")
+                }
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(path, forType: .string)
+                } label: {
+                    Label(l10n.menuCopyPath, systemImage: "doc.on.clipboard")
+                }
+
+                Divider()
+
+                Button {
+                    openInTerminal()
+                } label: {
+                    Label(l10n.menuOpenInTerminal, systemImage: "terminal")
+                }
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(resumeCommand, forType: .string)
+                } label: {
+                    Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
+                }
+            } else {
+                Button {
+                    openInTerminal()
+                } label: {
+                    Label(l10n.menuOpenInTerminal, systemImage: "terminal")
+                }
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(resumeCommand, forType: .string)
+                } label: {
+                    Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
+                }
+            }
+        }
     }
 
     private func updateTimeAgo() {

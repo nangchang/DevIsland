@@ -194,6 +194,7 @@ struct AppSettings: Equatable {
     var expandOnInteractiveTool: Bool
     var expandOnApprovalRequest: Bool
     var expandOnQuestionResponse: Bool
+    var preferredTerminal: String?
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -269,7 +270,8 @@ struct AppSettings: Equatable {
         expandOnNotification: true,
         expandOnInteractiveTool: true,
         expandOnApprovalRequest: true,
-        expandOnQuestionResponse: true
+        expandOnQuestionResponse: true,
+        preferredTerminal: nil
     )
 }
 
@@ -342,6 +344,7 @@ final class SettingsStore: ObservableObject {
         static let expandOnInteractiveTool = "expandOnInteractiveTool"
         static let expandOnApprovalRequest = "expandOnApprovalRequest"
         static let expandOnQuestionResponse = "expandOnQuestionResponse"
+        static let preferredTerminal = "preferredTerminal"
     }
 
     private let userDefaults: UserDefaults
@@ -411,6 +414,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.expandOnInteractiveTool, forKey: DefaultsKey.expandOnInteractiveTool)
         userDefaults.set(settings.expandOnApprovalRequest, forKey: DefaultsKey.expandOnApprovalRequest)
         userDefaults.set(settings.expandOnQuestionResponse, forKey: DefaultsKey.expandOnQuestionResponse)
+        userDefaults.set(settings.preferredTerminal, forKey: DefaultsKey.preferredTerminal)
         writeBridgeConfig(settings)
     }
 
@@ -678,7 +682,8 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.expandOnQuestionResponse,
                 from: userDefaults,
                 default: defaults.expandOnQuestionResponse
-            )
+            ),
+            preferredTerminal: userDefaults.string(forKey: DefaultsKey.preferredTerminal)
         )
     }
 

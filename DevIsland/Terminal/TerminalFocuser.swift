@@ -563,6 +563,74 @@ class TerminalFocuser {
         }
     }
 
+    /// 새 창/탭을 열고 command를 실행한다.
+    /// appName: normalizedAppName() 결과 또는 nil (설치된 첫 번째 터미널 자동 선택)
+    static func openNewWindow(appName: String?, command: String) {
+        let target = appName.flatMap { name in
+            candidates.first { $0.name == name }
+        } ?? candidates.first(where: {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.1).isEmpty
+                || NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.1) != nil
+        })
+
+        guard let target else { return }
+
+        let name = target.name
+        let cmdLiteral = appleScriptLiteral(command)
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            switch name {
+            case "iTerm":
+                let script = """
+                tell application "iTerm"
+                  activate
+                  set newWindow to (create window with default profile)
+                  tell current session of newWindow
+                    write text \(cmdLiteral)
+                  end tell
+                end tell
+                """
+                let (_, err) = executeAppleScript(script)
+                if let err { print("[DevIsland] openNewWindow iTerm error: \(err)") }
+
+            case "Terminal":
+                let script = """
+                tell application "Terminal"
+                  activate
+                  do script \(cmdLiteral)
+                end tell
+                """
+                let (_, err) = executeAppleScript(script)
+                if let err { print("[DevIsland] openNewWindow Terminal error: \(err)") }
+
+            case "Ghostty":
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleId) {
+                    let cfg = NSWorkspace.OpenConfiguration()
+                    cfg.arguments = ["--command=/bin/sh", "-c", command]
+                    NSWorkspace.shared.openApplication(at: url, configuration: cfg)
+                }
+
+            case "Warp":
+                // Warp URL scheme: warp://action/new_tab?command=<encoded>
+                if let encoded = command.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                   let url = URL(string: "warp://action/new_tab?command=\(encoded)") {
+                    DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+                }
+
+            default:
+                // cmux 및 기타: process 직접 실행
+                let script = """
+                tell application \"\(name)\"
+                  activate
+                  do script \(cmdLiteral)
+                end tell
+                """
+                let (_, err) = executeAppleScript(script)
+                if let err { print("[DevIsland] openNewWindow \(name) error: \(err)") }
+            }
+        }
+    }
+
     private static func appleScriptLiteral(_ value: String) -> String {
         "\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
     }

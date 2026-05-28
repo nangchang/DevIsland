@@ -150,6 +150,20 @@ private struct GeneralSettingsPane: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
 
+    private var installedTerminals: [(name: String, bundleId: String)] {
+        let candidates: [(String, String)] = [
+            ("cmux",     "com.cmuxterm.app"),
+            ("Ghostty",  "com.mitchellh.ghostty"),
+            ("iTerm",    "com.googlecode.iterm2"),
+            ("Warp",     "dev.warp.Warp-Stable"),
+            ("Terminal", "com.apple.Terminal"),
+        ]
+        return candidates.filter {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.1).isEmpty
+                || NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.1) != nil
+        }
+    }
+
     var body: some View {
         Form {
             Section(l10n.secLanguage) {
@@ -159,6 +173,19 @@ private struct GeneralSettingsPane: View {
                     }
                 }
                 .pickerStyle(.radioGroup)
+            }
+
+            Section(l10n.secPreferredTerminal) {
+                Picker(l10n.lblPreferredTerminal, selection: $store.settings.preferredTerminal) {
+                    Text(l10n.optTerminalSessionDefault).tag(String?.none)
+                    ForEach(installedTerminals, id: \.name) { terminal in
+                        Text(terminal.name).tag(String?.some(terminal.name))
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                Text(l10n.hintPreferredTerminal)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section {
