@@ -1806,6 +1806,12 @@ class AppState: ObservableObject {
         return try approvalProxy.replayLog(limit: limit)
     }
 
+    func closedSessionRecords(retentionDays: Int) throws -> [ClosedSessionRecord] {
+        guard let approvalProxy else { return [] }
+        let since = Date().addingTimeInterval(-Double(retentionDays) * 86_400)
+        return try approvalProxy.closedSessions(since: since)
+    }
+
     func addPersistentRule(from entry: ReplayLogEntry, action: RuleAction) throws {
         guard let approvalProxy else { return }
         let toolName = entry.toolName.trimmingCharacters(in: .whitespacesAndNewlines)

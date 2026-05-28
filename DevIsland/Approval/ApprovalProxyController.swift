@@ -68,6 +68,10 @@ final class ApprovalProxyController {
         try store.openSessions(since: since)
     }
 
+    func closedSessions(since: Date) throws -> [ClosedSessionRecord] {
+        try store.closedSessions(since: since)
+    }
+
     @discardableResult
     func recordPTYMessage(
         sessionId: String,

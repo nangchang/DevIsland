@@ -64,6 +64,7 @@ extension L10n {
     var menuApprovalRules:      String { s("Approval Rules…",            "승인 규칙…") }
     var menuReplayLog:          String { s("Replay Log…",                "재실행 로그…") }
     var menuPTYTranscript:      String { s("PTY Transcript…",            "PTY 트랜스크립트…") }
+    var menuSessionHistory:     String { s("Session History…",           "세션 기록…") }
     var menuInstallHooks:       String { s("Install / Repair Hooks",     "훅 설치 / 수리") }
     var menuInstallAll:         String { s("Install All (Claude · Codex · Gemini)",    "전부 설치 (Claude · Codex · Gemini)") }
     var menuInstallClaude:      String { s("Install Claude Code only…",  "Claude Code만 설치…") }
@@ -174,6 +175,7 @@ extension L10n {
     var winApprovalRules:    String { s("Approval Rules",       "승인 규칙") }
     var winReplayLog:        String { s("Replay Log",           "재실행 로그") }
     var winPTYTranscript:    String { s("PTY Transcript",       "PTY 트랜스크립트") }
+    var winSessionHistory:   String { s("Session History",      "세션 기록") }
 
     // Tab labels
     var tabGeneral:          String { s("General",      "일반") }
@@ -432,6 +434,17 @@ extension L10n {
     func timeJustNow() -> String  { s("Just now",     "방금") }
     func timeSecsAgo(_ n: Int) -> String  { s("\(n)s ago",  "\(n)초 전") }
     func timeMinsAgo(_ n: Int) -> String  { s("\(n)m ago",  "\(n)분 전") }
+
+    // Session History Window
+    var historySearch:      String { s("Search sessions…",    "세션 검색…") }
+    var historyEmpty:       String { s("No closed sessions",  "종료된 세션 없음") }
+    var historyRefresh:     String { s("Refresh",             "새로 고침") }
+    var historyColAgent:    String { s("Agent",               "에이전트") }
+    var historyColPath:     String { s("Path",                "경로") }
+    var historyColTitle:    String { s("Terminal",            "터미널") }
+    var historyColEnded:    String { s("Ended",               "종료") }
+    var historyColSession:  String { s("Session ID",          "세션 ID") }
+    func historyCount(_ n: Int) -> String { s("\(n) sessions", "\(n)개 세션") }
 
     // Session status labels
     var statusPending:       String { s("Pending",        "대기 중") }
