@@ -604,9 +604,10 @@ class TerminalFocuser {
                 if let err { print("[DevIsland] openNewWindow Terminal error: \(err)") }
 
             case "Ghostty":
+                // --initial-command: 새 창 셸에 명령을 타이핑한 것처럼 전달 (&&도 그대로 동작).
                 if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleId) {
                     let cfg = NSWorkspace.OpenConfiguration()
-                    cfg.arguments = ["--command=/bin/sh", "-c", command]
+                    cfg.arguments = ["--initial-command=\(command)"]
                     NSWorkspace.shared.openApplication(at: url, configuration: cfg)
                 }
 
