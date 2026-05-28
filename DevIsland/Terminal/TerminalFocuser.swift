@@ -617,16 +617,21 @@ class TerminalFocuser {
                     DispatchQueue.main.async { NSWorkspace.shared.open(url) }
                 }
 
-            default:
-                // cmux 및 기타: process 직접 실행
-                let script = """
-                tell application \"\(name)\"
+            case "cmux":
+                let cmuxScript = """
+                tell application "cmux"
                   activate
-                  do script \(cmdLiteral)
+                  set newTab to new tab in front window
+                  set newTerm to first terminal of newTab
+                  input text \(cmdLiteral) to newTerm
+                  input text (ASCII character 13) to newTerm
                 end tell
                 """
-                let (_, err) = executeAppleScript(script)
-                if let err { print("[DevIsland] openNewWindow \(name) error: \(err)") }
+                let (_, cmuxErr) = executeAppleScript(cmuxScript)
+                if let cmuxErr { print("[DevIsland] openNewWindow cmux error: \(cmuxErr)") }
+
+            default:
+                break
             }
         }
     }
