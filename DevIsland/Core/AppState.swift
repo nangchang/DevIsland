@@ -39,6 +39,7 @@ class AppState: ObservableObject {
         static let requestDisplayTarget = "requestDisplayTarget"
         static let globalAutoApproveTypes = "globalAutoApproveTypes"
         static let autoApproveSafeTools = "autoApproveSafeTools"
+        static let sessionLabels = "sessionLabels"
     }
 
     typealias FrontmostCheck = (
@@ -102,6 +103,9 @@ class AppState: ObservableObject {
     // `globalAutoApproveTypes` serves as a fast-path in-memory cache for explicit
     // whole-tool approvals. Patterned SQLite rules stay in ApprovalPolicyEngine.
     @Published var globalAutoApproveTypes: Set<String> = []
+    @Published var sessionLabels: [String: String] = [:] {
+        didSet { userDefaults.set(sessionLabels, forKey: DefaultsKey.sessionLabels) }
+    }
 
     private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
 
@@ -226,6 +230,7 @@ class AppState: ObservableObject {
             }
         }
         autoApproveSafeTools = userDefaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
+        sessionLabels = userDefaults.dictionary(forKey: DefaultsKey.sessionLabels) as? [String: String] ?? [:]
         ensureSelectedDisplay()
 
         if let proxy = approvalProxy {
@@ -2284,6 +2289,32 @@ class AppState: ObservableObject {
                 let toolName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !toolName.isEmpty {
                     self.insertGlobalPersistentRule(toolName)
+                }
+            }
+        }
+    }
+
+    func promptRenameSession(_ sessionId: String, currentLabel: String?) {
+        DispatchQueue.main.async {
+            let l = L10n.shared
+            let alert = NSAlert()
+            alert.messageText = l.renameSessionTitle
+            alert.informativeText = l.renameSessionHint(sessionId.prefix(8).description)
+            alert.addButton(withTitle: l.renameSessionConfirm)
+            alert.addButton(withTitle: l.btnCancel)
+
+            let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+            input.placeholderString = l.renameSessionPlaceholder
+            input.stringValue = currentLabel ?? ""
+            alert.accessoryView = input
+            alert.window.initialFirstResponder = input
+
+            if ModalPresenter.run(alert) == .alertFirstButtonReturn {
+                let label = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if label.isEmpty {
+                    self.sessionLabels.removeValue(forKey: sessionId)
+                } else {
+                    self.sessionLabels[sessionId] = label
                 }
             }
         }

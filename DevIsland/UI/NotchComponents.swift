@@ -241,8 +241,15 @@ struct SessionRowView: View {
     var isSubAgent: Bool = false
 
     @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var appState = AppState.shared
     @State private var timeAgo: String = ""
     private var tool: ToolInfo { toolInfo(for: session.lastToolName) }
+    private var displayTitle: String {
+        appState.sessionLabels[session.id] ?? session.terminalTitle
+    }
+    private var hasCustomLabel: Bool {
+        appState.sessionLabels[session.id] != nil
+    }
 
     private var resumeCommand: String {
         let cd = session.workspaceRoot.map { "cd \($0.contains(" ") ? "\"\($0)\"" : $0) && " } ?? ""
@@ -339,10 +346,15 @@ struct SessionRowView: View {
                                     .frame(width: isSubAgent ? 5 : 6, height: isSubAgent ? 5 : 6)
                             }
 
-                            Text(session.terminalTitle)
+                            Text(displayTitle)
                                 .font(.system(size: titleFont, weight: (session.hasMissedApproval || session.isUnread) ? .heavy : .bold))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
+                            if hasCustomLabel {
+                                Image(systemName: "tag.fill")
+                                    .font(.system(size: titleFont - 2))
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
 
                             Spacer()
 
@@ -436,6 +448,17 @@ struct SessionRowView: View {
         .onAppear { updateTimeAgo() }
         .onReceive(Self.sharedTimer) { _ in updateTimeAgo() }
         .contextMenu {
+            Button {
+                AppState.shared.promptRenameSession(
+                    session.id,
+                    currentLabel: appState.sessionLabels[session.id]
+                )
+            } label: {
+                Label(l10n.menuRenameSession, systemImage: "pencil")
+            }
+
+            Divider()
+
             if let path = session.workspaceRoot {
                 Button {
                     NSWorkspace.shared.open(URL(fileURLWithPath: path))
@@ -451,24 +474,15 @@ struct SessionRowView: View {
                 }
 
                 Divider()
+            }
 
-                openInTerminalMenu
+            openInTerminalMenu
 
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(resumeCommand, forType: .string)
-                } label: {
-                    Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
-                }
-            } else {
-                openInTerminalMenu
-
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(resumeCommand, forType: .string)
-                } label: {
-                    Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
-                }
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(resumeCommand, forType: .string)
+            } label: {
+                Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
             }
         }
     }

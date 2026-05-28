@@ -427,6 +427,14 @@ extension L10n {
     var menuOpenInFinder:      String { s("Open in Finder",    "Finder에서 열기") }
     var menuCopyPath:          String { s("Copy Path",         "경로 복사") }
     var menuCopyResumeCommand: String { s("Copy Resume Command", "재시작 명령 복사") }
+    var menuRenameSession:     String { s("Rename…",             "이름 변경…") }
+    var renameSessionTitle:    String { s("Rename Session",      "세션 이름 변경") }
+    var renameSessionConfirm:  String { s("Rename",              "변경") }
+    var renameSessionPlaceholder: String { s("Session name",     "세션 이름") }
+    var btnCancel:             String { s("Cancel",              "취소") }
+    func renameSessionHint(_ id: String) -> String {
+        s("Enter a name for session \(id). Leave empty to reset.", "세션 \(id)의 이름을 입력하세요. 비워두면 초기화됩니다.")
+    }
     var menuOpenInTerminal:    String { s("Open in Terminal",  "터미널에서 열기") }
     func menuTerminalAuto(_ name: String) -> String { s("Auto (\(name))", "자동 (\(name))") }
     var helpDismissPending:    String { s("Dismiss session and pass pending request to terminal",

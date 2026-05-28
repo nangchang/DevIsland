@@ -68,6 +68,7 @@ final class SessionHistoryViewModel: ObservableObject {
 struct SessionHistoryWindowView: View {
     @StateObject private var viewModel: SessionHistoryViewModel
     @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var appState = AppState.shared
 
     init(appState: AppState = .shared) {
         _viewModel = StateObject(wrappedValue: SessionHistoryViewModel(appState: appState))
@@ -145,10 +146,19 @@ struct SessionHistoryWindowView: View {
             }
 
             TableColumn(l10n.historyColTitle) { record in
-                Text(record.terminalTitle ?? "—")
-                    .font(.system(size: 11))
-                    .lineLimit(1)
-                    .foregroundStyle(record.terminalTitle == nil ? .secondary : .primary)
+                let label = appState.sessionLabels[record.sessionId]
+                let displayTitle = label ?? record.terminalTitle
+                HStack(spacing: 4) {
+                    Text(displayTitle ?? "—")
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                        .foregroundStyle(displayTitle == nil ? .secondary : .primary)
+                    if label != nil {
+                        Image(systemName: "tag.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .width(120)
 
@@ -169,6 +179,17 @@ struct SessionHistoryWindowView: View {
         .contextMenu(forSelectionType: ClosedSessionRecord.ID.self) { ids in
             if let id = ids.first,
                let record = viewModel.records.first(where: { $0.id == id }) {
+                Button {
+                    AppState.shared.promptRenameSession(
+                        record.sessionId,
+                        currentLabel: appState.sessionLabels[record.sessionId]
+                    )
+                } label: {
+                    Label(l10n.menuRenameSession, systemImage: "pencil")
+                }
+
+                Divider()
+
                 if let path = record.workspaceRoot {
                     Button {
                         NSWorkspace.shared.open(URL(fileURLWithPath: path))
