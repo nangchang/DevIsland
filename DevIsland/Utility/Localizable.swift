@@ -428,6 +428,7 @@ extension L10n {
     var menuCopyPath:          String { s("Copy Path",         "경로 복사") }
     var menuCopyResumeCommand: String { s("Copy Resume Command", "재시작 명령 복사") }
     var menuOpenInTerminal:    String { s("Open in Terminal",  "터미널에서 열기") }
+    func menuTerminalAuto(_ name: String) -> String { s("Auto (\(name))", "자동 (\(name))") }
     var helpDismissPending:    String { s("Dismiss session and pass pending request to terminal",
                                           "세션을 닫고 대기 중인 요청을 터미널로 전달") }
     func tasksQueued(_ n: Int) -> String { s("\(n) tasks queued", "\(n)개 대기 중") }

@@ -563,6 +563,21 @@ class TerminalFocuser {
         }
     }
 
+    /// 설치된 터미널 앱 목록
+    static var installedTerminals: [(name: String, bundleId: String)] {
+        candidates.filter {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
+                || NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundleId) != nil
+        }.map { (name: $0.name, bundleId: $0.bundleId) }
+    }
+
+    /// preferred → sessionTerminal → 설치된 첫 번째 순으로 자동 선택한 터미널 이름 반환
+    static func resolvedTerminalName(preferred: String?, sessionTerminal: String?) -> String? {
+        if let p = normalizedAppName(preferred) { return p }
+        if let s = normalizedAppName(sessionTerminal) { return s }
+        return installedTerminals.first?.name
+    }
+
     /// 새 창/탭을 열고 command를 실행한다.
     /// appName: normalizedAppName() 결과 또는 nil (설치된 첫 번째 터미널 자동 선택)
     static func openNewWindow(appName: String?, command: String) {

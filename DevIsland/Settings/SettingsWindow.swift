@@ -163,17 +163,7 @@ private struct GeneralSettingsPane: View {
     @ObservedObject private var l10n = L10n.shared
 
     private var installedTerminals: [(name: String, bundleId: String)] {
-        let candidates: [(String, String)] = [
-            ("cmux",     "com.cmuxterm.app"),
-            ("Ghostty",  "com.mitchellh.ghostty"),
-            ("iTerm",    "com.googlecode.iterm2"),
-            ("Warp",     "dev.warp.Warp-Stable"),
-            ("Terminal", "com.apple.Terminal"),
-        ]
-        return candidates.filter {
-            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.1).isEmpty
-                || NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.1) != nil
-        }
+        TerminalFocuser.installedTerminals
     }
 
     var body: some View {

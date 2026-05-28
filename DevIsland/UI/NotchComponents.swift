@@ -254,10 +254,16 @@ struct SessionRowView: View {
         }
     }
 
-    private func openInTerminal() {
-        let preferred = TerminalFocuser.normalizedAppName(SettingsStore.shared.settings.preferredTerminal)
-        let fallback  = TerminalFocuser.normalizedAppName(session.terminalApp)
-        TerminalFocuser.openNewWindow(appName: preferred ?? fallback, command: resumeCommand)
+    private var autoTerminalName: String {
+        TerminalFocuser.resolvedTerminalName(
+            preferred: SettingsStore.shared.settings.preferredTerminal,
+            sessionTerminal: session.workspaceRoot != nil ? session.terminalApp : nil
+        ) ?? "?"
+    }
+
+    private func openInTerminal(appName: String? = nil) {
+        let name = appName ?? autoTerminalName
+        TerminalFocuser.openNewWindow(appName: name, command: resumeCommand)
     }
     private var statusLabel: String? {
         switch session.status {
@@ -446,11 +452,7 @@ struct SessionRowView: View {
 
                 Divider()
 
-                Button {
-                    openInTerminal()
-                } label: {
-                    Label(l10n.menuOpenInTerminal, systemImage: "terminal")
-                }
+                openInTerminalMenu
 
                 Button {
                     NSPasteboard.general.clearContents()
@@ -459,11 +461,7 @@ struct SessionRowView: View {
                     Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
                 }
             } else {
-                Button {
-                    openInTerminal()
-                } label: {
-                    Label(l10n.menuOpenInTerminal, systemImage: "terminal")
-                }
+                openInTerminalMenu
 
                 Button {
                     NSPasteboard.general.clearContents()
@@ -472,6 +470,27 @@ struct SessionRowView: View {
                     Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var openInTerminalMenu: some View {
+        let installed = TerminalFocuser.installedTerminals
+        let auto = autoTerminalName
+        Menu {
+            Button { openInTerminal() } label: {
+                Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
+            }
+            if !installed.isEmpty {
+                Divider()
+                ForEach(installed, id: \.name) { terminal in
+                    Button { openInTerminal(appName: terminal.name) } label: {
+                        Label(terminal.name, systemImage: terminal.name == auto ? "checkmark" : "terminal")
+                    }
+                }
+            }
+        } label: {
+            Label(l10n.menuOpenInTerminal, systemImage: "terminal")
         }
     }
 

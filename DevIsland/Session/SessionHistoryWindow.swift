@@ -50,15 +50,16 @@ final class SessionHistoryViewModel: ObservableObject {
         }
     }
 
-    func openInTerminal(_ record: ClosedSessionRecord) {
-        let preferred = TerminalFocuser.normalizedAppName(
-            SettingsStore.shared.settings.preferredTerminal
-        )
-        let fallback = TerminalFocuser.normalizedAppName(record.terminalApp)
-        TerminalFocuser.openNewWindow(
-            appName: preferred ?? fallback,
-            command: resumeCommand(for: record)
-        )
+    func autoTerminalName(for record: ClosedSessionRecord) -> String {
+        TerminalFocuser.resolvedTerminalName(
+            preferred: SettingsStore.shared.settings.preferredTerminal,
+            sessionTerminal: record.terminalApp
+        ) ?? "?"
+    }
+
+    func openInTerminal(_ record: ClosedSessionRecord, appName: String? = nil) {
+        let name = appName ?? autoTerminalName(for: record)
+        TerminalFocuser.openNewWindow(appName: name, command: resumeCommand(for: record))
     }
 }
 
@@ -185,8 +186,20 @@ struct SessionHistoryWindowView: View {
                     Divider()
                 }
 
-                Button {
-                    viewModel.openInTerminal(record)
+                let installed = TerminalFocuser.installedTerminals
+                let auto = viewModel.autoTerminalName(for: record)
+                Menu {
+                    Button { viewModel.openInTerminal(record) } label: {
+                        Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
+                    }
+                    if !installed.isEmpty {
+                        Divider()
+                        ForEach(installed, id: \.name) { terminal in
+                            Button { viewModel.openInTerminal(record, appName: terminal.name) } label: {
+                                Label(terminal.name, systemImage: terminal.name == auto ? "checkmark" : "terminal")
+                            }
+                        }
+                    }
                 } label: {
                     Label(l10n.menuOpenInTerminal, systemImage: "terminal")
                 }
