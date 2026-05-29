@@ -482,6 +482,20 @@ class AppState: ObservableObject {
     }
 
     private func handleParsedEvent(_ h: ParsedHookEvent, responseHandler: @escaping (String) -> Void) {
+        let ud = UserDefaults.standard
+        let processVSCode = ud.object(forKey: "processVSCodeEnabled") as? Bool ?? true
+        let processClaudeDesktop = ud.object(forKey: "processClaudeDesktopEnabled") as? Bool ?? true
+        switch h.terminalApp {
+        case "VSCode" where !processVSCode:
+            responseHandler("{\"response\": \"approved\"}")
+            return
+        case "ClaudeDesktop" where !processClaudeDesktop:
+            responseHandler("{\"response\": \"approved\"}")
+            return
+        default:
+            break
+        }
+
         // --- Phase 1: Sub-Agent and Lifecycle Handling ---
         // Sub-agents are tracked but their approval is usually delegated to the parent or
         // auto-approved. We record them in replay and update session grouping.
@@ -2450,7 +2464,7 @@ class AppState: ObservableObject {
         }
     }
 
-    func focusTerminal(for sessionId: String? = nil) {
+    @MainActor func focusTerminal(for sessionId: String? = nil) {
         let targetId = sessionId ?? (currentSessionId.isEmpty ? sessionStore.selectedSessionId : currentSessionId)
         if let targetId {
             sessionStore.setUnread(false, sessionId: targetId)
@@ -2458,15 +2472,6 @@ class AppState: ObservableObject {
         }
         let session = targetId.flatMap { id in
             sessionStore.activeSessions.first { $0.id == id }
-        }
-        let settings = SettingsStore.shared.settings
-        switch session?.terminalApp {
-        case "VSCode" where !settings.focusVSCodeEnabled:
-            return
-        case "ClaudeDesktop" where !settings.focusClaudeDesktopEnabled:
-            return
-        default:
-            break
         }
         TerminalFocuser.focusTerminal(
             appName: session?.terminalApp,
@@ -2476,7 +2481,8 @@ class AppState: ObservableObject {
             tabIndex: session?.terminalTabIndex,
             tmuxPane: session?.terminalTmuxPane,
             tmuxSocket: session?.terminalTmuxSocket,
-            tmuxClient: session?.terminalTmuxClient
+            tmuxClient: session?.terminalTmuxClient,
+            workspaceRoot: session?.workspaceRoot
         ) { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.terminalFocusRecheckDelay) {
                 self?.passIfTerminalFocused()

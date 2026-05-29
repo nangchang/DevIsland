@@ -196,8 +196,8 @@ struct AppSettings: Equatable {
     var expandOnQuestionResponse: Bool
     var preferredTerminal: String?
     var checkForUpdatesOnStartup: Bool
-    var focusVSCodeEnabled: Bool
-    var focusClaudeDesktopEnabled: Bool
+    var processVSCodeEnabled: Bool
+    var processClaudeDesktopEnabled: Bool
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -276,8 +276,8 @@ struct AppSettings: Equatable {
         expandOnQuestionResponse: true,
         preferredTerminal: nil,
         checkForUpdatesOnStartup: true,
-        focusVSCodeEnabled: true,
-        focusClaudeDesktopEnabled: true
+        processVSCodeEnabled: true,
+        processClaudeDesktopEnabled: true
     )
 }
 
@@ -352,8 +352,8 @@ final class SettingsStore: ObservableObject {
         static let expandOnQuestionResponse = "expandOnQuestionResponse"
         static let preferredTerminal = "preferredTerminal"
         static let checkForUpdatesOnStartup = "checkForUpdatesOnStartup"
-        static let focusVSCodeEnabled = "focusVSCodeEnabled"
-        static let focusClaudeDesktopEnabled = "focusClaudeDesktopEnabled"
+        static let processVSCodeEnabled = "processVSCodeEnabled"
+        static let processClaudeDesktopEnabled = "processClaudeDesktopEnabled"
     }
 
     private let userDefaults: UserDefaults
@@ -425,8 +425,8 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.expandOnQuestionResponse, forKey: DefaultsKey.expandOnQuestionResponse)
         userDefaults.set(settings.preferredTerminal, forKey: DefaultsKey.preferredTerminal)
         userDefaults.set(settings.checkForUpdatesOnStartup, forKey: DefaultsKey.checkForUpdatesOnStartup)
-        userDefaults.set(settings.focusVSCodeEnabled, forKey: DefaultsKey.focusVSCodeEnabled)
-        userDefaults.set(settings.focusClaudeDesktopEnabled, forKey: DefaultsKey.focusClaudeDesktopEnabled)
+        userDefaults.set(settings.processVSCodeEnabled, forKey: DefaultsKey.processVSCodeEnabled)
+        userDefaults.set(settings.processClaudeDesktopEnabled, forKey: DefaultsKey.processClaudeDesktopEnabled)
         writeBridgeConfig(settings)
     }
 
@@ -701,15 +701,15 @@ final class SettingsStore: ObservableObject {
                 from: userDefaults,
                 default: defaults.checkForUpdatesOnStartup
             ),
-            focusVSCodeEnabled: bool(
-                key: DefaultsKey.focusVSCodeEnabled,
+            processVSCodeEnabled: bool(
+                key: DefaultsKey.processVSCodeEnabled,
                 from: userDefaults,
-                default: defaults.focusVSCodeEnabled
+                default: defaults.processVSCodeEnabled
             ),
-            focusClaudeDesktopEnabled: bool(
-                key: DefaultsKey.focusClaudeDesktopEnabled,
+            processClaudeDesktopEnabled: bool(
+                key: DefaultsKey.processClaudeDesktopEnabled,
                 from: userDefaults,
-                default: defaults.focusClaudeDesktopEnabled
+                default: defaults.processClaudeDesktopEnabled
             )
         )
     }

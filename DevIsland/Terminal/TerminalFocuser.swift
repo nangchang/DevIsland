@@ -380,6 +380,7 @@ class TerminalFocuser {
         tmuxPane: String? = nil,
         tmuxSocket: String? = nil,
         tmuxClient: String? = nil,
+        workspaceRoot: String? = nil,
         completion: (() -> Void)? = nil
     ) {
         let targetName = normalizedAppName(appName)
@@ -401,9 +402,16 @@ class TerminalFocuser {
         let name = match.name
         DispatchQueue.global(qos: .userInitiated).async {
             // This launches /usr/bin/osascript as a child process, so keep it off the main thread.
-            let (_, error) = executeAppleScript(focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))
-            if let error {
-                print("[DevIsland] terminal focus AppleScript error: \(error)")
+            if name == "VSCode", let path = workspaceRoot, !path.isEmpty {
+                let ok = runProcess(executable: URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", "Visual Studio Code", path])
+                if !ok {
+                    print("[DevIsland] open VS Code failed for path: \(path)")
+                }
+            } else {
+                let (_, error) = executeAppleScript(focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))
+                if let error {
+                    print("[DevIsland] terminal focus AppleScript error: \(error)")
+                }
             }
             if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
                 print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
@@ -564,6 +572,10 @@ class TerminalFocuser {
               end repeat
             end tell
             """
+        case "VSCode":
+            return "tell application id \"com.microsoft.VSCode\" to activate"
+        case "ClaudeDesktop":
+            return "tell application id \"com.anthropic.claudefordesktop\" to activate"
         default:
             return "tell application \"\(appName)\" to activate"
         }

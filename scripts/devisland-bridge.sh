@@ -188,17 +188,16 @@ if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "WarpTermi
 fi
 
 # VS Code integrated terminal (TERM_PROGRAM=vscode, has TTY)
+# TERM_PROGRAM=vscode is set by all VS Code variants (Insiders, VSCodium, etc.) — no app check needed
 if [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "vscode" ]; then
-  if osascript -e 'return (application "Code" is running)' 2>/dev/null | grep -q "true"; then
-    TERM_APP="VSCode"
-    _dir=$(basename "$PWD" 2>/dev/null)
-    TERM_TITLE="${_dir:-VS Code}"
-  fi
+  TERM_APP="VSCode"
+  _dir=$(basename "$PWD" 2>/dev/null)
+  TERM_TITLE="${_dir:-VS Code}"
 fi
 
 # VS Code extension host (no TTY, VSCODE_PID / VSCODE_IPC_HOOK / VSCODE_IPC_HOOK_CLI)
 if [ -z "$TERM_APP" ] && { [ -n "${VSCODE_PID:-}" ] || [ -n "${VSCODE_IPC_HOOK:-}" ] || [ -n "${VSCODE_IPC_HOOK_CLI:-}" ]; }; then
-  if osascript -e 'return (application "Code" is running)' 2>/dev/null | grep -q "true"; then
+  if osascript -e 'return application id "com.microsoft.VSCode" is running' 2>/dev/null | grep -q "true"; then
     TERM_APP="VSCode"
     _dir=$(basename "$PWD" 2>/dev/null)
     TERM_TITLE="${_dir:-VS Code}"

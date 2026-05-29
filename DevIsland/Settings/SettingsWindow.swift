@@ -1090,16 +1090,16 @@ private struct IntegrationsSettingsPane: View {
 
     var body: some View {
         Form {
-            Section(l10n.secAppFocus) {
+            Section(l10n.secAppIntegrations) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Toggle(l10n.lblFocusVSCode, isOn: store.binding(\.focusVSCodeEnabled))
-                    Text(l10n.descFocusVSCode)
+                    Toggle(l10n.lblProcessVSCode, isOn: store.binding(\.processVSCodeEnabled))
+                    Text(l10n.descProcessVSCode)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Toggle(l10n.lblFocusClaudeDesktop, isOn: store.binding(\.focusClaudeDesktopEnabled))
-                    Text(l10n.descFocusClaudeDesktop)
+                    Toggle(l10n.lblProcessClaudeDesktop, isOn: store.binding(\.processClaudeDesktopEnabled))
+                    Text(l10n.descProcessClaudeDesktop)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
