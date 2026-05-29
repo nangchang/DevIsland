@@ -213,6 +213,10 @@ private struct GeneralSettingsPane: View {
                 }
             }
 
+            Section(l10n.secUpdates) {
+                Toggle(l10n.lblCheckForUpdatesOnStartup, isOn: store.binding(\.checkForUpdatesOnStartup))
+            }
+
             Section {
                 Button(l10n.btnResetAllSettings) {
                     store.resetToDefaults()
