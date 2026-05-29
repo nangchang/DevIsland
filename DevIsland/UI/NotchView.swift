@@ -189,6 +189,7 @@ struct NotchView: View {
     @ObservedObject private var l10n = L10n.shared
     @State private var buddyPulse = false
     @State private var isExpanded = false
+    @State private var dragStartHeight: Double = 0
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
@@ -233,14 +234,27 @@ struct NotchView: View {
                 ZStack(alignment: .top) {
                     notchBackground
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        if isExpanded {
-                            expandedContent
-                                .transition(.opacity)
-                        }
+                    ZStack(alignment: .bottom) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            if isExpanded {
+                                expandedContent
+                                    .transition(.opacity)
+                            }
 
-                        if !isExpanded {
-                            Spacer(minLength: 0)
+                            if !isExpanded {
+                                Spacer(minLength: 0)
+                            }
+                        }
+                        .frame(
+                            width: notchSize.width,
+                            height: notchSize.height,
+                            alignment: .top
+                        )
+
+                        if isExpanded {
+                            ResizeHandle(dragStartHeight: $dragStartHeight)
+                                .frame(width: notchSize.width)
+                                .transition(.opacity)
                         }
                     }
                     .frame(
@@ -749,5 +763,51 @@ private final class MouseDownMonitorView: NSView {
 
     deinit {
         removeMonitor()
+    }
+}
+
+// MARK: - Resize Handle
+
+private struct ResizeHandle: View {
+    @Binding var dragStartHeight: Double
+    @ObservedObject private var settingsStore = SettingsStore.shared
+
+    private let minHeight: Double = 240
+    private var maxHeight: Double {
+        let screenHeight = NSScreen.main?.frame.height ?? 1000
+        return min(screenHeight * 0.6, 720)
+    }
+
+    var body: some View {
+        ZStack {
+            Color.clear
+                .frame(height: 12)
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.white.opacity(0.2))
+                .frame(width: 36, height: 4)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            if inside {
+                NSCursor.resizeUpDown.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 2)
+                .onChanged { value in
+                    if dragStartHeight == 0 {
+                        dragStartHeight = settingsStore.settings.expandedNotchHeight
+                    }
+                    let newHeight = dragStartHeight + value.translation.height
+                    let clamped = min(max(newHeight, minHeight), maxHeight)
+                    settingsStore.settings.expandedNotchHeight = clamped
+                }
+                .onEnded { _ in
+                    dragStartHeight = 0
+                }
+        )
     }
 }
