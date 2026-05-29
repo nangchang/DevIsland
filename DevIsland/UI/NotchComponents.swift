@@ -396,6 +396,15 @@ struct SessionRowView: View {
                                         .font(.system(size: titleFont - 2))
                                         .foregroundColor(.white.opacity(0.4))
                                 }
+                                if let appBadge = terminalAppBadge(session.terminalApp) {
+                                    Text(appBadge.label)
+                                        .font(.system(size: metaFont - 1, weight: .semibold))
+                                        .foregroundColor(appBadge.color)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(appBadge.color.opacity(0.15))
+                                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                                }
                             }
 
                             Spacer()
@@ -411,16 +420,6 @@ struct SessionRowView: View {
                             Text(String(session.id.prefix(8)))
                                 .font(.system(size: metaFont, weight: .medium, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.4))
-
-                            if let appBadge = terminalAppBadge(session.terminalApp) {
-                                Text(appBadge.label)
-                                    .font(.system(size: metaFont - 1, weight: .semibold))
-                                    .foregroundColor(appBadge.color)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(appBadge.color.opacity(0.15))
-                                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                            }
 
                             Text("•")
                                 .font(.system(size: metaFont - 1))
