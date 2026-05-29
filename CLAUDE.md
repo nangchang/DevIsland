@@ -97,7 +97,7 @@ main에 직접 커밋하지 말 것 — 예외 없음.
 
 노치 윈도우는 포커스를 잃으면 자동으로 닫힌다. 노치 컨텍스트 메뉴에서 NSAlert를
 띄우면 윈도우가 즉시 사라진다 — 항상 인라인 SwiftUI TextField를 사용할 것.
-`@FocusState` + `onAppear { DispatchQueue.main.asyncAfter(0.05s) { focused = true } }`
+`@FocusState` + `onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focused = true } }`
 패턴으로 컨텍스트 메뉴 닫힌 뒤 포커스를 강제 설정한다.
 
 ## 커밋 원자성
@@ -105,8 +105,9 @@ main에 직접 커밋하지 말 것 — 예외 없음.
 각 커밋은 하나의 논리적 변경만 담을 것. 여러 파일에 걸쳐 있어도
 같은 목적이면 한 커밋 — 다른 목적이면 반드시 분리.
 여러 변경을 묶어 커밋했다가 분리 요청 받으면:
-`git reset --soft HEAD~1 && git restore --staged .` 후 순서대로 재커밋.
-같은 파일의 다른 변경은 파일을 HEAD로 되돌리고 Edit으로 하나씩 적용.
+`git reset --soft HEAD~1 && git restore --staged .` — 워킹 트리는 그대로이므로
+파일 단위로 스테이징해 순서대로 재커밋. 같은 파일에 여러 변경이 섞인 경우도
+soft reset 후 Edit으로 하나씩 적용하고 커밋하면 된다.
 
 ## git commit 멀티라인 메시지
 
