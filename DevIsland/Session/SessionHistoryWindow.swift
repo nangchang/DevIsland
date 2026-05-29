@@ -18,12 +18,11 @@ final class SessionHistoryViewModel: ObservableObject {
 
     var filtered: [ClosedSessionRecord] {
         guard !searchText.isEmpty else { return records }
-        let q = searchText.lowercased()
         return records.filter {
-            $0.sessionId.lowercased().contains(q)
-            || ($0.workspaceRoot?.lowercased().contains(q) ?? false)
-            || ($0.terminalTitle?.lowercased().contains(q) ?? false)
-            || $0.provider.rawValue.lowercased().contains(q)
+            $0.sessionId.localizedCaseInsensitiveContains(searchText)
+            || ($0.workspaceRoot?.localizedCaseInsensitiveContains(searchText) ?? false)
+            || ($0.terminalTitle?.localizedCaseInsensitiveContains(searchText) ?? false)
+            || $0.provider.rawValue.localizedCaseInsensitiveContains(searchText)
         }
     }
 
