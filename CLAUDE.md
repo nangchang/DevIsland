@@ -92,3 +92,24 @@ main에 직접 커밋하지 말 것 — 예외 없음.
 ## Swift SourceKit 진단 오류
 
 `xcode-build-server`를 설정하면 cross-file 참조 오류가 사라진다 (AGENTS.md "One-Time Local Setup" 참고). 설정 전이거나 DerivedData 초기화 후에는 "Cannot find 'AppState' in scope" 류의 오류가 표시될 수 있으나 빌드 오류가 아님 — `xcodebuild build`로 실제 오류 여부 확인.
+
+## 노치 윈도우 UI 패턴
+
+노치 윈도우는 포커스를 잃으면 자동으로 닫힌다. 노치 컨텍스트 메뉴에서 NSAlert를
+띄우면 윈도우가 즉시 사라진다 — 항상 인라인 SwiftUI TextField를 사용할 것.
+`@FocusState` + `onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focused = true } }`
+패턴으로 컨텍스트 메뉴 닫힌 뒤 포커스를 강제 설정한다.
+
+## 커밋 원자성
+
+각 커밋은 하나의 논리적 변경만 담을 것. 여러 파일에 걸쳐 있어도
+같은 목적이면 한 커밋 — 다른 목적이면 반드시 분리.
+여러 변경을 묶어 커밋했다가 분리 요청 받으면:
+`git reset --soft HEAD~1 && git restore --staged .` — 워킹 트리는 그대로이므로
+파일 단위로 스테이징해 순서대로 재커밋. 같은 파일에 여러 변경이 섞인 경우도
+soft reset 후 Edit으로 하나씩 적용하고 커밋하면 된다.
+
+## git commit 멀티라인 메시지
+
+`git commit -m "$(cat <<'EOF' ... EOF)"` 형식은 hook에 막힐 수 있다.
+`Write`로 `/tmp/commit_msg.txt` 생성 후 `git commit -F /tmp/commit_msg.txt` 사용.
