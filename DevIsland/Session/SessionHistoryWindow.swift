@@ -27,13 +27,17 @@ final class SessionHistoryViewModel: ObservableObject {
     }
 
     func refresh() {
-        do {
-            records = try appState.closedSessionRecords(
-                retentionDays: SettingsStore.shared.settings.replayRetentionDays
-            )
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
+        let days = SettingsStore.shared.settings.replayRetentionDays
+        Task {
+            do {
+                let fetched = try await Task.detached(priority: .userInitiated) { [appState] in
+                    try appState.closedSessionRecords(retentionDays: days)
+                }.value
+                records = fetched
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
