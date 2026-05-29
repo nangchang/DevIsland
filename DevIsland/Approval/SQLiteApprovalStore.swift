@@ -340,12 +340,21 @@ final class SQLiteApprovalStore {
                 FROM hook_events e
                 JOIN starts s ON s.session_id = e.session_id
                 JOIN ended en ON en.session_id = e.session_id
+            ),
+            with_meta AS (
+                SELECT e.session_id, e.payload_json AS meta_payload,
+                       ROW_NUMBER() OVER (PARTITION BY e.session_id ORDER BY e.received_at DESC) AS rn
+                FROM hook_events e
+                JOIN starts s ON s.session_id = e.session_id
+                JOIN ended en ON en.session_id = e.session_id
+                WHERE json_extract(e.payload_json, '$.cwd') IS NOT NULL
             )
             SELECT s.session_id, s.provider, l.payload_json, l.event_name, l.tool_name,
-                   s.start_at, en.ended_at
+                   s.start_at, en.ended_at, m.meta_payload
             FROM starts s
             JOIN ended en ON en.session_id = s.session_id
             JOIN latest l ON l.session_id = s.session_id AND l.rn = 1
+            LEFT JOIN with_meta m ON m.session_id = s.session_id AND m.rn = 1
             ORDER BY en.ended_at DESC
             """
         var statement: OpaquePointer?
@@ -367,7 +376,8 @@ final class SQLiteApprovalStore {
             else { continue }
             let startAt  = Date(timeIntervalSince1970: sqlite3_column_double(statement, 5))
             let endedAt  = Date(timeIntervalSince1970: sqlite3_column_double(statement, 6))
-            let json = (try? JSONSerialization.jsonObject(with: Data(payloadJSON.utf8))) as? [String: Any]
+            let metaPayload = columnString(statement, 7) ?? payloadJSON
+            let meta = (try? JSONSerialization.jsonObject(with: Data(metaPayload.utf8))) as? [String: Any]
             records.append(ClosedSessionRecord(
                 sessionId: sessionId,
                 provider: provider,
@@ -376,9 +386,9 @@ final class SQLiteApprovalStore {
                 lastToolName: toolName,
                 startAt: startAt,
                 endedAt: endedAt,
-                workspaceRoot: json?["cwd"] as? String,
-                terminalApp: json?["terminal_app"] as? String,
-                terminalTitle: json?["terminal_title"] as? String
+                workspaceRoot: meta?["cwd"] as? String,
+                terminalApp: meta?["terminal_app"] as? String,
+                terminalTitle: meta?["terminal_title"] as? String
             ))
         }
         return records
