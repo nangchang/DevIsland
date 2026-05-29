@@ -255,13 +255,19 @@ struct SessionRowView: View {
     }
 
     private var resumeCommand: String {
-        let cd = session.workspaceRoot.map { "cd \($0.contains(" ") ? "\"\($0)\"" : $0) && " } ?? ""
+        let cd = session.workspaceRoot.map { shellCdPrefix($0) } ?? ""
         switch session.agentKind {
         case .claudeCode: return "\(cd)claude --resume \(session.id)"
         case .codex:      return "\(cd)codex --resume \(session.id)"
         case .gemini:     return "\(cd)gemini"
         case .island:     return cd.isEmpty ? "" : String(cd.dropLast(4)) // cd only
         }
+    }
+
+    private func shellCdPrefix(_ path: String) -> String {
+        let escaped = path.replacingOccurrences(of: "\\", with: "\\\\")
+                          .replacingOccurrences(of: "\"", with: "\\\"")
+        return "cd \"\(escaped)\" && "
     }
 
     private var autoTerminalName: String {
