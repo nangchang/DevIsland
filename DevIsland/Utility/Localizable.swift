@@ -450,6 +450,7 @@ extension L10n {
     var historyRefresh:     String { s("Refresh",             "새로 고침") }
     var historyColAgent:    String { s("Agent",               "에이전트") }
     var historyColPath:     String { s("Path",                "경로") }
+    var historyColLabel:    String { s("Name",                "이름") }
     var historyColTitle:    String { s("Terminal",            "터미널") }
     var historyColEnded:    String { s("Ended",               "종료") }
     var historyColSession:  String { s("Session ID",          "세션 ID") }

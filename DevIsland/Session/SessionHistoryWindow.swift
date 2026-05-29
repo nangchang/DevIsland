@@ -145,20 +145,29 @@ struct SessionHistoryWindowView: View {
                 }
             }
 
-            TableColumn(l10n.historyColTitle) { record in
-                let label = appState.sessionLabels[record.sessionId]
-                let displayTitle = label ?? record.terminalTitle
-                HStack(spacing: 4) {
-                    Text(displayTitle ?? "—")
-                        .font(.system(size: 11))
-                        .lineLimit(1)
-                        .foregroundStyle(displayTitle == nil ? .secondary : .primary)
-                    if label != nil {
+            TableColumn(l10n.historyColLabel) { record in
+                if let label = appState.sessionLabels[record.sessionId] {
+                    HStack(spacing: 4) {
                         Image(systemName: "tag.fill")
                             .font(.system(size: 9))
                             .foregroundStyle(.secondary)
+                        Text(label)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
                     }
+                } else {
+                    Text("—")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                 }
+            }
+            .width(120)
+
+            TableColumn(l10n.historyColTitle) { record in
+                Text(record.terminalTitle ?? "—")
+                    .font(.system(size: 11))
+                    .lineLimit(1)
+                    .foregroundStyle(record.terminalTitle == nil ? .secondary : .primary)
             }
             .width(120)
 

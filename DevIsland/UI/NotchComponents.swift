@@ -243,6 +243,9 @@ struct SessionRowView: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var appState = AppState.shared
     @State private var timeAgo: String = ""
+    @State private var isRenaming: Bool = false
+    @State private var renameText: String = ""
+    @FocusState private var renameFocused: Bool
     private var tool: ToolInfo { toolInfo(for: session.lastToolName) }
     private var displayTitle: String {
         appState.sessionLabels[session.id] ?? session.terminalTitle
@@ -346,21 +349,47 @@ struct SessionRowView: View {
                                     .frame(width: isSubAgent ? 5 : 6, height: isSubAgent ? 5 : 6)
                             }
 
-                            Text(displayTitle)
-                                .font(.system(size: titleFont, weight: (session.hasMissedApproval || session.isUnread) ? .heavy : .bold))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                            if hasCustomLabel {
-                                Image(systemName: "tag.fill")
-                                    .font(.system(size: titleFont - 2))
-                                    .foregroundColor(.white.opacity(0.4))
+                            if isRenaming {
+                                TextField("", text: $renameText)
+                                    .font(.system(size: titleFont, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .textFieldStyle(.plain)
+                                    .focused($renameFocused)
+                                    .padding(.horizontal, 4)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(Color.white.opacity(0.12))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .strokeBorder(Color.white.opacity(0.4), lineWidth: 1)
+                                            )
+                                    )
+                                    .onSubmit { commitRename() }
+                                    .onExitCommand { isRenaming = false }
+                                    .onAppear {
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                            renameFocused = true
+                                        }
+                                    }
+                            } else {
+                                Text(displayTitle)
+                                    .font(.system(size: titleFont, weight: (session.hasMissedApproval || session.isUnread) ? .heavy : .bold))
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                                if hasCustomLabel {
+                                    Image(systemName: "tag.fill")
+                                        .font(.system(size: titleFont - 2))
+                                        .foregroundColor(.white.opacity(0.4))
+                                }
                             }
 
                             Spacer()
 
-                            Text(timeAgo)
-                                .font(.system(size: metaFont - 1, weight: .medium))
-                                .foregroundColor(.white.opacity(0.3))
+                            if !isRenaming {
+                                Text(timeAgo)
+                                    .font(.system(size: metaFont - 1, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.3))
+                            }
                         }
 
                         HStack(spacing: 6) {
@@ -406,6 +435,14 @@ struct SessionRowView: View {
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
+
+                        if !isSubAgent, let root = session.workspaceRoot {
+                            Text((root as NSString).abbreviatingWithTildeInPath)
+                                .font(.system(size: metaFont, weight: .regular, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.25))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -449,10 +486,8 @@ struct SessionRowView: View {
         .onReceive(Self.sharedTimer) { _ in updateTimeAgo() }
         .contextMenu {
             Button {
-                AppState.shared.promptRenameSession(
-                    session.id,
-                    currentLabel: appState.sessionLabels[session.id]
-                )
+                renameText = appState.sessionLabels[session.id] ?? ""
+                isRenaming = true
             } label: {
                 Label(l10n.menuRenameSession, systemImage: "pencil")
             }
@@ -506,6 +541,16 @@ struct SessionRowView: View {
         } label: {
             Label(l10n.menuOpenInTerminal, systemImage: "terminal")
         }
+    }
+
+    private func commitRename() {
+        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            appState.sessionLabels.removeValue(forKey: session.id)
+        } else {
+            appState.sessionLabels[session.id] = trimmed
+        }
+        isRenaming = false
     }
 
     private func updateTimeAgo() {
