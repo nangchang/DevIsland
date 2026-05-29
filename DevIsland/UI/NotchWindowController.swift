@@ -100,6 +100,7 @@ class NotchWindowController: NSWindowController {
         collapsedPanel.acceptsMouseMovedEvents = true
         collapsedPanel.isMovableByWindowBackground = false
         collapsedPanel.animationBehavior = .none
+        collapsedPanel.becomesKeyOnlyIfNeeded = true
         collapsedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
 
         let expandedPanel = NotchPanel(
@@ -118,6 +119,7 @@ class NotchWindowController: NSWindowController {
         expandedPanel.acceptsMouseMovedEvents = true
         expandedPanel.isMovableByWindowBackground = false
         expandedPanel.animationBehavior = .none
+        expandedPanel.becomesKeyOnlyIfNeeded = true
         expandedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
 
         self.init(window: collapsedPanel)
