@@ -483,8 +483,8 @@ class AppState: ObservableObject {
 
     private func handleParsedEvent(_ h: ParsedHookEvent, responseHandler: @escaping (String) -> Void) {
         let ud = UserDefaults.standard
-        let processVSCode = ud.object(forKey: "processVSCodeEnabled") as? Bool ?? true
-        let processClaudeDesktop = ud.object(forKey: "processClaudeDesktopEnabled") as? Bool ?? true
+        let processVSCode = ud.object(forKey: "processVSCodeEnabled") as? Bool ?? false
+        let processClaudeDesktop = ud.object(forKey: "processClaudeDesktopEnabled") as? Bool ?? false
         switch h.terminalApp {
         case "VSCode" where !processVSCode:
             responseHandler("{\"response\": \"approved\"}")

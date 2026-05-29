@@ -276,8 +276,8 @@ struct AppSettings: Equatable {
         expandOnQuestionResponse: true,
         preferredTerminal: nil,
         checkForUpdatesOnStartup: true,
-        processVSCodeEnabled: true,
-        processClaudeDesktopEnabled: true
+        processVSCodeEnabled: false,
+        processClaudeDesktopEnabled: false
     )
 }
 
