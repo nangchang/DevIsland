@@ -42,11 +42,13 @@ final class LaunchAtLoginManager: ObservableObject {
     }
 
     private func showError(_ error: Error) {
-        let alert = NSAlert()
-        alert.messageText = L10n.shared.alertLaunchAtLoginFailed
-        alert.informativeText = error.localizedDescription
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: L10n.shared.alertOK)
-        alert.runModal()
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = L10n.shared.alertLaunchAtLoginFailed
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: L10n.shared.alertOK)
+            alert.runModal()
+        }
     }
 }
