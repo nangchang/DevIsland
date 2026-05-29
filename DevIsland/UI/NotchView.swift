@@ -780,104 +780,123 @@ private final class MouseDownMonitorView: NSView {
     }
 }
 
-// MARK: - Resize Handle
+// MARK: - Resize Handle (NSView-backed, 스크린 절대좌표 사용으로 창 이동에 의한 lag 제거)
 
-private struct ResizeHandle: View {
+private struct ResizeHandle: NSViewRepresentable {
     @Binding var liveHeight: Double?
-    @ObservedObject private var settingsStore = SettingsStore.shared
-    @State private var dragStartHeight: Double = 0
 
-    private let minHeight: Double = 240
-    private var maxHeight: Double {
-        let screenHeight = NSScreen.main?.frame.height ?? 1000
-        return min(screenHeight * 0.6, 720)
+    func makeNSView(context: Context) -> ResizeHandleNSView {
+        ResizeHandleNSView(axis: .vertical, liveValue: $liveHeight)
     }
-
-    var body: some View {
-        ZStack {
-            Color.clear
-                .frame(height: 12)
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.white.opacity(0.2))
-                .frame(width: 36, height: 4)
-        }
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .onHover { inside in
-            if inside {
-                NSCursor.resizeUpDown.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        .gesture(
-            DragGesture(minimumDistance: 2)
-                .onChanged { value in
-                    if dragStartHeight == 0 {
-                        dragStartHeight = settingsStore.settings.expandedNotchHeight
-                    }
-                    let clamped = min(max(dragStartHeight + value.translation.height, minHeight), maxHeight)
-                    liveHeight = clamped
-                    let currentWidth = settingsStore.settings.expandedNotchWidth
-                    NotchWindowController.current?.updateLiveExpandedFrame(size: NSSize(width: currentWidth, height: clamped))
-                }
-                .onEnded { _ in
-                    if let final = liveHeight {
-                        settingsStore.settings.expandedNotchHeight = final
-                    }
-                    liveHeight = nil
-                    dragStartHeight = 0
-                }
-        )
+    func updateNSView(_ nsView: ResizeHandleNSView, context: Context) {
+        nsView.liveValue = $liveHeight
     }
 }
 
-// MARK: - Right Resize Handle
-
-private struct RightResizeHandle: View {
+private struct RightResizeHandle: NSViewRepresentable {
     @Binding var liveWidth: Double?
-    @ObservedObject private var settingsStore = SettingsStore.shared
-    @State private var dragStartWidth: Double = 0
 
-    private let minWidth: Double = 610
-    private let maxWidth: Double = 1200
+    func makeNSView(context: Context) -> ResizeHandleNSView {
+        ResizeHandleNSView(axis: .horizontal, liveValue: $liveWidth)
+    }
+    func updateNSView(_ nsView: ResizeHandleNSView, context: Context) {
+        nsView.liveValue = $liveWidth
+    }
+}
 
-    var body: some View {
-        ZStack {
-            Color.clear
-                .frame(width: 12)
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.white.opacity(0.2))
-                .frame(width: 4, height: 36)
+// MARK: - ResizeHandleNSView
+
+final class ResizeHandleNSView: NSView {
+    enum Axis { case vertical, horizontal }
+
+    var liveValue: Binding<Double?>
+
+    private let axis: Axis
+    private var isTracking = false
+    private var dragStartValue: Double = 0
+    private var startScreenPos: CGFloat = 0
+    private var trackingArea: NSTrackingArea?
+
+    private var minValue: Double { axis == .vertical ? 240 : 610 }
+    private var maxValue: Double { axis == .vertical ? 720 : 1200 }
+
+    init(axis: Axis, liveValue: Binding<Double?>) {
+        self.axis = axis
+        self.liveValue = liveValue
+        super.init(frame: .zero)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize {
+        axis == .vertical
+            ? NSSize(width: NSView.noIntrinsicMetric, height: 12)
+            : NSSize(width: 12, height: NSView.noIntrinsicMetric)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.white.withAlphaComponent(0.2).setFill()
+        let (w, h): (CGFloat, CGFloat) = axis == .vertical ? (36, 4) : (4, 36)
+        let rect = NSRect(
+            x: (bounds.width - w) / 2,
+            y: (bounds.height - h) / 2,
+            width: w, height: h
+        )
+        NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2).fill()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingArea.map { removeTrackingArea($0) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        (axis == .vertical ? NSCursor.resizeUpDown : NSCursor.resizeLeftRight).push()
+    }
+    override func mouseExited(with event: NSEvent) { NSCursor.pop() }
+
+    override func mouseDown(with event: NSEvent) {
+        isTracking = true
+        let settings = SettingsStore.shared.settings
+        dragStartValue = axis == .vertical ? settings.expandedNotchHeight : settings.expandedNotchWidth
+        startScreenPos = axis == .vertical ? NSEvent.mouseLocation.y : NSEvent.mouseLocation.x
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard isTracking else { return }
+        let currentPos = axis == .vertical ? NSEvent.mouseLocation.y : NSEvent.mouseLocation.x
+        let delta = currentPos - startScreenPos
+        let settings = SettingsStore.shared.settings
+
+        let clamped: Double
+        let size: NSSize
+        if axis == .vertical {
+            // 아래로 드래그 = y 감소 = delta 음수 → 높이 증가
+            clamped = min(max(dragStartValue - delta, minValue), maxValue)
+            size = NSSize(width: settings.expandedNotchWidth, height: clamped)
+        } else {
+            // 오른쪽으로 드래그 = x 증가 = delta 양수 → 패널 중앙 고정이므로 ×2
+            clamped = min(max(dragStartValue + delta * 2, minValue), maxValue)
+            size = NSSize(width: clamped, height: settings.expandedNotchHeight)
         }
-        .frame(maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onHover { inside in
-            if inside {
-                NSCursor.resizeLeftRight.push()
+        liveValue.wrappedValue = clamped
+        NotchWindowController.current?.updateLiveExpandedFrame(size: size)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isTracking else { return }
+        isTracking = false
+        if let final = liveValue.wrappedValue {
+            if axis == .vertical {
+                SettingsStore.shared.settings.expandedNotchHeight = final
             } else {
-                NSCursor.pop()
+                SettingsStore.shared.settings.expandedNotchWidth = final
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 2)
-                .onChanged { value in
-                    if dragStartWidth == 0 {
-                        dragStartWidth = settingsStore.settings.expandedNotchWidth
-                    }
-                    // 패널이 중앙 고정이므로 오른쪽 엣지 이동 × 2 = 너비 변화
-                    let clamped = min(max(dragStartWidth + value.translation.width * 2, minWidth), maxWidth)
-                    liveWidth = clamped
-                    let currentHeight = settingsStore.settings.expandedNotchHeight
-                    NotchWindowController.current?.updateLiveExpandedFrame(size: NSSize(width: clamped, height: currentHeight))
-                }
-                .onEnded { _ in
-                    if let final = liveWidth {
-                        settingsStore.settings.expandedNotchWidth = final
-                    }
-                    liveWidth = nil
-                    dragStartWidth = 0
-                }
-        )
+        liveValue.wrappedValue = nil
     }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
