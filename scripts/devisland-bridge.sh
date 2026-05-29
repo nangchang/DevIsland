@@ -204,11 +204,29 @@ if [ -z "$TERM_APP" ] && { [ -n "${VSCODE_PID:-}" ] || [ -n "${VSCODE_IPC_HOOK:-
   fi
 fi
 
-# Claude desktop app (CLAUDE_CODE_DESKTOP 환경변수로 식별)
-if [ -z "$TERM_APP" ] && [ -n "${CLAUDE_CODE_DESKTOP:-}" ]; then
-  TERM_APP="ClaudeDesktop"
-  _dir=$(basename "$PWD" 2>/dev/null)
-  TERM_TITLE="${_dir:-Claude}"
+# Claude Desktop app: CLAUDE_CODE_DESKTOP 환경변수 또는 부모 프로세스 체인에서 "Claude" 앱 탐지
+if [ -z "$TERM_APP" ]; then
+  _is_claude_desktop=0
+  if [ -n "${CLAUDE_CODE_DESKTOP:-}" ]; then
+    _is_claude_desktop=1
+  else
+    _pid=$$
+    for _i in 1 2 3 4 5; do
+      _ppid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ')
+      [ -z "$_ppid" ] || [ "$_ppid" = "0" ] && break
+      _pname=$(ps -p "$_ppid" -o comm= 2>/dev/null | tr -d ' ')
+      if [ "$_pname" = "Claude" ]; then
+        _is_claude_desktop=1
+        break
+      fi
+      _pid="$_ppid"
+    done
+  fi
+  if [ "$_is_claude_desktop" = "1" ]; then
+    TERM_APP="ClaudeDesktop"
+    _dir=$(basename "$PWD" 2>/dev/null)
+    TERM_TITLE="${_dir:-Claude}"
+  fi
 fi
 
 if [ -z "$TERM_APP" ]; then
