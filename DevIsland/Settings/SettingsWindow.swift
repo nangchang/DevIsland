@@ -161,6 +161,7 @@ private extension SettingsStore {
 private struct GeneralSettingsPane: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var launchManager = LaunchAtLoginManager.shared
 
     private var installedTerminals: [(name: String, bundleId: String)] {
         TerminalFocuser.installedTerminals
@@ -188,6 +189,28 @@ private struct GeneralSettingsPane: View {
                 Text(l10n.hintPreferredTerminal)
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+
+            Section(l10n.secStartup) {
+                Toggle(l10n.lblLaunchAtLogin, isOn: Binding(
+                    get: { launchManager.isEnabled },
+                    set: { launchManager.setEnabled($0) }
+                ))
+
+                if launchManager.status == .requiresApproval {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Text(l10n.lblLaunchAtLoginApproval)
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
+                        Spacer()
+                        Button(l10n.btnOpenLoginSettings) {
+                            launchManager.openLoginItemsSettings()
+                        }
+                        .buttonStyle(.link)
+                    }
+                }
             }
 
             Section {

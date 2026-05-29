@@ -1,0 +1,54 @@
+import AppKit
+import ServiceManagement
+
+@MainActor
+final class LaunchAtLoginManager: ObservableObject {
+    static let shared = LaunchAtLoginManager()
+
+    private init() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
+
+    var isEnabled: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    var status: SMAppService.Status {
+        SMAppService.mainApp.status
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        objectWillChange.send()
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            objectWillChange.send()
+            showError(error)
+        }
+    }
+
+    func openLoginItemsSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+
+    private func showError(_ error: Error) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = L10n.shared.alertLaunchAtLoginFailed
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: L10n.shared.alertOK)
+            alert.runModal()
+        }
+    }
+}
