@@ -805,8 +805,10 @@ private struct ResizeHandle: View {
                     if dragStartHeight == 0 {
                         dragStartHeight = settingsStore.settings.expandedNotchHeight
                     }
-                    let newHeight = dragStartHeight + value.translation.height
-                    liveHeight = min(max(newHeight, minHeight), maxHeight)
+                    let clamped = min(max(dragStartHeight + value.translation.height, minHeight), maxHeight)
+                    liveHeight = clamped
+                    let currentWidth = settingsStore.settings.expandedNotchWidth
+                    NotchWindowController.current?.updateLiveExpandedFrame(size: NSSize(width: currentWidth, height: clamped))
                 }
                 .onEnded { _ in
                     if let final = liveHeight {
