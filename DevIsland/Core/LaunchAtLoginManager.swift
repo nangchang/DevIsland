@@ -5,7 +5,15 @@ import ServiceManagement
 final class LaunchAtLoginManager: ObservableObject {
     static let shared = LaunchAtLoginManager()
 
-    private init() {}
+    private init() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
 
     var isEnabled: Bool {
         SMAppService.mainApp.status == .enabled
