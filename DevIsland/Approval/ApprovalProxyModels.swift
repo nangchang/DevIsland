@@ -170,6 +170,20 @@ struct OpenSessionRecord {
     let startAt: Date
 }
 
+struct ClosedSessionRecord: Identifiable {
+    var id: String { sessionId }
+    let sessionId: String
+    let provider: ProviderKind
+    let lastPayloadJSON: String
+    let lastEventName: String
+    let lastToolName: String
+    let startAt: Date
+    let endedAt: Date
+    let workspaceRoot: String?
+    let terminalApp: String?
+    let terminalTitle: String?
+}
+
 // MARK: - PTY
 
 enum PTYDirection: String, Codable, CaseIterable {

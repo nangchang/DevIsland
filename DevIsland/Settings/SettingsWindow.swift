@@ -9,6 +9,7 @@ enum AppWindowRouter {
     private static var approvalRulesController: HostedWindowController?
     private static var replayLogController: HostedWindowController?
     private static var ptyTranscriptController: HostedWindowController?
+    private static var sessionHistoryController: HostedWindowController?
 
     static func showSettings() {
         AppState.shared.isNotchExpanded = false
@@ -39,6 +40,17 @@ enum AppWindowRouter {
                 title: L10n.shared.winReplayLog,
                 size: NSSize(width: 900, height: 600),
                 rootView: AnyView(ReplayLogWindowView())
+            )
+        }
+        controller.show()
+    }
+
+    static func showSessionHistory() {
+        let controller = cachedController(&sessionHistoryController) {
+            HostedWindowController(
+                title: L10n.shared.winSessionHistory,
+                size: NSSize(width: 800, height: 500),
+                rootView: AnyView(SessionHistoryWindowView())
             )
         }
         controller.show()
@@ -150,6 +162,10 @@ private struct GeneralSettingsPane: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
 
+    private var installedTerminals: [(name: String, bundleId: String)] {
+        TerminalFocuser.installedTerminals
+    }
+
     var body: some View {
         Form {
             Section(l10n.secLanguage) {
@@ -159,6 +175,19 @@ private struct GeneralSettingsPane: View {
                     }
                 }
                 .pickerStyle(.radioGroup)
+            }
+
+            Section(l10n.secPreferredTerminal) {
+                Picker(l10n.lblPreferredTerminal, selection: $store.settings.preferredTerminal) {
+                    Text(l10n.optTerminalSessionDefault).tag(String?.none)
+                    ForEach(installedTerminals, id: \.name) { terminal in
+                        Text(terminal.name).tag(String?.some(terminal.name))
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                Text(l10n.hintPreferredTerminal)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section {

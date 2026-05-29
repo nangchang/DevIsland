@@ -241,8 +241,46 @@ struct SessionRowView: View {
     var isSubAgent: Bool = false
 
     @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var appState = AppState.shared
     @State private var timeAgo: String = ""
+    @State private var isRenaming: Bool = false
+    @State private var renameText: String = ""
+    @FocusState private var renameFocused: Bool
     private var tool: ToolInfo { toolInfo(for: session.lastToolName) }
+    private var displayTitle: String {
+        appState.sessionLabels[session.id] ?? session.terminalTitle
+    }
+    private var hasCustomLabel: Bool {
+        appState.sessionLabels[session.id] != nil
+    }
+
+    private var resumeCommand: String {
+        let cd = session.workspaceRoot.map { shellCdPrefix($0) } ?? ""
+        switch session.agentKind {
+        case .claudeCode: return "\(cd)claude --resume \(session.id)"
+        case .codex:      return "\(cd)codex --resume \(session.id)"
+        case .gemini:     return "\(cd)gemini"
+        case .island:     return cd.isEmpty ? "" : String(cd.dropLast(4)) // cd only
+        }
+    }
+
+    private func shellCdPrefix(_ path: String) -> String {
+        let escaped = path.replacingOccurrences(of: "\\", with: "\\\\")
+                          .replacingOccurrences(of: "\"", with: "\\\"")
+        return "cd \"\(escaped)\" && "
+    }
+
+    private var autoTerminalName: String {
+        TerminalFocuser.resolvedTerminalName(
+            preferred: SettingsStore.shared.settings.preferredTerminal,
+            sessionTerminal: session.workspaceRoot != nil ? session.terminalApp : nil
+        ) ?? "?"
+    }
+
+    private func openInTerminal(appName: String? = nil) {
+        let name = appName ?? autoTerminalName
+        TerminalFocuser.openNewWindow(appName: name, command: resumeCommand)
+    }
     private var statusLabel: String? {
         switch session.status {
         case .pending:       return l10n.statusPending
@@ -317,16 +355,47 @@ struct SessionRowView: View {
                                     .frame(width: isSubAgent ? 5 : 6, height: isSubAgent ? 5 : 6)
                             }
 
-                            Text(session.terminalTitle)
-                                .font(.system(size: titleFont, weight: (session.hasMissedApproval || session.isUnread) ? .heavy : .bold))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
+                            if isRenaming {
+                                TextField("", text: $renameText)
+                                    .font(.system(size: titleFont, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .textFieldStyle(.plain)
+                                    .focused($renameFocused)
+                                    .padding(.horizontal, 4)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(Color.white.opacity(0.12))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .strokeBorder(Color.white.opacity(0.4), lineWidth: 1)
+                                            )
+                                    )
+                                    .onSubmit { commitRename() }
+                                    .onExitCommand { isRenaming = false }
+                                    .onAppear {
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                            renameFocused = true
+                                        }
+                                    }
+                            } else {
+                                Text(displayTitle)
+                                    .font(.system(size: titleFont, weight: (session.hasMissedApproval || session.isUnread) ? .heavy : .bold))
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                                if hasCustomLabel {
+                                    Image(systemName: "tag.fill")
+                                        .font(.system(size: titleFont - 2))
+                                        .foregroundColor(.white.opacity(0.4))
+                                }
+                            }
 
                             Spacer()
 
-                            Text(timeAgo)
-                                .font(.system(size: metaFont - 1, weight: .medium))
-                                .foregroundColor(.white.opacity(0.3))
+                            if !isRenaming {
+                                Text(timeAgo)
+                                    .font(.system(size: metaFont - 1, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.3))
+                            }
                         }
 
                         HStack(spacing: 6) {
@@ -372,6 +441,14 @@ struct SessionRowView: View {
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
+
+                        if !isSubAgent, let root = session.workspaceRoot {
+                            Text((root as NSString).abbreviatingWithTildeInPath)
+                                .font(.system(size: metaFont, weight: .regular, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.25))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -413,6 +490,73 @@ struct SessionRowView: View {
         )
         .onAppear { updateTimeAgo() }
         .onReceive(Self.sharedTimer) { _ in updateTimeAgo() }
+        .contextMenu {
+            Button {
+                renameText = appState.sessionLabels[session.id] ?? ""
+                isRenaming = true
+            } label: {
+                Label(l10n.menuRenameSession, systemImage: "pencil")
+            }
+
+            Divider()
+
+            if let path = session.workspaceRoot {
+                Button {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                } label: {
+                    Label(l10n.menuOpenInFinder, systemImage: "folder")
+                }
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(path, forType: .string)
+                } label: {
+                    Label(l10n.menuCopyPath, systemImage: "doc.on.clipboard")
+                }
+
+                Divider()
+            }
+
+            openInTerminalMenu
+
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(resumeCommand, forType: .string)
+            } label: {
+                Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var openInTerminalMenu: some View {
+        let installed = TerminalFocuser.installedTerminals
+        let auto = autoTerminalName
+        Menu {
+            Button { openInTerminal() } label: {
+                Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
+            }
+            if !installed.isEmpty {
+                Divider()
+                ForEach(installed, id: \.name) { terminal in
+                    Button { openInTerminal(appName: terminal.name) } label: {
+                        Label(terminal.name, systemImage: terminal.name == auto ? "checkmark" : "terminal")
+                    }
+                }
+            }
+        } label: {
+            Label(l10n.menuOpenInTerminal, systemImage: "terminal")
+        }
+    }
+
+    private func commitRename() {
+        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            appState.sessionLabels.removeValue(forKey: session.id)
+        } else {
+            appState.sessionLabels[session.id] = trimmed
+        }
+        isRenaming = false
     }
 
     private func updateTimeAgo() {

@@ -88,6 +88,9 @@ struct MenuBarMenu: View {
         Button(l.menuReplayLog) {
             AppWindowRouter.showReplayLog()
         }
+        Button(l.menuSessionHistory) {
+            AppWindowRouter.showSessionHistory()
+        }
         Button(l.menuPTYTranscript) {
             AppWindowRouter.showPTYTranscript()
         }

@@ -53,7 +53,8 @@ final class SessionStore: ObservableObject {
         isLifecycleTracked: Bool = false,
         isSubAgentSession: Bool = false,
         parentSessionId: String? = nil,
-        status: SessionStatus? = nil
+        status: SessionStatus? = nil,
+        workspaceRoot: String? = nil
     ) {
         if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) {
             let shouldUpdateTitle = !Self.genericTitles.contains(terminalTitle)
@@ -78,6 +79,9 @@ final class SessionStore: ObservableObject {
             if isLifecycleTracked { activeSessions[index].isLifecycleTracked = true }
             if isSubAgentSession { activeSessions[index].isSubAgentSession = true }
             if let pid = parentSessionId { activeSessions[index].parentSessionId = pid }
+            if let root = workspaceRoot, activeSessions[index].workspaceRoot == nil {
+                activeSessions[index].workspaceRoot = root
+            }
         } else {
             let session = ActiveSession(
                 id: sessionId,
@@ -102,7 +106,8 @@ final class SessionStore: ObservableObject {
                 isUnread: false,
                 hasMissedApproval: false,
                 status: status ?? (isPending ? .pending : .idle),
-                parentSessionId: parentSessionId
+                parentSessionId: parentSessionId,
+                workspaceRoot: workspaceRoot
             )
             activeSessions.insert(session, at: 0)
         }

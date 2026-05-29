@@ -64,6 +64,7 @@ extension L10n {
     var menuApprovalRules:      String { s("Approval Rules…",            "승인 규칙…") }
     var menuReplayLog:          String { s("Replay Log…",                "재실행 로그…") }
     var menuPTYTranscript:      String { s("PTY Transcript…",            "PTY 트랜스크립트…") }
+    var menuSessionHistory:     String { s("Session History…",           "세션 기록…") }
     var menuInstallHooks:       String { s("Install / Repair Hooks",     "훅 설치 / 수리") }
     var menuInstallAll:         String { s("Install All (Claude · Codex · Gemini)",    "전부 설치 (Claude · Codex · Gemini)") }
     var menuInstallClaude:      String { s("Install Claude Code only…",  "Claude Code만 설치…") }
@@ -174,6 +175,7 @@ extension L10n {
     var winApprovalRules:    String { s("Approval Rules",       "승인 규칙") }
     var winReplayLog:        String { s("Replay Log",           "재실행 로그") }
     var winPTYTranscript:    String { s("PTY Transcript",       "PTY 트랜스크립트") }
+    var winSessionHistory:   String { s("Session History",      "세션 기록") }
 
     // Tab labels
     var tabGeneral:          String { s("General",      "일반") }
@@ -186,9 +188,13 @@ extension L10n {
     var tabExperimental:     String { s("Experimental", "실험적") }
 
     // General tab
-    var btnResetAllSettings: String { s("Reset All Settings to Defaults", "모든 설정 초기화") }
-    var secLanguage:         String { s("Language",                      "언어") }
-    var lblLanguage:         String { s("Language",                      "언어") }
+    var btnResetAllSettings:    String { s("Reset All Settings to Defaults", "모든 설정 초기화") }
+    var secLanguage:            String { s("Language",                      "언어") }
+    var lblLanguage:            String { s("Language",                      "언어") }
+    var secPreferredTerminal:   String { s("Default Terminal",              "기본 터미널") }
+    var lblPreferredTerminal:   String { s("Open sessions in",              "세션 열기") }
+    var optTerminalSessionDefault: String { s("Session's terminal (automatic)", "세션 터미널 자동 선택") }
+    var hintPreferredTerminal:  String { s("Used when opening a session in a new terminal window. Falls back to the session's original terminal app if not set.", "새 터미널 창에서 세션을 열 때 사용합니다. 설정하지 않으면 세션이 실행된 터미널 앱을 사용합니다.") }
 
     // Display tab
     var secNotch:            String { s("Notch",                         "노치") }
@@ -418,12 +424,37 @@ extension L10n {
     var helpOpenSettings:       String { s("Open settings",     "설정 열기") }
     var helpFocusTerminal:     String { s("Focus terminal",    "터미널 포커스") }
     var helpDismissSession:    String { s("Dismiss session",   "세션 닫기") }
+    var menuOpenInFinder:      String { s("Open in Finder",    "Finder에서 열기") }
+    var menuCopyPath:          String { s("Copy Path",         "경로 복사") }
+    var menuCopyResumeCommand: String { s("Copy Resume Command", "재시작 명령 복사") }
+    var menuRenameSession:     String { s("Rename…",             "이름 변경…") }
+    var renameSessionTitle:    String { s("Rename Session",      "세션 이름 변경") }
+    var renameSessionConfirm:  String { s("Rename",              "변경") }
+    var renameSessionPlaceholder: String { s("Session name",     "세션 이름") }
+    var btnCancel:             String { s("Cancel",              "취소") }
+    func renameSessionHint(_ id: String) -> String {
+        s("Enter a name for session \(id). Leave empty to reset.", "세션 \(id)의 이름을 입력하세요. 비워두면 초기화됩니다.")
+    }
+    var menuOpenInTerminal:    String { s("Open in Terminal",  "터미널에서 열기") }
+    func menuTerminalAuto(_ name: String) -> String { s("Auto (\(name))", "자동 (\(name))") }
     var helpDismissPending:    String { s("Dismiss session and pass pending request to terminal",
                                           "세션을 닫고 대기 중인 요청을 터미널로 전달") }
     func tasksQueued(_ n: Int) -> String { s("\(n) tasks queued", "\(n)개 대기 중") }
     func timeJustNow() -> String  { s("Just now",     "방금") }
     func timeSecsAgo(_ n: Int) -> String  { s("\(n)s ago",  "\(n)초 전") }
     func timeMinsAgo(_ n: Int) -> String  { s("\(n)m ago",  "\(n)분 전") }
+
+    // Session History Window
+    var historySearch:      String { s("Search sessions…",    "세션 검색…") }
+    var historyEmpty:       String { s("No closed sessions",  "종료된 세션 없음") }
+    var historyRefresh:     String { s("Refresh",             "새로 고침") }
+    var historyColAgent:    String { s("Agent",               "에이전트") }
+    var historyColPath:     String { s("Path",                "경로") }
+    var historyColLabel:    String { s("Name",                "이름") }
+    var historyColTitle:    String { s("Terminal",            "터미널") }
+    var historyColEnded:    String { s("Ended",               "종료") }
+    var historyColSession:  String { s("Session ID",          "세션 ID") }
+    func historyCount(_ n: Int) -> String { s("\(n) sessions", "\(n)개 세션") }
 
     // Session status labels
     var statusPending:       String { s("Pending",        "대기 중") }

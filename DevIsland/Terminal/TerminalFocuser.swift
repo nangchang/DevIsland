@@ -563,6 +563,95 @@ class TerminalFocuser {
         }
     }
 
+    /// 설치된 터미널 앱 목록 (Launch Services는 느리므로 최초 1회만 계산)
+    static let installedTerminals: [(name: String, bundleId: String)] = {
+        candidates.filter {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
+                || NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundleId) != nil
+        }.map { (name: $0.name, bundleId: $0.bundleId) }
+    }()
+
+    /// preferred → sessionTerminal → 설치된 첫 번째 순으로 자동 선택한 터미널 이름 반환
+    static func resolvedTerminalName(preferred: String?, sessionTerminal: String?) -> String? {
+        if let p = normalizedAppName(preferred) { return p }
+        if let s = normalizedAppName(sessionTerminal) { return s }
+        return installedTerminals.first?.name
+    }
+
+    /// 새 창/탭을 열고 command를 실행한다.
+    /// appName: normalizedAppName() 결과 또는 nil (설치된 첫 번째 터미널 자동 선택)
+    static func openNewWindow(appName: String?, command: String) {
+        let target = appName.flatMap { name in
+            candidates.first { $0.name == name }
+        } ?? candidates.first(where: {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.1).isEmpty
+                || NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.1) != nil
+        })
+
+        guard let target else { return }
+
+        let name = target.name
+        let cmdLiteral = appleScriptLiteral(command)
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            switch name {
+            case "iTerm":
+                let script = """
+                tell application "iTerm"
+                  activate
+                  set newWindow to (create window with default profile)
+                  tell current session of newWindow
+                    write text \(cmdLiteral)
+                  end tell
+                end tell
+                """
+                let (_, err) = executeAppleScript(script)
+                if let err { print("[DevIsland] openNewWindow iTerm error: \(err)") }
+
+            case "Terminal":
+                let script = """
+                tell application "Terminal"
+                  activate
+                  do script \(cmdLiteral)
+                end tell
+                """
+                let (_, err) = executeAppleScript(script)
+                if let err { print("[DevIsland] openNewWindow Terminal error: \(err)") }
+
+            case "Ghostty":
+                // --initial-command: 새 창 셸에 명령을 타이핑한 것처럼 전달 (&&도 그대로 동작).
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleId) {
+                    let cfg = NSWorkspace.OpenConfiguration()
+                    cfg.arguments = ["--initial-command=\(command)"]
+                    NSWorkspace.shared.openApplication(at: url, configuration: cfg)
+                }
+
+            case "Warp":
+                // Warp URL scheme: warp://action/new_tab?command=<encoded>
+                if let encoded = command.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                   let url = URL(string: "warp://action/new_tab?command=\(encoded)") {
+                    DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+                }
+
+            case "cmux":
+                let cmuxScript = """
+                tell application "cmux"
+                  activate
+                  set newTab to new tab in front window
+                  set newTerm to first terminal of newTab
+                  input text \(cmdLiteral) to newTerm
+                  input text (ASCII character 13) to newTerm
+                end tell
+                """
+                let (_, cmuxErr) = executeAppleScript(cmuxScript)
+                if let cmuxErr { print("[DevIsland] openNewWindow cmux error: \(cmuxErr)") }
+
+            default:
+                break
+            }
+        }
+    }
+
     private static func appleScriptLiteral(_ value: String) -> String {
         "\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
     }

@@ -318,6 +318,82 @@ final class SQLiteApprovalStore {
         return records
     }
 
+    func closedSessions(since: Date) throws -> [ClosedSessionRecord] {
+        let n = Self.sqlNormalize
+        let sql = """
+            WITH starts AS (
+                SELECT session_id, provider, MIN(received_at) AS start_at
+                FROM hook_events
+                WHERE \(n) IN ('sessionstart', 'startup', 'init')
+                  AND received_at > ?
+                GROUP BY session_id
+            ),
+            ended AS (
+                SELECT session_id, MAX(received_at) AS ended_at
+                FROM hook_events
+                WHERE \(n) IN ('exit', 'shutdown', 'sessionend', 'devislanddismissed')
+                GROUP BY session_id
+            ),
+            latest AS (
+                SELECT e.session_id, e.payload_json, e.event_name, e.tool_name, e.received_at,
+                       ROW_NUMBER() OVER (PARTITION BY e.session_id ORDER BY e.received_at DESC) AS rn
+                FROM hook_events e
+                JOIN starts s ON s.session_id = e.session_id
+                JOIN ended en ON en.session_id = e.session_id
+            ),
+            with_meta AS (
+                SELECT e.session_id, e.payload_json AS meta_payload,
+                       ROW_NUMBER() OVER (PARTITION BY e.session_id ORDER BY e.received_at DESC) AS rn
+                FROM hook_events e
+                JOIN starts s ON s.session_id = e.session_id
+                JOIN ended en ON en.session_id = e.session_id
+                WHERE json_extract(e.payload_json, '$.cwd') IS NOT NULL
+            )
+            SELECT s.session_id, s.provider, l.payload_json, l.event_name, l.tool_name,
+                   s.start_at, en.ended_at, m.meta_payload
+            FROM starts s
+            JOIN ended en ON en.session_id = s.session_id
+            JOIN latest l ON l.session_id = s.session_id AND l.rn = 1
+            LEFT JOIN with_meta m ON m.session_id = s.session_id AND m.rn = 1
+            ORDER BY en.ended_at DESC
+            """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(statement) }
+        try bind([since.timeIntervalSince1970], to: statement)
+
+        var records: [ClosedSessionRecord] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard
+                let sessionId = columnString(statement, 0),
+                let providerRaw = columnString(statement, 1),
+                let provider = ProviderKind(rawValue: providerRaw),
+                let payloadJSON = columnString(statement, 2),
+                let eventName = columnString(statement, 3),
+                let toolName = columnString(statement, 4)
+            else { continue }
+            let startAt  = Date(timeIntervalSince1970: sqlite3_column_double(statement, 5))
+            let endedAt  = Date(timeIntervalSince1970: sqlite3_column_double(statement, 6))
+            let metaPayload = columnString(statement, 7) ?? payloadJSON
+            let meta = (try? JSONSerialization.jsonObject(with: Data(metaPayload.utf8))) as? [String: Any]
+            records.append(ClosedSessionRecord(
+                sessionId: sessionId,
+                provider: provider,
+                lastPayloadJSON: payloadJSON,
+                lastEventName: eventName,
+                lastToolName: toolName,
+                startAt: startAt,
+                endedAt: endedAt,
+                workspaceRoot: meta?["cwd"] as? String,
+                terminalApp: meta?["terminal_app"] as? String,
+                terminalTitle: meta?["terminal_title"] as? String
+            ))
+        }
+        return records
+    }
+
     func deleteRule(id: UUID) throws {
         try execute("DELETE FROM rules WHERE id = ?", [id.uuidString])
     }
