@@ -16,13 +16,13 @@ final class LaunchAtLoginManager: ObservableObject {
     }
 
     func setEnabled(_ enabled: Bool) {
+        objectWillChange.send()
         do {
             if enabled {
                 try SMAppService.mainApp.register()
             } else {
                 try SMAppService.mainApp.unregister()
             }
-            objectWillChange.send()
         } catch {
             objectWillChange.send()
             showError(error)
