@@ -190,6 +190,7 @@ struct NotchView: View {
     @State private var buddyPulse = false
     @State private var isExpanded = false
     @State private var liveHeight: Double? = nil
+    @State private var liveWidth: Double? = nil
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
@@ -200,10 +201,13 @@ struct NotchView: View {
         state.currentSessionId.isEmpty ? (sessionStore.selectedSessionId ?? "") : state.currentSessionId
     }
     private var notchSize: NSSize {
-        if isExpanded, let h = liveHeight {
-            return NSSize(width: settingsStore.settings.expandedNotchWidth, height: h)
+        guard isExpanded else {
+            return NotchLayout.collapsedSize(settings: settingsStore.settings)
         }
-        return NotchLayout.size(expanded: isExpanded, settings: settingsStore.settings)
+        return NSSize(
+            width: liveWidth ?? settingsStore.settings.expandedNotchWidth,
+            height: liveHeight ?? settingsStore.settings.expandedNotchHeight
+        )
     }
     private var approvalLeftColumnHeight: CGFloat {
         notchSize.height - 80
@@ -265,6 +269,13 @@ struct NotchView: View {
                         height: notchSize.height,
                         alignment: .top
                     )
+                    .overlay(alignment: .trailing) {
+                        if isExpanded {
+                            RightResizeHandle(liveWidth: $liveWidth)
+                                .frame(height: notchSize.height)
+                                .transition(.opacity)
+                        }
+                    }
                 }
             }
             .frame(
@@ -816,6 +827,56 @@ private struct ResizeHandle: View {
                     }
                     liveHeight = nil
                     dragStartHeight = 0
+                }
+        )
+    }
+}
+
+// MARK: - Right Resize Handle
+
+private struct RightResizeHandle: View {
+    @Binding var liveWidth: Double?
+    @ObservedObject private var settingsStore = SettingsStore.shared
+    @State private var dragStartWidth: Double = 0
+
+    private let minWidth: Double = 610
+    private let maxWidth: Double = 1200
+
+    var body: some View {
+        ZStack {
+            Color.clear
+                .frame(width: 12)
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.white.opacity(0.2))
+                .frame(width: 4, height: 36)
+        }
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            if inside {
+                NSCursor.resizeLeftRight.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 2)
+                .onChanged { value in
+                    if dragStartWidth == 0 {
+                        dragStartWidth = settingsStore.settings.expandedNotchWidth
+                    }
+                    // 패널이 중앙 고정이므로 오른쪽 엣지 이동 × 2 = 너비 변화
+                    let clamped = min(max(dragStartWidth + value.translation.width * 2, minWidth), maxWidth)
+                    liveWidth = clamped
+                    let currentHeight = settingsStore.settings.expandedNotchHeight
+                    NotchWindowController.current?.updateLiveExpandedFrame(size: NSSize(width: clamped, height: currentHeight))
+                }
+                .onEnded { _ in
+                    if let final = liveWidth {
+                        settingsStore.settings.expandedNotchWidth = final
+                    }
+                    liveWidth = nil
+                    dragStartWidth = 0
                 }
         )
     }
