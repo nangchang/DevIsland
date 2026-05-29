@@ -188,13 +188,18 @@ extension L10n {
     var tabExperimental:     String { s("Experimental", "실험적") }
 
     // General tab
-    var btnResetAllSettings:    String { s("Reset All Settings to Defaults", "모든 설정 초기화") }
-    var secLanguage:            String { s("Language",                      "언어") }
-    var lblLanguage:            String { s("Language",                      "언어") }
-    var secPreferredTerminal:   String { s("Default Terminal",              "기본 터미널") }
-    var lblPreferredTerminal:   String { s("Open sessions in",              "세션 열기") }
-    var optTerminalSessionDefault: String { s("Session's terminal (automatic)", "세션 터미널 자동 선택") }
-    var hintPreferredTerminal:  String { s("Used when opening a session in a new terminal window. Falls back to the session's original terminal app if not set.", "새 터미널 창에서 세션을 열 때 사용합니다. 설정하지 않으면 세션이 실행된 터미널 앱을 사용합니다.") }
+    var btnResetAllSettings:          String { s("Reset All Settings to Defaults",          "모든 설정 초기화") }
+    var secLanguage:                  String { s("Language",                                "언어") }
+    var lblLanguage:                  String { s("Language",                                "언어") }
+    var secPreferredTerminal:         String { s("Default Terminal",                        "기본 터미널") }
+    var lblPreferredTerminal:         String { s("Open sessions in",                        "세션 열기") }
+    var optTerminalSessionDefault:    String { s("Session's terminal (automatic)",           "세션 터미널 자동 선택") }
+    var hintPreferredTerminal:        String { s("Used when opening a session in a new terminal window. Falls back to the session's original terminal app if not set.", "새 터미널 창에서 세션을 열 때 사용합니다. 설정하지 않으면 세션이 실행된 터미널 앱을 사용합니다.") }
+    var secStartup:                   String { s("Startup",                                 "시작") }
+    var lblLaunchAtLogin:             String { s("Launch at Login",                         "로그인 시 자동 시작") }
+    var lblLaunchAtLoginApproval:     String { s("Approval required in System Settings",    "시스템 설정에서 승인 필요") }
+    var btnOpenLoginSettings:         String { s("Open Login Items Settings…",              "로그인 항목 설정 열기…") }
+    var alertLaunchAtLoginFailed:     String { s("Failed to change Launch at Login",        "자동 시작 설정 변경 실패") }
 
     // Display tab
     var secNotch:            String { s("Notch",                         "노치") }
