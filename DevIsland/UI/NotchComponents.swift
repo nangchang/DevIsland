@@ -254,6 +254,15 @@ struct SessionRowView: View {
         appState.sessionLabels[session.id] != nil
     }
 
+    private struct AppBadge { let label: String; let color: Color }
+    private func terminalAppBadge(_ app: String) -> AppBadge? {
+        switch app {
+        case "VSCode":        return AppBadge(label: "VS Code", color: Color(red: 0.0, green: 0.6, blue: 1.0))
+        case "ClaudeDesktop": return AppBadge(label: "Claude",  color: Color(red: 0.8, green: 0.5, blue: 1.0))
+        default:              return nil
+        }
+    }
+
     private var resumeCommand: String {
         let cd = session.workspaceRoot.map { shellCdPrefix($0) } ?? ""
         switch session.agentKind {
@@ -402,6 +411,16 @@ struct SessionRowView: View {
                             Text(String(session.id.prefix(8)))
                                 .font(.system(size: metaFont, weight: .medium, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.4))
+
+                            if let appBadge = terminalAppBadge(session.terminalApp) {
+                                Text(appBadge.label)
+                                    .font(.system(size: metaFont - 1, weight: .semibold))
+                                    .foregroundColor(appBadge.color)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(appBadge.color.opacity(0.15))
+                                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                            }
 
                             Text("•")
                                 .font(.system(size: metaFont - 1))
