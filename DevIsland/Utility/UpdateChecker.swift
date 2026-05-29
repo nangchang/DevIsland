@@ -62,6 +62,7 @@ final class UpdateChecker: ObservableObject {
         }
         Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
             guard let self else { return }
+            guard SettingsStore.shared.settings.checkForUpdatesOnStartup else { return }
             Task { await self.fetchLatestRelease(silent: true) }
         }
     }

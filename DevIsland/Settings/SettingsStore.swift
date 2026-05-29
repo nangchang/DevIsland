@@ -195,6 +195,7 @@ struct AppSettings: Equatable {
     var expandOnApprovalRequest: Bool
     var expandOnQuestionResponse: Bool
     var preferredTerminal: String?
+    var checkForUpdatesOnStartup: Bool
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -271,7 +272,8 @@ struct AppSettings: Equatable {
         expandOnInteractiveTool: true,
         expandOnApprovalRequest: true,
         expandOnQuestionResponse: true,
-        preferredTerminal: nil
+        preferredTerminal: nil,
+        checkForUpdatesOnStartup: true
     )
 }
 
@@ -345,6 +347,7 @@ final class SettingsStore: ObservableObject {
         static let expandOnApprovalRequest = "expandOnApprovalRequest"
         static let expandOnQuestionResponse = "expandOnQuestionResponse"
         static let preferredTerminal = "preferredTerminal"
+        static let checkForUpdatesOnStartup = "checkForUpdatesOnStartup"
     }
 
     private let userDefaults: UserDefaults
@@ -415,6 +418,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.expandOnApprovalRequest, forKey: DefaultsKey.expandOnApprovalRequest)
         userDefaults.set(settings.expandOnQuestionResponse, forKey: DefaultsKey.expandOnQuestionResponse)
         userDefaults.set(settings.preferredTerminal, forKey: DefaultsKey.preferredTerminal)
+        userDefaults.set(settings.checkForUpdatesOnStartup, forKey: DefaultsKey.checkForUpdatesOnStartup)
         writeBridgeConfig(settings)
     }
 
@@ -683,7 +687,12 @@ final class SettingsStore: ObservableObject {
                 from: userDefaults,
                 default: defaults.expandOnQuestionResponse
             ),
-            preferredTerminal: userDefaults.string(forKey: DefaultsKey.preferredTerminal)
+            preferredTerminal: userDefaults.string(forKey: DefaultsKey.preferredTerminal),
+            checkForUpdatesOnStartup: bool(
+                key: DefaultsKey.checkForUpdatesOnStartup,
+                from: userDefaults,
+                default: defaults.checkForUpdatesOnStartup
+            )
         )
     }
 

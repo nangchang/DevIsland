@@ -68,6 +68,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.settings.expandOnInteractiveTool)
         XCTAssertTrue(store.settings.expandOnApprovalRequest)
         XCTAssertTrue(store.settings.expandOnQuestionResponse)
+        XCTAssertTrue(store.settings.checkForUpdatesOnStartup)
     }
 
     func testSettingsPersistAndReload() {
@@ -109,6 +110,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.expandOnInteractiveTool = false
         store.settings.expandOnApprovalRequest = false
         store.settings.expandOnQuestionResponse = false
+        store.settings.checkForUpdatesOnStartup = false
 
         let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
@@ -149,6 +151,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.settings.expandOnInteractiveTool)
         XCTAssertFalse(reloaded.settings.expandOnApprovalRequest)
         XCTAssertFalse(reloaded.settings.expandOnQuestionResponse)
+        XCTAssertFalse(reloaded.settings.checkForUpdatesOnStartup)
     }
 
     func testInvalidPersistedValuesFallBackToDefaults() {

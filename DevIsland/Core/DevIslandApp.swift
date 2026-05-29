@@ -675,7 +675,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            UpdateChecker.shared.schedulePeriodicCheck()
+            if SettingsStore.shared.settings.checkForUpdatesOnStartup {
+                UpdateChecker.shared.schedulePeriodicCheck()
+            }
         }
     }
 }

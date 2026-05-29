@@ -200,6 +200,8 @@ extension L10n {
     var lblLaunchAtLoginApproval:     String { s("Approval required in System Settings",    "시스템 설정에서 승인 필요") }
     var btnOpenLoginSettings:         String { s("Open Login Items Settings…",              "로그인 항목 설정 열기…") }
     var alertLaunchAtLoginFailed:     String { s("Failed to change Launch at Login",        "자동 시작 설정 변경 실패") }
+    var secUpdates:                   String { s("Updates",                                 "업데이트") }
+    var lblCheckForUpdatesOnStartup:  String { s("Check for updates on startup",            "시작 시 업데이트 확인") }
 
     // Display tab
     var secNotch:            String { s("Notch",                         "노치") }
