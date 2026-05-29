@@ -563,13 +563,13 @@ class TerminalFocuser {
         }
     }
 
-    /// 설치된 터미널 앱 목록
-    static var installedTerminals: [(name: String, bundleId: String)] {
+    /// 설치된 터미널 앱 목록 (Launch Services는 느리므로 최초 1회만 계산)
+    static let installedTerminals: [(name: String, bundleId: String)] = {
         candidates.filter {
             !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
                 || NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundleId) != nil
         }.map { (name: $0.name, bundleId: $0.bundleId) }
-    }
+    }()
 
     /// preferred → sessionTerminal → 설치된 첫 번째 순으로 자동 선택한 터미널 이름 반환
     static func resolvedTerminalName(preferred: String?, sessionTerminal: String?) -> String? {
