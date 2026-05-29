@@ -215,7 +215,7 @@ if [ -z "$TERM_APP" ]; then
       _ppid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ')
       [ -z "$_ppid" ] || [ "$_ppid" = "0" ] && break
       _pname=$(ps -p "$_ppid" -o comm= 2>/dev/null | tr -d ' ')
-      if [ "$_pname" = "Claude" ]; then
+      if echo "$_pname" | grep -q "Claude\.app/Contents/MacOS/Claude$"; then
         _is_claude_desktop=1
         break
       fi
