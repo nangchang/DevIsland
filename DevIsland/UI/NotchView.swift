@@ -189,7 +189,7 @@ struct NotchView: View {
     @ObservedObject private var l10n = L10n.shared
     @State private var buddyPulse = false
     @State private var isExpanded = false
-    @State private var dragStartHeight: Double = 0
+    @State private var liveHeight: Double? = nil
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
@@ -200,7 +200,10 @@ struct NotchView: View {
         state.currentSessionId.isEmpty ? (sessionStore.selectedSessionId ?? "") : state.currentSessionId
     }
     private var notchSize: NSSize {
-        NotchLayout.size(expanded: isExpanded, settings: settingsStore.settings)
+        if isExpanded, let h = liveHeight {
+            return NSSize(width: settingsStore.settings.expandedNotchWidth, height: h)
+        }
+        return NotchLayout.size(expanded: isExpanded, settings: settingsStore.settings)
     }
     private var approvalLeftColumnHeight: CGFloat {
         notchSize.height - 80
@@ -252,7 +255,7 @@ struct NotchView: View {
                         )
 
                         if isExpanded {
-                            ResizeHandle(dragStartHeight: $dragStartHeight)
+                            ResizeHandle(liveHeight: $liveHeight)
                                 .frame(width: notchSize.width)
                                 .transition(.opacity)
                         }
@@ -266,7 +269,7 @@ struct NotchView: View {
             }
             .frame(
                 width: notchSize.width,
-                height: NotchLayout.windowSize(expanded: isExpanded, settings: settingsStore.settings).height,
+                height: notchSize.height + NotchLayout.shadowOutset(expanded: isExpanded, settings: settingsStore.settings),
                 alignment: .top
             )
             .animation(notchExpansionAnimation, value: isExpanded)
@@ -769,8 +772,9 @@ private final class MouseDownMonitorView: NSView {
 // MARK: - Resize Handle
 
 private struct ResizeHandle: View {
-    @Binding var dragStartHeight: Double
+    @Binding var liveHeight: Double?
     @ObservedObject private var settingsStore = SettingsStore.shared
+    @State private var dragStartHeight: Double = 0
 
     private let minHeight: Double = 240
     private var maxHeight: Double {
@@ -802,10 +806,13 @@ private struct ResizeHandle: View {
                         dragStartHeight = settingsStore.settings.expandedNotchHeight
                     }
                     let newHeight = dragStartHeight + value.translation.height
-                    let clamped = min(max(newHeight, minHeight), maxHeight)
-                    settingsStore.settings.expandedNotchHeight = clamped
+                    liveHeight = min(max(newHeight, minHeight), maxHeight)
                 }
                 .onEnded { _ in
+                    if let final = liveHeight {
+                        settingsStore.settings.expandedNotchHeight = final
+                    }
+                    liveHeight = nil
                     dragStartHeight = 0
                 }
         )
