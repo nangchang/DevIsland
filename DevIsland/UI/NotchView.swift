@@ -280,6 +280,15 @@ struct NotchView: View {
                         if isExpanded {
                             CornerResizeHandle(liveHeight: $liveHeight, liveWidth: $liveWidth)
                                 .frame(width: 20, height: 20)
+                                // 패널 r=24 모서리에 맞춰 클리핑: 원 중심 (-4,-4), r=24
+                                .clipShape(Path { p in
+                                    p.move(to: CGPoint(x: 20, y: 0))
+                                    p.addArc(center: CGPoint(x: -4, y: -4), radius: 24,
+                                             startAngle: .degrees(0), endAngle: .degrees(90),
+                                             clockwise: true)
+                                    p.addLine(to: CGPoint(x: 0, y: 0))
+                                    p.closeSubpath()
+                                })
                                 .transition(.opacity)
                         }
                     }
@@ -860,9 +869,9 @@ final class ResizeHandleNSView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        (axis == .vertical ? NSCursor.resizeUpDown : NSCursor.resizeLeftRight).push()
+        (axis == .vertical ? NSCursor.resizeUpDown : NSCursor.resizeLeftRight).set()
     }
-    override func mouseExited(with event: NSEvent) { NSCursor.pop() }
+    override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
 
     override func mouseDown(with event: NSEvent) {
         isTracking = true
@@ -903,6 +912,7 @@ final class ResizeHandleNSView: NSView {
             }
         }
         liveValue.wrappedValue = nil
+        NSCursor.arrow.set()
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -965,8 +975,8 @@ final class CornerResizeHandleNSView: NSView {
         trackingArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) { NSCursor.crosshair.push() }
-    override func mouseExited(with event: NSEvent) { NSCursor.pop() }
+    override func mouseEntered(with event: NSEvent) { NSCursor.crosshair.set() }
+    override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
 
     override func mouseDown(with event: NSEvent) {
         isTracking = true
@@ -996,6 +1006,7 @@ final class CornerResizeHandleNSView: NSView {
         if let w = liveWidth.wrappedValue  { SettingsStore.shared.settings.expandedNotchWidth  = w }
         liveHeight.wrappedValue = nil
         liveWidth.wrappedValue  = nil
+        NSCursor.arrow.set()
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
