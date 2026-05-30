@@ -13,11 +13,13 @@ final class SessionMessageWindowManager {
     func openWindow(for sessionId: String) {
         if let existing = controllers[sessionId] {
             existing.show()
-            return
+        } else {
+            let controller = SessionMessageWindowController(sessionId: sessionId)
+            controllers[sessionId] = controller
+            controller.show()
         }
-        let controller = SessionMessageWindowController(sessionId: sessionId)
-        controllers[sessionId] = controller
-        controller.show()
+        // 팝아웃 창으로 분리 시 노치 닫기
+        AppState.shared.isNotchExpanded = false
     }
 
     func closeWindow(for sessionId: String) {
