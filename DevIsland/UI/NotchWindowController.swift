@@ -240,7 +240,7 @@ class NotchWindowController: NSWindowController {
                 self.updateWindowFrame(animate: false)
                 // makeKey()를 받은 NSPanel은 canJoinAllSpaces에도 불구하고
                 // 해당 Space에 고정될 수 있으므로, 스페이스 전환 시 재표시한다.
-                guard !self.isHiddenForFullScreen else { return }
+                guard !self.isHiddenForFullScreen, !self.isShowingModal else { return }
                 if AppState.shared.isNotchExpanded {
                     self.expandedPanel.orderFrontRegardless()
                 }
