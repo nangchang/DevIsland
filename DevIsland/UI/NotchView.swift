@@ -754,7 +754,7 @@ struct NotchView: View {
     }
 }
 
-private struct MessageMouseDownMonitor: NSViewRepresentable {
+struct MessageMouseDownMonitor: NSViewRepresentable {
     let onMouseDown: () -> Void
 
     func makeNSView(context: Context) -> MouseDownMonitorView {
@@ -772,7 +772,7 @@ private struct MessageMouseDownMonitor: NSViewRepresentable {
     }
 }
 
-private final class MouseDownMonitorView: NSView {
+final class MouseDownMonitorView: NSView {
     var onMouseDown: (() -> Void)?
     private var monitor: Any?
 

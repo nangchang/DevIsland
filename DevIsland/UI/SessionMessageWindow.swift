@@ -1,0 +1,416 @@
+import AppKit
+import SwiftUI
+import Combine
+
+// MARK: - Manager
+
+@MainActor
+final class SessionMessageWindowManager {
+    static let shared = SessionMessageWindowManager()
+
+    private var controllers: [String: SessionMessageWindowController] = [:]
+
+    func openWindow(for sessionId: String) {
+        if let existing = controllers[sessionId] {
+            existing.window?.orderFrontRegardless()
+            existing.window?.makeKey()
+            return
+        }
+        let controller = SessionMessageWindowController(sessionId: sessionId)
+        controllers[sessionId] = controller
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+
+    func closeWindow(for sessionId: String) {
+        controllers[sessionId]?.close()
+        controllers.removeValue(forKey: sessionId)
+    }
+
+    func hasWindow(for sessionId: String) -> Bool {
+        controllers[sessionId] != nil
+    }
+
+    func windowClosed(for sessionId: String) {
+        controllers.removeValue(forKey: sessionId)
+    }
+
+    func updateTitle(for sessionId: String, title: String) {
+        controllers[sessionId]?.window?.title = title
+    }
+
+    func closeAll() {
+        controllers.values.forEach { $0.close() }
+        controllers.removeAll()
+    }
+}
+
+// MARK: - Window Controller
+
+final class SessionMessageWindowController: NSWindowController, NSWindowDelegate {
+    let sessionId: String
+
+    init(sessionId: String) {
+        self.sessionId = sessionId
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 380),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .floating
+        panel.backgroundColor = NSColor(white: 0.07, alpha: 1.0)
+        panel.titlebarAppearsTransparent = true
+        panel.titleVisibility = .hidden
+        panel.isMovableByWindowBackground = true
+        panel.collectionBehavior = [.canJoinAllSpaces]
+        panel.minSize = NSSize(width: 360, height: 260)
+
+        let hosting = NSHostingView(rootView: SessionMessageView(sessionId: sessionId))
+        panel.contentView = hosting
+
+        super.init(window: panel)
+        panel.delegate = self
+        panel.center()
+
+        let session = AppState.shared.sessionStore.activeSessions.first { $0.id == sessionId }
+        panel.title = AppState.shared.sessionLabels[sessionId]
+            ?? session?.terminalTitle
+            ?? String(sessionId.prefix(8))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func windowWillClose(_ notification: Notification) {
+        Task { @MainActor in
+            SessionMessageWindowManager.shared.windowClosed(for: sessionId)
+        }
+    }
+}
+
+// MARK: - View
+
+struct SessionMessageView: View {
+    let sessionId: String
+
+    @ObservedObject private var sessionStore = AppState.shared.sessionStore
+    @ObservedObject private var appState = AppState.shared
+    @ObservedObject private var l10n = L10n.shared
+
+    private var session: ActiveSession? {
+        sessionStore.activeSessions.first { $0.id == sessionId }
+    }
+
+    private var isCurrentSession: Bool {
+        appState.currentSessionId == sessionId
+    }
+
+    private var activeToolName: String {
+        isCurrentSession ? appState.currentToolName : (session?.lastToolName ?? "")
+    }
+
+    private var activeEventName: String {
+        isCurrentSession ? appState.currentEventName : (session?.lastEventName ?? "")
+    }
+
+    private var displayMessage: String {
+        isCurrentSession ? appState.currentMessage : (session?.lastMessage ?? "")
+    }
+
+    private var tool: ToolInfo { toolInfo(for: activeToolName) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            headerBar
+            Divider().background(Color.white.opacity(0.1))
+
+            if let session {
+                contentArea(session: session)
+            } else {
+                VStack(spacing: 8) {
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 24))
+                        .foregroundColor(.white.opacity(0.2))
+                    Text("세션이 종료되었습니다")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .background(Color(nsColor: NSColor(white: 0.07, alpha: 1.0)))
+        .onChange(of: appState.sessionLabels[sessionId]) { _, newLabel in
+            let displayTitle = newLabel
+                ?? sessionStore.activeSessions.first(where: { $0.id == sessionId })?.terminalTitle
+                ?? String(sessionId.prefix(8))
+            SessionMessageWindowManager.shared.updateTitle(for: sessionId, title: displayTitle)
+        }
+    }
+
+    // MARK: - Header
+
+    private var headerBar: some View {
+        HStack(spacing: 10) {
+            if let session {
+                AgentRequestBadge(
+                    kind: session.agentKind,
+                    tool: tool,
+                    isActive: session.isPending,
+                    size: 30
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(appState.sessionLabels[sessionId] ?? (session?.terminalTitle ?? String(sessionId.prefix(8))))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    if let session, session.isPending {
+                        StatusBadge(text: "PENDING", color: .orange)
+                    }
+                }
+                Text(String(sessionId.prefix(8)))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.35))
+            }
+
+            Spacer()
+
+            Button {
+                appState.focusTerminal(for: sessionId)
+            } label: {
+                Image(systemName: "arrow.up.forward.app.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white.opacity(0.6))
+                    .frame(width: 26, height: 26)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help(l10n.helpFocusTerminal)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 36)
+        .padding(.bottom, 10)
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private func contentArea(session: ActiveSession) -> some View {
+        VStack(spacing: 0) {
+            if !activeEventName.isEmpty || !activeToolName.isEmpty {
+                HStack(spacing: 8) {
+                    Text((isCurrentSession && appState.hasResponseHandler) ? "ACTIVE ACTION" : "NOTIFICATION")
+                        .font(.system(size: 9, weight: .black))
+                        .foregroundColor(.white.opacity(0.3))
+
+                    if !activeToolName.isEmpty {
+                        let risk = ToolKnowledge.risk(for: activeToolName)
+                        HStack(spacing: 4) {
+                            Image(systemName: risk.icon)
+                            Text(risk.rawValue.uppercased())
+                        }
+                        .font(.system(size: 9, weight: .bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(risk.color.opacity(0.2))
+                        .foregroundColor(risk.color)
+                        .clipShape(Capsule())
+                    }
+
+                    Spacer()
+
+                    Text(activeEventName)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(tool.color)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+            }
+
+            ScrollView {
+                if isCurrentSession, let question = appState.currentClaudeQuestion {
+                    ClaudeQuestionFormView(request: question, state: appState)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                } else if !displayMessage.isEmpty {
+                    DiffAwareMarkdownView(text: displayMessage)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                } else {
+                    Text("메시지 대기 중…")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.3))
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                }
+            }
+            .background(Color.white.opacity(0.03))
+            .cornerRadius(8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxHeight: .infinity)
+            .overlay {
+                if isCurrentSession {
+                    MessageMouseDownMonitor {
+                        appState.pauseAutoTimersForUserViewing()
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
+
+            if isCurrentSession && (appState.hasResponseHandler || appState.isNotificationAutoCollapseActive) {
+                actionArea
+            } else if session.isPending && !isCurrentSession {
+                HStack {
+                    Image(systemName: "hourglass")
+                        .font(.system(size: 11))
+                        .foregroundColor(.orange.opacity(0.7))
+                    Text("다른 세션 승인 처리 중…")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.4))
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+        }
+    }
+
+    // MARK: - Action Area
+
+    @ViewBuilder
+    private var actionArea: some View {
+        VStack(spacing: 8) {
+            if appState.hasResponseHandler || appState.isNotificationAutoCollapseActive {
+                GeometryReader { geo in
+                    let progress = appState.hasResponseHandler
+                        ? appState.timeoutProgress
+                        : appState.notificationAutoCollapseProgress
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.07))
+                        Capsule()
+                            .fill(LinearGradient(
+                                colors: [progressColor(for: progress).opacity(0.8), progressColor(for: progress)],
+                                startPoint: .leading, endPoint: .trailing
+                            ))
+                            .frame(width: geo.size.width * progress)
+                    }
+                }
+                .frame(height: 4)
+                .padding(.horizontal, 16)
+            }
+
+            HStack(spacing: 10) {
+                if appState.hasResponseHandler {
+                    Button(action: { appState.focusTerminal() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.up.forward.app.fill")
+                            Text(l10n.notchFocus)
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(width: 80, height: 34)
+                        .background(Color.white.opacity(0.08))
+                        .foregroundColor(.white.opacity(0.82))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .help(l10n.helpFocusTerminal)
+
+                    Button(action: { appState.deny() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "xmark.circle.fill")
+                            Text(l10n.notchDenyRequest)
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .background(Color.red.opacity(0.15))
+                        .foregroundColor(.red)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+
+                    // [UI/UX] 노치뷰와 동일한 ZStack 트릭으로 macOS Menu 배경색 버그 우회
+                    HStack(spacing: 1) {
+                        Button(action: {
+                            if appState.currentClaudeQuestion != nil {
+                                appState.submitClaudeQuestion()
+                            } else {
+                                appState.approve()
+                            }
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.fill")
+                                Text(appState.currentClaudeQuestion == nil ? l10n.notchApprove : "Submit")
+                            }
+                            .font(.system(size: 12, weight: .bold))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(tool.color.opacity(0.15))
+                            .foregroundColor(
+                                appState.currentClaudeQuestion == nil || appState.canSubmitClaudeQuestion()
+                                    ? tool.color : .white.opacity(0.35)
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(appState.currentClaudeQuestion != nil && !appState.canSubmitClaudeQuestion())
+
+                        if appState.currentClaudeQuestion == nil {
+                            ZStack {
+                                tool.color.opacity(0.2)
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(tool.color)
+
+                                Menu {
+                                    Button(l10n.notchAutoApproveSession) {
+                                        appState.approve(globalAlways: false, sessionAlways: true)
+                                    }
+                                    Button(l10n.notchAlwaysAutoApprove) {
+                                        appState.approve(globalAlways: true, sessionAlways: false)
+                                    }
+                                } label: {
+                                    Color.black.opacity(0.001)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .contentShape(Rectangle())
+                                }
+                                .menuStyle(.borderlessButton)
+                                .menuIndicator(.hidden)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                            .frame(width: 28, height: 34)
+                        }
+                    }
+                    .frame(height: 34)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    Button(action: { appState.dismissCurrentRequest() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text(l10n.notchDismiss)
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .background(Color.blue.opacity(0.15))
+                        .foregroundColor(.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14)
+        }
+        .padding(.vertical, 10)
+        .background(Color.white.opacity(0.02))
+    }
+
+    private func progressColor(for progress: Double) -> Color {
+        if progress > 0.5  { return .green }
+        if progress > 0.25 { return .orange }
+        return .red
+    }
+}

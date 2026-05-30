@@ -474,6 +474,17 @@ struct SessionRowView: View {
             }
             .buttonStyle(.plain)
 
+            Button(action: { SessionMessageWindowManager.shared.openWindow(for: session.id) }) {
+                Image(systemName: "macwindow.on.rectangle")
+                    .font(.system(size: isSubAgent ? 9 : 11, weight: .bold))
+                    .foregroundColor(.white.opacity(0.65))
+                    .frame(width: buttonSize, height: buttonSize)
+                    .background(Color.white.opacity(0.07))
+                    .clipShape(RoundedRectangle(cornerRadius: isSubAgent ? 6 : 8))
+            }
+            .buttonStyle(.plain)
+            .help("팝아웃 메시지 창 열기")
+
             Button(action: { AppState.shared.focusTerminal(for: session.id) }) {
                 Image(systemName: "arrow.up.forward.app.fill")
                     .font(.system(size: isSubAgent ? 10 : 12, weight: .bold))
