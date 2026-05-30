@@ -918,6 +918,16 @@ final class ResizeHandleNSView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
+// MARK: - NSCursor helpers
+
+private extension NSCursor {
+    /// macOS 창 우하단 모서리 리사이즈 커서 (↖↘). 공개 API 부재로 private selector 사용, 실패 시 crosshair 폴백.
+    static var resizeNorthWestSouthEast: NSCursor {
+        let sel = NSSelectorFromString("_windowResizeNorthWestSouthEastCursor")
+        return (NSCursor.perform(sel)?.takeUnretainedValue() as? NSCursor) ?? .crosshair
+    }
+}
+
 // MARK: - Corner Resize Handle
 
 private struct CornerResizeHandle: NSViewRepresentable {
@@ -975,7 +985,7 @@ final class CornerResizeHandleNSView: NSView {
         trackingArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) { NSCursor.crosshair.set() }
+    override func mouseEntered(with event: NSEvent) { NSCursor.resizeNorthWestSouthEast.set() }
     override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
 
     override func mouseDown(with event: NSEvent) {
