@@ -261,6 +261,7 @@ struct NotchView: View {
                         if isExpanded {
                             ResizeHandle(liveHeight: $liveHeight)
                                 .frame(width: notchSize.width, height: 12)
+                                .padding(.trailing, 20)
                                 .transition(.opacity)
                         }
                     }
@@ -273,6 +274,7 @@ struct NotchView: View {
                         if isExpanded {
                             RightResizeHandle(liveWidth: $liveWidth)
                                 .frame(width: 12, height: notchSize.height)
+                                .padding(.bottom, 20)
                                 .transition(.opacity)
                         }
                     }
