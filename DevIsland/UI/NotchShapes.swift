@@ -30,7 +30,6 @@ struct NotchShape: Shape {
     var cornerRadius: CGFloat
     var topFilletRadius: CGFloat
     var shapeStyle: NotchShapeStyle = .classic
-    var topGap: CGFloat = 0
 
     var animatableData: CGFloat {
         get { cornerRadius }
@@ -38,8 +37,10 @@ struct NotchShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
+        // 다이나믹 아일랜드: 모든 코너가 동일하게 라운드된 직사각형
         if shapeStyle == .dynamicIsland {
-            return dynamicIslandPath(in: rect)
+            let r = min(cornerRadius, rect.height / 2, rect.width / 2)
+            return Path(roundedRect: rect, cornerSize: CGSize(width: r, height: r))
         }
 
         var path = Path()
@@ -72,29 +73,6 @@ struct NotchShape: Shape {
         path.addQuadCurve(to: CGPoint(x: w, y: 0), control: CGPoint(x: w - tr, y: 0))
 
         path.closeSubpath()
-        return path
-    }
-
-    // 다이나믹 아일랜드: 상단에 topGap만큼 여백을 두고 모든 코너가 동일하게 라운드된 직사각형
-    private func dynamicIslandPath(in rect: CGRect) -> Path {
-        var path = Path()
-
-        let w = rect.width
-        let h = rect.height
-        let r = min(cornerRadius, (h - topGap) / 2, w / 2)
-        let top = topGap
-
-        path.move(to: CGPoint(x: r, y: top))
-        path.addLine(to: CGPoint(x: w - r, y: top))
-        path.addQuadCurve(to: CGPoint(x: w, y: top + r), control: CGPoint(x: w, y: top))
-        path.addLine(to: CGPoint(x: w, y: h - r))
-        path.addQuadCurve(to: CGPoint(x: w - r, y: h), control: CGPoint(x: w, y: h))
-        path.addLine(to: CGPoint(x: r, y: h))
-        path.addQuadCurve(to: CGPoint(x: 0, y: h - r), control: CGPoint(x: 0, y: h))
-        path.addLine(to: CGPoint(x: 0, y: top + r))
-        path.addQuadCurve(to: CGPoint(x: r, y: top), control: CGPoint(x: 0, y: top))
-        path.closeSubpath()
-
         return path
     }
 }

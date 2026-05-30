@@ -119,6 +119,7 @@ struct NotchCollapsedView: View {
                     }
                     .frame(width: notchSize.width, height: notchSize.height)
                 }
+                .offset(y: settingsStore.settings.notchShapeStyle == .dynamicIsland ? 3 : 0)
             }
             .frame(
                 width: notchSize.width,
@@ -145,12 +146,10 @@ struct NotchCollapsedView: View {
 
     private var collapsedBackground: some View {
         let style = settingsStore.settings.notchShapeStyle
-        let shape = NotchShape(
-            cornerRadius: style == .dynamicIsland ? notchSize.height / 2 : 14,
-            topFilletRadius: style == .classic ? 6 : 0,
-            shapeStyle: style,
-            topGap: style == .dynamicIsland ? 3 : 0
-        )
+        let (cr, tr): (CGFloat, CGFloat) = style == .dynamicIsland
+            ? (notchSize.height / 2, 0)
+            : (14, 6)
+        let shape = NotchShape(cornerRadius: cr, topFilletRadius: tr, shapeStyle: style)
 
         return ZStack(alignment: .top) {
             if settingsStore.settings.notchBackdropShadowEnabled {
@@ -301,6 +300,7 @@ struct NotchView: View {
                         }
                     }
                 }
+                .offset(y: settingsStore.settings.notchShapeStyle == .dynamicIsland ? 3 : 0)
             }
             .frame(
                 width: notchSize.width,
@@ -336,14 +336,13 @@ struct NotchView: View {
 
     private var notchBackground: some View {
         let style = settingsStore.settings.notchShapeStyle
-        let collapsedCR: CGFloat = style == .dynamicIsland
-            ? CGFloat(settingsStore.settings.collapsedNotchHeight) / 2
-            : 14
+        let (collapsedCR, tr): (CGFloat, CGFloat) = style == .dynamicIsland
+            ? (CGFloat(settingsStore.settings.collapsedNotchHeight) / 2, 0)
+            : (14, 6)
         let shape = NotchShape(
             cornerRadius: isExpanded ? 24 : collapsedCR,
-            topFilletRadius: style == .classic ? 6 : 0,
-            shapeStyle: style,
-            topGap: style == .dynamicIsland ? 3 : 0
+            topFilletRadius: tr,
+            shapeStyle: style
         )
 
         return ZStack(alignment: .top) {
