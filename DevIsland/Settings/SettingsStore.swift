@@ -696,20 +696,22 @@ final class SettingsStore: ObservableObject {
                 from: userDefaults,
                 default: defaults.expandOnNotification
             ),
+            // 마이그레이션: 세 하위 키가 아직 없으면 기존 expandOnNotification 값을 초기값으로 사용한다.
+            // 이렇게 해야 업그레이드 후 부모 토글을 다시 켰을 때 하위 설정도 원래 의도를 유지한다.
             expandOnTaskCompletion: bool(
                 key: DefaultsKey.expandOnTaskCompletion,
                 from: userDefaults,
-                default: defaults.expandOnTaskCompletion
+                default: (userDefaults.object(forKey: DefaultsKey.expandOnNotification) as? Bool) ?? defaults.expandOnTaskCompletion
             ),
             expandOnIdlePrompt: bool(
                 key: DefaultsKey.expandOnIdlePrompt,
                 from: userDefaults,
-                default: defaults.expandOnIdlePrompt
+                default: (userDefaults.object(forKey: DefaultsKey.expandOnNotification) as? Bool) ?? defaults.expandOnIdlePrompt
             ),
             expandOnNotificationMessage: bool(
                 key: DefaultsKey.expandOnNotificationMessage,
                 from: userDefaults,
-                default: defaults.expandOnNotificationMessage
+                default: (userDefaults.object(forKey: DefaultsKey.expandOnNotification) as? Bool) ?? defaults.expandOnNotificationMessage
             ),
             expandOnInteractiveTool: bool(
                 key: DefaultsKey.expandOnInteractiveTool,
