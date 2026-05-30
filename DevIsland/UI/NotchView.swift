@@ -144,7 +144,13 @@ struct NotchCollapsedView: View {
     }
 
     private var collapsedBackground: some View {
-        let shape = NotchShape(cornerRadius: 14, topFilletRadius: 6)
+        let style = settingsStore.settings.notchShapeStyle
+        let shape = NotchShape(
+            cornerRadius: style == .dynamicIsland ? notchSize.height / 2 : 14,
+            topFilletRadius: style == .classic ? 6 : 0,
+            shapeStyle: style,
+            topGap: style == .dynamicIsland ? 6 : 0
+        )
 
         return ZStack(alignment: .top) {
             if settingsStore.settings.notchBackdropShadowEnabled {
@@ -329,9 +335,15 @@ struct NotchView: View {
     }
 
     private var notchBackground: some View {
+        let style = settingsStore.settings.notchShapeStyle
+        let collapsedCR: CGFloat = style == .dynamicIsland
+            ? CGFloat(settingsStore.settings.collapsedNotchHeight) / 2
+            : 14
         let shape = NotchShape(
-            cornerRadius: isExpanded ? 24 : 14,
-            topFilletRadius: 6
+            cornerRadius: isExpanded ? 24 : collapsedCR,
+            topFilletRadius: style == .classic ? 6 : 0,
+            shapeStyle: style,
+            topGap: style == .dynamicIsland ? 6 : 0
         )
 
         return ZStack(alignment: .top) {

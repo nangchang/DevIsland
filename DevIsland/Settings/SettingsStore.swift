@@ -119,6 +119,21 @@ enum NotchUnreadDotPosition: String, CaseIterable, Identifiable {
     }
 }
 
+enum NotchShapeStyle: String, CaseIterable, Identifiable {
+    case classic
+    case dynamicIsland
+
+    var id: String { rawValue }
+
+    var label: String {
+        let l = L10n.shared
+        switch self {
+        case .classic:       return l.notchShapeClassic
+        case .dynamicIsland: return l.notchShapeDynamicIsland
+        }
+    }
+}
+
 enum NotchAutoCollapseDelay: String, CaseIterable, Identifiable {
     case off
     case seconds3
@@ -174,6 +189,7 @@ struct AppSettings: Equatable {
     var openPeonDebounceMilliseconds: Int
     var notchPanelOpacity: Double
     var notchBackdropShadowEnabled: Bool
+    var notchShapeStyle: NotchShapeStyle
     var collapsedNotchWidth: Double
     var collapsedNotchHeight: Double
     var expandedNotchWidth: Double
@@ -257,6 +273,7 @@ struct AppSettings: Equatable {
         openPeonDebounceMilliseconds: 1500,
         notchPanelOpacity: 1.0,
         notchBackdropShadowEnabled: true,
+        notchShapeStyle: .classic,
         collapsedNotchWidth: 260,
         collapsedNotchHeight: 32,
         expandedNotchWidth: 692,
@@ -336,6 +353,7 @@ final class SettingsStore: ObservableObject {
         static let notchBackgroundOpacity = "notchBackgroundOpacity"
         static let notchPanelOpacity = "notchPanelOpacity"
         static let notchBackdropShadowEnabled = "notchBackdropShadowEnabled"
+        static let notchShapeStyle = "notchShapeStyle"
         static let collapsedNotchWidth = "collapsedNotchWidth"
         static let collapsedNotchHeight = "collapsedNotchHeight"
         static let expandedNotchWidth = "expandedNotchWidth"
@@ -412,6 +430,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.openPeonDebounceMilliseconds, forKey: DefaultsKey.openPeonDebounceMilliseconds)
         userDefaults.set(settings.notchPanelOpacity, forKey: DefaultsKey.notchPanelOpacity)
         userDefaults.set(settings.notchBackdropShadowEnabled, forKey: DefaultsKey.notchBackdropShadowEnabled)
+        userDefaults.set(settings.notchShapeStyle.rawValue, forKey: DefaultsKey.notchShapeStyle)
         userDefaults.set(settings.collapsedNotchWidth, forKey: DefaultsKey.collapsedNotchWidth)
         userDefaults.set(settings.collapsedNotchHeight, forKey: DefaultsKey.collapsedNotchHeight)
         userDefaults.set(settings.expandedNotchWidth, forKey: DefaultsKey.expandedNotchWidth)
@@ -602,6 +621,12 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.notchBackdropShadowEnabled,
                 from: userDefaults,
                 default: defaults.notchBackdropShadowEnabled
+            ),
+            notchShapeStyle: enumValue(
+                NotchShapeStyle.self,
+                key: DefaultsKey.notchShapeStyle,
+                from: userDefaults,
+                default: defaults.notchShapeStyle
             ),
             collapsedNotchWidth: boundedDouble(
                 key: DefaultsKey.collapsedNotchWidth,

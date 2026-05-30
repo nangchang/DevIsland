@@ -263,6 +263,12 @@ private struct DisplaySettingsPane: View {
 
                 Toggle(l10n.lblNotchShadow, isOn: store.binding(\.notchBackdropShadowEnabled))
 
+                Picker(l10n.lblNotchShapeStyle, selection: store.binding(\.notchShapeStyle)) {
+                    ForEach(NotchShapeStyle.allCases) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+
                 SettingsSliderRow(
                     title: l10n.lblCollapsedNotchWidth(Int(store.settings.collapsedNotchWidth)),
                     value: store.binding(\.collapsedNotchWidth),
