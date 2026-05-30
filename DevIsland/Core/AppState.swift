@@ -482,7 +482,7 @@ class AppState: ObservableObject {
     }
 
     private func handleParsedEvent(_ h: ParsedHookEvent, responseHandler: @escaping (String) -> Void) {
-        let ud = UserDefaults.standard
+        let ud = self.userDefaults
         let processVSCode = ud.object(forKey: "processVSCodeEnabled") as? Bool ?? false
         let processClaudeDesktop = ud.object(forKey: "processClaudeDesktopEnabled") as? Bool ?? false
         switch h.terminalApp {
@@ -952,6 +952,13 @@ class AppState: ObservableObject {
         
         guard isApproval && !isGeminiNormalMode else {
             print("[DevIsland] ignoring non-approval h.event (or Gemini normal mode): \(h.event)")
+            if isGeminiNormalMode && h.toolName == "enter_plan_mode" {
+                DispatchQueue.main.async {
+                    if let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
+                        self.sessionStore.activeSessions[index].isAutoEditActive = false
+                    }
+                }
+            }
             respondWithReplay(
                 "{\"response\": \"approved\"}",
                 responseHandler: responseHandler,
