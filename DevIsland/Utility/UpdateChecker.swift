@@ -138,7 +138,7 @@ final class UpdateChecker: ObservableObject {
         if let changeLog = changeLog, !changeLog.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let changeLogView = UpdateChangeLogView(changeLog: changeLog)
             let hostingView = NSHostingView(rootView: changeLogView)
-            hostingView.frame = NSRect(x: 0, y: 0, width: 440, height: 200)
+            hostingView.frame.size = hostingView.fittingSize
             alert.accessoryView = hostingView
         }
 
