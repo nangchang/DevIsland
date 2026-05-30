@@ -904,7 +904,7 @@ class AppState: ObservableObject {
 
                 let expandEnabled = MainActor.assumeIsolated {
                     let s = SettingsStore.shared.settings
-                    guard s.notchAutoExpandEnabled else { return false }
+                    guard s.notchAutoExpandEnabled && s.expandOnNotification else { return false }
                     if isTaskCompletion  { return s.expandOnTaskCompletion }
                     if isIdleOrWaiting   { return s.expandOnIdlePrompt }
                     if isNotificationMsg { return s.expandOnNotificationMessage }

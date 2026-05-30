@@ -230,12 +230,15 @@ extension L10n {
     var lblNotchAutoCollapse: String { s("Auto-collapse",                "자동 닫힘") }
     var secNotchAutoExpand:      String { s("Auto-expand",               "자동 펼침") }
     var secNotchExpandTriggers: String { s("When to expand",              "자동 펼침 조건") }
+    var lblExpandOnNotification: String { s("On notification",                    "알림 수신 시") }
     var lblExpandOnTaskCompletion: String { s("On task completion",               "작업 완료 시") }
     var lblExpandOnIdlePrompt: String { s("On idle / waiting for input",          "대기 중 (입력 필요 시)") }
     var lblExpandOnNotificationMessage: String { s("On notification message",     "알림 메시지 수신 시") }
     var lblExpandOnInteractiveTool: String { s("On interactive input (Gemini only)", "Gemini 인터랙티브 입력 시") }
     var lblExpandOnApprovalRequest: String { s("On approval request",            "승인 요청 시") }
     var lblExpandOnQuestionResponse: String { s("On question response",           "질문 응답 대기 시") }
+    var hintExpandOnNotification: String { s("Expand when a notification event occurs. Use the sub-options to choose which kinds.",
+                                             "알림 이벤트 발생 시 펼칩니다. 하위 항목으로 종류를 선택하세요.") }
     var hintExpandOnTaskCompletion: String { s("When an agent finishes its task.",
                                                "에이전트가 작업을 완료했을 때") }
     var hintExpandOnIdlePrompt: String { s("When the agent is done and waiting for the next prompt.",

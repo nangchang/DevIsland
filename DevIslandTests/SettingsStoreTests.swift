@@ -64,6 +64,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings.notchRightCharacterMode, .random)
         XCTAssertEqual(store.settings.notchRightCharacterKind, .gemini)
         XCTAssertEqual(store.settings.notchRightRandomCharacterKinds, Set(BuddyKind.defaultRandomCases))
+        XCTAssertTrue(store.settings.expandOnNotification)
         XCTAssertTrue(store.settings.expandOnTaskCompletion)
         XCTAssertTrue(store.settings.expandOnIdlePrompt)
         XCTAssertTrue(store.settings.expandOnNotificationMessage)
@@ -108,6 +109,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.notchRightCharacterMode = .random
         store.settings.notchRightCharacterKind = .claudeCode
         store.settings.notchRightRandomCharacterKinds = [.gemini]
+        store.settings.expandOnNotification = false
         store.settings.expandOnTaskCompletion = false
         store.settings.expandOnIdlePrompt = false
         store.settings.expandOnNotificationMessage = false
@@ -151,6 +153,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.settings.notchRightCharacterMode, .random)
         XCTAssertEqual(reloaded.settings.notchRightCharacterKind, .claudeCode)
         XCTAssertEqual(reloaded.settings.notchRightRandomCharacterKinds, [.gemini])
+        XCTAssertFalse(reloaded.settings.expandOnNotification)
         XCTAssertFalse(reloaded.settings.expandOnTaskCompletion)
         XCTAssertFalse(reloaded.settings.expandOnIdlePrompt)
         XCTAssertFalse(reloaded.settings.expandOnNotificationMessage)

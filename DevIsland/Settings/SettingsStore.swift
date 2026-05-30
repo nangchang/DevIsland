@@ -190,6 +190,7 @@ struct AppSettings: Equatable {
     var notchRightCharacterKind: BuddyKind
     var notchRightRandomCharacterKinds: Set<BuddyKind>
     var notchCenterText: String
+    var expandOnNotification: Bool
     var expandOnTaskCompletion: Bool
     var expandOnIdlePrompt: Bool
     var expandOnNotificationMessage: Bool
@@ -272,6 +273,7 @@ struct AppSettings: Equatable {
         notchRightCharacterKind: .gemini,
         notchRightRandomCharacterKinds: Set(BuddyKind.defaultRandomCases),
         notchCenterText: "DevIsland",
+        expandOnNotification: true,
         expandOnTaskCompletion: true,
         expandOnIdlePrompt: true,
         expandOnNotificationMessage: true,
@@ -350,6 +352,7 @@ final class SettingsStore: ObservableObject {
         static let notchRightCharacterKind = "notchRightCharacterKind"
         static let notchRightRandomCharacterKinds = "notchRightRandomCharacterKinds"
         static let notchCenterText = "notchCenterText"
+        static let expandOnNotification = "expandOnNotification"
         static let expandOnTaskCompletion = "expandOnTaskCompletion"
         static let expandOnIdlePrompt = "expandOnIdlePrompt"
         static let expandOnNotificationMessage = "expandOnNotificationMessage"
@@ -425,6 +428,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.notchRightCharacterKind.rawValue, forKey: DefaultsKey.notchRightCharacterKind)
         userDefaults.set(settings.notchRightRandomCharacterKinds.map(\.rawValue).sorted(), forKey: DefaultsKey.notchRightRandomCharacterKinds)
         userDefaults.set(settings.notchCenterText, forKey: DefaultsKey.notchCenterText)
+        userDefaults.set(settings.expandOnNotification, forKey: DefaultsKey.expandOnNotification)
         userDefaults.set(settings.expandOnTaskCompletion, forKey: DefaultsKey.expandOnTaskCompletion)
         userDefaults.set(settings.expandOnIdlePrompt, forKey: DefaultsKey.expandOnIdlePrompt)
         userDefaults.set(settings.expandOnNotificationMessage, forKey: DefaultsKey.expandOnNotificationMessage)
@@ -687,6 +691,11 @@ final class SettingsStore: ObservableObject {
                 default: defaults.notchRightRandomCharacterKinds
             ),
             notchCenterText: userDefaults.string(forKey: DefaultsKey.notchCenterText) ?? defaults.notchCenterText,
+            expandOnNotification: bool(
+                key: DefaultsKey.expandOnNotification,
+                from: userDefaults,
+                default: defaults.expandOnNotification
+            ),
             expandOnTaskCompletion: bool(
                 key: DefaultsKey.expandOnTaskCompletion,
                 from: userDefaults,
