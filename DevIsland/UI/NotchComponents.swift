@@ -512,7 +512,7 @@ struct SessionRowView: View {
             Button {
                 SessionMessageWindowManager.shared.openWindow(for: session.id)
             } label: {
-                Label("메시지 창 분리", systemImage: "macwindow.on.rectangle")
+                Label(l10n.popOutWindow, systemImage: "macwindow.on.rectangle")
             }
 
             Divider()

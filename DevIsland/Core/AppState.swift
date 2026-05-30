@@ -1237,7 +1237,7 @@ class AppState: ObservableObject {
                     self.isNotchExpanded = true
                     self.isExpandingFromRequest = true
                     self.currentSessionId = h.sessionId
-                    self.currentMessage = "터미널 창을 확인해 주세요 (\(displayToolName))"
+                    self.currentMessage = L10n.shared.terminalCheckMsg(displayToolName)
                 }
 
                 if h.toolName == "exit_plan_mode",
@@ -1265,7 +1265,7 @@ class AppState: ObservableObject {
                         terminalTmuxClient: h.terminalTmuxClient,
                         toolName: displayToolName,
                         eventName: h.event,
-                        message: isInteractive ? "터미널 확인 대기 중..." : "Auto-approved: \(displayToolName)",
+                        message: isInteractive ? L10n.shared.terminalWaiting : "Auto-approved: \(displayToolName)",
                         isPending: false,
                         preserveMessage: true,
                         isLifecycleTracked: true,
@@ -2333,11 +2333,12 @@ class AppState: ObservableObject {
 
     func promptToAddGlobalAutoApprove() {
         DispatchQueue.main.async {
+            let l = L10n.shared
             let alert = NSAlert()
-            alert.messageText = "글로벌 자동 승인 툴 추가"
-            alert.informativeText = "모든 세션에서 자동 승인할 툴 이름(예: read_file)을 입력하세요."
-            alert.addButton(withTitle: "추가")
-            alert.addButton(withTitle: "취소")
+            alert.messageText = l.alertAddGlobalToolTitle
+            alert.informativeText = l.alertAddGlobalToolMsg
+            alert.addButton(withTitle: l.btnAdd)
+            alert.addButton(withTitle: l.btnCancel)
 
             let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
             alert.accessoryView = input
@@ -2379,11 +2380,12 @@ class AppState: ObservableObject {
 
     func promptToAddSessionAutoApprove(for sessionId: String) {
         DispatchQueue.main.async {
+            let l = L10n.shared
             let alert = NSAlert()
-            alert.messageText = "세션 자동 승인 툴 추가"
-            alert.informativeText = "현재 세션(\(sessionId.prefix(8)))에서 자동 승인할 툴 이름을 입력하세요."
-            alert.addButton(withTitle: "추가")
-            alert.addButton(withTitle: "취소")
+            alert.messageText = l.alertAddSessionToolTitle
+            alert.informativeText = l.alertAddSessionToolMsg(sessionId.prefix(8).description)
+            alert.addButton(withTitle: l.btnAdd)
+            alert.addButton(withTitle: l.btnCancel)
 
             let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
             alert.accessoryView = input

@@ -7,7 +7,7 @@ import Foundation
 // claudeUserPromptSubmitOutput, etc.) and ClaudeAdapter in the same file.
 //
 struct ProviderAdapter {
-    static let denialMessage = "DevIsland에서 거절되었습니다."
+    static var denialMessage: String { L10n.shared.providerDenialMessage }
 
     static func providerOutput(
         decision: String?,

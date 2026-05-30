@@ -438,7 +438,7 @@ struct NotchView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
-                    .help("메시지 창 분리")
+                    .help(l10n.popOutWindow)
 
                     Button {
                         state.focusTerminal(for: displayedSessionId)
