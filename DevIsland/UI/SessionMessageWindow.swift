@@ -2,6 +2,72 @@ import AppKit
 import SwiftUI
 import Combine
 
+// MARK: - Session History ViewModel
+
+@MainActor
+final class SessionMessageHistoryViewModel: ObservableObject {
+    @Published private(set) var entries: [ReplayLogEntry] = []  // 오래된 것부터 — [0]=oldest, [last]=newest
+    @Published var currentIndex: Int = 0
+
+    let sessionId: String
+
+    init(sessionId: String) {
+        self.sessionId = sessionId
+        load()
+    }
+
+    var count: Int { entries.count }
+    var currentEntry: ReplayLogEntry? { entries.isEmpty ? nil : entries[currentIndex] }
+
+    /// 최신 항목(라이브 뷰)에 있는 상태
+    var isAtLatest: Bool { entries.isEmpty || currentIndex == entries.count - 1 }
+    var hasPrevious: Bool { currentIndex > 0 }
+    var hasNext: Bool { currentIndex < entries.count - 1 }
+
+    /// 1-based 위치 표시용 (예: "3 / 12")
+    var positionLabel: String { entries.isEmpty ? "" : "\(currentIndex + 1) / \(entries.count)" }
+
+    func goToPrevious() { if hasPrevious { currentIndex -= 1 } }
+    func goToNext()     { if hasNext     { currentIndex += 1 } }
+    func goToLatest()   { currentIndex = max(0, entries.count - 1) }
+
+    func load() {
+        let loaded = (try? AppState.shared.sessionMessageHistory(sessionId: sessionId, limit: 100)) ?? []
+        entries = loaded.reversed()  // DESC → ASC (오래된 것부터)
+        currentIndex = max(0, entries.count - 1)
+    }
+
+    /// 새 이벤트 도착 시 최신 항목 유지하며 갱신
+    func refresh() {
+        let wasAtLatest = isAtLatest
+        let prevId = currentEntry?.id
+        load()
+        if wasAtLatest || prevId == nil {
+            goToLatest()
+        } else if let prevId, let idx = entries.firstIndex(where: { $0.id == prevId }) {
+            currentIndex = idx
+        } else {
+            goToLatest()
+        }
+    }
+
+    /// payloadJSON에서 표시 메시지 추출
+    func displayMessage(for entry: ReplayLogEntry) -> String {
+        guard
+            let data = entry.payloadJSON.data(using: .utf8),
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return "" }
+        let toolInput = json["tool_input"] as? [String: Any]
+        let msg = ToolMessageFormatter.displayMessage(
+            for: entry.toolName,
+            toolInput: toolInput,
+            json: json,
+            eventName: entry.eventName
+        )
+        return msg
+    }
+}
+
 // MARK: - Manager
 
 @MainActor
@@ -100,6 +166,12 @@ struct SessionMessageView: View {
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var appState = AppState.shared
     @ObservedObject private var l10n = L10n.shared
+    @StateObject private var history: SessionMessageHistoryViewModel
+
+    init(sessionId: String) {
+        self.sessionId = sessionId
+        _history = StateObject(wrappedValue: SessionMessageHistoryViewModel(sessionId: sessionId))
+    }
 
     private var session: ActiveSession? {
         sessionStore.activeSessions.first { $0.id == sessionId }
@@ -109,16 +181,22 @@ struct SessionMessageView: View {
         appState.currentSessionId == sessionId
     }
 
+    /// 히스토리 뷰일 때는 해당 항목의 툴/이벤트, 라이브 뷰일 때는 현재 상태
     private var activeToolName: String {
-        isCurrentSession ? appState.currentToolName : (session?.lastToolName ?? "")
+        if !history.isAtLatest, let entry = history.currentEntry { return entry.toolName }
+        return isCurrentSession ? appState.currentToolName : (session?.lastToolName ?? "")
     }
 
     private var activeEventName: String {
-        isCurrentSession ? appState.currentEventName : (session?.lastEventName ?? "")
+        if !history.isAtLatest, let entry = history.currentEntry { return entry.eventName }
+        return isCurrentSession ? appState.currentEventName : (session?.lastEventName ?? "")
     }
 
     private var displayMessage: String {
-        isCurrentSession ? appState.currentMessage : (session?.lastMessage ?? "")
+        if !history.isAtLatest, let entry = history.currentEntry {
+            return history.displayMessage(for: entry)
+        }
+        return isCurrentSession ? appState.currentMessage : (session?.lastMessage ?? "")
     }
 
     private var tool: ToolInfo { toolInfo(for: activeToolName) }
@@ -153,6 +231,13 @@ struct SessionMessageView: View {
         // displayTitle을 관찰하여 커스텀 라벨과 터미널 타이틀 변경 모두에 반응
         .onChange(of: displayTitle) { _, newTitle in
             SessionMessageWindowManager.shared.updateTitle(for: sessionId, title: newTitle)
+        }
+        // 새 이벤트 도착 시 히스토리 갱신 (최신 뷰에 있을 때만)
+        .onChange(of: session?.lastActiveAt) { _, _ in
+            history.refresh()
+        }
+        .onAppear {
+            history.load()
         }
     }
 
@@ -271,9 +356,15 @@ struct SessionMessageView: View {
                 }
             }
 
-            if isCurrentSession && (appState.hasResponseHandler || appState.isNotificationAutoCollapseActive) {
+            // 히스토리 내비게이션 바
+            if history.count > 1 {
+                historyNavigationBar
+            }
+
+            if history.isAtLatest &&
+               isCurrentSession && (appState.hasResponseHandler || appState.isNotificationAutoCollapseActive) {
                 actionArea
-            } else if session.isPending && !isCurrentSession {
+            } else if history.isAtLatest && session.isPending && !isCurrentSession {
                 HStack {
                     Image(systemName: "hourglass")
                         .font(.system(size: 11))
@@ -287,6 +378,58 @@ struct SessionMessageView: View {
                 .padding(.vertical, 10)
             }
         }
+    }
+
+    // MARK: - History Navigation Bar
+
+    private var historyNavigationBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                history.goToPrevious()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 28, height: 24)
+                    .background(Color.white.opacity(history.hasPrevious ? 0.08 : 0.03))
+                    .foregroundColor(.white.opacity(history.hasPrevious ? 0.8 : 0.25))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .disabled(!history.hasPrevious)
+
+            Spacer()
+
+            if let entry = history.currentEntry {
+                VStack(spacing: 1) {
+                    Text(history.positionLabel)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.5))
+                    Text(entry.receivedAt, style: .relative)
+                        .font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.3))
+                }
+            }
+
+            Spacer()
+
+            Button {
+                if history.hasNext {
+                    history.goToNext()
+                }
+            } label: {
+                Image(systemName: history.isAtLatest ? "arrow.clockwise" : "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 28, height: 24)
+                    .background(Color.white.opacity(history.hasNext ? 0.08 : 0.03))
+                    .foregroundColor(.white.opacity(history.hasNext ? 0.8 : 0.25))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .disabled(!history.hasNext)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.03))
     }
 
     // MARK: - Action Area

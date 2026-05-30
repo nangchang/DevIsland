@@ -255,6 +255,33 @@ final class SQLiteApprovalStore {
         )
     }
 
+    func replayLog(sessionId: String, limit: Int = 100) throws -> [ReplayLogEntry] {
+        try fetchReplayLog(
+            sql:
+                """
+                WITH latest_decisions AS (
+                    SELECT
+                        hook_event_id,
+                        action,
+                        source,
+                        reason,
+                        decided_at,
+                        ROW_NUMBER() OVER(PARTITION BY hook_event_id ORDER BY decided_at DESC) AS row_number
+                    FROM approval_decisions
+                )
+                SELECT e.id, e.request_id, e.provider, e.session_id, e.event_name, e.tool_name,
+                       e.payload_json, e.received_at,
+                       d.action, d.source, d.reason, d.decided_at
+                FROM hook_events e
+                LEFT JOIN latest_decisions d ON d.hook_event_id = e.id AND d.row_number = 1
+                WHERE e.session_id = ?
+                ORDER BY e.received_at DESC
+                LIMIT ?
+                """,
+            parameters: [sessionId, max(1, limit)]
+        )
+    }
+
     // Normalized form used for lifecycle event matching: lowercase, underscores/hyphens stripped.
     // Matches HookEventNormalizer.normalizedName in Swift.
     private static let sqlNormalize = "lower(replace(replace(event_name,'_',''),'-',''))"
