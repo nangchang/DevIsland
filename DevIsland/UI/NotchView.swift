@@ -149,7 +149,7 @@ struct NotchCollapsedView: View {
             cornerRadius: style == .dynamicIsland ? notchSize.height / 2 : 14,
             topFilletRadius: style == .classic ? 6 : 0,
             shapeStyle: style,
-            topGap: style == .dynamicIsland ? 6 : 0
+            topGap: style == .dynamicIsland ? 3 : 0
         )
 
         return ZStack(alignment: .top) {
@@ -343,7 +343,7 @@ struct NotchView: View {
             cornerRadius: isExpanded ? 24 : collapsedCR,
             topFilletRadius: style == .classic ? 6 : 0,
             shapeStyle: style,
-            topGap: style == .dynamicIsland ? 6 : 0
+            topGap: style == .dynamicIsland ? 3 : 0
         )
 
         return ZStack(alignment: .top) {
