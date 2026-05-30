@@ -150,6 +150,7 @@ extension L10n {
 
     // MARK: Alerts — UpdateChecker
     var updateAvailableTitle:     String { s("Update Available",       "업데이트 가능") }
+    var updateChangeLogTitle:     String { s("Release Notes / Change Log", "릴리즈 노트 / 변경 로그") }
     func updateAvailableMsg(_ v: String) -> String {
         s("DevIsland \(v) is available.\nInstall and relaunch?",
           "DevIsland \(v)이(가) 출시되었습니다.\n설치 후 재실행하시겠습니까?")

@@ -7,6 +7,7 @@ import SwiftUI
 struct ReleaseInfo {
     let version: String
     let downloadURL: URL
+    let changeLog: String?
 }
 
 enum UpdateError: LocalizedError {
@@ -73,7 +74,7 @@ final class UpdateChecker: ObservableObject {
 
     func installUpdate() {
         guard let release = latestRelease, hasUpdate else { return }
-        promptInstall(version: release.version, downloadURL: release.downloadURL)
+        promptInstall(version: release.version, downloadURL: release.downloadURL, changeLog: release.changeLog)
     }
 
     // MARK: Check
@@ -111,10 +112,11 @@ final class UpdateChecker: ObservableObject {
             }
 
             UserDefaults.standard.set(Date(), forKey: lastCheckKey)
-            latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL)
+            let changeLog = json["body"] as? String
+            latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog)
 
             if hasUpdate {
-                promptInstall(version: version, downloadURL: downloadURL)
+                promptInstall(version: version, downloadURL: downloadURL, changeLog: changeLog)
             } else if !silent {
                 showAlert(title: L10n.shared.updateUpToDateTitle, message: L10n.shared.updateUpToDateMsg(currentVersion))
             }
@@ -125,13 +127,21 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: Install
 
-    private func promptInstall(version: String, downloadURL: URL) {
+    private func promptInstall(version: String, downloadURL: URL, changeLog: String?) {
         let l = L10n.shared
         let alert = NSAlert()
         alert.messageText = l.updateAvailableTitle
         alert.informativeText = l.updateAvailableMsg(version)
         alert.addButton(withTitle: l.updateInstallBtn)
         alert.addButton(withTitle: l.updateLaterBtn)
+
+        if let changeLog = changeLog, !changeLog.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let changeLogView = UpdateChangeLogView(changeLog: changeLog)
+            let hostingView = NSHostingView(rootView: changeLogView)
+            hostingView.frame.size = hostingView.fittingSize
+            alert.accessoryView = hostingView
+        }
+
         guard runModal(alert) == .alertFirstButtonReturn else { return }
         Task { await doInstall(downloadURL: downloadURL) }
     }
@@ -326,5 +336,44 @@ struct UpdateProgressView: View {
         }
         .padding(32)
         .frame(width: 320)
+    }
+}
+
+// MARK: - Change Log View
+
+struct UpdateChangeLogView: View {
+    let changeLog: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.shared.updateChangeLogTitle)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.secondary)
+            
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(markdownAttributedString(from: changeLog))
+                        .font(.system(size: 11))
+                        .multilineTextAlignment(.leading)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(8)
+            }
+            .frame(width: 440, height: 180)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+            )
+        }
+    }
+
+    private func markdownAttributedString(from text: String) -> AttributedString {
+        if let attrStr = try? AttributedString(markdown: text) {
+            return attrStr
+        }
+        return AttributedString(text)
     }
 }
