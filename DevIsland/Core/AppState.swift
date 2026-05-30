@@ -302,7 +302,7 @@ class AppState: ObservableObject {
                 let prunedIds = self.sessionStore.pruneInactiveSessions()
                 for id in prunedIds {
                     self.ptyCoordinator.clearBuffer(sessionId: id)
-                    MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: id) }
+                    Task { @MainActor in SessionMessageWindowManager.shared.closeWindow(for: id) }
                 }
             }
         }

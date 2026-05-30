@@ -33,6 +33,12 @@ final class SessionMessageWindowManager {
 
     func windowClosed(for sessionId: String) {
         controllers.removeValue(forKey: sessionId)
+        // P2: 팝아웃 창이 승인 대기 중 닫히면 노치에서 요청을 다시 표시
+        let state = AppState.shared
+        if state.currentSessionId == sessionId && state.hasResponseHandler {
+            state.isExpandingFromRequest = true
+            state.isNotchExpanded = true
+        }
     }
 
     func updateTitle(for sessionId: String, title: String) {
@@ -82,9 +88,7 @@ final class SessionMessageWindowController: NSWindowController, NSWindowDelegate
     }
 
     func windowWillClose(_ notification: Notification) {
-        Task { @MainActor in
-            SessionMessageWindowManager.shared.windowClosed(for: sessionId)
-        }
+        SessionMessageWindowManager.shared.windowClosed(for: sessionId)
     }
 }
 
