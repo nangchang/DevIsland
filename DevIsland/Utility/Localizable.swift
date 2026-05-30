@@ -369,7 +369,6 @@ extension L10n {
         s("Enter the tool name to auto-approve in session \(id).",
           "현재 세션(\(id))에서 자동 승인할 툴 이름을 입력하세요.")
     }
-    var providerDenialMessage:   String { s("Denied by DevIsland.",             "DevIsland에서 거절되었습니다.") }
     var btnAddManually:      String { s("Add manually…",                     "직접 추가…") }
     var btnAddFromList:      String { s("Add from list",                     "목록에서 추가") }
     var lblNoGlobalTools:    String { s("No global auto-approval tools are configured.", "구성된 전역 자동 승인 도구가 없습니다.") }

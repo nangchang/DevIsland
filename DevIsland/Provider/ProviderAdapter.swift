@@ -7,7 +7,18 @@ import Foundation
 // claudeUserPromptSubmitOutput, etc.) and ClaudeAdapter in the same file.
 //
 struct ProviderAdapter {
-    static var denialMessage: String { L10n.shared.providerDenialMessage }
+    static var denialMessage: String {
+        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "system"
+        let isKorean: Bool
+        if lang == "korean" {
+            isKorean = true
+        } else if lang == "english" {
+            isKorean = false
+        } else {
+            isKorean = Locale.preferredLanguages.first?.hasPrefix("ko") ?? false
+        }
+        return isKorean ? "DevIsland에서 거절되었습니다." : "Denied by DevIsland."
+    }
 
     static func providerOutput(
         decision: String?,
