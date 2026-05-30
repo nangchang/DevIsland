@@ -648,7 +648,13 @@ final class AppStateTests: XCTestCase {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        
+        let stateExp = XCTestExpectation(description: "Wait for auto-edit state to clear")
+        waitUntil(timeout: 1.0, expectation: stateExp) {
+            let session = self.appState.sessionStore.activeSessions.first { $0.id == sessionId }
+            return session?.isAutoEditActive == false
+        }
+        wait(for: [stateExp], timeout: 2.0)
         
         let session = appState.sessionStore.activeSessions.first { $0.id == sessionId }
         XCTAssertFalse(session?.isAutoEditActive ?? true, "Auto-Edit must be cleared when enter_plan_mode passes through")
@@ -959,7 +965,13 @@ final class AppStateTests: XCTestCase {
         }
         """
         appState.handleMessage(message) { _ in }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        
+        let waitExp = XCTestExpectation(description: "Wait for pending queue")
+        waitUntil(timeout: 1.0, expectation: waitExp) {
+            self.appState.sessionStore.pendingCount == 1
+        }
+        wait(for: [waitExp], timeout: 2.0)
+        
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         XCTAssertEqual(appState.currentSessionId, "vscode-enabled-session")
         XCTAssertTrue(appState.hasResponseHandler)
