@@ -85,6 +85,31 @@ Response format:
 
 `decision` is `allow` or `deny`; returning `{}` or omitting a decision allows the action. Exit code `2` is a hard block and stderr is used as the rejection reason.
 
+## VS Code / Claude Desktop Integration
+
+VS Code and Claude Desktop sessions are opt-in (`processVSCodeEnabled`, `processClaudeDesktopEnabled` both default `false`). When disabled, hooks are auto-approved and not shown in the notch.
+
+### VS Code detection (bridge)
+
+- Integrated terminal: `TERM_PROGRAM=vscode` — this is the official VS Code standard and applies to all variants (Insiders, VSCodium). No app-running check needed.
+- Extension host (no TTY): `VSCODE_PID` / `VSCODE_IPC_HOOK` / `VSCODE_IPC_HOOK_CLI` present → verify with `osascript -e 'return application id "com.microsoft.VSCode" is running'`.
+
+### Claude Desktop detection (bridge)
+
+Claude Desktop has no distinguishing environment variable. Detection walks the parent process chain (up to 5 levels) looking for a process whose `comm` path matches `Claude\.app/Contents/MacOS/Claude$`.
+
+Note: `ps -o comm=` on macOS returns the full executable path, not the process name — string equality against `"Claude"` will never match.
+
+Process chain: `Claude.app/MacOS/Claude` → `Contents/Helpers/disclaimer` → `claude` (Claude Code) → hook script (3 levels up).
+
+### AppleScript / focus
+
+Use bundle IDs, not app names — `"VSCode"` and `"ClaudeDesktop"` are not recognized application names by macOS:
+- `tell application id "com.microsoft.VSCode" to activate`
+- `tell application id "com.anthropic.claudefordesktop" to activate`
+
+For VS Code, prefer `open -a "Visual Studio Code" <workspaceRoot>` over AppleScript — it targets the correct window when multiple VS Code instances are open.
+
 ## Communication Flow
 
 ```text

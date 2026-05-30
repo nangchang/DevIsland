@@ -186,6 +186,14 @@ extension L10n {
     var tabBridge:           String { s("Bridge / IPC", "브리지 / IPC") }
     var tabOpenPeon:         String { s("OpenPeon",     "OpenPeon") }
     var tabExperimental:     String { s("Experimental", "실험적") }
+    var tabIntegrations:     String { s("Integrations", "통합") }
+
+    // Integrations tab
+    var secAppIntegrations:           String { s("App Integrations",                                               "앱 통합") }
+    var lblProcessVSCode:             String { s("Enable VS Code integration",                                     "VS Code 통합 활성화") }
+    var descProcessVSCode:            String { s("Process hook events from sessions running in VS Code.",          "VS Code에서 실행 중인 세션의 hook 이벤트를 처리합니다.") }
+    var lblProcessClaudeDesktop:      String { s("Enable Claude Desktop integration",                              "Claude 데스크탑 통합 활성화") }
+    var descProcessClaudeDesktop:     String { s("Process hook events from sessions running in Claude Desktop.",   "Claude 데스크탑에서 실행 중인 세션의 hook 이벤트를 처리합니다.") }
 
     // General tab
     var btnResetAllSettings:          String { s("Reset All Settings to Defaults",          "모든 설정 초기화") }

@@ -187,6 +187,48 @@ if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "WarpTermi
   fi
 fi
 
+# VS Code integrated terminal (TERM_PROGRAM=vscode, has TTY)
+# TERM_PROGRAM=vscode is set by all VS Code variants (Insiders, VSCodium, etc.) — no app check needed
+if [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "vscode" ]; then
+  TERM_APP="VSCode"
+  _dir=$(basename "$PWD" 2>/dev/null)
+  TERM_TITLE="${_dir:-VS Code}"
+fi
+
+# VS Code extension host (no TTY, VSCODE_PID / VSCODE_IPC_HOOK / VSCODE_IPC_HOOK_CLI)
+if [ -z "$TERM_APP" ] && { [ -n "${VSCODE_PID:-}" ] || [ -n "${VSCODE_IPC_HOOK:-}" ] || [ -n "${VSCODE_IPC_HOOK_CLI:-}" ]; }; then
+  if osascript -e 'return application id "com.microsoft.VSCode" is running' 2>/dev/null | grep -q "true"; then
+    TERM_APP="VSCode"
+    _dir=$(basename "$PWD" 2>/dev/null)
+    TERM_TITLE="${_dir:-VS Code}"
+  fi
+fi
+
+# Claude Desktop app: CLAUDE_CODE_DESKTOP 환경변수 또는 부모 프로세스 체인에서 "Claude" 앱 탐지
+if [ -z "$TERM_APP" ]; then
+  _is_claude_desktop=0
+  if [ -n "${CLAUDE_CODE_DESKTOP:-}" ]; then
+    _is_claude_desktop=1
+  else
+    _pid=$$
+    for _i in 1 2 3 4 5; do
+      _ppid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ')
+      [ -z "$_ppid" ] || [ "$_ppid" = "0" ] && break
+      _pname=$(ps -p "$_ppid" -o comm= 2>/dev/null | tr -d ' ')
+      if echo "$_pname" | grep -q "Claude\.app/Contents/MacOS/Claude$"; then
+        _is_claude_desktop=1
+        break
+      fi
+      _pid="$_ppid"
+    done
+  fi
+  if [ "$_is_claude_desktop" = "1" ]; then
+    TERM_APP="ClaudeDesktop"
+    _dir=$(basename "$PWD" 2>/dev/null)
+    TERM_TITLE="${_dir:-Claude}"
+  fi
+fi
+
 if [ -z "$TERM_APP" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ignoring non-terminal hook source: TERM_PROGRAM=${TERM_PROGRAM:-} TERM_TTY=${CURRENT_TTY:-}" >> /tmp/DevIsland.bridge.log
   exit 0

@@ -196,6 +196,8 @@ struct AppSettings: Equatable {
     var expandOnQuestionResponse: Bool
     var preferredTerminal: String?
     var checkForUpdatesOnStartup: Bool
+    var processVSCodeEnabled: Bool
+    var processClaudeDesktopEnabled: Bool
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -273,7 +275,9 @@ struct AppSettings: Equatable {
         expandOnApprovalRequest: true,
         expandOnQuestionResponse: true,
         preferredTerminal: nil,
-        checkForUpdatesOnStartup: true
+        checkForUpdatesOnStartup: true,
+        processVSCodeEnabled: false,
+        processClaudeDesktopEnabled: false
     )
 }
 
@@ -348,6 +352,8 @@ final class SettingsStore: ObservableObject {
         static let expandOnQuestionResponse = "expandOnQuestionResponse"
         static let preferredTerminal = "preferredTerminal"
         static let checkForUpdatesOnStartup = "checkForUpdatesOnStartup"
+        static let processVSCodeEnabled = "processVSCodeEnabled"
+        static let processClaudeDesktopEnabled = "processClaudeDesktopEnabled"
     }
 
     private let userDefaults: UserDefaults
@@ -419,6 +425,8 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.expandOnQuestionResponse, forKey: DefaultsKey.expandOnQuestionResponse)
         userDefaults.set(settings.preferredTerminal, forKey: DefaultsKey.preferredTerminal)
         userDefaults.set(settings.checkForUpdatesOnStartup, forKey: DefaultsKey.checkForUpdatesOnStartup)
+        userDefaults.set(settings.processVSCodeEnabled, forKey: DefaultsKey.processVSCodeEnabled)
+        userDefaults.set(settings.processClaudeDesktopEnabled, forKey: DefaultsKey.processClaudeDesktopEnabled)
         writeBridgeConfig(settings)
     }
 
@@ -692,6 +700,16 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.checkForUpdatesOnStartup,
                 from: userDefaults,
                 default: defaults.checkForUpdatesOnStartup
+            ),
+            processVSCodeEnabled: bool(
+                key: DefaultsKey.processVSCodeEnabled,
+                from: userDefaults,
+                default: defaults.processVSCodeEnabled
+            ),
+            processClaudeDesktopEnabled: bool(
+                key: DefaultsKey.processClaudeDesktopEnabled,
+                from: userDefaults,
+                default: defaults.processClaudeDesktopEnabled
             )
         )
     }

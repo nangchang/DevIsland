@@ -143,6 +143,9 @@ struct SettingsWindowView: View {
             ExperimentalPTYSettingsPane()
                 .environmentObject(store)
                 .tabItem { Label(l10n.tabExperimental, systemImage: "testtube.2") }
+
+            IntegrationsSettingsPane(store: store)
+                .tabItem { Label(l10n.tabIntegrations, systemImage: "puzzlepiece.extension") }
         }
         .padding(16)
         .frame(minWidth: 700, minHeight: 500)
@@ -1078,6 +1081,31 @@ private struct ApprovalRulesWindowView: View {
             sessionStore.sessionAutoApproveTypes[sessionId] = []
         }
         sessionStore.sessionAutoApproveTypes[sessionId]?.insert(tool)
+    }
+}
+
+private struct IntegrationsSettingsPane: View {
+    @ObservedObject var store: SettingsStore
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        Form {
+            Section(l10n.secAppIntegrations) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(l10n.lblProcessVSCode, isOn: store.binding(\.processVSCodeEnabled))
+                    Text(l10n.descProcessVSCode)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(l10n.lblProcessClaudeDesktop, isOn: store.binding(\.processClaudeDesktopEnabled))
+                    Text(l10n.descProcessClaudeDesktop)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
