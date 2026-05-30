@@ -276,6 +276,13 @@ struct NotchView: View {
                                 .transition(.opacity)
                         }
                     }
+                    .overlay(alignment: .bottomTrailing) {
+                        if isExpanded {
+                            CornerResizeHandle(liveHeight: $liveHeight, liveWidth: $liveWidth)
+                                .frame(width: 20, height: 20)
+                                .transition(.opacity)
+                        }
+                    }
                 }
             }
             .frame(
@@ -896,6 +903,99 @@ final class ResizeHandleNSView: NSView {
             }
         }
         liveValue.wrappedValue = nil
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+// MARK: - Corner Resize Handle
+
+private struct CornerResizeHandle: NSViewRepresentable {
+    @Binding var liveHeight: Double?
+    @Binding var liveWidth: Double?
+
+    func makeNSView(context: Context) -> CornerResizeHandleNSView {
+        CornerResizeHandleNSView(liveHeight: $liveHeight, liveWidth: $liveWidth)
+    }
+    func updateNSView(_ nsView: CornerResizeHandleNSView, context: Context) {
+        nsView.liveHeight = $liveHeight
+        nsView.liveWidth = $liveWidth
+    }
+}
+
+final class CornerResizeHandleNSView: NSView {
+    var liveHeight: Binding<Double?>
+    var liveWidth: Binding<Double?>
+
+    private var isTracking = false
+    private var dragStartHeight: Double = 0
+    private var dragStartWidth: Double = 0
+    private var startScreenX: CGFloat = 0
+    private var startScreenY: CGFloat = 0
+    private var trackingArea: NSTrackingArea?
+
+    private let minHeight: Double = 240, maxHeight: Double = 720
+    private let minWidth: Double = 610, maxWidth: Double = 1200
+
+    init(liveHeight: Binding<Double?>, liveWidth: Binding<Double?>) {
+        self.liveHeight = liveHeight
+        self.liveWidth = liveWidth
+        super.init(frame: .zero)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        // 모서리 그립: 우하단 방향 대각선 3줄
+        NSColor.white.withAlphaComponent(0.3).setStroke()
+        let path = NSBezierPath()
+        path.lineWidth = 1.5
+        for i in 0..<3 {
+            let offset = CGFloat(i * 5 + 4)
+            path.move(to: NSPoint(x: bounds.maxX - offset, y: bounds.minY + 2))
+            path.line(to: NSPoint(x: bounds.maxX - 2, y: bounds.minY + offset))
+        }
+        path.stroke()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingArea.map { removeTrackingArea($0) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { NSCursor.crosshair.push() }
+    override func mouseExited(with event: NSEvent) { NSCursor.pop() }
+
+    override func mouseDown(with event: NSEvent) {
+        isTracking = true
+        let settings = SettingsStore.shared.settings
+        dragStartHeight = settings.expandedNotchHeight
+        dragStartWidth = settings.expandedNotchWidth
+        startScreenX = NSEvent.mouseLocation.x
+        startScreenY = NSEvent.mouseLocation.y
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard isTracking else { return }
+        let dx = NSEvent.mouseLocation.x - startScreenX
+        let dy = NSEvent.mouseLocation.y - startScreenY
+        // 아래로 드래그 = y 감소 → 높이 증가 / 오른쪽 드래그 = x 증가 → 너비 증가 (중앙 고정 ×2)
+        let newHeight = min(max(dragStartHeight - dy, minHeight), maxHeight)
+        let newWidth  = min(max(dragStartWidth + dx * 2, minWidth), maxWidth)
+        liveHeight.wrappedValue = newHeight
+        liveWidth.wrappedValue  = newWidth
+        NotchWindowController.current?.updateLiveExpandedFrame(size: NSSize(width: newWidth, height: newHeight))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isTracking else { return }
+        isTracking = false
+        if let h = liveHeight.wrappedValue { SettingsStore.shared.settings.expandedNotchHeight = h }
+        if let w = liveWidth.wrappedValue  { SettingsStore.shared.settings.expandedNotchWidth  = w }
+        liveHeight.wrappedValue = nil
+        liveWidth.wrappedValue  = nil
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
