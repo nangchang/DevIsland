@@ -1,0 +1,149 @@
+name: Nightly Build
+
+on:
+  schedule:
+    - cron: '0 18 * * *' # 3:00 AM KST (18:00 UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-build:
+    name: Build & Release Nightly
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for new commits
+        id: check_commits
+        run: |
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            # Check if there are any commits in the last 24 hours
+            if [ -z "$(git log --since="24 hours ago" --oneline)" ]; then
+              echo "No commits in the last 24 hours. Skipping nightly build."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "Manual trigger — proceeding with build."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute Nightly Version
+        if: steps.check_commits.outputs.skip != 'true'
+        id: version
+        run: |
+          # Extract current version from project.yml (e.g. 0.9.4-dev)
+          CURRENT_VERSION=$(grep "CFBundleShortVersionString:" project.yml | sed -E 's/.*: "(.*)"/\1/')
+          # Remove any suffixes like -dev to get the base version (e.g. 0.9.4)
+          BASE_VERSION=$(echo "$CURRENT_VERSION" | cut -d'-' -f1)
+          
+          # Current date in YYYYMMDD
+          DATE_STR=$(date +'%Y%m%d')
+          NIGHTLY_VERSION="${BASE_VERSION}-nightly.${DATE_STR}"
+          NIGHTLY_TAG="v${NIGHTLY_VERSION}"
+          
+          echo "CURRENT_VERSION=$CURRENT_VERSION"
+          echo "BASE_VERSION=$BASE_VERSION"
+          echo "NIGHTLY_VERSION=$NIGHTLY_VERSION"
+          echo "NIGHTLY_TAG=$NIGHTLY_TAG"
+          
+          # Set outputs and environment variables
+          echo "nightly_version=${NIGHTLY_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "nightly_tag=${NIGHTLY_TAG}" >> "$GITHUB_OUTPUT"
+          echo "base_version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+          
+          # Update project.yml in-place for the build on the runner
+          sed -i '' "s/CFBundleShortVersionString: .*/CFBundleShortVersionString: \"$NIGHTLY_VERSION\"/" project.yml
+          sed -i '' "s/CFBundleVersion: .*/CFBundleVersion: \"${{ github.run_number }}\"/" project.yml
+          
+          echo "Updated project.yml version to $NIGHTLY_VERSION (build ${{ github.run_number }})"
+          git diff project.yml
+
+      - name: Cache Homebrew downloads
+        if: steps.check_commits.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew/downloads
+          key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/nightly.yml') }}
+          restore-keys: ${{ runner.os }}-brew-
+
+      - name: Cache Homebrew Tools
+        if: steps.check_commits.outputs.skip != 'true'
+        id: cache-tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew/bin/xcodegen
+            /opt/homebrew/bin/create-dmg
+            /opt/homebrew/Cellar/xcodegen
+            /opt/homebrew/Cellar/create-dmg
+          key: ${{ runner.os }}-brew-tools-${{ hashFiles('.github/workflows/nightly.yml') }}
+
+      - name: Install dependencies
+        if: steps.check_commits.outputs.skip != 'true' && steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          brew install xcodegen create-dmg
+
+      - name: Cache DerivedData
+        if: steps.check_commits.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: /tmp/DevIsland-Nightly-DerivedData
+          key: ${{ runner.os }}-deriveddata-nightly-${{ hashFiles('project.yml', 'DevIsland/**/*.swift') }}
+          restore-keys: ${{ runner.os }}-deriveddata-nightly-
+
+      - name: Generate Xcode project
+        if: steps.check_commits.outputs.skip != 'true'
+        run: xcodegen generate
+
+      - name: Run Tests
+        if: steps.check_commits.outputs.skip != 'true'
+        run: |
+          HOST_ARCH="$(uname -m)"
+          xcodebuild test \
+            -project DevIsland.xcodeproj \
+            -scheme DevIsland \
+            -destination "platform=macOS,arch=${HOST_ARCH}" \
+            -derivedDataPath /tmp/DevIsland-Nightly-DerivedData \
+            -quiet 2>&1 | awk '
+              /DVTErrorPresenter: Unable to load simulator devices\./ { skip = 1; next }
+              skip && /^--$/ { skipDashCount += 1; if (skipDashCount >= 2) { skip = 0; skipDashCount = 0 }; next }
+              skip { next }
+              /iOSSimulator: .*CoreSimulator is out of date/ { next }
+              /CoreSimulator is out of date\./ { next }
+              { print }
+            '
+
+      - name: Build and Create DMG
+        if: steps.check_commits.outputs.skip != 'true'
+        run: ./scripts/create-dmg.sh
+
+      - name: Create Nightly Release
+        if: steps.check_commits.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DevIsland-*.dmg
+          tag_name: ${{ steps.version.outputs.nightly_tag }}
+          name: "Nightly Build - ${{ steps.version.outputs.nightly_version }}"
+          body: |
+            🏝️ **DevIsland Nightly Build**
+            
+            This is an automated nightly build generated from the `main` branch.
+            
+            - **Base version:** ${{ steps.version.outputs.base_version }}-dev
+            - **Nightly version:** ${{ steps.version.outputs.nightly_version }}
+            - **Build run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            > [!WARNING]
+            > Nightly builds are pre-release development versions. They may contain experimental features, bugs, or build instabilities.
+          draft: false
+          prerelease: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
