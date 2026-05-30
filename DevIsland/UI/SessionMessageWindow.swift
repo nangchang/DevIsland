@@ -123,6 +123,13 @@ struct SessionMessageView: View {
 
     private var tool: ToolInfo { toolInfo(for: activeToolName) }
 
+    /// 커스텀 라벨 → 터미널 타이틀 → 세션 ID 접두사 순으로 결정되는 표시 이름
+    private var displayTitle: String {
+        appState.sessionLabels[sessionId]
+            ?? session?.terminalTitle
+            ?? String(sessionId.prefix(8))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             headerBar
@@ -143,11 +150,9 @@ struct SessionMessageView: View {
             }
         }
         .background(Color(nsColor: NSColor(white: 0.07, alpha: 1.0)))
-        .onChange(of: appState.sessionLabels[sessionId]) { _, newLabel in
-            let displayTitle = newLabel
-                ?? sessionStore.activeSessions.first(where: { $0.id == sessionId })?.terminalTitle
-                ?? String(sessionId.prefix(8))
-            SessionMessageWindowManager.shared.updateTitle(for: sessionId, title: displayTitle)
+        // displayTitle을 관찰하여 커스텀 라벨과 터미널 타이틀 변경 모두에 반응
+        .onChange(of: displayTitle) { _, newTitle in
+            SessionMessageWindowManager.shared.updateTitle(for: sessionId, title: newTitle)
         }
     }
 
@@ -166,7 +171,7 @@ struct SessionMessageView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(appState.sessionLabels[sessionId] ?? (session?.terminalTitle ?? String(sessionId.prefix(8))))
+                    Text(displayTitle)
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.white)
                         .lineLimit(1)
@@ -253,8 +258,7 @@ struct SessionMessageView: View {
                         .padding()
                 }
             }
-            .background(Color.white.opacity(0.03))
-            .cornerRadius(8)
+            .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .frame(maxHeight: .infinity)
