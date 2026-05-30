@@ -237,7 +237,7 @@ struct SessionMessageView: View {
                     Image(systemName: "xmark.circle")
                         .font(.system(size: 24))
                         .foregroundColor(.white.opacity(0.2))
-                    Text("세션이 종료되었습니다")
+                    Text(l10n.sessionEnded)
                         .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.4))
                 }
@@ -353,7 +353,7 @@ struct SessionMessageView: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                 } else {
-                    Text("메시지 대기 중…")
+                    Text(l10n.msgWaiting)
                         .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.3))
                         .frame(maxWidth: .infinity)
@@ -386,7 +386,7 @@ struct SessionMessageView: View {
                     Image(systemName: "hourglass")
                         .font(.system(size: 11))
                         .foregroundColor(.orange.opacity(0.7))
-                    Text("다른 세션 승인 처리 중…")
+                    Text(l10n.approvingOtherSession)
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.4))
                     Spacer()

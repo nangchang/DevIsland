@@ -361,6 +361,14 @@ extension L10n {
     var secGlobalRules:      String { s("Global auto-approval tools",        "전역 자동 승인 도구") }
     var descGlobalRules:     String { s("These existing DevIsland rules are checked for every session before showing an approval prompt.",
                                         "이 DevIsland 규칙은 승인 프롬프트 표시 전 모든 세션에서 확인됩니다.") }
+    var alertAddGlobalToolTitle: String { s("Add Global Auto-Approval Tool",   "글로벌 자동 승인 툴 추가") }
+    var alertAddGlobalToolMsg:   String { s("Enter the tool name (e.g. read_file) to auto-approve in all sessions.",
+                                            "모든 세션에서 자동 승인할 툴 이름(예: read_file)을 입력하세요.") }
+    var alertAddSessionToolTitle: String { s("Add Session Auto-Approval Tool", "세션 자동 승인 툴 추가") }
+    func alertAddSessionToolMsg(_ id: String) -> String {
+        s("Enter the tool name to auto-approve in session \(id).",
+          "현재 세션(\(id))에서 자동 승인할 툴 이름을 입력하세요.")
+    }
     var btnAddManually:      String { s("Add manually…",                     "직접 추가…") }
     var btnAddFromList:      String { s("Add from list",                     "목록에서 추가") }
     var lblNoGlobalTools:    String { s("No global auto-approval tools are configured.", "구성된 전역 자동 승인 도구가 없습니다.") }
@@ -433,6 +441,12 @@ extension L10n {
     var fallbackPass: String { s("Pass (let CLI decide)",     "통과 (CLI에 위임)") }
     var fallbackDeny: String { s("Deny",                      "거부") }
 
+    // Pop-out window
+    var popOutWindow:          String { s("Pop out message window",       "메시지 창 분리") }
+    var sessionEnded:          String { s("Session ended",                "세션이 종료되었습니다") }
+    var msgWaiting:            String { s("Waiting for message…",         "메시지 대기 중…") }
+    var approvingOtherSession: String { s("Approving another session…",   "다른 세션 승인 처리 중…") }
+
     // Notch UI
     var notchApprovalRequired: String { s("Approval Required", "승인 필요") }
     var notchNotification:     String { s("Notification",      "알림") }
@@ -440,6 +454,8 @@ extension L10n {
     var notchActiveAction:     String { s("ACTIVE ACTION",     "활성 작업") }
     var notchAgentSessions:    String { s("AGENT SESSIONS",    "에이전트 세션") }
     var notchListening:        String { s("Listening for AI Agents…", "AI 에이전트 대기 중…") }
+    var terminalWaiting:       String { s("Waiting for terminal confirmation…", "터미널 확인 대기 중...") }
+    func terminalCheckMsg(_ tool: String) -> String { s("Check terminal window (\(tool))", "터미널 창을 확인해 주세요 (\(tool))") }
     var notchSessions:         String { s("Sessions",          "세션") }
     var notchFocus:            String { s("Focus",             "포커스") }
     var notchDenyRequest:      String { s("Deny Request",      "요청 거부") }
