@@ -29,6 +29,7 @@ func toolInfo(for name: String) -> ToolInfo {
 struct NotchShape: Shape {
     var cornerRadius: CGFloat
     var topFilletRadius: CGFloat
+    var shapeStyle: NotchShapeStyle = .classic
 
     var animatableData: CGFloat {
         get { cornerRadius }
@@ -36,6 +37,12 @@ struct NotchShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
+        // 다이나믹 아일랜드: 모든 코너가 동일하게 라운드된 직사각형
+        if shapeStyle == .dynamicIsland {
+            let r = min(cornerRadius, rect.height / 2, rect.width / 2)
+            return Path(roundedRect: rect, cornerSize: CGSize(width: r, height: r))
+        }
+
         var path = Path()
 
         let w = rect.width
