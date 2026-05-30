@@ -43,9 +43,9 @@ jobs:
           # Remove any suffixes like -dev to get the base version (e.g. 0.9.4)
           BASE_VERSION=$(echo "$CURRENT_VERSION" | cut -d'-' -f1)
           
-          # Current date in YYYYMMDD
+          # Current date in YYYYMMDD and unique run number
           DATE_STR=$(date +'%Y%m%d')
-          NIGHTLY_VERSION="${BASE_VERSION}-nightly.${DATE_STR}"
+          NIGHTLY_VERSION="${BASE_VERSION}-nightly.${DATE_STR}.${{ github.run_number }}"
           NIGHTLY_TAG="v${NIGHTLY_VERSION}"
           
           echo "CURRENT_VERSION=$CURRENT_VERSION"
