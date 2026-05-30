@@ -871,7 +871,9 @@ final class ResizeHandleNSView: NSView {
     override func mouseEntered(with event: NSEvent) {
         (axis == .vertical ? NSCursor.resizeUpDown : NSCursor.resizeLeftRight).set()
     }
-    override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
+    override func mouseExited(with event: NSEvent) {
+        if !isTracking { NSCursor.arrow.set() }
+    }
 
     override func mouseDown(with event: NSEvent) {
         isTracking = true
@@ -986,7 +988,9 @@ final class CornerResizeHandleNSView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) { NSCursor.resizeNorthWestSouthEast.set() }
-    override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
+    override func mouseExited(with event: NSEvent) {
+        if !isTracking { NSCursor.arrow.set() }
+    }
 
     override func mouseDown(with event: NSEvent) {
         isTracking = true
