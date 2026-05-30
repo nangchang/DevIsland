@@ -32,22 +32,34 @@ final class SessionMessageHistoryViewModel: ObservableObject {
     func goToLatest()   { currentIndex = max(0, entries.count - 1) }
 
     func load() {
-        let loaded = (try? AppState.shared.sessionMessageHistory(sessionId: sessionId, limit: 100)) ?? []
-        entries = loaded.reversed()  // DESC → ASC (오래된 것부터)
-        currentIndex = max(0, entries.count - 1)
+        // DB I/O를 백그라운드에서 처리하여 메인 스레드 블로킹 방지
+        let sid = sessionId
+        Task {
+            let loaded = await Task.detached(priority: .userInitiated) {
+                (try? AppState.shared.sessionMessageHistory(sessionId: sid, limit: 100)) ?? []
+            }.value
+            self.entries = loaded.reversed()  // DESC → ASC (오래된 것부터)
+            self.currentIndex = max(0, self.entries.count - 1)
+        }
     }
 
     /// 새 이벤트 도착 시 최신 항목 유지하며 갱신
     func refresh() {
         let wasAtLatest = isAtLatest
         let prevId = currentEntry?.id
-        load()
-        if wasAtLatest || prevId == nil {
-            goToLatest()
-        } else if let prevId, let idx = entries.firstIndex(where: { $0.id == prevId }) {
-            currentIndex = idx
-        } else {
-            goToLatest()
+        let sid = sessionId
+        Task {
+            let loaded = await Task.detached(priority: .userInitiated) {
+                (try? AppState.shared.sessionMessageHistory(sessionId: sid, limit: 100)) ?? []
+            }.value
+            self.entries = loaded.reversed()
+            if wasAtLatest || prevId == nil {
+                self.goToLatest()
+            } else if let prevId, let idx = self.entries.firstIndex(where: { $0.id == prevId }) {
+                self.currentIndex = idx
+            } else {
+                self.goToLatest()
+            }
         }
     }
 
@@ -154,7 +166,12 @@ final class SessionMessageWindowController: NSWindowController, NSWindowDelegate
     }
 
     func windowWillClose(_ notification: Notification) {
-        SessionMessageWindowManager.shared.windowClosed(for: sessionId)
+        // DispatchQueue.main.async: 현재 AppKit 런루프 사이클 완료 후 컨트롤러 참조 제거
+        // → windowWillClose 콜백 실행 도중 self 해제로 인한 크래시 방지
+        let sid = sessionId
+        DispatchQueue.main.async {
+            SessionMessageWindowManager.shared.windowClosed(for: sid)
+        }
     }
 }
 
