@@ -12,13 +12,12 @@ final class SessionMessageWindowManager {
 
     func openWindow(for sessionId: String) {
         if let existing = controllers[sessionId] {
-            existing.window?.orderFrontRegardless()
+            existing.show()
             return
         }
         let controller = SessionMessageWindowController(sessionId: sessionId)
         controllers[sessionId] = controller
-        // orderFrontRegardless: 앱 활성화 상태와 무관하게 창을 최상단에 표시
-        controller.window?.orderFrontRegardless()
+        controller.show()
     }
 
     func closeWindow(for sessionId: String) {
@@ -46,40 +45,39 @@ final class SessionMessageWindowManager {
 
 // MARK: - Window Controller
 
+@MainActor
 final class SessionMessageWindowController: NSWindowController, NSWindowDelegate {
     let sessionId: String
 
     init(sessionId: String) {
         self.sessionId = sessionId
 
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 380),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        panel.level = .floating
-        panel.backgroundColor = NSColor(white: 0.07, alpha: 1.0)
-        panel.titlebarAppearsTransparent = true
-        panel.titleVisibility = .hidden
-        panel.isMovableByWindowBackground = true
-        panel.collectionBehavior = [.canJoinAllSpaces]
-        panel.minSize = NSSize(width: 360, height: 260)
-
-        let hosting = NSHostingView(rootView: SessionMessageView(sessionId: sessionId))
-        panel.contentView = hosting
-
-        super.init(window: panel)
-        panel.delegate = self
-        panel.center()
-
         let session = AppState.shared.sessionStore.activeSessions.first { $0.id == sessionId }
-        panel.title = AppState.shared.sessionLabels[sessionId]
+        let title = AppState.shared.sessionLabels[sessionId]
             ?? session?.terminalTitle
             ?? String(sessionId.prefix(8))
+
+        // HostedWindowController 패턴과 동일: NSHostingController → NSWindow(contentViewController:)
+        let hostingController = NSHostingController(rootView: SessionMessageView(sessionId: sessionId))
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = title
+        window.setContentSize(NSSize(width: 460, height: 380))
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 360, height: 260)
+        window.center()
+
+        super.init(window: window)
+        window.delegate = self
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    func show() {
+        if window?.isVisible == false { window?.center() }
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
 
     func windowWillClose(_ notification: Notification) {
         Task { @MainActor in
