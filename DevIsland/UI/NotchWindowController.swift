@@ -405,6 +405,18 @@ class NotchWindowController: NSWindowController {
         updateFullScreenVisibility()
     }
 
+    /// 드래그 리사이즈 중 NSPanel 프레임을 직접 업데이트한다 (SettingsStore 우회).
+    func updateLiveExpandedFrame(size: NSSize) {
+        guard let screen = expandedPanel.screen ?? window?.screen ?? NSScreen.main else { return }
+        let settings = SettingsStore.shared.settings
+        let outset = NotchLayout.shadowOutset(expanded: true, settings: settings)
+        let winSize = NSSize(width: size.width, height: size.height + outset)
+        let centerX = pinnedCenterX ?? Self.notchCenterX(on: screen)
+        let expX = centerX - winSize.width / 2 + notchHorizontalOffset
+        let expY = screen.frame.maxY - winSize.height
+        expandedPanel.setFrame(NSRect(origin: NSPoint(x: expX, y: expY), size: winSize), display: false, animate: false)
+    }
+
     func hideForModal() {
         isShowingModal = true
         pendingSettle?.cancel()

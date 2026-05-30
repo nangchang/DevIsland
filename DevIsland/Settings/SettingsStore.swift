@@ -360,7 +360,7 @@ final class SettingsStore: ObservableObject {
     private let bridgeConfigURL: URL
 
     @Published var settings: AppSettings {
-        didSet { save(settings) }
+        didSet { save(settings, previous: oldValue) }
     }
 
     init(
@@ -377,7 +377,7 @@ final class SettingsStore: ObservableObject {
         settings = .defaults
     }
 
-    private func save(_ settings: AppSettings) {
+    private func save(_ settings: AppSettings, previous: AppSettings? = nil) {
         userDefaults.set(settings.claudeSessionApprovalMode.rawValue, forKey: DefaultsKey.claudeSessionApprovalMode)
         userDefaults.set(settings.claudePersistentApprovalDestination.rawValue, forKey: DefaultsKey.claudePersistentApprovalDestination)
         userDefaults.set(settings.bridgeTransportKind.rawValue, forKey: DefaultsKey.bridgeTransportKind)
@@ -427,7 +427,11 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.checkForUpdatesOnStartup, forKey: DefaultsKey.checkForUpdatesOnStartup)
         userDefaults.set(settings.processVSCodeEnabled, forKey: DefaultsKey.processVSCodeEnabled)
         userDefaults.set(settings.processClaudeDesktopEnabled, forKey: DefaultsKey.processClaudeDesktopEnabled)
-        writeBridgeConfig(settings)
+        // 브리지 관련 필드가 변경된 경우에만 파일 쓰기 (드래그 리사이즈 등 빈번한 UI 변경 시 파일 I/O 방지)
+        let bridgeChanged = previous.map { BridgeRuntimeConfig(settings: settings) != BridgeRuntimeConfig(settings: $0) } ?? true
+        if bridgeChanged {
+            writeBridgeConfig(settings)
+        }
     }
 
     private func writeBridgeConfig(_ settings: AppSettings) {
