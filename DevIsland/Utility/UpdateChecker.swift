@@ -267,7 +267,13 @@ final class UpdateChecker: ObservableObject {
     // MARK: Helpers
 
     private func isNewer(_ latest: String, than current: String) -> Bool {
-        let parse: (String) -> [Int] = { $0.split(separator: ".").compactMap { Int($0) } }
+        let clean: (String) -> String = {
+            if let index = $0.firstIndex(of: "-") {
+                return String($0[..<index])
+            }
+            return $0
+        }
+        let parse: (String) -> [Int] = { clean($0).split(separator: ".").compactMap { Int($0) } }
         let l = parse(latest), c = parse(current)
         for i in 0..<max(l.count, c.count) {
             let lv = i < l.count ? l[i] : 0
