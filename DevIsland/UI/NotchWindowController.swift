@@ -235,8 +235,15 @@ class NotchWindowController: NSWindowController {
         NotificationCenter.default.publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.resetPinnedPosition()
-                self?.updateWindowFrame(animate: false)
+                guard let self else { return }
+                self.resetPinnedPosition()
+                self.updateWindowFrame(animate: false)
+                // makeKey()를 받은 NSPanel은 canJoinAllSpaces에도 불구하고
+                // 해당 Space에 고정될 수 있으므로, 스페이스 전환 시 재표시한다.
+                guard !self.isHiddenForFullScreen else { return }
+                if AppState.shared.isNotchExpanded {
+                    self.expandedPanel.orderFrontRegardless()
+                }
             }
             .store(in: &cancellables)
 
