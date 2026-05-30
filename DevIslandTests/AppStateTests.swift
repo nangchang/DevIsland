@@ -605,6 +605,61 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(session?.isAutoEditActive ?? false, "Auto-Edit must not activate via pass-through in normal mode")
     }
 
+    func testGeminiNormalModeEnterPlanModePassesThroughAndClearsAutoEdit() {
+        let expectation = XCTestExpectation(description: "enter_plan_mode approved in normal mode")
+        let sessionId = "gemini-normal-enter-plan"
+        
+        // Force auto-edit active to ensure it gets cleared
+        appState.sessionStore.updateActiveSession(
+            sessionId: sessionId,
+            terminalTitle: "Terminal",
+            agentKind: .gemini,
+            terminalApp: "",
+            terminalTTY: "",
+            terminalWindowId: "",
+            terminalTabIndex: "",
+            terminalTmuxPane: "",
+            terminalTmuxSocket: "",
+            terminalTmuxClient: "",
+            toolName: "some_tool",
+            eventName: "BeforeTool",
+            message: "",
+            isPending: false,
+            preserveMessage: false,
+            isLifecycleTracked: true,
+            isSubAgentSession: false,
+            parentSessionId: nil,
+            workspaceRoot: nil
+        )
+        if let idx = appState.sessionStore.activeSessions.firstIndex(where: { $0.id == sessionId }) {
+            appState.sessionStore.activeSessions[idx].isAutoEditActive = true
+        }
+
+        let message = """
+        {
+            "hook_event_name": "BeforeTool",
+            "session_id": "\(sessionId)",
+            "tool_name": "enter_plan_mode"
+        }
+        """
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+        
+        let stateExp = XCTestExpectation(description: "Wait for auto-edit state to clear")
+        waitUntil(timeout: 1.0, expectation: stateExp) {
+            let session = self.appState.sessionStore.activeSessions.first { $0.id == sessionId }
+            return session?.isAutoEditActive == false
+        }
+        wait(for: [stateExp], timeout: 2.0)
+        
+        let session = appState.sessionStore.activeSessions.first { $0.id == sessionId }
+        XCTAssertFalse(session?.isAutoEditActive ?? true, "Auto-Edit must be cleared when enter_plan_mode passes through")
+    }
+
     // MARK: - Gemini Emulation Mode (emulateGeminiInteractiveMode = true)
 
     func testGeminiEmulationModeRiskyToolRequiresApproval() {
@@ -875,6 +930,72 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.hasResponseHandler)
         XCTAssertFalse(appState.isNotchExpanded)
         XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-pretool" }))
+    }
+
+    func testVSCodeHookAutoApprovesWhenSettingIsDisabled() {
+        mockDefaults.set(false, forKey: "processVSCodeEnabled")
+        let expectation = XCTestExpectation(description: "VS Code hook auto-approved")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "vscode-session",
+            "terminal_app": "VSCode",
+            "tool_name": "write_to_file"
+        }
+        """
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "vscode-session" }))
+    }
+
+    func testVSCodeHookEntersPendingQueueWhenSettingIsEnabled() {
+        mockDefaults.set(true, forKey: "processVSCodeEnabled")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "vscode-enabled-session",
+            "cli_source": "codex",
+            "terminal_app": "VSCode",
+            "tool_name": "write_to_file"
+        }
+        """
+        appState.handleMessage(message) { _ in }
+        
+        let waitExp = XCTestExpectation(description: "Wait for pending queue")
+        waitUntil(timeout: 1.0, expectation: waitExp) {
+            self.appState.sessionStore.pendingCount == 1
+        }
+        wait(for: [waitExp], timeout: 2.0)
+        
+        XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertEqual(appState.currentSessionId, "vscode-enabled-session")
+        XCTAssertTrue(appState.hasResponseHandler)
+    }
+
+    func testClaudeDesktopHookAutoApprovesWhenSettingIsDisabled() {
+        mockDefaults.set(false, forKey: "processClaudeDesktopEnabled")
+        let expectation = XCTestExpectation(description: "Claude Desktop hook auto-approved")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "claude-desktop-session",
+            "terminal_app": "ClaudeDesktop",
+            "tool_name": "write_to_file"
+        }
+        """
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "approved")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "claude-desktop-session" }))
     }
 
     func testClaudeToolLifecycleEventsAreStatusNotifications() {
@@ -1490,6 +1611,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(try controller.openSessions(since: Date().addingTimeInterval(-60)).isEmpty)
     }
 
+    @MainActor
     func testFocusTerminalMarksSessionRead() {
         appState.sessionStore.updateActiveSession(
             sessionId: "focus-read",
@@ -1514,6 +1636,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.sessionStore.activeSessions.first { $0.id == "focus-read" }?.isUnread ?? true)
     }
 
+    @MainActor
     func testFocusTerminalClearsMissedApproval() {
         appState.sessionStore.updateActiveSession(
             sessionId: "focus-missed",
