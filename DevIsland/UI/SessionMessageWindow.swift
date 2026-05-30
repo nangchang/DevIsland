@@ -13,12 +13,12 @@ final class SessionMessageWindowManager {
     func openWindow(for sessionId: String) {
         if let existing = controllers[sessionId] {
             existing.window?.orderFrontRegardless()
-            existing.window?.makeKey()
             return
         }
         let controller = SessionMessageWindowController(sessionId: sessionId)
         controllers[sessionId] = controller
-        controller.window?.makeKeyAndOrderFront(nil)
+        // orderFrontRegardless: 앱 활성화 상태와 무관하게 창을 최상단에 표시
+        controller.window?.orderFrontRegardless()
     }
 
     func closeWindow(for sessionId: String) {
