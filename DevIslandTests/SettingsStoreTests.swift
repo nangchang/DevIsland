@@ -65,6 +65,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings.notchRightCharacterKind, .gemini)
         XCTAssertEqual(store.settings.notchRightRandomCharacterKinds, Set(BuddyKind.defaultRandomCases))
         XCTAssertTrue(store.settings.expandOnNotification)
+        XCTAssertTrue(store.settings.expandOnTaskCompletion)
+        XCTAssertTrue(store.settings.expandOnIdlePrompt)
+        XCTAssertTrue(store.settings.expandOnNotificationMessage)
         XCTAssertTrue(store.settings.expandOnInteractiveTool)
         XCTAssertTrue(store.settings.expandOnApprovalRequest)
         XCTAssertTrue(store.settings.expandOnQuestionResponse)
@@ -107,6 +110,9 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.notchRightCharacterKind = .claudeCode
         store.settings.notchRightRandomCharacterKinds = [.gemini]
         store.settings.expandOnNotification = false
+        store.settings.expandOnTaskCompletion = false
+        store.settings.expandOnIdlePrompt = false
+        store.settings.expandOnNotificationMessage = false
         store.settings.expandOnInteractiveTool = false
         store.settings.expandOnApprovalRequest = false
         store.settings.expandOnQuestionResponse = false
@@ -148,10 +154,38 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.settings.notchRightCharacterKind, .claudeCode)
         XCTAssertEqual(reloaded.settings.notchRightRandomCharacterKinds, [.gemini])
         XCTAssertFalse(reloaded.settings.expandOnNotification)
+        XCTAssertFalse(reloaded.settings.expandOnTaskCompletion)
+        XCTAssertFalse(reloaded.settings.expandOnIdlePrompt)
+        XCTAssertFalse(reloaded.settings.expandOnNotificationMessage)
         XCTAssertFalse(reloaded.settings.expandOnInteractiveTool)
         XCTAssertFalse(reloaded.settings.expandOnApprovalRequest)
         XCTAssertFalse(reloaded.settings.expandOnQuestionResponse)
         XCTAssertFalse(reloaded.settings.checkForUpdatesOnStartup)
+    }
+
+    func testNotificationSubSettingsMigrateFromLegacyExpandOnNotification() {
+        // 기존 사용자: expandOnNotification=false만 존재, 하위 키는 없음
+        defaults.set(false, forKey: SettingsStore.DefaultsKey.expandOnNotification)
+        // 하위 키는 저장하지 않음 — 업그레이드 직후를 시뮬레이션
+
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+
+        XCTAssertFalse(store.settings.expandOnNotification, "parent must inherit legacy false")
+        XCTAssertFalse(store.settings.expandOnTaskCompletion, "sub-setting must inherit legacy false when absent")
+        XCTAssertFalse(store.settings.expandOnIdlePrompt, "sub-setting must inherit legacy false when absent")
+        XCTAssertFalse(store.settings.expandOnNotificationMessage, "sub-setting must inherit legacy false when absent")
+    }
+
+    func testNotificationSubSettingsDefaultToTrueWhenNoLegacyKey() {
+        // 신규 설치: expandOnNotification 키 자체가 없음
+        // (defaults.removePersistentDomain은 setUp에서 이미 수행됨)
+
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+
+        XCTAssertTrue(store.settings.expandOnNotification)
+        XCTAssertTrue(store.settings.expandOnTaskCompletion)
+        XCTAssertTrue(store.settings.expandOnIdlePrompt)
+        XCTAssertTrue(store.settings.expandOnNotificationMessage)
     }
 
     func testInvalidPersistedValuesFallBackToDefaults() {

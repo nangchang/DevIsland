@@ -2093,4 +2093,126 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(entry?.decisionAction, .allow, "Approved decision must be linked to hook event as 'allow'")
         XCTAssertNotNil(entry?.decidedAt, "Decision timestamp must be recorded")
     }
+
+    // MARK: - Notification expand per-case settings
+
+    @MainActor
+    func testTaskCompletionExpandsWhenEnabled() {
+        SettingsStore.shared.settings.notchAutoExpandEnabled = true
+        SettingsStore.shared.settings.expandOnTaskCompletion = true
+        defer { SettingsStore.shared.settings.expandOnTaskCompletion = true }
+
+        let expectation = XCTestExpectation(description: "stop event processed")
+        let message = """
+        {
+            "hook_event_name": "Stop",
+            "session_id": "stop-expand-session",
+            "tool_name": ""
+        }
+        """
+        appState.handleMessage(message) { _ in expectation.fulfill() }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        wait(for: [expectation], timeout: 1.0)
+
+        XCTAssertTrue(appState.isNotchExpanded, "notch should expand on task completion when expandOnTaskCompletion is enabled")
+    }
+
+    @MainActor
+    func testTaskCompletionDoesNotExpandWhenDisabled() {
+        SettingsStore.shared.settings.notchAutoExpandEnabled = true
+        SettingsStore.shared.settings.expandOnTaskCompletion = false
+        defer { SettingsStore.shared.settings.expandOnTaskCompletion = true }
+
+        let expectation = XCTestExpectation(description: "stop event processed")
+        let message = """
+        {
+            "hook_event_name": "Stop",
+            "session_id": "stop-no-expand-session",
+            "tool_name": ""
+        }
+        """
+        appState.handleMessage(message) { _ in expectation.fulfill() }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        wait(for: [expectation], timeout: 1.0)
+
+        XCTAssertFalse(appState.isNotchExpanded, "notch should NOT expand on task completion when expandOnTaskCompletion is disabled")
+    }
+
+    @MainActor
+    func testIdlePromptExpandsWhenEnabled() {
+        SettingsStore.shared.settings.notchAutoExpandEnabled = true
+        SettingsStore.shared.settings.expandOnIdlePrompt = true
+        defer { SettingsStore.shared.settings.expandOnIdlePrompt = true }
+
+        let expectation = XCTestExpectation(description: "idle_prompt notification processed")
+        let message = """
+        {
+            "hook_event_name": "Notification",
+            "session_id": "idle-expand-session",
+            "notification_type": "idle_prompt",
+            "tool_name": ""
+        }
+        """
+        appState.handleMessage(message) { _ in expectation.fulfill() }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        wait(for: [expectation], timeout: 1.0)
+
+        XCTAssertTrue(appState.isNotchExpanded, "notch should expand on idle prompt when expandOnIdlePrompt is enabled")
+    }
+
+    @MainActor
+    func testIdlePromptDoesNotExpandWhenDisabled() {
+        SettingsStore.shared.settings.notchAutoExpandEnabled = true
+        SettingsStore.shared.settings.expandOnIdlePrompt = false
+        defer { SettingsStore.shared.settings.expandOnIdlePrompt = true }
+
+        let expectation = XCTestExpectation(description: "idle_prompt notification processed")
+        let message = """
+        {
+            "hook_event_name": "Notification",
+            "session_id": "idle-no-expand-session",
+            "notification_type": "idle_prompt",
+            "tool_name": ""
+        }
+        """
+        appState.handleMessage(message) { _ in expectation.fulfill() }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        wait(for: [expectation], timeout: 1.0)
+
+        XCTAssertFalse(appState.isNotchExpanded, "notch should NOT expand on idle prompt when expandOnIdlePrompt is disabled")
+    }
+
+    @MainActor
+    func testTaskCompletionSetsUnreadRegardlessOfExpandSetting() {
+        SettingsStore.shared.settings.notchAutoExpandEnabled = true
+        SettingsStore.shared.settings.expandOnTaskCompletion = false
+        defer { SettingsStore.shared.settings.expandOnTaskCompletion = true }
+
+        let sessionId = "stop-unread-session"
+        // 세션을 먼저 시작해야 unread 상태가 기록됨
+        let startExpectation = XCTestExpectation(description: "session started")
+        appState.handleMessage("""
+        {
+            "hook_event_name": "SessionStart",
+            "session_id": "\(sessionId)"
+        }
+        """) { _ in startExpectation.fulfill() }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+        wait(for: [startExpectation], timeout: 1.0)
+
+        let stopExpectation = XCTestExpectation(description: "stop event processed")
+        appState.handleMessage("""
+        {
+            "hook_event_name": "Stop",
+            "session_id": "\(sessionId)",
+            "tool_name": ""
+        }
+        """) { _ in stopExpectation.fulfill() }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        wait(for: [stopExpectation], timeout: 1.0)
+
+        XCTAssertFalse(appState.isNotchExpanded, "notch must not expand when expandOnTaskCompletion is disabled")
+        let session = appState.sessionStore.activeSessions.first { $0.id == sessionId }
+        XCTAssertTrue(session?.isUnread == true, "unread dot must be set regardless of expand setting")
+    }
 }

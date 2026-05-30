@@ -191,6 +191,9 @@ struct AppSettings: Equatable {
     var notchRightRandomCharacterKinds: Set<BuddyKind>
     var notchCenterText: String
     var expandOnNotification: Bool
+    var expandOnTaskCompletion: Bool
+    var expandOnIdlePrompt: Bool
+    var expandOnNotificationMessage: Bool
     var expandOnInteractiveTool: Bool
     var expandOnApprovalRequest: Bool
     var expandOnQuestionResponse: Bool
@@ -271,6 +274,9 @@ struct AppSettings: Equatable {
         notchRightRandomCharacterKinds: Set(BuddyKind.defaultRandomCases),
         notchCenterText: "DevIsland",
         expandOnNotification: true,
+        expandOnTaskCompletion: true,
+        expandOnIdlePrompt: true,
+        expandOnNotificationMessage: true,
         expandOnInteractiveTool: true,
         expandOnApprovalRequest: true,
         expandOnQuestionResponse: true,
@@ -347,6 +353,9 @@ final class SettingsStore: ObservableObject {
         static let notchRightRandomCharacterKinds = "notchRightRandomCharacterKinds"
         static let notchCenterText = "notchCenterText"
         static let expandOnNotification = "expandOnNotification"
+        static let expandOnTaskCompletion = "expandOnTaskCompletion"
+        static let expandOnIdlePrompt = "expandOnIdlePrompt"
+        static let expandOnNotificationMessage = "expandOnNotificationMessage"
         static let expandOnInteractiveTool = "expandOnInteractiveTool"
         static let expandOnApprovalRequest = "expandOnApprovalRequest"
         static let expandOnQuestionResponse = "expandOnQuestionResponse"
@@ -420,6 +429,9 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.notchRightRandomCharacterKinds.map(\.rawValue).sorted(), forKey: DefaultsKey.notchRightRandomCharacterKinds)
         userDefaults.set(settings.notchCenterText, forKey: DefaultsKey.notchCenterText)
         userDefaults.set(settings.expandOnNotification, forKey: DefaultsKey.expandOnNotification)
+        userDefaults.set(settings.expandOnTaskCompletion, forKey: DefaultsKey.expandOnTaskCompletion)
+        userDefaults.set(settings.expandOnIdlePrompt, forKey: DefaultsKey.expandOnIdlePrompt)
+        userDefaults.set(settings.expandOnNotificationMessage, forKey: DefaultsKey.expandOnNotificationMessage)
         userDefaults.set(settings.expandOnInteractiveTool, forKey: DefaultsKey.expandOnInteractiveTool)
         userDefaults.set(settings.expandOnApprovalRequest, forKey: DefaultsKey.expandOnApprovalRequest)
         userDefaults.set(settings.expandOnQuestionResponse, forKey: DefaultsKey.expandOnQuestionResponse)
@@ -683,6 +695,23 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.expandOnNotification,
                 from: userDefaults,
                 default: defaults.expandOnNotification
+            ),
+            // 마이그레이션: 세 하위 키가 아직 없으면 기존 expandOnNotification 값을 초기값으로 사용한다.
+            // 이렇게 해야 업그레이드 후 부모 토글을 다시 켰을 때 하위 설정도 원래 의도를 유지한다.
+            expandOnTaskCompletion: bool(
+                key: DefaultsKey.expandOnTaskCompletion,
+                from: userDefaults,
+                default: (userDefaults.object(forKey: DefaultsKey.expandOnNotification) as? Bool) ?? defaults.expandOnTaskCompletion
+            ),
+            expandOnIdlePrompt: bool(
+                key: DefaultsKey.expandOnIdlePrompt,
+                from: userDefaults,
+                default: (userDefaults.object(forKey: DefaultsKey.expandOnNotification) as? Bool) ?? defaults.expandOnIdlePrompt
+            ),
+            expandOnNotificationMessage: bool(
+                key: DefaultsKey.expandOnNotificationMessage,
+                from: userDefaults,
+                default: (userDefaults.object(forKey: DefaultsKey.expandOnNotification) as? Bool) ?? defaults.expandOnNotificationMessage
             ),
             expandOnInteractiveTool: bool(
                 key: DefaultsKey.expandOnInteractiveTool,

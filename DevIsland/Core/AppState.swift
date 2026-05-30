@@ -888,10 +888,14 @@ class AppState: ObservableObject {
                     self.sessionStore.selectedSessionId = fullSessionId
                 }
 
-                // 알림 확장 로직 (질문이나 작업 완료 시)
-                let isInformational = !isCodexStatusOnlyLifecycleEvent && ((normalizedEvent == "stop" || isStartEvent) || isIdlePrompt ||
-                                     isUserQuestionTool ||
-                                     (h.displayMsg.contains("?") && (normalizedEvent == "notification" || h.agentKind != .claudeCode)))
+                // notification 이벤트 케이스 분류 (케이스별로 독립 제어 가능)
+                let isTaskCompletion  = !isCodexStatusOnlyLifecycleEvent && normalizedEvent == "stop"
+                let isIdleOrWaiting   = !isCodexStatusOnlyLifecycleEvent && isIdlePrompt
+                let isNotificationMsg = !isCodexStatusOnlyLifecycleEvent &&
+                    (isUserQuestionTool || (h.displayMsg.contains("?") && (normalizedEvent == "notification" || h.agentKind != .claudeCode)))
+                // isInformational = unread dot 표시 게이트 (확장 설정과 무관하게 유지)
+                let isInformational = isTaskCompletion || isIdleOrWaiting || isNotificationMsg
+                    || (!isCodexStatusOnlyLifecycleEvent && isStartEvent)
 
                 let isCurrentlyViewed = self.isExpandingFromRequest && self.currentSessionId == fullSessionId
                 if isInformational && !isStartEvent && !sessionMessage.isEmpty && !isCurrentlyViewed {
@@ -899,8 +903,12 @@ class AppState: ObservableObject {
                 }
 
                 let expandEnabled = MainActor.assumeIsolated {
-                    SettingsStore.shared.settings.notchAutoExpandEnabled
-                        && SettingsStore.shared.settings.expandOnNotification
+                    let s = SettingsStore.shared.settings
+                    guard s.notchAutoExpandEnabled && s.expandOnNotification else { return false }
+                    if isTaskCompletion  { return s.expandOnTaskCompletion }
+                    if isIdleOrWaiting   { return s.expandOnIdlePrompt }
+                    if isNotificationMsg { return s.expandOnNotificationMessage }
+                    return false
                 }
                 if isInformational && !isStartEvent && !hasPendingForSession && self.currentResponseHandler == nil {
                     // expandEnabled 여부와 무관하게 포커스된 터미널의 unread 해제는 항상 수행

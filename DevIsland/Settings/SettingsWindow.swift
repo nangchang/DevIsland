@@ -474,6 +474,25 @@ private struct ExpandSettingsPane: View {
                     binding: store.binding(\.expandOnNotification),
                     enabled: enabled
                 )
+                let notifEnabled = enabled && store.settings.expandOnNotification
+                subTriggerRow(
+                    label: l10n.lblExpandOnTaskCompletion,
+                    hint: l10n.hintExpandOnTaskCompletion,
+                    binding: store.binding(\.expandOnTaskCompletion),
+                    enabled: notifEnabled
+                )
+                subTriggerRow(
+                    label: l10n.lblExpandOnIdlePrompt,
+                    hint: l10n.hintExpandOnIdlePrompt,
+                    binding: store.binding(\.expandOnIdlePrompt),
+                    enabled: notifEnabled
+                )
+                subTriggerRow(
+                    label: l10n.lblExpandOnNotificationMessage,
+                    hint: l10n.hintExpandOnNotificationMessage,
+                    binding: store.binding(\.expandOnNotificationMessage),
+                    enabled: notifEnabled
+                )
                 triggerRow(
                     label: l10n.lblExpandOnApprovalRequest,
                     hint: l10n.hintExpandOnApprovalRequest,
@@ -507,6 +526,12 @@ private struct ExpandSettingsPane: View {
             }
         }
         .disabled(!enabled)
+    }
+
+    /// 들여쓰기가 적용된 하위 토글 행 (부모 토글 아래에 종류별 옵션 표시용)
+    private func subTriggerRow(label: String, hint: String, binding: Binding<Bool>, enabled: Bool) -> some View {
+        triggerRow(label: label, hint: hint, binding: binding, enabled: enabled)
+            .padding(.leading, 20)
     }
 }
 
