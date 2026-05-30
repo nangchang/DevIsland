@@ -428,6 +428,19 @@ struct NotchView: View {
 
                 if !displayedSessionId.isEmpty {
                     Button {
+                        SessionMessageWindowManager.shared.openWindow(for: displayedSessionId)
+                    } label: {
+                        Image(systemName: "macwindow.on.rectangle")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 30, height: 30)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .help("메시지 창 분리")
+
+                    Button {
                         state.focusTerminal(for: displayedSessionId)
                     } label: {
                         Image(systemName: "arrow.up.forward.app.fill")
@@ -754,7 +767,7 @@ struct NotchView: View {
     }
 }
 
-private struct MessageMouseDownMonitor: NSViewRepresentable {
+struct MessageMouseDownMonitor: NSViewRepresentable {
     let onMouseDown: () -> Void
 
     func makeNSView(context: Context) -> MouseDownMonitorView {
@@ -772,7 +785,7 @@ private struct MessageMouseDownMonitor: NSViewRepresentable {
     }
 }
 
-private final class MouseDownMonitorView: NSView {
+final class MouseDownMonitorView: NSView {
     var onMouseDown: (() -> Void)?
     private var monitor: Any?
 

@@ -64,6 +64,10 @@ final class ApprovalProxyController {
         try store.replayLog(limit: limit)
     }
 
+    func replayLog(sessionId: String, limit: Int = 100) throws -> [ReplayLogEntry] {
+        try store.replayLog(sessionId: sessionId, limit: limit)
+    }
+
     func openSessions(since: Date) throws -> [OpenSessionRecord] {
         try store.openSessions(since: since)
     }

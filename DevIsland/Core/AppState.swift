@@ -302,6 +302,7 @@ class AppState: ObservableObject {
                 let prunedIds = self.sessionStore.pruneInactiveSessions()
                 for id in prunedIds {
                     self.ptyCoordinator.clearBuffer(sessionId: id)
+                    Task { @MainActor in SessionMessageWindowManager.shared.closeWindow(for: id) }
                 }
             }
         }
@@ -649,6 +650,7 @@ class AppState: ObservableObject {
                 }
                 self.sessionStore.removeSession(id: fullSessionId)
                 self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
+                MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: fullSessionId) }
 
                 if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                     self.currentResponseHandler = nil
@@ -844,6 +846,7 @@ class AppState: ObservableObject {
                             )
                         }
                         self.ptyCoordinator.clearBuffer(sessionId: removedSessionId)
+                        MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: removedSessionId) }
                     }
 
                     if removedSessionIds.contains(self.currentSessionId) || removedCurrentRequest {
@@ -921,6 +924,11 @@ class AppState: ObservableObject {
                         }
                         guard expandEnabled else { return }
                         guard self.currentResponseHandler == nil else { return }
+                        // 세션의 팝아웃 창이 열려있으면 노치 확장 억제 — 창이 알림을 표시함
+                        let hasDetachedWindow = MainActor.assumeIsolated {
+                            SessionMessageWindowManager.shared.hasWindow(for: fullSessionId)
+                        }
+                        guard !hasDetachedWindow else { return }
                         if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
                             self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
                             self.previousSessionId = self.currentSessionId
@@ -1440,6 +1448,7 @@ class AppState: ObservableObject {
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
             self.sessionStore.removeSession(id: sessionId)
             self.ptyCoordinator.clearBuffer(sessionId: sessionId)
+            MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: sessionId) }
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                 self.currentResponseHandler?("{\"response\": \"pass\"}")
@@ -1598,15 +1607,29 @@ class AppState: ObservableObject {
                 guard s.notchAutoExpandEnabled else { return false }
                 return isQuestion ? s.expandOnQuestionResponse : s.expandOnApprovalRequest
             }
-            if expandEnabled || self.isNotchExpanded {
+            // 팝아웃 창이 열린 세션은 노치 확장 억제 — 창이 승인 UI를 표시함
+            let suppressNotch = MainActor.assumeIsolated {
+                SessionMessageWindowManager.shared.hasWindow(for: next.sessionId)
+            }
+            if (expandEnabled || self.isNotchExpanded) && !suppressNotch {
                 self.isNotchExpanded = true
+            }
+            if expandEnabled || self.isNotchExpanded || suppressNotch {
                 self.startTimeout()
             }
         }
     }
 
     private func nextPendingRequestToDisplay() -> PendingRequest? {
-        sessionStore.pendingQueue.first(where: Self.isApprovalPriorityRequest)
+        // 팝아웃 창이 열린 세션의 요청을 우선 처리하여 창에서 즉시 승인/거부 가능하게 함
+        let withWindow = sessionStore.pendingQueue.first { request in
+            guard Self.isApprovalPriorityRequest(request) else { return false }
+            let sid = request.sessionId
+            return MainActor.assumeIsolated { SessionMessageWindowManager.shared.hasWindow(for: sid) }
+        }
+        if let withWindow { return withWindow }
+
+        return sessionStore.pendingQueue.first(where: Self.isApprovalPriorityRequest)
             ?? sessionStore.pendingQueue.first
     }
 
@@ -1838,6 +1861,11 @@ class AppState: ObservableObject {
     func replayLogEntries(limit: Int = 200) throws -> [ReplayLogEntry] {
         guard let approvalProxy else { return [] }
         return try approvalProxy.replayLog(limit: limit)
+    }
+
+    func sessionMessageHistory(sessionId: String, limit: Int = 100) throws -> [ReplayLogEntry] {
+        guard let approvalProxy else { return [] }
+        return try approvalProxy.replayLog(sessionId: sessionId, limit: limit)
     }
 
     func closedSessionRecords(retentionDays: Int) throws -> [ClosedSessionRecord] {

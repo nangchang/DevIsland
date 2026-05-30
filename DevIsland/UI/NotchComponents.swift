@@ -510,6 +510,14 @@ struct SessionRowView: View {
         .onReceive(Self.sharedTimer) { _ in updateTimeAgo() }
         .contextMenu {
             Button {
+                SessionMessageWindowManager.shared.openWindow(for: session.id)
+            } label: {
+                Label("메시지 창 분리", systemImage: "macwindow.on.rectangle")
+            }
+
+            Divider()
+
+            Button {
                 renameText = appState.sessionLabels[session.id] ?? ""
                 isRenaming = true
             } label: {

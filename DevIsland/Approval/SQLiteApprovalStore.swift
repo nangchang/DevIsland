@@ -12,7 +12,7 @@ final class SQLiteApprovalStore {
         case unsupportedSchemaVersion(Int32)
     }
 
-    static let currentSchemaVersion: Int32 = 4
+    static let currentSchemaVersion: Int32 = 5
 
     static func deterministicRuleID(
         provider: ProviderKind,
@@ -252,6 +252,33 @@ final class SQLiteApprovalStore {
                 LIMIT ?
                 """,
             parameters: [max(1, limit)]
+        )
+    }
+
+    func replayLog(sessionId: String, limit: Int = 100) throws -> [ReplayLogEntry] {
+        try fetchReplayLog(
+            sql:
+                """
+                WITH latest_decisions AS (
+                    SELECT
+                        hook_event_id,
+                        action,
+                        source,
+                        reason,
+                        decided_at,
+                        ROW_NUMBER() OVER(PARTITION BY hook_event_id ORDER BY decided_at DESC) AS row_number
+                    FROM approval_decisions
+                )
+                SELECT e.id, e.request_id, e.provider, e.session_id, e.event_name, e.tool_name,
+                       e.payload_json, e.received_at,
+                       d.action, d.source, d.reason, d.decided_at
+                FROM hook_events e
+                LEFT JOIN latest_decisions d ON d.hook_event_id = e.id AND d.row_number = 1
+                WHERE e.session_id = ?
+                ORDER BY e.received_at DESC
+                LIMIT ?
+                """,
+            parameters: [sessionId, max(1, limit)]
         )
     }
 
@@ -553,6 +580,7 @@ final class SQLiteApprovalStore {
         if version < 2 { try migrateToVersion2() }
         if version < 3 { try migrateToVersion3() }
         if version < 4 { try migrateToVersion4() }
+        if version < 5 { try migrateToVersion5() }
         try execute("PRAGMA user_version = \(Self.currentSchemaVersion)")
     }
 
@@ -699,6 +727,15 @@ final class SQLiteApprovalStore {
                 [entry.id, entry.toolName, entry.pattern]
             )
         }
+    }
+
+    private func migrateToVersion5() throws {
+        // session_id 단독 필터링 쿼리 성능을 위한 인덱스
+        // 기존 idx_hook_events_session(provider, session_id, received_at)은 session_id로만
+        // 조회 시 leading column이 맞지 않아 풀스캔이 발생한다.
+        try execute(
+            "CREATE INDEX IF NOT EXISTS idx_hook_events_session_id ON hook_events(session_id, received_at DESC)"
+        )
     }
 
     private func migrateToVersion2() throws {
