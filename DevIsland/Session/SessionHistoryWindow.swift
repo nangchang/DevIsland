@@ -23,6 +23,7 @@ final class SessionHistoryViewModel: ObservableObject {
             || ($0.workspaceRoot?.localizedCaseInsensitiveContains(searchText) ?? false)
             || ($0.terminalTitle?.localizedCaseInsensitiveContains(searchText) ?? false)
             || $0.provider.rawValue.localizedCaseInsensitiveContains(searchText)
+            || (appState.sessionLabels[$0.sessionId]?.localizedCaseInsensitiveContains(searchText) ?? false)
         }
     }
 
