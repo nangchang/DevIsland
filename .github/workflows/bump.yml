@@ -43,13 +43,28 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 1. Commit and push the clean release version to main branch
           git add project.yml
           git commit -m "chore: bump version to ${GITHUB_REF_NAME#v} (build ${{ github.run_number }}) [skip ci]"
           git push origin HEAD:${{ github.event.repository.default_branch }}
           
-          # Move the tag to the new commit
+          # 2. Force the release tag to point to the clean release commit and push tag
           git tag -f "$GITHUB_REF_NAME"
           git push origin -f "refs/tags/$GITHUB_REF_NAME"
+          
+          # 3. Transition main branch to the next development version (X.Y.Z-dev)
+          VERSION="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r major minor patch <<< "$VERSION"
+          NEXT_PATCH=$((patch + 1))
+          NEXT_VERSION="${major}.${minor}.${NEXT_PATCH}-dev"
+          
+          echo "Transitioning main branch to next development version: $NEXT_VERSION"
+          
+          sed -i "s/CFBundleShortVersionString: .*/CFBundleShortVersionString: \"$NEXT_VERSION\"/" project.yml
+          git add project.yml
+          git commit -m "chore: prepare for next development iteration $NEXT_VERSION [skip ci]"
+          git push origin HEAD:${{ github.event.repository.default_branch }}
 
       - name: Trigger Release Workflow
         if: steps.bump.outputs.changed == 'true'
