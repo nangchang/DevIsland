@@ -469,9 +469,21 @@ private struct ExpandSettingsPane: View {
             Section(l10n.secNotchExpandTriggers) {
                 let enabled = store.settings.notchAutoExpandEnabled
                 triggerRow(
-                    label: l10n.lblExpandOnNotification,
-                    hint: l10n.hintExpandOnNotification,
-                    binding: store.binding(\.expandOnNotification),
+                    label: l10n.lblExpandOnTaskCompletion,
+                    hint: l10n.hintExpandOnTaskCompletion,
+                    binding: store.binding(\.expandOnTaskCompletion),
+                    enabled: enabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnIdlePrompt,
+                    hint: l10n.hintExpandOnIdlePrompt,
+                    binding: store.binding(\.expandOnIdlePrompt),
+                    enabled: enabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnNotificationMessage,
+                    hint: l10n.hintExpandOnNotificationMessage,
+                    binding: store.binding(\.expandOnNotificationMessage),
                     enabled: enabled
                 )
                 triggerRow(
