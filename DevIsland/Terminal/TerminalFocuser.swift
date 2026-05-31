@@ -595,10 +595,16 @@ class TerminalFocuser {
         }.map { (name: $0.name, bundleId: $0.bundleId) }
     }()
 
+    private static func isOpenableTerminal(_ name: String) -> Bool {
+        guard let bundleId = candidates.first(where: { $0.name == name })?.bundleId else { return true }
+        return !nonTerminalBundleIds.contains(bundleId)
+    }
+
     /// preferred → sessionTerminal → 설치된 첫 번째 순으로 자동 선택한 터미널 이름 반환
+    /// 비터미널 앱(VSCode·ClaudeDesktop)으로 저장된 preference는 무시
     static func resolvedTerminalName(preferred: String?, sessionTerminal: String?) -> String? {
-        if let p = normalizedAppName(preferred) { return p }
-        if let s = normalizedAppName(sessionTerminal) { return s }
+        if let p = normalizedAppName(preferred), isOpenableTerminal(p) { return p }
+        if let s = normalizedAppName(sessionTerminal), isOpenableTerminal(s) { return s }
         return installedTerminals.first?.name
     }
 
