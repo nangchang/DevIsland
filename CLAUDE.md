@@ -61,6 +61,14 @@ gh api "repos/nangchang/DevIsland/issues/<PR_NUMBER>/comments" --jq '.[] | "[com
 gh api "repos/nangchang/DevIsland/pulls/<PR_NUMBER>/reviews" --jq '.[] | "[review] \(.user.login) (\(.state)): \(.body)"'
 ```
 
+리뷰 스레드 resolve는 REST API 미지원 — GraphQL 사용:
+```bash
+# 스레드 ID 조회
+gh api graphql -f query='{ repository(owner:"nangchang",name:"DevIsland") { pullRequest(number:N) { reviewThreads(first:20) { nodes { id isResolved comments(first:1) { nodes { databaseId } } } } } } }'
+# resolve
+gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"PRRT_..."}) { thread { isResolved } } }'
+```
+
 ## Bridge Path
 
 브리지 스크립트 설치 위치: `~/Library/Application Support/DevIsland/devisland-bridge.sh`
@@ -112,4 +120,5 @@ soft reset 후 Edit으로 하나씩 적용하고 커밋하면 된다.
 ## git commit 멀티라인 메시지
 
 `git commit -m "$(cat <<'EOF' ... EOF)"` 형식은 hook에 막힐 수 있다.
-`Write`로 `/tmp/commit_msg.txt` 생성 후 `git commit -F /tmp/commit_msg.txt` 사용.
+`/tmp/commit_msg.txt` 생성 후 `git commit -F /tmp/commit_msg.txt` 사용.
+`Write` 툴은 새 파일도 Read 선행이 필요하므로 임시 파일엔 Bash `cat > /tmp/commit_msg.txt << 'EOF' ... EOF` 방식 사용.
