@@ -333,7 +333,7 @@ struct SessionRowView: View {
                     .padding(.leading, 8)
             }
             Button(action: { AppState.shared.showSessionDetail(session.id) }) {
-                HStack(spacing: isSubAgent ? 8 : 12) {
+                HStack(alignment: .top, spacing: isSubAgent ? 8 : 12) {
                     VStack(spacing: 3) {
                         ZStack(alignment: .topTrailing) {
                             AgentRequestBadge(
