@@ -2,8 +2,9 @@ name: CodeQL
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+    paths:
+      - '**/*.swift'
+      - 'project.yml'
   schedule:
     - cron: '0 9 * * 1'
 
