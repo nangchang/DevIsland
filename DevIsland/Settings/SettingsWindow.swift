@@ -1034,7 +1034,7 @@ private struct ApprovalRulesWindowView: View {
         let toolName = codexToolName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !toolName.isEmpty else { return }
         do {
-            try state.addCodexPersistentRule(toolName: toolName, action: codexRuleAction)
+            try state.ruleService.addCodexPersistentRule(toolName: toolName, action: codexRuleAction)
             codexToolName = ""
             codexRuleError = nil
             loadCodexPersistentRules()
@@ -1045,7 +1045,7 @@ private struct ApprovalRulesWindowView: View {
 
     private func deleteCodexPersistentRule(_ rule: ApprovalRule) {
         do {
-            try state.deleteCodexPersistentRule(rule)
+            try state.ruleService.deleteCodexPersistentRule(rule)
             codexRuleError = nil
             loadCodexPersistentRules()
         } catch {
@@ -1055,7 +1055,7 @@ private struct ApprovalRulesWindowView: View {
 
     private func loadCodexPersistentRules() {
         do {
-            codexPersistentRules = try state.codexPersistentRules()
+            codexPersistentRules = try state.ruleService.codexPersistentRules()
             codexRuleError = nil
         } catch {
             codexPersistentRules = []
@@ -1065,7 +1065,7 @@ private struct ApprovalRulesWindowView: View {
 
     private func syncCodexPersistentRules() {
         do {
-            let result = try state.syncCodexPersistentRules()
+            let result = try state.ruleService.syncCodexPersistentRules()
             codexRuleSyncMessage = l10n.exportedCodexRules(result.ruleCount, result.url.path)
             codexRuleError = nil
         } catch {

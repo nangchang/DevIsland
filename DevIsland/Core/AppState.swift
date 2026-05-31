@@ -51,7 +51,6 @@ class AppState: ObservableObject {
 
     private let userDefaults: UserDefaults
     private let frontmostCheck: FrontmostCheck
-    private let codexRuleSyncAdapter: CodexRuleSyncAdapter
     private let openPeonSoundPlayer: OpenPeonSoundPlayer
 
     @Published var isNotchExpanded = false
@@ -85,6 +84,7 @@ class AppState: ObservableObject {
     let sessionStore: SessionStore
     let geminiState: GeminiSessionState
     let displayPrefs: NotchDisplayPreferences
+    let ruleService: ApprovalRuleService
 
     private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
@@ -141,11 +141,15 @@ class AppState: ObservableObject {
         self.userDefaults = userDefaults
         self.frontmostCheck = frontmostCheck
         self.approvalProxy = approvalProxy
-        self.codexRuleSyncAdapter = codexRuleSyncAdapter
         self.openPeonSoundPlayer = openPeonSoundPlayer
         self.sessionStore = SessionStore()
         self.geminiState = GeminiSessionState(userDefaults: userDefaults)
         self.displayPrefs = NotchDisplayPreferences(userDefaults: userDefaults)
+        self.ruleService = ApprovalRuleService(
+            approvalProxy: approvalProxy,
+            persistenceQueue: approvalPersistenceQueue,
+            codexRuleSyncAdapter: codexRuleSyncAdapter
+        )
         self.ptyCoordinator = PTYCoordinator(
             ptyBuffer: PTYSessionBuffer(),
             approvalProxy: approvalProxy,
@@ -1803,11 +1807,6 @@ class AppState: ObservableObject {
         approved ? "{\"response\":\"approved\"}" : "{\"response\":\"denied\"}"
     }
 
-    func codexPersistentRules() throws -> [ApprovalRule] {
-        guard let approvalProxy else { return [] }
-        return try approvalProxy.store.rules(provider: .codex, scope: .persistent)
-    }
-
     func replayLogEntries(limit: Int = 200) throws -> [ReplayLogEntry] {
         guard let approvalProxy else { return [] }
         return try approvalProxy.replayLog(limit: limit)
@@ -1822,24 +1821,6 @@ class AppState: ObservableObject {
         guard let approvalProxy else { return [] }
         let since = Date().addingTimeInterval(-Double(retentionDays) * 86_400)
         return try approvalProxy.closedSessions(since: since)
-    }
-
-    func addPersistentRule(from entry: ReplayLogEntry, action: RuleAction) throws {
-        guard let approvalProxy else { return }
-        let toolName = entry.toolName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !toolName.isEmpty else { return }
-        try approvalProxy.store.insertRule(ApprovalRule(
-            id: SQLiteApprovalStore.deterministicRuleID(
-                provider: entry.provider,
-                toolName: toolName,
-                scope: .persistent,
-                workspaceRoot: nil
-            ),
-            provider: entry.provider,
-            toolName: toolName,
-            action: action,
-            scope: .persistent
-        ))
     }
 
     func replayHookEvent(_ entry: ReplayLogEntry) throws {
@@ -1895,33 +1876,6 @@ class AppState: ObservableObject {
         handleMessage(replayMessage) { response in
             print("[DevIsland] [REPLAY] Replayed event \(entry.id) completed with response: \(response)")
         }
-    }
-
-    func addCodexPersistentRule(toolName: String, action: RuleAction) throws {
-        guard let approvalProxy else { return }
-        let trimmed = toolName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        try approvalProxy.store.insertRule(ApprovalRule(
-            id: SQLiteApprovalStore.deterministicRuleID(
-                provider: .codex,
-                toolName: trimmed,
-                scope: .persistent,
-                workspaceRoot: nil
-            ),
-            provider: .codex,
-            toolName: trimmed,
-            action: action,
-            scope: .persistent
-        ))
-    }
-
-    func deleteCodexPersistentRule(_ rule: ApprovalRule) throws {
-        guard let approvalProxy else { return }
-        try approvalProxy.store.deleteRule(id: rule.id)
-    }
-
-    func syncCodexPersistentRules() throws -> CodexRuleSyncResult {
-        try codexRuleSyncAdapter.sync(rules: codexPersistentRules(), generatedAt: Date())
     }
 
     func flushApprovalPersistenceForTesting() {
