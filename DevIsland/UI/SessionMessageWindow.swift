@@ -151,16 +151,21 @@ final class SessionMessageWindowController: NSWindowController, NSWindowDelegate
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 360, height: 260)
-        window.center()
 
         super.init(window: window)
         window.delegate = self
+
+        // 저장된 프레임이 없으면 중앙 배치, 있으면 setFrameAutosaveName이 복원
+        let autosaveName = "SessionMessageWindow"
+        if UserDefaults.standard.string(forKey: "NSWindow Frame \(autosaveName)") == nil {
+            window.center()
+        }
+        window.setFrameAutosaveName(autosaveName)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     func show() {
-        if window?.isVisible == false { window?.center() }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
