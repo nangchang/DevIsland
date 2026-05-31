@@ -589,218 +589,15 @@ class AppState: ObservableObject {
 
         // MARK: Phase 2f: Notification
         if isNotification {
-            let passClaudeUserQuestion = h.agentKind == .claudeCode && isUserQuestionTool
-            let notification = passClaudeUserQuestion
-                ? (response: "pass", action: RuleAction.prompt, reason: "Claude user question passthrough")
-                : (response: "approved", action: RuleAction.allow, reason: "notification")
-
-            print("[DevIsland] notification event: \(h.event) for \(h.toolName) → \(notification.response)")
-            if !isCodexStatusOnlyLifecycleEvent {
-                playOpenPeonSound(cespCategory)
-            }
-            guard !h.sessionId.isEmpty else {
-                respondWithReplay(
-                    "{\"response\": \"\(notification.response)\"}",
-                    responseHandler: responseHandler,
-                    hookEventId: hookEventId,
-                    agentKind: h.agentKind,
-                    sessionId: h.sessionId,
-                    toolName: replayToolName,
-                    workspaceRoot: h.workspaceRoot,
-                    action: notification.action,
-                    source: .automatic,
-                    reason: notification.reason
-                )
-                return
-            }
-            if normalizedEvent == "notification",
-               h.notificationType == "permission_prompt" || h.displayMsg.lowercased().contains("needs your permission") {
-                respondWithReplay(
-                    "{\"response\": \"approved\"}",
-                    responseHandler: responseHandler,
-                    hookEventId: hookEventId,
-                    agentKind: h.agentKind,
-                    sessionId: h.sessionId,
-                    toolName: replayToolName,
-                    workspaceRoot: h.workspaceRoot,
-                    action: .allow,
-                    source: .automatic,
-                    reason: "permission prompt notification"
-                )
-                return
-            }
-            let fullSessionId = h.sessionId
-            let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "startup" || normalizedEvent == "init")
-
-            // [UX] 에이전트 작업 완료 대기 상태(Idle Prompt) 판별 로직
-            // - Claude Code: notification 훅에 idle_prompt 또는 input_required 타입으로 전달됨
-            // - Gemini CLI: afteragent, aftermodel 등 턴 종료 시 발생하는 훅을 대기 상태로 간주
-            // - Codex CLI: posttooluse를 쓰면 툴 연속 자동 실행 시 스팸 알림이 생기므로 제외함. 대신 stop 이벤트를 통해 완료됨을 알림
-            let isIdlePrompt = (normalizedEvent == "notification" && (h.notificationType == "idle_prompt" || h.notificationType == "input_required")) ||
-                               normalizedEvent == "afteragent"
-
-            let sessionMessage: String
-            if isStartEvent {
-                sessionMessage = "Session Started"
-            } else if isIdlePrompt && h.displayMsg.isEmpty {
-                sessionMessage = "Waiting for next prompt..."
-            } else if (normalizedEvent == "stop" && h.displayMsg.isEmpty) {
-                sessionMessage = "Task Completed"
-            } else {
-                sessionMessage = h.displayMsg
-            }
-
-            DispatchQueue.main.async {
-                // sessionStore 뮤테이션은 항상 메인 스레드에서 수행 (@Published → SwiftUI 업데이트)
-                if isStartEvent &&
-                    h.agentKind == .codex &&
-                    Self.shouldSupersedeCodexSessionsOnStart(source: h.sessionStartSource) {
-                    let removedSessionIds = self.sessionStore.removeSupersededCodexSessions(
-                        newSessionId: fullSessionId,
-                        terminalApp: h.terminalApp,
-                        terminalTTY: h.terminalTTY,
-                        terminalWindowId: h.terminalWindowId,
-                        terminalTabIndex: h.terminalTabIndex,
-                        terminalTmuxPane: h.terminalTmuxPane,
-                        terminalTmuxSocket: h.terminalTmuxSocket,
-                        terminalTmuxClient: h.terminalTmuxClient
-                    )
-
-                    var removedCurrentRequest = false
-                    for removedSessionId in removedSessionIds {
-                        let removedRequests = self.sessionStore.removeAllPending(sessionId: removedSessionId)
-                        removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
-                        if removedRequests.contains(where: { $0.id == self.showingRequestId }) {
-                            removedCurrentRequest = true
-                        }
-                        removedRequests.forEach {
-                            self.respondWithReplay(
-                                "{\"response\": \"denied\"}",
-                                responseHandler: $0.responseHandler,
-                                hookEventId: $0.hookEventId,
-                                agentKind: $0.agentKind,
-                                sessionId: $0.sessionId,
-                                toolName: $0.rawToolName.isEmpty ? $0.toolName : $0.rawToolName,
-                                workspaceRoot: $0.workspaceRoot,
-                                action: .deny,
-                                source: .automatic,
-                                reason: "session superseded"
-                            )
-                        }
-                        self.ptyCoordinator.clearBuffer(sessionId: removedSessionId)
-                        MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: removedSessionId) }
-                    }
-
-                    if removedSessionIds.contains(self.currentSessionId) || removedCurrentRequest {
-                        self.currentResponseHandler = nil
-                        self.isShowingRequest = false
-                        self.showingRequestId = nil
-                        self.timeoutTimer?.invalidate()
-                        self.timeoutProgress = 1.0
-                        self.currentSessionId = ""
-                        self.currentToolName = ""
-                        self.currentEventName = ""
-                        self.currentMessage = ""
-                        self.currentClaudeQuestion = nil
-                        self.currentClaudeQuestionAnswers = [:]
-                        self.showNextRequest()
-                    }
-                }
-
-                let hasPendingForSession = self.sessionStore.pendingQueue.contains { $0.sessionId == fullSessionId }
-                self.sessionStore.updateActiveSession(
-                    sessionId: fullSessionId,
-                    terminalTitle: h.terminalTitle,
-                    agentKind: h.agentKind,
-                    terminalApp: h.terminalApp,
-                    terminalTTY: h.terminalTTY,
-                    terminalWindowId: h.terminalWindowId,
-                    terminalTabIndex: h.terminalTabIndex,
-                    terminalTmuxPane: h.terminalTmuxPane,
-                    terminalTmuxSocket: h.terminalTmuxSocket,
-                    terminalTmuxClient: h.terminalTmuxClient,
-                    toolName: displayToolName,
-                    eventName: h.event,
-                    message: sessionMessage,
-                    isPending: hasPendingForSession,
-                    preserveMessage: normalizedEvent == "posttooluse" || sessionMessage.isEmpty,
-                    isLifecycleTracked: isStartEvent || h.agentKind != .claudeCode, // Codex/Gemini는 기본적으로 추적 유지
-                    isSubAgentSession: h.isSubAgentSession,
-                    workspaceRoot: h.workspaceRoot
-                )
-
-                if isStartEvent || (self.sessionStore.selectedSessionId == nil) {
-                    self.sessionStore.selectedSessionId = fullSessionId
-                }
-
-                // notification 이벤트 케이스 분류 (케이스별로 독립 제어 가능)
-                let isTaskCompletion  = !isCodexStatusOnlyLifecycleEvent && normalizedEvent == "stop"
-                let isIdleOrWaiting   = !isCodexStatusOnlyLifecycleEvent && isIdlePrompt
-                let isNotificationMsg = !isCodexStatusOnlyLifecycleEvent &&
-                    (isUserQuestionTool || (h.displayMsg.contains("?") && (normalizedEvent == "notification" || h.agentKind != .claudeCode)))
-                // isInformational = unread dot 표시 게이트 (확장 설정과 무관하게 유지)
-                let isInformational = isTaskCompletion || isIdleOrWaiting || isNotificationMsg
-                    || (!isCodexStatusOnlyLifecycleEvent && isStartEvent)
-
-                let isCurrentlyViewed = self.isExpandingFromRequest && self.currentSessionId == fullSessionId
-                if isInformational && !isStartEvent && !sessionMessage.isEmpty && !isCurrentlyViewed {
-                    self.sessionStore.setUnread(true, sessionId: fullSessionId)
-                }
-
-                let expandEnabled = MainActor.assumeIsolated {
-                    let s = SettingsStore.shared.settings
-                    guard s.notchAutoExpandEnabled && s.expandOnNotification else { return false }
-                    if isTaskCompletion  { return s.expandOnTaskCompletion }
-                    if isIdleOrWaiting   { return s.expandOnIdlePrompt }
-                    if isNotificationMsg { return s.expandOnNotificationMessage }
-                    return false
-                }
-                if isInformational && !isStartEvent && !hasPendingForSession && self.currentResponseHandler == nil {
-                    // expandEnabled 여부와 무관하게 포커스된 터미널의 unread 해제는 항상 수행
-                    let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
-                    self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
-                        guard let self else { return }
-                        if isFrontmost {
-                            self.sessionStore.setUnread(false, sessionId: fullSessionId)
-                            return
-                        }
-                        guard expandEnabled else { return }
-                        guard self.currentResponseHandler == nil else { return }
-                        // 세션의 팝아웃 창이 열려있으면 노치 확장 억제 — 창이 알림을 표시함
-                        let hasDetachedWindow = MainActor.assumeIsolated {
-                            SessionMessageWindowManager.shared.hasWindow(for: fullSessionId)
-                        }
-                        guard !hasDetachedWindow else { return }
-                        if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
-                            self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
-                            self.previousSessionId = self.currentSessionId
-                        }
-                        self.currentToolName = displayToolName
-                        self.currentEventName = h.event
-                        self.currentMessage = sessionMessage
-                        self.currentSessionId = fullSessionId
-                        self.isNotchExpanded = true
-                        self.isExpandingFromRequest = true
-
-                        self.stopNotificationAutoCollapseTimer()
-                        if let delay = self.notificationAutoCollapseDelay {
-                            self.startNotificationAutoCollapseTimer(delay: delay)
-                        }
-                    }
-                }
-            }
-
-            respondWithReplay(
-                "{\"response\": \"\(notification.response)\"}",
-                responseHandler: responseHandler,
+            handleNotificationEvent(
+                h,
                 hookEventId: hookEventId,
-                agentKind: h.agentKind,
-                sessionId: h.sessionId,
-                toolName: replayToolName,
-                workspaceRoot: h.workspaceRoot,
-                action: notification.action,
-                source: .automatic,
-                reason: notification.reason
+                isCodexStatusOnlyLifecycleEvent: isCodexStatusOnlyLifecycleEvent,
+                isUserQuestionTool: isUserQuestionTool,
+                displayToolName: displayToolName,
+                replayToolName: replayToolName,
+                cespCategory: cespCategory,
+                responseHandler: responseHandler
             )
             return
         }
@@ -1308,6 +1105,234 @@ class AppState: ObservableObject {
             action: .allow,
             source: .automatic,
             reason: "stop h.event"
+        )
+    }
+
+    // MARK: - Phase 2f handler: Notification
+
+    private func handleNotificationEvent(
+        _ h: ParsedHookEvent,
+        hookEventId: Int64?,
+        isCodexStatusOnlyLifecycleEvent: Bool,
+        isUserQuestionTool: Bool,
+        displayToolName: String,
+        replayToolName: String,
+        cespCategory: CESPCategory?,
+        responseHandler: @escaping (String) -> Void
+    ) {
+        let normalizedEvent = HookEventNormalizer.normalizedName(h.event)
+        let passClaudeUserQuestion = h.agentKind == .claudeCode && isUserQuestionTool
+        let notification = passClaudeUserQuestion
+            ? (response: "pass", action: RuleAction.prompt, reason: "Claude user question passthrough")
+            : (response: "approved", action: RuleAction.allow, reason: "notification")
+
+        print("[DevIsland] notification event: \(h.event) for \(h.toolName) → \(notification.response)")
+        if !isCodexStatusOnlyLifecycleEvent {
+            playOpenPeonSound(cespCategory)
+        }
+        guard !h.sessionId.isEmpty else {
+            respondWithReplay(
+                "{\"response\": \"\(notification.response)\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
+                toolName: replayToolName,
+                workspaceRoot: h.workspaceRoot,
+                action: notification.action,
+                source: .automatic,
+                reason: notification.reason
+            )
+            return
+        }
+        if normalizedEvent == "notification",
+           h.notificationType == "permission_prompt" || h.displayMsg.lowercased().contains("needs your permission") {
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
+                toolName: replayToolName,
+                workspaceRoot: h.workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "permission prompt notification"
+            )
+            return
+        }
+        let fullSessionId = h.sessionId
+        let isStartEvent = (normalizedEvent == "sessionstart" || normalizedEvent == "startup" || normalizedEvent == "init")
+
+        // [UX] 에이전트 작업 완료 대기 상태(Idle Prompt) 판별 로직
+        // - Claude Code: notification 훅에 idle_prompt 또는 input_required 타입으로 전달됨
+        // - Gemini CLI: afteragent, aftermodel 등 턴 종료 시 발생하는 훅을 대기 상태로 간주
+        // - Codex CLI: posttooluse를 쓰면 툴 연속 자동 실행 시 스팸 알림이 생기므로 제외함. 대신 stop 이벤트를 통해 완료됨을 알림
+        let isIdlePrompt = (normalizedEvent == "notification" && (h.notificationType == "idle_prompt" || h.notificationType == "input_required")) ||
+                           normalizedEvent == "afteragent"
+
+        let sessionMessage: String
+        if isStartEvent {
+            sessionMessage = "Session Started"
+        } else if isIdlePrompt && h.displayMsg.isEmpty {
+            sessionMessage = "Waiting for next prompt..."
+        } else if (normalizedEvent == "stop" && h.displayMsg.isEmpty) {
+            sessionMessage = "Task Completed"
+        } else {
+            sessionMessage = h.displayMsg
+        }
+
+        DispatchQueue.main.async {
+            // sessionStore 뮤테이션은 항상 메인 스레드에서 수행 (@Published → SwiftUI 업데이트)
+            if isStartEvent &&
+                h.agentKind == .codex &&
+                Self.shouldSupersedeCodexSessionsOnStart(source: h.sessionStartSource) {
+                let removedSessionIds = self.sessionStore.removeSupersededCodexSessions(
+                    newSessionId: fullSessionId,
+                    terminalApp: h.terminalApp,
+                    terminalTTY: h.terminalTTY,
+                    terminalWindowId: h.terminalWindowId,
+                    terminalTabIndex: h.terminalTabIndex,
+                    terminalTmuxPane: h.terminalTmuxPane,
+                    terminalTmuxSocket: h.terminalTmuxSocket,
+                    terminalTmuxClient: h.terminalTmuxClient
+                )
+
+                var removedCurrentRequest = false
+                for removedSessionId in removedSessionIds {
+                    let removedRequests = self.sessionStore.removeAllPending(sessionId: removedSessionId)
+                    removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
+                    if removedRequests.contains(where: { $0.id == self.showingRequestId }) {
+                        removedCurrentRequest = true
+                    }
+                    removedRequests.forEach {
+                        self.respondWithReplay(
+                            "{\"response\": \"denied\"}",
+                            responseHandler: $0.responseHandler,
+                            hookEventId: $0.hookEventId,
+                            agentKind: $0.agentKind,
+                            sessionId: $0.sessionId,
+                            toolName: $0.rawToolName.isEmpty ? $0.toolName : $0.rawToolName,
+                            workspaceRoot: $0.workspaceRoot,
+                            action: .deny,
+                            source: .automatic,
+                            reason: "session superseded"
+                        )
+                    }
+                    self.ptyCoordinator.clearBuffer(sessionId: removedSessionId)
+                    MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: removedSessionId) }
+                }
+
+                if removedSessionIds.contains(self.currentSessionId) || removedCurrentRequest {
+                    self.currentResponseHandler = nil
+                    self.isShowingRequest = false
+                    self.showingRequestId = nil
+                    self.timeoutTimer?.invalidate()
+                    self.timeoutProgress = 1.0
+                    self.currentSessionId = ""
+                    self.currentToolName = ""
+                    self.currentEventName = ""
+                    self.currentMessage = ""
+                    self.currentClaudeQuestion = nil
+                    self.currentClaudeQuestionAnswers = [:]
+                    self.showNextRequest()
+                }
+            }
+
+            let hasPendingForSession = self.sessionStore.pendingQueue.contains { $0.sessionId == fullSessionId }
+            self.sessionStore.updateActiveSession(
+                sessionId: fullSessionId,
+                terminalTitle: h.terminalTitle,
+                agentKind: h.agentKind,
+                terminalApp: h.terminalApp,
+                terminalTTY: h.terminalTTY,
+                terminalWindowId: h.terminalWindowId,
+                terminalTabIndex: h.terminalTabIndex,
+                terminalTmuxPane: h.terminalTmuxPane,
+                terminalTmuxSocket: h.terminalTmuxSocket,
+                terminalTmuxClient: h.terminalTmuxClient,
+                toolName: displayToolName,
+                eventName: h.event,
+                message: sessionMessage,
+                isPending: hasPendingForSession,
+                preserveMessage: normalizedEvent == "posttooluse" || sessionMessage.isEmpty,
+                isLifecycleTracked: isStartEvent || h.agentKind != .claudeCode, // Codex/Gemini는 기본적으로 추적 유지
+                isSubAgentSession: h.isSubAgentSession,
+                workspaceRoot: h.workspaceRoot
+            )
+
+            if isStartEvent || (self.sessionStore.selectedSessionId == nil) {
+                self.sessionStore.selectedSessionId = fullSessionId
+            }
+
+            // notification 이벤트 케이스 분류 (케이스별로 독립 제어 가능)
+            let isTaskCompletion  = !isCodexStatusOnlyLifecycleEvent && normalizedEvent == "stop"
+            let isIdleOrWaiting   = !isCodexStatusOnlyLifecycleEvent && isIdlePrompt
+            let isNotificationMsg = !isCodexStatusOnlyLifecycleEvent &&
+                (isUserQuestionTool || (h.displayMsg.contains("?") && (normalizedEvent == "notification" || h.agentKind != .claudeCode)))
+            // isInformational = unread dot 표시 게이트 (확장 설정과 무관하게 유지)
+            let isInformational = isTaskCompletion || isIdleOrWaiting || isNotificationMsg
+                || (!isCodexStatusOnlyLifecycleEvent && isStartEvent)
+
+            let isCurrentlyViewed = self.isExpandingFromRequest && self.currentSessionId == fullSessionId
+            if isInformational && !isStartEvent && !sessionMessage.isEmpty && !isCurrentlyViewed {
+                self.sessionStore.setUnread(true, sessionId: fullSessionId)
+            }
+
+            let expandEnabled = MainActor.assumeIsolated {
+                let s = SettingsStore.shared.settings
+                guard s.notchAutoExpandEnabled && s.expandOnNotification else { return false }
+                if isTaskCompletion  { return s.expandOnTaskCompletion }
+                if isIdleOrWaiting   { return s.expandOnIdlePrompt }
+                if isNotificationMsg { return s.expandOnNotificationMessage }
+                return false
+            }
+            if isInformational && !isStartEvent && !hasPendingForSession && self.currentResponseHandler == nil {
+                // expandEnabled 여부와 무관하게 포커스된 터미널의 unread 해제는 항상 수행
+                let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
+                self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
+                    guard let self else { return }
+                    if isFrontmost {
+                        self.sessionStore.setUnread(false, sessionId: fullSessionId)
+                        return
+                    }
+                    guard expandEnabled else { return }
+                    guard self.currentResponseHandler == nil else { return }
+                    // 세션의 팝아웃 창이 열려있으면 노치 확장 억제 — 창이 알림을 표시함
+                    let hasDetachedWindow = MainActor.assumeIsolated {
+                        SessionMessageWindowManager.shared.hasWindow(for: fullSessionId)
+                    }
+                    guard !hasDetachedWindow else { return }
+                    if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
+                        self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
+                        self.previousSessionId = self.currentSessionId
+                    }
+                    self.currentToolName = displayToolName
+                    self.currentEventName = h.event
+                    self.currentMessage = sessionMessage
+                    self.currentSessionId = fullSessionId
+                    self.isNotchExpanded = true
+                    self.isExpandingFromRequest = true
+
+                    self.stopNotificationAutoCollapseTimer()
+                    if let delay = self.notificationAutoCollapseDelay {
+                        self.startNotificationAutoCollapseTimer(delay: delay)
+                    }
+                }
+            }
+        }
+
+        respondWithReplay(
+            "{\"response\": \"\(notification.response)\"}",
+            responseHandler: responseHandler,
+            hookEventId: hookEventId,
+            agentKind: h.agentKind,
+            sessionId: h.sessionId,
+            toolName: replayToolName,
+            workspaceRoot: h.workspaceRoot,
+            action: notification.action,
+            source: .automatic,
+            reason: notification.reason
         )
     }
 
