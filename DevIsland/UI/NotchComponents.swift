@@ -334,23 +334,35 @@ struct SessionRowView: View {
             }
             Button(action: { AppState.shared.showSessionDetail(session.id) }) {
                 HStack(spacing: isSubAgent ? 8 : 12) {
-                    ZStack(alignment: .topTrailing) {
-                        AgentRequestBadge(
-                            kind: session.agentKind,
-                            tool: tool,
-                            isActive: session.isPending,
-                            size: badgeSize
-                        )
+                    VStack(spacing: 3) {
+                        ZStack(alignment: .topTrailing) {
+                            AgentRequestBadge(
+                                kind: session.agentKind,
+                                tool: tool,
+                                isActive: session.isPending,
+                                size: badgeSize
+                            )
 
-                        if session.isPending {
-                            Circle()
-                                .fill(Color.orange)
-                                .frame(width: isSubAgent ? 8 : 10, height: isSubAgent ? 8 : 10)
-                                .overlay(Circle().stroke(Color.black, lineWidth: 2))
-                                .offset(x: 4, y: -4)
+                            if session.isPending {
+                                Circle()
+                                    .fill(Color.orange)
+                                    .frame(width: isSubAgent ? 8 : 10, height: isSubAgent ? 8 : 10)
+                                    .overlay(Circle().stroke(Color.black, lineWidth: 2))
+                                    .offset(x: 4, y: -4)
+                            }
+                        }
+                        .frame(width: badgeFrame, height: badgeFrame)
+
+                        if let appBadge = terminalAppBadge(session.terminalApp) {
+                            Text(appBadge.label)
+                                .font(.system(size: metaFont - 1, weight: .semibold))
+                                .foregroundColor(appBadge.color)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(appBadge.color.opacity(0.15))
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
                         }
                     }
-                    .frame(width: badgeFrame, height: badgeFrame)
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
@@ -395,15 +407,6 @@ struct SessionRowView: View {
                                     Image(systemName: "tag.fill")
                                         .font(.system(size: titleFont - 2))
                                         .foregroundColor(.white.opacity(0.4))
-                                }
-                                if let appBadge = terminalAppBadge(session.terminalApp) {
-                                    Text(appBadge.label)
-                                        .font(.system(size: metaFont - 1, weight: .semibold))
-                                        .foregroundColor(appBadge.color)
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(appBadge.color.opacity(0.15))
-                                        .clipShape(RoundedRectangle(cornerRadius: 3))
                                 }
                             }
 
