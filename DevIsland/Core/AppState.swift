@@ -451,61 +451,14 @@ class AppState: ObservableObject {
             break
         }
 
-        // --- Phase 1: Sub-Agent and Lifecycle Handling ---
-        // Sub-agents are tracked but their approval is usually delegated to the parent or
-        // auto-approved. We record them in replay and update session grouping.
+        // MARK: Phase 1: Sub-Agent
         var displayToolName = h.displayToolName
-
         if h.isSubAgentSession {
-            _ = recordReplayHookEvent(
-                requestId: h.requestId,
-                provider: providerKind(for: h.agentKind),
-                sessionId: h.sessionId,
-                eventName: h.event,
-                toolName: h.toolName,
-                payload: h.parsedJSON
-            )
-            if !h.sessionId.isEmpty {
-                let fullSessionId = h.sessionId
-                let pid = h.parentSessionId
-                let subAgentStopEvents: Set<String> = ["stop", "exit", "shutdown", "sessionend"]
-                let normalizedSubEvent = HookEventNormalizer.normalizedName(h.event)
-                if subAgentStopEvents.contains(normalizedSubEvent) {
-                    DispatchQueue.main.async {
-                        self.sessionStore.removeSession(id: fullSessionId)
-                        self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
-                    }
-                } else {
-                    DispatchQueue.main.async {
-                        self.sessionStore.updateActiveSession(
-                            sessionId: fullSessionId,
-                            terminalTitle: h.terminalTitle,
-                            agentKind: h.agentKind,
-                            terminalApp: h.terminalApp,
-                            terminalTTY: h.terminalTTY,
-                            terminalWindowId: h.terminalWindowId,
-                            terminalTabIndex: h.terminalTabIndex,
-                            terminalTmuxPane: h.terminalTmuxPane,
-                            terminalTmuxSocket: h.terminalTmuxSocket,
-                            terminalTmuxClient: h.terminalTmuxClient,
-                            toolName: displayToolName,
-                            eventName: h.event,
-                            message: h.displayMsg,
-                            isPending: false,
-                            isLifecycleTracked: true,
-                            isSubAgentSession: true,
-                            parentSessionId: pid,
-                            workspaceRoot: h.workspaceRoot
-                        )
-                    }
-                }
-            }
-            responseHandler("{\"response\": \"approved\"}")
+            handleSubAgentEvent(h, displayToolName: displayToolName, responseHandler: responseHandler)
             return
         }
 
-        // --- Phase 2: PTY and Classification ---
-        // PTY output is processed separately from hook events to avoid replay log pollution.
+        // MARK: Phase 2a: PTY Output (processed separately to avoid replay log pollution)
         if h.event == "PTYOutput" {
             ptyCoordinator.handleOutputEvent(
                 sessionId: h.sessionId,
@@ -516,6 +469,7 @@ class AppState: ObservableObject {
             return
         }
 
+        // MARK: Phase 2b: Event Classification
         let normalizedEvent = HookEventNormalizer.normalizedName(h.event)
         let hookEventId = recordReplayHookEvent(
             requestId: h.requestId,
@@ -567,81 +521,13 @@ class AppState: ObservableObject {
             payload: h.parsedJSON
         )
 
+        // MARK: Phase 2c: Stop
         if isStop {
-            playOpenPeonSound(cespCategory)
-            guard !h.sessionId.isEmpty else {
-                respondWithReplay(
-                    "{\"response\": \"approved\"}",
-                    responseHandler: responseHandler,
-                    hookEventId: hookEventId,
-                    agentKind: h.agentKind,
-                    sessionId: h.sessionId,
-                    toolName: replayToolName,
-                    workspaceRoot: h.workspaceRoot,
-                    action: .allow,
-                    source: .automatic,
-                    reason: "stop h.event"
-                )
-                return
-            }
-            let fullSessionId = h.sessionId
-            DispatchQueue.main.async {
-                let removedRequests = self.sessionStore.removeAllPending(sessionId: fullSessionId)
-                removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
-                removedRequests.forEach {
-                    self.respondWithReplay(
-                        "{\"response\": \"denied\"}",
-                        responseHandler: $0.responseHandler,
-                        hookEventId: $0.hookEventId,
-                        agentKind: $0.agentKind,
-                        sessionId: $0.sessionId,
-                        toolName: $0.rawToolName.isEmpty ? $0.toolName : $0.rawToolName,
-                        workspaceRoot: $0.workspaceRoot,
-                        action: .deny,
-                        source: .automatic,
-                        reason: "session stopped"
-                    )
-                }
-                self.sessionStore.removeSession(id: fullSessionId)
-                self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
-                MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: fullSessionId) }
-
-                if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
-                    self.currentResponseHandler = nil
-                    self.isShowingRequest = false
-                    self.showingRequestId = nil
-                    self.timeoutTimer?.invalidate()
-                    self.timeoutProgress = 1.0
-                    self.currentSessionId = ""
-                    self.currentToolName = ""
-                    self.currentEventName = ""
-                    self.currentMessage = ""
-                    self.currentClaudeQuestion = nil
-                    self.currentClaudeQuestionAnswers = [:]
-                }
-
-                if self.sessionStore.pendingQueue.isEmpty {
-                    self.isNotchExpanded = false
-                    self.syncDisplayToSelectedSession()
-                } else if self.currentResponseHandler == nil {
-                    self.showNextRequest()
-                }
-            }
-            respondWithReplay(
-                "{\"response\": \"approved\"}",
-                responseHandler: responseHandler,
-                hookEventId: hookEventId,
-                agentKind: h.agentKind,
-                sessionId: h.sessionId,
-                toolName: replayToolName,
-                workspaceRoot: h.workspaceRoot,
-                action: .allow,
-                source: .automatic,
-                reason: "stop h.event"
-            )
+            handleStopEvent(h, hookEventId: hookEventId, cespCategory: cespCategory, replayToolName: replayToolName, responseHandler: responseHandler)
             return
         }
 
+        // MARK: Phase 2d: UserPromptSubmit Policy
         if normalizedEvent == "userpromptsubmit", h.agentKind == .claudeCode,
            let prompt = h.parsedJSON["prompt"] as? String,
            let denialReason = ClaudePromptPolicy.denialReason(for: prompt) {
@@ -681,6 +567,7 @@ class AppState: ObservableObject {
             return
         }
 
+        // MARK: Phase 2e: Claude user-question follow-up passthrough
         if h.agentKind == .claudeCode,
            (normalizedEvent == "permissionrequest" || normalizedEvent == "posttooluse"),
            isUserQuestionTool {
@@ -700,6 +587,7 @@ class AppState: ObservableObject {
             return
         }
 
+        // MARK: Phase 2f: Notification
         if isNotification {
             let passClaudeUserQuestion = h.agentKind == .claudeCode && isUserQuestionTool
             let notification = passClaudeUserQuestion
@@ -917,7 +805,7 @@ class AppState: ObservableObject {
             return
         }
 
-        // --- Phase 3: Decision Logic ---
+        // MARK: Phase 3: Decision Logic
         let isGeminiNormalMode = h.agentKind == .gemini && !geminiState.emulateInteractiveMode
         
         guard isApproval && !isGeminiNormalMode else {
@@ -1079,7 +967,7 @@ class AppState: ObservableObject {
             }
         }
 
-        // --- Phase 4: Evaluation Hierarchy ---
+        // MARK: Phase 4: Evaluation Hierarchy
         // 1. Terminal Focus Check: If the user is already in the terminal, we 'pass' to let
         //    the CLI handle the prompt, avoiding double approval.
         isTerminalFrontmostAsync(
@@ -1286,6 +1174,141 @@ class AppState: ObservableObject {
                 self.syncDisplayToSelectedSession()
             }
         }
+    }
+
+    // MARK: - Phase 1 handler: Sub-Agent
+
+    private func handleSubAgentEvent(
+        _ h: ParsedHookEvent,
+        displayToolName: String,
+        responseHandler: @escaping (String) -> Void
+    ) {
+        _ = recordReplayHookEvent(
+            requestId: h.requestId,
+            provider: providerKind(for: h.agentKind),
+            sessionId: h.sessionId,
+            eventName: h.event,
+            toolName: h.toolName,
+            payload: h.parsedJSON
+        )
+        if !h.sessionId.isEmpty {
+            let fullSessionId = h.sessionId
+            let pid = h.parentSessionId
+            let subAgentStopEvents: Set<String> = ["stop", "exit", "shutdown", "sessionend"]
+            let normalizedSubEvent = HookEventNormalizer.normalizedName(h.event)
+            if subAgentStopEvents.contains(normalizedSubEvent) {
+                DispatchQueue.main.async {
+                    self.sessionStore.removeSession(id: fullSessionId)
+                    self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.sessionStore.updateActiveSession(
+                        sessionId: fullSessionId,
+                        terminalTitle: h.terminalTitle,
+                        agentKind: h.agentKind,
+                        terminalApp: h.terminalApp,
+                        terminalTTY: h.terminalTTY,
+                        terminalWindowId: h.terminalWindowId,
+                        terminalTabIndex: h.terminalTabIndex,
+                        terminalTmuxPane: h.terminalTmuxPane,
+                        terminalTmuxSocket: h.terminalTmuxSocket,
+                        terminalTmuxClient: h.terminalTmuxClient,
+                        toolName: displayToolName,
+                        eventName: h.event,
+                        message: h.displayMsg,
+                        isPending: false,
+                        isLifecycleTracked: true,
+                        isSubAgentSession: true,
+                        parentSessionId: pid,
+                        workspaceRoot: h.workspaceRoot
+                    )
+                }
+            }
+        }
+        responseHandler("{\"response\": \"approved\"}")
+    }
+
+    // MARK: - Phase 2c handler: Stop
+
+    private func handleStopEvent(
+        _ h: ParsedHookEvent,
+        hookEventId: Int64?,
+        cespCategory: CESPCategory?,
+        replayToolName: String,
+        responseHandler: @escaping (String) -> Void
+    ) {
+        playOpenPeonSound(cespCategory)
+        guard !h.sessionId.isEmpty else {
+            respondWithReplay(
+                "{\"response\": \"approved\"}",
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
+                toolName: replayToolName,
+                workspaceRoot: h.workspaceRoot,
+                action: .allow,
+                source: .automatic,
+                reason: "stop h.event"
+            )
+            return
+        }
+        let fullSessionId = h.sessionId
+        DispatchQueue.main.async {
+            let removedRequests = self.sessionStore.removeAllPending(sessionId: fullSessionId)
+            removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
+            removedRequests.forEach {
+                self.respondWithReplay(
+                    "{\"response\": \"denied\"}",
+                    responseHandler: $0.responseHandler,
+                    hookEventId: $0.hookEventId,
+                    agentKind: $0.agentKind,
+                    sessionId: $0.sessionId,
+                    toolName: $0.rawToolName.isEmpty ? $0.toolName : $0.rawToolName,
+                    workspaceRoot: $0.workspaceRoot,
+                    action: .deny,
+                    source: .automatic,
+                    reason: "session stopped"
+                )
+            }
+            self.sessionStore.removeSession(id: fullSessionId)
+            self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
+            MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: fullSessionId) }
+
+            if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
+                self.currentResponseHandler = nil
+                self.isShowingRequest = false
+                self.showingRequestId = nil
+                self.timeoutTimer?.invalidate()
+                self.timeoutProgress = 1.0
+                self.currentSessionId = ""
+                self.currentToolName = ""
+                self.currentEventName = ""
+                self.currentMessage = ""
+                self.currentClaudeQuestion = nil
+                self.currentClaudeQuestionAnswers = [:]
+            }
+
+            if self.sessionStore.pendingQueue.isEmpty {
+                self.isNotchExpanded = false
+                self.syncDisplayToSelectedSession()
+            } else if self.currentResponseHandler == nil {
+                self.showNextRequest()
+            }
+        }
+        respondWithReplay(
+            "{\"response\": \"approved\"}",
+            responseHandler: responseHandler,
+            hookEventId: hookEventId,
+            agentKind: h.agentKind,
+            sessionId: h.sessionId,
+            toolName: replayToolName,
+            workspaceRoot: h.workspaceRoot,
+            action: .allow,
+            source: .automatic,
+            reason: "stop h.event"
+        )
     }
 
     private func enqueueManualRequest(
