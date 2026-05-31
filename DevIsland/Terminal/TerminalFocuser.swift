@@ -581,11 +581,17 @@ class TerminalFocuser {
         }
     }
 
-    /// 설치된 터미널 앱 목록 (Launch Services는 느리므로 최초 1회만 계산)
+    /// 세션을 새로 열 수 있는 터미널 앱 목록 (Launch Services는 느리므로 최초 1회만 계산)
+    /// VSCode·ClaudeDesktop은 세션 포커스용으로만 쓰이므로 제외
+    private static let nonTerminalBundleIds: Set<String> = [
+        "com.microsoft.VSCode",
+        "com.anthropic.claudefordesktop",
+    ]
     static let installedTerminals: [(name: String, bundleId: String)] = {
         candidates.filter {
-            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
-                || NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundleId) != nil
+            !nonTerminalBundleIds.contains($0.bundleId) &&
+            (!NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
+                || NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundleId) != nil)
         }.map { (name: $0.name, bundleId: $0.bundleId) }
     }()
 
