@@ -103,6 +103,7 @@ final class SessionMessageWindowManager {
     func closeWindow(for sessionId: String) {
         controllers[sessionId]?.close()
         controllers.removeValue(forKey: sessionId)
+        UserDefaults.standard.removeObject(forKey: "NSWindow Frame SessionMessageWindow-\(sessionId)")
     }
 
     func hasWindow(for sessionId: String) -> Bool {
@@ -151,16 +152,21 @@ final class SessionMessageWindowController: NSWindowController, NSWindowDelegate
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 360, height: 260)
-        window.center()
 
         super.init(window: window)
         window.delegate = self
+
+        // 세션별 고유 autosaveName — 여러 창 동시 오픈 시 각각 독립적으로 저장·복원
+        let autosaveName = "SessionMessageWindow-\(sessionId)"
+        if UserDefaults.standard.string(forKey: "NSWindow Frame \(autosaveName)") == nil {
+            window.center()
+        }
+        window.setFrameAutosaveName(autosaveName)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     func show() {
-        if window?.isVisible == false { window?.center() }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
