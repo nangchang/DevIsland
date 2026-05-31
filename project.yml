@@ -31,7 +31,7 @@ targets:
     info:
       path: DevIsland/Info.plist
       properties:
-        CFBundleShortVersionString: "0.10.0"
+        CFBundleShortVersionString: "0.10.1-dev"
         CFBundleVersion: "81"
         LSUIElement: true
         NSHighResolutionCapable: true
