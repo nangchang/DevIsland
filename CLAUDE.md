@@ -48,6 +48,10 @@ tail -f /tmp/DevIsland.bridge.log
 `position`은 diff 파일 내 1-indexed 줄 번호 (헝크 헤더 포함). `REQUEST_CHANGES`는 본인 PR에 불가 — `COMMENT` 사용.
 
 ```bash
+# 인라인 코멘트 reply (PR 번호 포함 필수 — 없으면 404)
+gh api "repos/nangchang/DevIsland/pulls/<PR_NUMBER>/comments/<COMMENT_ID>/replies" \
+  --method POST --field body="..."
+
 # PR 브랜치 체크아웃
 gh pr view <PR_NUMBER> --repo nangchang/DevIsland --json headRefName -q .headRefName
 git fetch origin pull/<PR_NUMBER>/head:<local-branch> && git checkout <local-branch>
@@ -88,6 +92,18 @@ main에 직접 커밋하지 말 것 — 예외 없음.
 파일 생성 후 `xcodegen generate`만 실행하면 됨.
 
 빌드 결과 확인: 종료 코드(`$?`)가 가장 정확함. grep 사용 시 `BUILD SUCCEEDED` / `BUILD FAILED` (대문자, `-quiet` 시 출력 없음).
+
+## 워크트리 빌드
+
+git worktree에는 `*.xcodeproj`가 없으므로 빌드 전 `xcodegen generate`로 생성 필요.
+메인 프로젝트의 xcodeproj로 빌드하면 워크트리 변경이 반영되지 않음.
+
+```bash
+xcodegen generate  # 워크트리 루트에서
+xcodebuild build -scheme DevIsland -quiet -project "$(pwd)/DevIsland.xcodeproj"
+```
+
+앱 실행 시에도 이 워크트리 DerivedData 경로의 .app을 사용할 것.
 
 ## Swift SourceKit 진단 오류
 
