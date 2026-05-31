@@ -33,10 +33,6 @@ class AppState: ObservableObject {
     }
 
     private enum DefaultsKey {
-        static let notchDisplayTarget = "notchDisplayTarget"
-        static let selectedDisplayId = "selectedDisplayId"
-        static let showInFullScreenApps = "showInFullScreenApps"
-        static let requestDisplayTarget = "requestDisplayTarget"
         static let globalAutoApproveTypes = "globalAutoApproveTypes"
         static let autoApproveSafeTools = "autoApproveSafeTools"
         static let sessionLabels = "sessionLabels"
@@ -60,29 +56,6 @@ class AppState: ObservableObject {
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
-    @Published var notchDisplayTarget: NotchDisplayTarget = .automatic {
-        didSet {
-            if notchDisplayTarget == .specific {
-                ensureSelectedDisplay()
-            }
-            userDefaults.set(notchDisplayTarget.rawValue, forKey: DefaultsKey.notchDisplayTarget)
-        }
-    }
-    @Published var selectedDisplayId: UInt32 = 0 {
-        didSet {
-            userDefaults.set(Int(selectedDisplayId), forKey: DefaultsKey.selectedDisplayId)
-        }
-    }
-    @Published var showInFullScreenApps = true {
-        didSet {
-            userDefaults.set(showInFullScreenApps, forKey: DefaultsKey.showInFullScreenApps)
-        }
-    }
-    @Published var requestDisplayTarget: RequestDisplayTarget = .focused {
-        didSet {
-            userDefaults.set(requestDisplayTarget.rawValue, forKey: DefaultsKey.requestDisplayTarget)
-        }
-    }
     @Published var currentMessage: String = ""
     @Published var currentSessionId: String = ""
     @Published var currentToolName: String = ""
@@ -111,6 +84,7 @@ class AppState: ObservableObject {
 
     let sessionStore: SessionStore
     let geminiState: GeminiSessionState
+    let displayPrefs: NotchDisplayPreferences
 
     private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
@@ -171,6 +145,7 @@ class AppState: ObservableObject {
         self.openPeonSoundPlayer = openPeonSoundPlayer
         self.sessionStore = SessionStore()
         self.geminiState = GeminiSessionState(userDefaults: userDefaults)
+        self.displayPrefs = NotchDisplayPreferences(userDefaults: userDefaults)
         self.ptyCoordinator = PTYCoordinator(
             ptyBuffer: PTYSessionBuffer(),
             approvalProxy: approvalProxy,
@@ -178,23 +153,7 @@ class AppState: ObservableObject {
             userDefaults: userDefaults
         )
         self.replayRecorder = ReplayRecorder(proxy: approvalProxy, queue: approvalPersistenceQueue)
-        
-        if let rawTarget = userDefaults.string(forKey: "displayTarget"), // Migration check
-           let target = NotchDisplayTarget(rawValue: rawTarget) {
-            notchDisplayTarget = target
-        } else if let rawTarget = userDefaults.string(forKey: DefaultsKey.notchDisplayTarget),
-                  let target = NotchDisplayTarget(rawValue: rawTarget) {
-            notchDisplayTarget = target
-        }
-        
-        selectedDisplayId = UInt32(userDefaults.integer(forKey: DefaultsKey.selectedDisplayId))
-        if userDefaults.object(forKey: DefaultsKey.showInFullScreenApps) != nil {
-            showInFullScreenApps = userDefaults.bool(forKey: DefaultsKey.showInFullScreenApps)
-        }
-        if let rawTarget = userDefaults.string(forKey: DefaultsKey.requestDisplayTarget),
-           let target = RequestDisplayTarget(rawValue: rawTarget) {
-            requestDisplayTarget = target
-        }
+
         if let savedAutoApprove = userDefaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String], !savedAutoApprove.isEmpty {
             globalAutoApproveTypes = Set(savedAutoApprove)
             // Migrate legacy UserDefaults rules into SQLite; only remove keys that succeeded.
@@ -231,7 +190,6 @@ class AppState: ObservableObject {
         }
         autoApproveSafeTools = userDefaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
         sessionLabels = userDefaults.dictionary(forKey: DefaultsKey.sessionLabels) as? [String: String] ?? [:]
-        ensureSelectedDisplay()
 
         if let proxy = approvalProxy {
             let rawReplay = userDefaults.integer(forKey: SettingsStore.DefaultsKey.replayRetentionDays)
@@ -423,14 +381,6 @@ class AppState: ObservableObject {
             let path = socketPath.flatMap { $0.isEmpty ? nil : $0 } ?? AppSettings.defaults.bridgeSocketPath
             return .unix(path: path)
         }
-    }
-
-    private func ensureSelectedDisplay() {
-        guard !NSScreen.screens.isEmpty,
-              !NSScreen.screens.contains(where: { $0.displayId == selectedDisplayId }) else {
-            return
-        }
-        selectedDisplayId = NSScreen.main?.displayId ?? NSScreen.screens[0].displayId
     }
 
     /// 현재 표시 중인 요청의 터미널이 포커스되었는지 확인하고, 그렇다면 자동으로 'pass' 또는 'dismiss' 처리
