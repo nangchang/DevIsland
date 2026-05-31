@@ -188,7 +188,7 @@ class NotchWindowController: NSWindowController {
             }
             .store(in: &cancellables)
 
-        AppState.shared.$currentClaudeQuestion
+        AppState.shared.claudeQuestionState.$currentClaudeQuestion
             .receive(on: RunLoop.main)
             .sink { [weak self] question in
                 guard question != nil, AppState.shared.isNotchExpanded else { return }

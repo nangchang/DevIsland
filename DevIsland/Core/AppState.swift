@@ -59,8 +59,8 @@ class AppState: ObservableObject {
     @Published var currentSessionId: String = ""
     @Published var currentToolName: String = ""
     @Published var currentEventName: String = ""
-    @Published var currentClaudeQuestion: ClaudeQuestionRequest?
-    @Published var currentClaudeQuestionAnswers: [String: ClaudeQuestionAnswer] = [:]
+    var currentClaudeQuestion: ClaudeQuestionRequest? { claudeQuestionState.currentClaudeQuestion }
+    var currentClaudeQuestionAnswers: [String: ClaudeQuestionAnswer] { claudeQuestionState.currentClaudeQuestionAnswers }
     @Published var timeoutProgress: Double = 1.0
     @Published var notificationAutoCollapseProgress: Double = 1.0
     @Published var isNotificationAutoCollapseActive = false
@@ -85,6 +85,7 @@ class AppState: ObservableObject {
     let geminiState: GeminiSessionState
     let displayPrefs: NotchDisplayPreferences
     let ruleService: ApprovalRuleService
+    let claudeQuestionState: ClaudeQuestionState
 
     private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
@@ -97,6 +98,7 @@ class AppState: ObservableObject {
     private var isShowingRequest = false
     private var showingRequestId: UUID?
     private var suspendedClaudeQuestionAnswers: [UUID: [String: ClaudeQuestionAnswer]] = [:]
+    private var claudeQuestionCancellable: AnyCancellable?
     private var _previousSessionId: String?
     private var previousSessionId: String? {
         get {
@@ -150,6 +152,7 @@ class AppState: ObservableObject {
             persistenceQueue: approvalPersistenceQueue,
             codexRuleSyncAdapter: codexRuleSyncAdapter
         )
+        self.claudeQuestionState = ClaudeQuestionState()
         self.ptyCoordinator = PTYCoordinator(
             ptyBuffer: PTYSessionBuffer(),
             approvalProxy: approvalProxy,
@@ -157,6 +160,11 @@ class AppState: ObservableObject {
             userDefaults: userDefaults
         )
         self.replayRecorder = ReplayRecorder(proxy: approvalProxy, queue: approvalPersistenceQueue)
+
+        // Forward ClaudeQuestionState changes to AppState.objectWillChange so that
+        // views observing AppState re-render when question/answer state changes.
+        claudeQuestionCancellable = claudeQuestionState.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
 
         if let savedAutoApprove = userDefaults.array(forKey: DefaultsKey.globalAutoApproveTypes) as? [String], !savedAutoApprove.isEmpty {
             globalAutoApproveTypes = Set(savedAutoApprove)
@@ -1083,8 +1091,7 @@ class AppState: ObservableObject {
                 self.currentToolName = ""
                 self.currentEventName = ""
                 self.currentMessage = ""
-                self.currentClaudeQuestion = nil
-                self.currentClaudeQuestionAnswers = [:]
+                self.claudeQuestionState.reset()
             }
 
             if self.sessionStore.pendingQueue.isEmpty {
@@ -1233,8 +1240,7 @@ class AppState: ObservableObject {
                     self.currentToolName = ""
                     self.currentEventName = ""
                     self.currentMessage = ""
-                    self.currentClaudeQuestion = nil
-                    self.currentClaudeQuestionAnswers = [:]
+                    self.claudeQuestionState.reset()
                     self.showNextRequest()
                 }
             }
@@ -1463,8 +1469,7 @@ class AppState: ObservableObject {
                 self.currentToolName = ""
                 self.currentEventName = ""
                 self.currentMessage = ""
-                self.currentClaudeQuestion = nil
-                self.currentClaudeQuestionAnswers = [:]
+                self.claudeQuestionState.reset()
             }
 
             if self.sessionStore.pendingQueue.isEmpty {
@@ -1495,8 +1500,7 @@ class AppState: ObservableObject {
             currentWorkspaceRoot = nil
             currentHookEventId = nil
             currentMessage = ""
-            currentClaudeQuestion = nil
-            currentClaudeQuestionAnswers = [:]
+            claudeQuestionState.reset()
             currentSessionId = ""
             if let prev = previousSessionId {
                 previousSessionId = nil
@@ -1561,8 +1565,7 @@ class AppState: ObservableObject {
                             workspaceRoot: next.workspaceRoot
                         )
                     }
-                    self.currentClaudeQuestion = nil
-                    self.currentClaudeQuestionAnswers = [:]
+                    self.claudeQuestionState.reset()
                     self.isShowingRequest = false
                     self.showingRequestId = nil
                     self.timeoutTimer?.invalidate()
@@ -1593,12 +1596,12 @@ class AppState: ObservableObject {
             self.currentWorkspaceRoot = next.workspaceRoot
             self.currentHookEventId = next.hookEventId
             self.currentMessage    = next.message
-            self.currentClaudeQuestion = next.claudeQuestion
             if let claudeQuestion = next.claudeQuestion {
-                self.currentClaudeQuestionAnswers = self.suspendedClaudeQuestionAnswers.removeValue(forKey: next.id)
-                    ?? Self.defaultAnswers(for: claudeQuestion)
+                let answers = self.suspendedClaudeQuestionAnswers.removeValue(forKey: next.id)
+                    ?? ClaudeQuestionState.defaultAnswers(for: claudeQuestion)
+                self.claudeQuestionState.setQuestion(claudeQuestion, answers: answers)
             } else {
-                self.currentClaudeQuestionAnswers = [:]
+                self.claudeQuestionState.reset()
             }
             self.currentSessionId  = next.sessionId
 
@@ -1649,13 +1652,12 @@ class AppState: ObservableObject {
     }
 
     private func preemptCurrentPendingDisplay() {
-        if let showingRequestId, currentClaudeQuestion != nil {
-            suspendedClaudeQuestionAnswers[showingRequestId] = currentClaudeQuestionAnswers
+        if let showingRequestId, claudeQuestionState.currentClaudeQuestion != nil {
+            suspendedClaudeQuestionAnswers[showingRequestId] = claudeQuestionState.currentClaudeQuestionAnswers
         }
         currentResponseHandler = nil
         currentHookEventId = nil
-        currentClaudeQuestion = nil
-        currentClaudeQuestionAnswers = [:]
+        claudeQuestionState.reset()
         isShowingRequest = false
         showingRequestId = nil
         timeoutTimer?.invalidate()
@@ -1719,19 +1721,6 @@ class AppState: ObservableObject {
         }
         return Self.isApprovalEvent(HookEventNormalizer.normalizedName(request.eventName), for: request.agentKind)
             && (!request.toolName.isEmpty || !request.message.isEmpty)
-    }
-
-    private static func defaultAnswers(for request: ClaudeQuestionRequest) -> [String: ClaudeQuestionAnswer] {
-        var answers: [String: ClaudeQuestionAnswer] = [:]
-        for question in request.questions {
-            var answer = ClaudeQuestionAnswer()
-            if !question.allowsMultipleSelection, !question.allowsTextInput,
-               let firstOption = question.options.first {
-                answer.selectedOptionIds = [firstOption.id]
-            }
-            answers[question.id] = answer
-        }
-        return answers
     }
 
     private func recordReplayHookEvent(
@@ -2026,8 +2015,7 @@ class AppState: ObservableObject {
         let completedRequestId = showingRequestId
         currentResponseHandler = nil
         currentHookEventId = nil
-        currentClaudeQuestion = nil
-        currentClaudeQuestionAnswers = [:]
+        claudeQuestionState.reset()
         isShowingRequest = false
         showingRequestId = nil
         timeoutTimer?.invalidate()
@@ -2175,49 +2163,23 @@ class AppState: ObservableObject {
     }
 
     func setClaudeQuestionOption(questionId: String, optionId: String) {
-        guard let question = currentClaudeQuestion?.questions.first(where: { $0.id == questionId }) else { return }
-        var answer = currentClaudeQuestionAnswers[questionId] ?? ClaudeQuestionAnswer()
-        if !question.allowsMultipleSelection {
-            answer.usesCustomText = false
-        }
-        if question.allowsMultipleSelection {
-            if answer.selectedOptionIds.contains(optionId) {
-                answer.selectedOptionIds.remove(optionId)
-            } else {
-                answer.selectedOptionIds.insert(optionId)
-            }
-        } else {
-            answer.selectedOptionIds = [optionId]
-        }
-        currentClaudeQuestionAnswers[questionId] = answer
+        claudeQuestionState.setOption(questionId: questionId, optionId: optionId)
     }
 
     func setClaudeQuestionCustomAnswerEnabled(questionId: String, isEnabled: Bool) {
-        guard let question = currentClaudeQuestion?.questions.first(where: { $0.id == questionId }) else { return }
-        var answer = currentClaudeQuestionAnswers[questionId] ?? ClaudeQuestionAnswer()
-        answer.usesCustomText = isEnabled
-        if isEnabled && !question.allowsMultipleSelection {
-            answer.selectedOptionIds = []
-        }
-        currentClaudeQuestionAnswers[questionId] = answer
+        claudeQuestionState.setCustomAnswerEnabled(questionId: questionId, isEnabled: isEnabled)
     }
 
     func setClaudeQuestionText(questionId: String, text: String) {
-        var answer = currentClaudeQuestionAnswers[questionId] ?? ClaudeQuestionAnswer()
-        answer.text = text
-        currentClaudeQuestionAnswers[questionId] = answer
+        claudeQuestionState.setText(questionId: questionId, text: text)
     }
 
     func canSubmitClaudeQuestion() -> Bool {
-        guard let questionRequest = currentClaudeQuestion else { return false }
-        return questionRequest.updatedInput(answers: currentClaudeQuestionAnswers) != nil
+        claudeQuestionState.canSubmit()
     }
 
     func submitClaudeQuestion() {
-        guard let questionRequest = currentClaudeQuestion,
-              let updatedInput = questionRequest.updatedInput(answers: currentClaudeQuestionAnswers) else {
-            return
-        }
+        guard let updatedInput = claudeQuestionState.buildSubmitInput() else { return }
         sendDecision(approved: true, toolInput: updatedInput)
     }
 
@@ -2437,8 +2399,7 @@ class AppState: ObservableObject {
                 currentMessage = ""
                 currentToolName = ""
                 currentEventName = ""
-                currentClaudeQuestion = nil
-                currentClaudeQuestionAnswers = [:]
+                claudeQuestionState.reset()
                 showSessionDetail(prev)
             } else {
                 showNextRequest()
