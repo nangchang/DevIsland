@@ -217,6 +217,7 @@ struct AppSettings: Equatable {
     var checkForUpdatesOnStartup: Bool
     var processVSCodeEnabled: Bool
     var processClaudeDesktopEnabled: Bool
+    var notchAnimationEnabled: Bool
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -300,7 +301,8 @@ struct AppSettings: Equatable {
         preferredTerminal: nil,
         checkForUpdatesOnStartup: true,
         processVSCodeEnabled: false,
-        processClaudeDesktopEnabled: false
+        processClaudeDesktopEnabled: false,
+        notchAnimationEnabled: true
     )
 }
 
@@ -381,6 +383,7 @@ final class SettingsStore: ObservableObject {
         static let checkForUpdatesOnStartup = "checkForUpdatesOnStartup"
         static let processVSCodeEnabled = "processVSCodeEnabled"
         static let processClaudeDesktopEnabled = "processClaudeDesktopEnabled"
+        static let notchAnimationEnabled = "notchAnimationEnabled"
     }
 
     private let userDefaults: UserDefaults
@@ -458,6 +461,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.checkForUpdatesOnStartup, forKey: DefaultsKey.checkForUpdatesOnStartup)
         userDefaults.set(settings.processVSCodeEnabled, forKey: DefaultsKey.processVSCodeEnabled)
         userDefaults.set(settings.processClaudeDesktopEnabled, forKey: DefaultsKey.processClaudeDesktopEnabled)
+        userDefaults.set(settings.notchAnimationEnabled, forKey: DefaultsKey.notchAnimationEnabled)
         // 브리지 관련 필드가 변경된 경우에만 파일 쓰기 (드래그 리사이즈 등 빈번한 UI 변경 시 파일 I/O 방지)
         let bridgeChanged = previous.map { BridgeRuntimeConfig(settings: settings) != BridgeRuntimeConfig(settings: $0) } ?? true
         if bridgeChanged {
@@ -768,6 +772,11 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.processClaudeDesktopEnabled,
                 from: userDefaults,
                 default: defaults.processClaudeDesktopEnabled
+            ),
+            notchAnimationEnabled: bool(
+                key: DefaultsKey.notchAnimationEnabled,
+                from: userDefaults,
+                default: defaults.notchAnimationEnabled
             )
         )
     }
