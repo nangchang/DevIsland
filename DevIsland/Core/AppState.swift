@@ -149,7 +149,6 @@ class AppState: ObservableObject {
         self.displayPrefs = NotchDisplayPreferences(userDefaults: userDefaults)
         self.ruleService = ApprovalRuleService(
             approvalProxy: approvalProxy,
-            persistenceQueue: approvalPersistenceQueue,
             codexRuleSyncAdapter: codexRuleSyncAdapter
         )
         self.claudeQuestionState = ClaudeQuestionState()

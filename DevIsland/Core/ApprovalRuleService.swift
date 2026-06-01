@@ -5,16 +5,13 @@ import Foundation
 /// AppState owns an instance; call methods via appState.ruleService.
 final class ApprovalRuleService {
     private let approvalProxy: ApprovalProxyController?
-    private let persistenceQueue: DispatchQueue
     private let codexRuleSyncAdapter: CodexRuleSyncAdapter
 
     init(
         approvalProxy: ApprovalProxyController?,
-        persistenceQueue: DispatchQueue,
         codexRuleSyncAdapter: CodexRuleSyncAdapter = CodexJSONRuleSyncAdapter()
     ) {
         self.approvalProxy = approvalProxy
-        self.persistenceQueue = persistenceQueue
         self.codexRuleSyncAdapter = codexRuleSyncAdapter
     }
 

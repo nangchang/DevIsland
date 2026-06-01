@@ -18,7 +18,6 @@ private final class SpyCodexRuleSyncAdapter: CodexRuleSyncAdapter {
 final class ApprovalRuleServiceTests: XCTestCase {
     private var tempDir: URL!
     private var controller: ApprovalProxyController!
-    private var persistenceQueue: DispatchQueue!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -28,20 +27,17 @@ final class ApprovalRuleServiceTests: XCTestCase {
         controller = try ApprovalProxyController(
             databaseURL: tempDir.appendingPathComponent("rules.sqlite3")
         )
-        persistenceQueue = DispatchQueue(label: "ApprovalRuleServiceTests")
     }
 
     override func tearDown() {
         try? FileManager.default.removeItem(at: tempDir)
         controller = nil
-        persistenceQueue = nil
         super.tearDown()
     }
 
     private func makeService(adapter: CodexRuleSyncAdapter = SpyCodexRuleSyncAdapter()) -> ApprovalRuleService {
         ApprovalRuleService(
             approvalProxy: controller,
-            persistenceQueue: persistenceQueue,
             codexRuleSyncAdapter: adapter
         )
     }
@@ -49,10 +45,7 @@ final class ApprovalRuleServiceTests: XCTestCase {
     // MARK: - nil proxy guard
 
     func testAllOperationsNoOpWhenProxyIsNil() throws {
-        let service = ApprovalRuleService(
-            approvalProxy: nil,
-            persistenceQueue: persistenceQueue
-        )
+        let service = ApprovalRuleService(approvalProxy: nil)
         XCTAssertNoThrow(try service.addCodexPersistentRule(toolName: "shell", action: .allow))
         XCTAssertNoThrow(try service.deleteCodexPersistentRule(ApprovalRule(provider: .codex, toolName: "shell", action: .allow, scope: .persistent)))
         XCTAssertNoThrow(try service.addPersistentRule(from: makeReplayEntry(toolName: "shell"), action: .allow))
@@ -139,7 +132,6 @@ final class ApprovalRuleServiceTests: XCTestCase {
         let spy = SpyCodexRuleSyncAdapter()
         let service = ApprovalRuleService(
             approvalProxy: controller,
-            persistenceQueue: persistenceQueue,
             codexRuleSyncAdapter: spy
         )
         try service.addCodexPersistentRule(toolName: "shell", action: .allow)
@@ -154,7 +146,6 @@ final class ApprovalRuleServiceTests: XCTestCase {
         let spy = SpyCodexRuleSyncAdapter()
         let service = ApprovalRuleService(
             approvalProxy: controller,
-            persistenceQueue: persistenceQueue,
             codexRuleSyncAdapter: spy
         )
         let result = try service.syncCodexPersistentRules()
@@ -167,7 +158,6 @@ final class ApprovalRuleServiceTests: XCTestCase {
         spy.errorToThrow = NSError(domain: "test", code: 42, userInfo: nil)
         let service = ApprovalRuleService(
             approvalProxy: controller,
-            persistenceQueue: persistenceQueue,
             codexRuleSyncAdapter: spy
         )
         XCTAssertThrowsError(try service.syncCodexPersistentRules()) { error in
