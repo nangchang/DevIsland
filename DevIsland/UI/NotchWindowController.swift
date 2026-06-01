@@ -43,12 +43,12 @@ enum NotchLayout {
 
     static func expansionDuration(settings: AppSettings) -> TimeInterval {
         guard settings.notchAnimationEnabled else { return 0 }
-        return baseNotchExpansionDuration * transitionScale(settings: settings)
+        return baseNotchExpansionDuration * transitionScale(settings: settings) / settings.notchAnimationSpeed
     }
 
     static func collapseDuration(settings: AppSettings) -> TimeInterval {
         guard settings.notchAnimationEnabled else { return 0 }
-        return baseNotchCollapseDuration * transitionScale(settings: settings)
+        return baseNotchCollapseDuration * transitionScale(settings: settings) / settings.notchAnimationSpeed
     }
 }
 
