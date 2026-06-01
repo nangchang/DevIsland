@@ -42,11 +42,13 @@ enum NotchLayout {
     }
 
     static func expansionDuration(settings: AppSettings) -> TimeInterval {
-        baseNotchExpansionDuration * transitionScale(settings: settings)
+        guard settings.notchAnimationEnabled else { return 0 }
+        return baseNotchExpansionDuration * transitionScale(settings: settings)
     }
 
     static func collapseDuration(settings: AppSettings) -> TimeInterval {
-        baseNotchCollapseDuration * transitionScale(settings: settings)
+        guard settings.notchAnimationEnabled else { return 0 }
+        return baseNotchCollapseDuration * transitionScale(settings: settings)
     }
 }
 
@@ -344,7 +346,7 @@ class NotchWindowController: NSWindowController {
             expandedPanel.orderFrontRegardless()
             focusExpandedPanelForTextInput()
 
-            if usesTransparentPanel {
+            if usesTransparentPanel || expansionDuration == 0 {
                 window?.orderOut(nil)
             } else {
                 let work = DispatchWorkItem { [weak self] in
@@ -353,31 +355,41 @@ class NotchWindowController: NSWindowController {
                 pendingSettle = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + expansionDuration, execute: work)
             }
-            
+
         } else {
             window?.level = .mainMenu + 2
             expandedPanel.level = .mainMenu + 1
-            
+
             AppState.shared.isExpandingFromRequest = false
             resetPinnedPosition()
 
             if usesTransparentPanel {
-                let work = DispatchWorkItem { [weak self] in
-                    self?.expandedPanel.orderOut(nil)
-                    self?.updateWindowFrame(animate: false)
-                    self?.window?.orderFrontRegardless()
+                if collapseDuration == 0 {
+                    expandedPanel.orderOut(nil)
+                    updateWindowFrame(animate: false)
+                    window?.orderFrontRegardless()
+                } else {
+                    let work = DispatchWorkItem { [weak self] in
+                        self?.expandedPanel.orderOut(nil)
+                        self?.updateWindowFrame(animate: false)
+                        self?.window?.orderFrontRegardless()
+                    }
+                    pendingSettle = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration, execute: work)
                 }
-                pendingSettle = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration, execute: work)
             } else {
                 updateWindowFrame(animate: false)
                 window?.orderFrontRegardless()
 
-                let work = DispatchWorkItem { [weak self] in
-                    self?.expandedPanel.orderOut(nil)
+                if collapseDuration == 0 {
+                    expandedPanel.orderOut(nil)
+                } else {
+                    let work = DispatchWorkItem { [weak self] in
+                        self?.expandedPanel.orderOut(nil)
+                    }
+                    pendingSettle = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration, execute: work)
                 }
-                pendingSettle = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration, execute: work)
             }
         }
     }

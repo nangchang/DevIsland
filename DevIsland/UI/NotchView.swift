@@ -231,8 +231,9 @@ struct NotchView: View {
         return session?.agentKind ?? BuddyKind(from: "")
     }
 
-    private var notchExpansionAnimation: Animation {
+    private var notchExpansionAnimation: Animation? {
         let settings = settingsStore.settings
+        guard settings.notchAnimationEnabled else { return nil }
         return isExpanded
             ? Animation.spring(response: NotchLayout.expansionDuration(settings: settings), dampingFraction: 0.75)
             : Animation.easeOut(duration: NotchLayout.collapseDuration(settings: settings))

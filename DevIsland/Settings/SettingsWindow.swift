@@ -263,6 +263,8 @@ private struct DisplaySettingsPane: View {
 
                 Toggle(l10n.lblNotchShadow, isOn: store.binding(\.notchBackdropShadowEnabled))
 
+                Toggle(l10n.lblNotchAnimation, isOn: store.binding(\.notchAnimationEnabled))
+
                 Picker(l10n.lblNotchShapeStyle, selection: store.binding(\.notchShapeStyle)) {
                     ForEach(NotchShapeStyle.allCases) { style in
                         Text(style.label).tag(style)

@@ -219,6 +219,7 @@ extension L10n {
     var lblShowFullScreen:   String { s("Show above full-screen apps",   "전체화면 앱 위에 표시") }
     func lblPanelOpacity(_ percent: Int) -> String { s("Panel opacity: \(percent)%", "패널 불투명도: \(percent)%") }
     var lblNotchShadow:      String { s("Backdrop shadow",               "백드롭 그림자") }
+    var lblNotchAnimation:   String { s("Expand/collapse animation",     "펼침/접힘 애니메이션") }
     var lblNotchShapeStyle:  String { s("Shape style",                  "모양 스타일") }
     var notchShapeClassic:   String { s("Notch (classic)",              "노치 (기본)") }
     var notchShapeDynamicIsland: String { s("Dynamic Island",           "다이나믹 아일랜드") }

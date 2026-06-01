@@ -72,6 +72,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.settings.expandOnApprovalRequest)
         XCTAssertTrue(store.settings.expandOnQuestionResponse)
         XCTAssertTrue(store.settings.checkForUpdatesOnStartup)
+        XCTAssertTrue(store.settings.notchAnimationEnabled)
     }
 
     func testSettingsPersistAndReload() {
@@ -117,6 +118,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.expandOnApprovalRequest = false
         store.settings.expandOnQuestionResponse = false
         store.settings.checkForUpdatesOnStartup = false
+        store.settings.notchAnimationEnabled = false
 
         let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
@@ -161,6 +163,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.settings.expandOnApprovalRequest)
         XCTAssertFalse(reloaded.settings.expandOnQuestionResponse)
         XCTAssertFalse(reloaded.settings.checkForUpdatesOnStartup)
+        XCTAssertFalse(reloaded.settings.notchAnimationEnabled)
     }
 
     func testNotificationSubSettingsMigrateFromLegacyExpandOnNotification() {
