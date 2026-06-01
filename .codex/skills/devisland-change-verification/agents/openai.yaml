@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevIsland Change Verification"
+  short_description: "Verify DevIsland changes safely."
+  default_prompt: "Use this skill to verify a DevIsland code or docs change before commit."

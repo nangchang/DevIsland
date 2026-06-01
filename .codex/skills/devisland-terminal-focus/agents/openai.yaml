@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevIsland Terminal Focus"
+  short_description: "Fix DevIsland terminal focus flows."
+  default_prompt: "Use this skill when changing DevIsland terminal focus behavior."
