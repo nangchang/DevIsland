@@ -39,7 +39,7 @@ final class ReplayLogViewModel: ObservableObject {
             return
         }
         do {
-            try appState.addPersistentRule(from: selectedEntry, action: action)
+            try appState.ruleService.addPersistentRule(from: selectedEntry, action: action)
             statusMessage = "\(selectedEntry.provider.rawValue) \(selectedEntry.toolName) \(action.rawValue) rule saved"
             errorMessage = nil
         } catch {

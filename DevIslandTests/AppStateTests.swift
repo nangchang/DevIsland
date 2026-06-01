@@ -1102,7 +1102,7 @@ final class AppStateTests: XCTestCase {
             XCTFail("Expected current Claude question")
             return
         }
-        appState.currentClaudeQuestionAnswers[questionId] = answer
+        appState.claudeQuestionState.currentClaudeQuestionAnswers[questionId] = answer
         appState.submitClaudeQuestion()
 
         wait(for: [expectation], timeout: 2.0)
@@ -1163,7 +1163,7 @@ final class AppStateTests: XCTestCase {
         }
         var draftAnswer = ClaudeQuestionAnswer()
         draftAnswer.text = "Draft answer"
-        appState.currentClaudeQuestionAnswers[preemptedQuestionId] = draftAnswer
+        appState.claudeQuestionState.currentClaudeQuestionAnswers[preemptedQuestionId] = draftAnswer
 
         appState.handleMessage(firstApproval) { response in
             firstApprovalResponse = response
@@ -1202,7 +1202,7 @@ final class AppStateTests: XCTestCase {
         }
         var answer = ClaudeQuestionAnswer()
         answer.text = "Done"
-        appState.currentClaudeQuestionAnswers[questionId] = answer
+        appState.claudeQuestionState.currentClaudeQuestionAnswers[questionId] = answer
         appState.submitClaudeQuestion()
 
         wait(for: [firstApprovalExpectation, secondApprovalExpectation, questionExpectation], timeout: 2.0)
@@ -1308,7 +1308,7 @@ final class AppStateTests: XCTestCase {
         }
         var answer = ClaudeQuestionAnswer()
         answer.text = "Yes"
-        appState.currentClaudeQuestionAnswers[questionId] = answer
+        appState.claudeQuestionState.currentClaudeQuestionAnswers[questionId] = answer
         appState.submitClaudeQuestion()
 
         wait(for: [preToolExpectation], timeout: 1.0)
@@ -1358,7 +1358,7 @@ final class AppStateTests: XCTestCase {
         }
         var answer = ClaudeQuestionAnswer()
         answer.text = "Yes"
-        appState.currentClaudeQuestionAnswers[questionId] = answer
+        appState.claudeQuestionState.currentClaudeQuestionAnswers[questionId] = answer
         appState.submitClaudeQuestion()
 
         wait(for: [questionExpectation], timeout: 1.0)

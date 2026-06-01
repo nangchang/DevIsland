@@ -122,7 +122,7 @@ struct SettingsWindowView: View {
             GeneralSettingsPane(store: store)
                 .tabItem { Label(l10n.tabGeneral, systemImage: "gearshape") }
 
-            DisplaySettingsPane(appState: appState, store: store)
+            DisplaySettingsPane(displayPrefs: appState.displayPrefs, store: store)
                 .tabItem { Label(l10n.tabDisplay, systemImage: "display") }
 
             ExpandSettingsPane(store: store)
@@ -231,28 +231,28 @@ private struct GeneralSettingsPane: View {
 }
 
 private struct DisplaySettingsPane: View {
-    @ObservedObject var appState: AppState
+    @ObservedObject var displayPrefs: NotchDisplayPreferences
     @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         Form {
             Section(l10n.secNotch) {
-                Picker(l10n.lblDisplay, selection: $appState.notchDisplayTarget) {
+                Picker(l10n.lblDisplay, selection: $displayPrefs.notchDisplayTarget) {
                     ForEach(NotchDisplayTarget.allCases) { target in
                         Text(target.label).tag(target)
                     }
                 }
 
-                if appState.notchDisplayTarget == .specific {
-                    Picker(l10n.lblMonitor, selection: $appState.selectedDisplayId) {
+                if displayPrefs.notchDisplayTarget == .specific {
+                    Picker(l10n.lblMonitor, selection: $displayPrefs.selectedDisplayId) {
                         ForEach(NSScreen.screens, id: \.displayId) { screen in
                             Text(displayName(for: screen)).tag(screen.displayId)
                         }
                     }
                 }
 
-                Toggle(l10n.lblShowFullScreen, isOn: $appState.showInFullScreenApps)
+                Toggle(l10n.lblShowFullScreen, isOn: $displayPrefs.showInFullScreenApps)
 
                 SettingsSliderRow(
                     title: l10n.lblPanelOpacity(Int(store.settings.notchPanelOpacity * 100)),
@@ -339,7 +339,7 @@ private struct DisplaySettingsPane: View {
             }
 
             Section(l10n.secRequests) {
-                Picker(l10n.lblRequestDisplay, selection: $appState.requestDisplayTarget) {
+                Picker(l10n.lblRequestDisplay, selection: $displayPrefs.requestDisplayTarget) {
                     ForEach(RequestDisplayTarget.allCases) { target in
                         Text(target.label).tag(target)
                     }
@@ -1034,7 +1034,7 @@ private struct ApprovalRulesWindowView: View {
         let toolName = codexToolName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !toolName.isEmpty else { return }
         do {
-            try state.addCodexPersistentRule(toolName: toolName, action: codexRuleAction)
+            try state.ruleService.addCodexPersistentRule(toolName: toolName, action: codexRuleAction)
             codexToolName = ""
             codexRuleError = nil
             loadCodexPersistentRules()
@@ -1045,7 +1045,7 @@ private struct ApprovalRulesWindowView: View {
 
     private func deleteCodexPersistentRule(_ rule: ApprovalRule) {
         do {
-            try state.deleteCodexPersistentRule(rule)
+            try state.ruleService.deleteCodexPersistentRule(rule)
             codexRuleError = nil
             loadCodexPersistentRules()
         } catch {
@@ -1055,7 +1055,7 @@ private struct ApprovalRulesWindowView: View {
 
     private func loadCodexPersistentRules() {
         do {
-            codexPersistentRules = try state.codexPersistentRules()
+            codexPersistentRules = try state.ruleService.codexPersistentRules()
             codexRuleError = nil
         } catch {
             codexPersistentRules = []
@@ -1065,7 +1065,7 @@ private struct ApprovalRulesWindowView: View {
 
     private func syncCodexPersistentRules() {
         do {
-            let result = try state.syncCodexPersistentRules()
+            let result = try state.ruleService.syncCodexPersistentRules()
             codexRuleSyncMessage = l10n.exportedCodexRules(result.ruleCount, result.url.path)
             codexRuleError = nil
         } catch {

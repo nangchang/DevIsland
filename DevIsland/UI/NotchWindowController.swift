@@ -100,7 +100,7 @@ class NotchWindowController: NSWindowController {
         collapsedPanel.acceptsMouseMovedEvents = true
         collapsedPanel.isMovableByWindowBackground = false
         collapsedPanel.animationBehavior = .none
-        collapsedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
+        collapsedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.displayPrefs.showInFullScreenApps)
 
         let expandedPanel = NotchPanel(
             contentRect: NSRect(origin: .zero, size: NotchLayout.windowSize(expanded: true, settings: SettingsStore.shared.settings)),
@@ -119,7 +119,7 @@ class NotchWindowController: NSWindowController {
         expandedPanel.isMovableByWindowBackground = false
         expandedPanel.animationBehavior = .none
         expandedPanel.becomesKeyOnlyIfNeeded = true
-        expandedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.showInFullScreenApps)
+        expandedPanel.collectionBehavior = Self.collectionBehavior(showInFullScreenApps: AppState.shared.displayPrefs.showInFullScreenApps)
 
         self.init(window: collapsedPanel)
         self.expandedPanel = expandedPanel
@@ -146,7 +146,7 @@ class NotchWindowController: NSWindowController {
             }
             .store(in: &cancellables)
 
-        AppState.shared.$notchDisplayTarget
+        AppState.shared.displayPrefs.$notchDisplayTarget
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -155,7 +155,7 @@ class NotchWindowController: NSWindowController {
             }
             .store(in: &cancellables)
 
-        AppState.shared.$selectedDisplayId
+        AppState.shared.displayPrefs.$selectedDisplayId
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -164,7 +164,7 @@ class NotchWindowController: NSWindowController {
             }
             .store(in: &cancellables)
 
-        AppState.shared.$requestDisplayTarget
+        AppState.shared.displayPrefs.$requestDisplayTarget
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -175,15 +175,7 @@ class NotchWindowController: NSWindowController {
             }
             .store(in: &cancellables)
 
-        AppState.shared.$currentClaudeQuestion
-            .receive(on: RunLoop.main)
-            .sink { [weak self] question in
-                guard question != nil, AppState.shared.isNotchExpanded else { return }
-                self?.focusExpandedPanelForTextInput()
-            }
-            .store(in: &cancellables)
-
-        AppState.shared.$showInFullScreenApps
+        AppState.shared.displayPrefs.$showInFullScreenApps
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] showInFullScreenApps in
@@ -193,6 +185,14 @@ class NotchWindowController: NSWindowController {
                 self?.resetPinnedPosition()
                 self?.updateWindowFrame(animate: false)
                 self?.updateFullScreenVisibility()
+            }
+            .store(in: &cancellables)
+
+        AppState.shared.claudeQuestionState.$currentClaudeQuestion
+            .receive(on: RunLoop.main)
+            .sink { [weak self] question in
+                guard question != nil, AppState.shared.isNotchExpanded else { return }
+                self?.focusExpandedPanelForTextInput()
             }
             .store(in: &cancellables)
 
@@ -288,8 +288,8 @@ class NotchWindowController: NSWindowController {
             let state = AppState.shared
             let isRequestShowing = state.isNotchExpanded && !state.sessionStore.pendingItems.isEmpty
             
-            let isTargetFocused = isRequestShowing ? (state.requestDisplayTarget == .focused) : (state.notchDisplayTarget == .focused)
-            let isTargetMouse = isRequestShowing ? (state.requestDisplayTarget == .mouse) : (state.notchDisplayTarget == .mouse)
+            let isTargetFocused = isRequestShowing ? (state.displayPrefs.requestDisplayTarget == .focused) : (state.displayPrefs.notchDisplayTarget == .focused)
+            let isTargetMouse = isRequestShowing ? (state.displayPrefs.requestDisplayTarget == .mouse) : (state.displayPrefs.notchDisplayTarget == .mouse)
             
             // 확장 상태가 아닐 때만 클릭 시 즉시 위치 갱신
             if !state.isNotchExpanded && (isTargetFocused || isTargetMouse) {
@@ -305,7 +305,7 @@ class NotchWindowController: NSWindowController {
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self = self, !AppState.shared.isNotchExpanded else { return }
             let state = AppState.shared
-            if state.notchDisplayTarget == .focused || state.notchDisplayTarget == .mouse {
+            if state.displayPrefs.notchDisplayTarget == .focused || state.displayPrefs.notchDisplayTarget == .mouse {
                 self.updateWindowFrame(animate: false)
             }
         }
@@ -490,7 +490,7 @@ class NotchWindowController: NSWindowController {
     private func updateFullScreenVisibility() {
         guard let window = window else { return }
 
-        let shouldHide = !AppState.shared.showInFullScreenApps && Self.frontmostApplicationIsFullScreen()
+        let shouldHide = !AppState.shared.displayPrefs.showInFullScreenApps && Self.frontmostApplicationIsFullScreen()
         if shouldHide {
             guard !isHiddenForFullScreen else { return }
             isHiddenForFullScreen = true
@@ -518,7 +518,7 @@ class NotchWindowController: NSWindowController {
             }
         }
 
-        switch state.notchDisplayTarget {
+        switch state.displayPrefs.notchDisplayTarget {
         case .main:
             return NSScreen.screens.first!
         case .mouse:
@@ -527,7 +527,7 @@ class NotchWindowController: NSWindowController {
             // 키보드 포커스가 있는 화면(NSScreen.main)을 최우선으로 하되, 보조적으로 마우스 위치 참고
             return NSScreen.main ?? Self.mouseScreen() ?? NSScreen.screens.first!
         case .specific:
-            if let screen = NSScreen.screens.first(where: { $0.displayId == state.selectedDisplayId }) {
+            if let screen = NSScreen.screens.first(where: { $0.displayId == state.displayPrefs.selectedDisplayId }) {
                 return screen
             }
             return NSScreen.main ?? NSScreen.screens.first!
@@ -549,7 +549,7 @@ class NotchWindowController: NSWindowController {
     /// 요청 표시 위치 설정에 따라 override할 화면을 반환한다.
     /// .notch는 기존 notchDisplayTarget을 따르므로 nil 반환.
     private static func requestTargetScreen() -> NSScreen? {
-        switch AppState.shared.requestDisplayTarget {
+        switch AppState.shared.displayPrefs.requestDisplayTarget {
         case .notch:
             return nil
         case .focused:
