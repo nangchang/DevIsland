@@ -66,6 +66,10 @@ final class NotchDisplayPreferences: ObservableObject {
     }
 
     func ensureSelectedDisplay() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.ensureSelectedDisplay() }
+            return
+        }
         guard !NSScreen.screens.isEmpty,
               !NSScreen.screens.contains(where: { $0.displayId == selectedDisplayId }) else {
             return
