@@ -365,7 +365,14 @@ struct UpdateChangeLogView: View {
     }
 
     private func markdownAttributedString(from text: String) -> AttributedString {
-        if let attrStr = try? AttributedString(markdown: text) {
+        // GitHub 릴리스 노트는 단일 \n을 줄 바꿈으로 사용하지만
+        // Apple AttributedString 파서는 CommonMark 기준으로 단일 \n을 공백 처리함.
+        // 단락 내의 \n을 Markdown hard break (trailing 2 spaces)로 변환한다.
+        let processed = text
+            .components(separatedBy: "\n\n")
+            .map { $0.replacingOccurrences(of: "\n", with: "  \n") }
+            .joined(separator: "\n\n")
+        if let attrStr = try? AttributedString(markdown: processed) {
             return attrStr
         }
         return AttributedString(text)
