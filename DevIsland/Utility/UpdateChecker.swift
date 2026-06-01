@@ -36,8 +36,6 @@ final class UpdateChecker: ObservableObject {
     private init() {}
 
     private let apiURL = URL(string: "https://api.github.com/repos/nangchang/DevIsland/releases/latest")!
-    private let lastCheckKey = "updateLastCheckDate"
-
     @Published var latestRelease: ReleaseInfo? = nil
     @Published var isChecking = false
     @Published var isUpdating = false
@@ -55,12 +53,9 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: Public entry points
 
-    /// 앱 시작 시 호출 — 마지막 체크로부터 24시간 경과 시 자동 확인, 이후 매일 반복
+    /// 앱 시작 시 호출 — 즉시 한 번 확인, 이후 매일 반복
     func schedulePeriodicCheck() {
-        let last = UserDefaults.standard.object(forKey: lastCheckKey) as? Date ?? .distantPast
-        if Date().timeIntervalSince(last) > 86400 {
-            Task { await fetchLatestRelease(silent: true) }
-        }
+        Task { await fetchLatestRelease(silent: true) }
         Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
             guard let self else { return }
             guard SettingsStore.shared.settings.checkForUpdatesOnStartup else { return }
@@ -111,7 +106,6 @@ final class UpdateChecker: ObservableObject {
                 return
             }
 
-            UserDefaults.standard.set(Date(), forKey: lastCheckKey)
             let changeLog = json["body"] as? String
             latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog)
 
