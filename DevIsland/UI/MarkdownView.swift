@@ -16,6 +16,7 @@ private struct CompactHeadingStyle: StructuredText.HeadingStyle {
 
 struct MarkdownView: View {
     let text: String
+    var foregroundColor: Color = .white.opacity(0.9)
 
     var body: some View {
         StructuredText(markdown: text)
@@ -32,7 +33,7 @@ struct MarkdownView: View {
             )
             .textual.textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(.white.opacity(0.9))
+            .foregroundStyle(foregroundColor)
             .font(.system(size: 13, weight: .medium))
     }
 }

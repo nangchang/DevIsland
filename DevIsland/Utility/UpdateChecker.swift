@@ -345,16 +345,11 @@ struct UpdateChangeLogView: View {
             Text(L10n.shared.updateChangeLogTitle)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(.secondary)
-            
+
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(markdownAttributedString(from: changeLog))
-                        .font(.system(size: 11))
-                        .multilineTextAlignment(.leading)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(8)
+                MarkdownView(text: changeLog, foregroundColor: .primary)
+                    .font(.system(size: 11))
+                    .padding(8)
             }
             .frame(width: 440, height: 180)
             .background(Color(NSColor.controlBackgroundColor))
@@ -364,23 +359,5 @@ struct UpdateChangeLogView: View {
                     .stroke(Color(NSColor.separatorColor), lineWidth: 1)
             )
         }
-    }
-
-    private func markdownAttributedString(from text: String) -> AttributedString {
-        // GitHub 릴리스 노트는 단일 \n을 줄 바꿈으로 사용하지만
-        // Apple AttributedString 파서는 CommonMark 기준으로 단일 \n을 공백 처리함.
-        // 코드 블록(```) 외부에서만 \n을 Markdown hard break (trailing 2 spaces)로 변환한다.
-        let parts = text.components(separatedBy: "```")
-        let processed = parts.enumerated().map { index, part in
-            guard index % 2 == 0 else { return part }  // 코드 블록 내부는 그대로
-            return part
-                .components(separatedBy: "\n\n")
-                .map { $0.replacingOccurrences(of: "\n", with: "  \n") }
-                .joined(separator: "\n\n")
-        }.joined(separator: "```")
-        if let attrStr = try? AttributedString(markdown: processed) {
-            return attrStr
-        }
-        return AttributedString(text)
     }
 }
