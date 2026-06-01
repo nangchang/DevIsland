@@ -55,11 +55,13 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: Public entry points
 
-    /// 앱 시작 시 호출 — 마지막 체크로부터 24시간 경과 시 자동 확인, 이후 매일 반복
+    /// 앱 시작 시 호출 — 1시간 이내 체크했으면 스킵, 이후 매일 반복
     func schedulePeriodicCheck() {
-        let last = UserDefaults.standard.object(forKey: lastCheckKey) as? Date ?? .distantPast
-        if Date().timeIntervalSince(last) > 86400 {
-            Task { await fetchLatestRelease(silent: true) }
+        if SettingsStore.shared.settings.checkForUpdatesOnStartup {
+            let last = UserDefaults.standard.object(forKey: lastCheckKey) as? Date ?? .distantPast
+            if Date().timeIntervalSince(last) > 3600 {
+                Task { await fetchLatestRelease(silent: true) }
+            }
         }
         Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
             guard let self else { return }
@@ -349,16 +351,10 @@ struct UpdateChangeLogView: View {
             Text(L10n.shared.updateChangeLogTitle)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(.secondary)
-            
+
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(markdownAttributedString(from: changeLog))
-                        .font(.system(size: 11))
-                        .multilineTextAlignment(.leading)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(8)
+                MarkdownView(text: changeLog, foregroundColor: .primary, font: .system(size: 11))
+                    .padding(8)
             }
             .frame(width: 440, height: 180)
             .background(Color(NSColor.controlBackgroundColor))
@@ -368,12 +364,5 @@ struct UpdateChangeLogView: View {
                     .stroke(Color(NSColor.separatorColor), lineWidth: 1)
             )
         }
-    }
-
-    private func markdownAttributedString(from text: String) -> AttributedString {
-        if let attrStr = try? AttributedString(markdown: text) {
-            return attrStr
-        }
-        return AttributedString(text)
     }
 }
