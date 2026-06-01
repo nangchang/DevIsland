@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.10.1 - 2026-06-02
+
+이번 릴리즈는 노치 애니메이션 토글을 추가하고, `AppState`의 책임을 여러 서비스 레이어로 분리하는 리팩토링을 적용한 안정화 업데이트입니다.
+
+### UI/UX
+
+- 노치 펼침/접힘 애니메이션을 켜고 끌 수 있는 토글을 설정에 추가했습니다.
+- 애니메이션이 꺼진 상태에서 윈도우 순서가 동기적으로 실행되도록 수정했습니다.
+
+### 안정성
+
+- `SessionMessageWindow`에서 빈 문자열일 때 `appState` 폴백 처리를 가드로 보호했습니다.
+- `SessionMessageWindow`가 항상 세션 스토어에서 표시 데이터를 읽도록 수정했습니다.
+- `ensureSelectedDisplay()`가 항상 메인 스레드에서 실행되도록 가드를 추가했습니다.
+
+### 내부/CI
+
+- `AppState`에서 `NotchDisplayPreferences`, `ApprovalRuleService`, `ClaudeQuestionState`, Phase 핸들러, `handleNotificationEvent`를 각각 독립 컴포넌트로 분리했습니다.
+- `ApprovalRuleService`에서 사용되지 않는 `persistenceQueue`를 제거했습니다.
+- `SettingsStore`의 `notchAnimationEnabled` 설정을 검증하는 테스트를 추가했습니다.
+- DevIsland Codex 스킬과 release-packaging Claude 커맨드를 레포지토리에 추가했습니다.
+
+**Full Changelog**: https://github.com/nangchang/DevIsland/compare/v0.10.0...v0.10.1
+
 ## v0.10.0 - 2026-05-31
 
 이번 릴리즈는 세션을 앱 안팎에서 더 오래 이어갈 수 있도록 세션 기록과 팝아웃 메시지 창을 강화하고, 런치/업데이트 설정, VS Code/Claude Desktop 세션 감지, 노치 리사이즈와 포커스 안정성을 함께 다듬은 기능 확장 업데이트입니다.
