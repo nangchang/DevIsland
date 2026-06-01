@@ -16,6 +16,7 @@ CONTRIBUTING.md
 docs/agent/build-and-test.md
 .github/workflows/release.yml
 .github/workflows/bump.yml
+project.yml
 scripts/create-dmg.sh
 ```
 
