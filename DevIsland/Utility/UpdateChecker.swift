@@ -36,6 +36,8 @@ final class UpdateChecker: ObservableObject {
     private init() {}
 
     private let apiURL = URL(string: "https://api.github.com/repos/nangchang/DevIsland/releases/latest")!
+    private let lastCheckKey = "updateLastCheckDate"
+
     @Published var latestRelease: ReleaseInfo? = nil
     @Published var isChecking = false
     @Published var isUpdating = false
@@ -53,10 +55,13 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: Public entry points
 
-    /// 앱 시작 시 호출 — 즉시 한 번 확인, 이후 매일 반복
+    /// 앱 시작 시 호출 — 1시간 이내 체크했으면 스킵, 이후 매일 반복
     func schedulePeriodicCheck() {
         if SettingsStore.shared.settings.checkForUpdatesOnStartup {
-            Task { await fetchLatestRelease(silent: true) }
+            let last = UserDefaults.standard.object(forKey: lastCheckKey) as? Date ?? .distantPast
+            if Date().timeIntervalSince(last) > 3600 {
+                Task { await fetchLatestRelease(silent: true) }
+            }
         }
         Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
             guard let self else { return }
@@ -108,6 +113,7 @@ final class UpdateChecker: ObservableObject {
                 return
             }
 
+            UserDefaults.standard.set(Date(), forKey: lastCheckKey)
             let changeLog = json["body"] as? String
             latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog)
 
@@ -347,8 +353,7 @@ struct UpdateChangeLogView: View {
                 .foregroundColor(.secondary)
 
             ScrollView(.vertical, showsIndicators: true) {
-                MarkdownView(text: changeLog, foregroundColor: .primary)
-                    .font(.system(size: 11))
+                MarkdownView(text: changeLog, foregroundColor: .primary, font: .system(size: 11))
                     .padding(8)
             }
             .frame(width: 440, height: 180)
