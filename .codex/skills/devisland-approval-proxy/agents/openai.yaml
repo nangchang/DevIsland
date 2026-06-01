@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevIsland Approval Proxy"
+  short_description: "Work on DevIsland approval proxy."
+  default_prompt: "Use this skill when changing DevIsland approval proxy behavior."

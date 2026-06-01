@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevIsland Markdown Rendering"
+  short_description: "Change DevIsland Markdown rendering."
+  default_prompt: "Use this skill when changing DevIsland Markdown or diff rendering."

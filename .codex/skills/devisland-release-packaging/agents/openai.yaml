@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevIsland Release Packaging"
+  short_description: "Prepare DevIsland releases safely."
+  default_prompt: "Use this skill when preparing a DevIsland release or package."
