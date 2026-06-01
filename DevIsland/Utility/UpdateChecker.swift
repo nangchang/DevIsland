@@ -55,7 +55,9 @@ final class UpdateChecker: ObservableObject {
 
     /// 앱 시작 시 호출 — 즉시 한 번 확인, 이후 매일 반복
     func schedulePeriodicCheck() {
-        Task { await fetchLatestRelease(silent: true) }
+        if SettingsStore.shared.settings.checkForUpdatesOnStartup {
+            Task { await fetchLatestRelease(silent: true) }
+        }
         Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
             guard let self else { return }
             guard SettingsStore.shared.settings.checkForUpdatesOnStartup else { return }
@@ -367,11 +369,15 @@ struct UpdateChangeLogView: View {
     private func markdownAttributedString(from text: String) -> AttributedString {
         // GitHub 릴리스 노트는 단일 \n을 줄 바꿈으로 사용하지만
         // Apple AttributedString 파서는 CommonMark 기준으로 단일 \n을 공백 처리함.
-        // 단락 내의 \n을 Markdown hard break (trailing 2 spaces)로 변환한다.
-        let processed = text
-            .components(separatedBy: "\n\n")
-            .map { $0.replacingOccurrences(of: "\n", with: "  \n") }
-            .joined(separator: "\n\n")
+        // 코드 블록(```) 외부에서만 \n을 Markdown hard break (trailing 2 spaces)로 변환한다.
+        let parts = text.components(separatedBy: "```")
+        let processed = parts.enumerated().map { index, part in
+            guard index % 2 == 0 else { return part }  // 코드 블록 내부는 그대로
+            return part
+                .components(separatedBy: "\n\n")
+                .map { $0.replacingOccurrences(of: "\n", with: "  \n") }
+                .joined(separator: "\n\n")
+        }.joined(separator: "```")
         if let attrStr = try? AttributedString(markdown: processed) {
             return attrStr
         }
