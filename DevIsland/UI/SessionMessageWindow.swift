@@ -207,19 +207,19 @@ struct SessionMessageView: View {
     /// 히스토리 뷰일 때는 해당 항목의 툴/이벤트, 라이브 뷰일 때는 현재 상태
     private var activeToolName: String {
         if !history.isAtLatest, let entry = history.currentEntry { return entry.toolName }
-        return isCurrentSession ? appState.currentToolName : (session?.lastToolName ?? "")
+        return session?.lastToolName ?? (isCurrentSession ? appState.currentToolName : "")
     }
 
     private var activeEventName: String {
         if !history.isAtLatest, let entry = history.currentEntry { return entry.eventName }
-        return isCurrentSession ? appState.currentEventName : (session?.lastEventName ?? "")
+        return session?.lastEventName ?? (isCurrentSession ? appState.currentEventName : "")
     }
 
     private var displayMessage: String {
         if !history.isAtLatest, let entry = history.currentEntry {
             return history.displayMessage(for: entry)
         }
-        return isCurrentSession ? appState.currentMessage : (session?.lastMessage ?? "")
+        return session?.lastMessage ?? (isCurrentSession ? appState.currentMessage : "")
     }
 
     private var tool: ToolInfo { toolInfo(for: activeToolName) }
