@@ -79,6 +79,10 @@ struct MenuBarMenu: View {
 
         Divider()
 
+        CaffeineMenuItem()
+
+        Divider()
+
         Button(l.menuSettings) {
             AppWindowRouter.showSettings()
         }

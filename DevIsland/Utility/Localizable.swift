@@ -188,6 +188,31 @@ extension L10n {
     var tabOpenPeon:         String { s("OpenPeon",     "OpenPeon") }
     var tabExperimental:     String { s("Experimental", "실험적") }
     var tabIntegrations:     String { s("Integrations", "통합") }
+    var tabCaffeine:         String { s("Caffeine",    "Caffeine") }
+
+    // Caffeine tab
+    var secCaffeineStatus:            String { s("Status",                                    "현재 상태") }
+    var secCaffeineBehavior:          String { s("Behavior",                                  "동작") }
+    var secCaffeineExcludedSSIDs:     String { s("Excluded Wi-Fi Networks",                   "예외 Wi-Fi 네트워크") }
+    var lblCaffeineEnabled:           String { s("Enable Caffeine",                           "Caffeine 사용") }
+    var lblCurrentSSID:               String { s("Current Wi-Fi",                             "현재 Wi-Fi") }
+    var lblOnAC:                      String { s("On AC Power",                               "전원 연결") }
+    var lblBatteryLevel:              String { s("Battery",                                   "배터리") }
+    var lblHoldingAssertion:          String { s("Preventing sleep",                          "슬립 차단 중") }
+    var btnAddSSID:                   String { s("Add SSID…",                                 "SSID 추가…") }
+    var lblScanNearbyWifi:            String { s("Nearby Wi-Fi",                              "주변 Wi-Fi") }
+    var lblConnectedSSID:             String { s("Connected",                                 "연결됨") }
+    var lblManualSSIDEntry:           String { s("Enter SSID manually",                       "SSID 직접 입력") }
+    var lblScanFailed:                String { s("Scan failed (Location permission required)", "스캔 실패 (위치 권한 필요)") }
+    var hintCaffeineRule:             String { s("Active while on AC power. Always off on excluded Wi-Fi or when battery is ≤ 20%.", "전원 연결 시 활성화됩니다. 예외 Wi-Fi 또는 배터리 20% 이하에서는 항상 비활성화됩니다.") }
+    var menuCaffeineToggle:           String { s("Caffeine",                                  "Caffeine") }
+    var menuCaffeineOnAC:             String { s("Preventing sleep — AC power",               "슬립 차단 중 — AC 전원") }
+    var menuCaffeineOff:              String { s("Off",                                       "비활성") }
+    var menuCaffeineOnBattery:        String { s("Off — on battery",                          "비활성 — 배터리 사용 중") }
+    var menuCaffeineLowBattery:       String { s("Off — low battery",                         "비활성 — 배터리 부족") }
+    func menuCaffeineExcludedSSID(_ ssid: String) -> String {
+        s("Off — excluded Wi-Fi (\(ssid))", "비활성 — 예외 Wi-Fi (\(ssid))")
+    }
 
     // Integrations tab
     var secAppIntegrations:           String { s("App Integrations",                                               "앱 통합") }

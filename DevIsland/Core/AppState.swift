@@ -86,6 +86,10 @@ class AppState: ObservableObject {
     let displayPrefs: NotchDisplayPreferences
     let ruleService: ApprovalRuleService
     let claudeQuestionState: ClaudeQuestionState
+    let caffeineCoordinator: CaffeineCoordinator
+    private let powerSourceMonitor: PowerSourceMonitor
+    private let wifiMonitor: WifiSSIDMonitor
+    private var caffeineCancellables = Set<AnyCancellable>()
 
     private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
@@ -152,6 +156,9 @@ class AppState: ObservableObject {
             codexRuleSyncAdapter: codexRuleSyncAdapter
         )
         self.claudeQuestionState = ClaudeQuestionState()
+        self.powerSourceMonitor = PowerSourceMonitor()
+        self.wifiMonitor = WifiSSIDMonitor()
+        self.caffeineCoordinator = CaffeineCoordinator()
         self.ptyCoordinator = PTYCoordinator(
             ptyBuffer: PTYSessionBuffer(),
             approvalProxy: approvalProxy,
@@ -219,6 +226,8 @@ class AppState: ObservableObject {
         if let proxy = approvalProxy {
             restoreOpenSessions(from: proxy)
         }
+
+        setupCaffeine()
 
         if startServer {
             BridgeTokenManager.shared.generateIfNeeded()
@@ -2444,6 +2453,53 @@ class AppState: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.terminalFocusRecheckDelay) {
                 self?.passIfTerminalFocused()
             }
+        }
+    }
+
+    // MARK: - Caffeine
+
+    private func setupCaffeine() {
+        powerSourceMonitor.start()
+        wifiMonitor.start()
+
+        // 모니터 → coordinator 입력 신호 전달
+        powerSourceMonitor.$isOnACPower
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.isOnACPower, on: caffeineCoordinator)
+            .store(in: &caffeineCancellables)
+
+        powerSourceMonitor.$batteryLevel
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.batteryLevel, on: caffeineCoordinator)
+            .store(in: &caffeineCancellables)
+
+        wifiMonitor.$currentSSID
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.currentSSID, on: caffeineCoordinator)
+            .store(in: &caffeineCancellables)
+
+        // 설정 변경 → coordinator
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let store = SettingsStore.shared
+            self.caffeineCoordinator.caffeineEnabled = store.settings.caffeineEnabled
+            self.caffeineCoordinator.excludedSSIDs = store.settings.caffeineExcludedSSIDs
+
+            store.$settings
+                .map(\.caffeineEnabled)
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .assign(to: \.caffeineEnabled, on: self.caffeineCoordinator)
+                .store(in: &self.caffeineCancellables)
+
+            store.$settings
+                .map(\.caffeineExcludedSSIDs)
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .assign(to: \.excludedSSIDs, on: self.caffeineCoordinator)
+                .store(in: &self.caffeineCancellables)
+
+            self.caffeineCoordinator.bind()
         }
     }
 }
