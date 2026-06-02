@@ -218,6 +218,7 @@ struct AppSettings: Equatable {
     var processVSCodeEnabled: Bool
     var processClaudeDesktopEnabled: Bool
     var notchAnimationEnabled: Bool
+    var notchAnimationSpeed: Double
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -302,7 +303,8 @@ struct AppSettings: Equatable {
         checkForUpdatesOnStartup: true,
         processVSCodeEnabled: false,
         processClaudeDesktopEnabled: false,
-        notchAnimationEnabled: true
+        notchAnimationEnabled: true,
+        notchAnimationSpeed: 1.0
     )
 }
 
@@ -384,6 +386,7 @@ final class SettingsStore: ObservableObject {
         static let processVSCodeEnabled = "processVSCodeEnabled"
         static let processClaudeDesktopEnabled = "processClaudeDesktopEnabled"
         static let notchAnimationEnabled = "notchAnimationEnabled"
+        static let notchAnimationSpeed = "notchAnimationSpeed"
     }
 
     private let userDefaults: UserDefaults
@@ -462,6 +465,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.processVSCodeEnabled, forKey: DefaultsKey.processVSCodeEnabled)
         userDefaults.set(settings.processClaudeDesktopEnabled, forKey: DefaultsKey.processClaudeDesktopEnabled)
         userDefaults.set(settings.notchAnimationEnabled, forKey: DefaultsKey.notchAnimationEnabled)
+        userDefaults.set(settings.notchAnimationSpeed, forKey: DefaultsKey.notchAnimationSpeed)
         // 브리지 관련 필드가 변경된 경우에만 파일 쓰기 (드래그 리사이즈 등 빈번한 UI 변경 시 파일 I/O 방지)
         let bridgeChanged = previous.map { BridgeRuntimeConfig(settings: settings) != BridgeRuntimeConfig(settings: $0) } ?? true
         if bridgeChanged {
@@ -777,6 +781,12 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.notchAnimationEnabled,
                 from: userDefaults,
                 default: defaults.notchAnimationEnabled
+            ),
+            notchAnimationSpeed: boundedDouble(
+                key: DefaultsKey.notchAnimationSpeed,
+                from: userDefaults,
+                default: defaults.notchAnimationSpeed,
+                range: 0.5...2.0
             )
         )
     }

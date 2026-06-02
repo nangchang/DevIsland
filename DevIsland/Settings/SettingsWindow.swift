@@ -265,6 +265,15 @@ private struct DisplaySettingsPane: View {
 
                 Toggle(l10n.lblNotchAnimation, isOn: store.binding(\.notchAnimationEnabled))
 
+                if store.settings.notchAnimationEnabled {
+                    SettingsSliderRow(
+                        title: l10n.lblAnimationSpeed(store.settings.notchAnimationSpeed),
+                        value: store.binding(\.notchAnimationSpeed),
+                        range: 0.5...2.0,
+                        step: 0.25
+                    )
+                }
+
                 Picker(l10n.lblNotchShapeStyle, selection: store.binding(\.notchShapeStyle)) {
                     ForEach(NotchShapeStyle.allCases) { style in
                         Text(style.label).tag(style)
