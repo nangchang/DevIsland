@@ -4,8 +4,6 @@ import XCTest
 final class CaffeineCoordinatorTests: XCTestCase {
 
     private func makeCoordinator() -> CaffeineCoordinator {
-        // SleepAssertion 실제 호출은 IOKit 부수효과가 있으나 테스트에서는 acquire/release만 호출됨.
-        // 단순 decide() 로직 검증이 주 목적이므로 그대로 사용.
         return CaffeineCoordinator()
     }
 
@@ -15,8 +13,7 @@ final class CaffeineCoordinatorTests: XCTestCase {
         c.isOnACPower = true
         c.batteryLevel = 0.9
         c.currentSSID = "Home"
-        let (hold, reason) = c.decide()
-        XCTAssertFalse(hold)
+        let (_, reason) = c.decide(prevLowBattery: false)
         XCTAssertEqual(reason, .off)
     }
 
@@ -27,8 +24,7 @@ final class CaffeineCoordinatorTests: XCTestCase {
         c.batteryLevel = 0.8
         c.currentSSID = "Home"
         c.excludedSSIDs = ["Office-Internal"]
-        let (hold, reason) = c.decide()
-        XCTAssertTrue(hold)
+        let (_, reason) = c.decide(prevLowBattery: false)
         XCTAssertEqual(reason, .onAC)
     }
 
@@ -39,8 +35,7 @@ final class CaffeineCoordinatorTests: XCTestCase {
         c.batteryLevel = 0.8
         c.currentSSID = "Office-Internal"
         c.excludedSSIDs = ["Office-Internal", "Guest"]
-        let (hold, reason) = c.decide()
-        XCTAssertFalse(hold)
+        let (_, reason) = c.decide(prevLowBattery: false)
         XCTAssertEqual(reason, .excludedSSID("Office-Internal"))
     }
 
@@ -50,8 +45,7 @@ final class CaffeineCoordinatorTests: XCTestCase {
         c.isOnACPower = false
         c.batteryLevel = 0.6
         c.currentSSID = "Home"
-        let (hold, reason) = c.decide()
-        XCTAssertFalse(hold)
+        let (_, reason) = c.decide(prevLowBattery: false)
         XCTAssertEqual(reason, .onBattery)
     }
 
@@ -61,8 +55,8 @@ final class CaffeineCoordinatorTests: XCTestCase {
         c.isOnACPower = true
         c.batteryLevel = 0.18
         c.currentSSID = "Home"
-        let (hold, reason) = c.decide()
-        XCTAssertFalse(hold)
+        let (next, reason) = c.decide(prevLowBattery: false)
+        XCTAssertTrue(next)
         XCTAssertEqual(reason, .lowBattery(0.18))
     }
 
@@ -72,47 +66,67 @@ final class CaffeineCoordinatorTests: XCTestCase {
         c.isOnACPower = true
         c.currentSSID = nil
 
-        // 18% → OFF
+        // 18% → OFF (저전력 진입)
         c.batteryLevel = 0.18
-        var result = c.decide()
-        XCTAssertFalse(result.hold)
-        XCTAssertEqual(result.reason, .lowBattery(0.18))
+        var (next, reason) = c.decide(prevLowBattery: false)
+        XCTAssertTrue(next)
+        XCTAssertEqual(reason, .lowBattery(0.18))
 
-        // 22% → 히스테리시스 영역, 여전히 OFF
+        // 22% (히스테리시스 영역) — 이미 OFF 상태이므로 유지
         c.batteryLevel = 0.22
-        result = c.decide()
-        XCTAssertFalse(result.hold)
-        XCTAssertEqual(result.reason, .lowBattery(0.22))
+        (next, reason) = c.decide(prevLowBattery: true)
+        XCTAssertTrue(next)
+        XCTAssertEqual(reason, .lowBattery(0.22))
 
         // 23% 도달 → ON 복귀
         c.batteryLevel = 0.23
-        result = c.decide()
-        XCTAssertTrue(result.hold)
-        XCTAssertEqual(result.reason, .onAC)
+        (next, reason) = c.decide(prevLowBattery: true)
+        XCTAssertFalse(next)
+        XCTAssertEqual(reason, .onAC)
+    }
+
+    func testLowBatteryEnterBoundary() {
+        // 21% (임계 직상단) — 진입 안 됨
+        let c = makeCoordinator()
+        c.caffeineEnabled = true
+        c.isOnACPower = true
+        c.batteryLevel = 0.21
+        let (next, reason) = c.decide(prevLowBattery: false)
+        XCTAssertFalse(next)
+        XCTAssertEqual(reason, .onAC)
     }
 
     func testNilBatteryIgnoresBatteryRule() {
-        // 데스크톱 Mac — batteryLevel == nil
         let c = makeCoordinator()
         c.caffeineEnabled = true
         c.isOnACPower = true
         c.batteryLevel = nil
         c.currentSSID = nil
-        let (hold, reason) = c.decide()
-        XCTAssertTrue(hold)
+        let (next, reason) = c.decide(prevLowBattery: false)
+        XCTAssertFalse(next)
         XCTAssertEqual(reason, .onAC)
     }
 
     func testNilSSIDSkipsExclusion() {
-        // Location 권한 없음 → SSID nil → 제외 규칙 무시, AC 규칙만으로 판정
         let c = makeCoordinator()
         c.caffeineEnabled = true
         c.isOnACPower = true
         c.batteryLevel = 0.5
         c.currentSSID = nil
         c.excludedSSIDs = ["Office-Internal"]
-        let (hold, reason) = c.decide()
-        XCTAssertTrue(hold)
+        let (_, reason) = c.decide(prevLowBattery: false)
         XCTAssertEqual(reason, .onAC)
+    }
+
+    func testDecideIsIdempotent() {
+        // pure 함수 — 같은 입력 + prev에 대해 호출 횟수 무관하게 동일 결과
+        let c = makeCoordinator()
+        c.caffeineEnabled = true
+        c.isOnACPower = true
+        c.batteryLevel = 0.18
+        let (next1, reason1) = c.decide(prevLowBattery: false)
+        let (next2, reason2) = c.decide(prevLowBattery: false)
+        XCTAssertEqual(next1, next2)
+        XCTAssertEqual(reason1, reason2)
     }
 }

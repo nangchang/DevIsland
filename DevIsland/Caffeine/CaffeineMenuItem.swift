@@ -31,6 +31,8 @@ struct CaffeineMenuItem: View {
             return l10n.menuCaffeineLowBattery
         case .excludedSSID(let ssid):
             return l10n.menuCaffeineExcludedSSID(ssid)
+        case .failure(let code):
+            return l10n.menuCaffeineFailure(code)
         }
     }
 }

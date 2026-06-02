@@ -3,13 +3,15 @@ import Combine
 import IOKit.ps
 
 /// AC 전원 상태와 배터리 잔량을 IOKit PowerSource API로 감시한다.
-/// 배터리 없는 데스크톱 Mac에서는 `batteryLevel == nil`.
+/// 배터리 없는 데스크톱 Mac에서는 `batteryLevel == nil` (영구).
 final class PowerSourceMonitor: ObservableObject {
     @Published private(set) var isOnACPower: Bool = true
-    /// 0.0 ~ 1.0. nil이면 내장 배터리 없음(데스크톱).
+    /// 0.0 ~ 1.0. nil = 데스크톱(배터리 없음) 또는 최초 호출 전.
     @Published private(set) var batteryLevel: Double? = nil
 
     private var runLoopSource: CFRunLoopSource?
+    /// nil = 미확정 / false = 데스크톱 / true = 노트북. 첫 성공 호출에서 확정.
+    private var hasBatterySource: Bool? = nil
 
     init() {
         refresh()
@@ -43,27 +45,45 @@ final class PowerSourceMonitor: ObservableObject {
     }
 
     private func refresh() {
-        let snapshot = Self.snapshot()
+        guard let snapshot = Self.snapshot() else {
+            // 일시적 IOKit 실패 — 직전 상태를 그대로 유지(데스크톱 가정 금지).
+            return
+        }
+
+        // 첫 성공 호출에서 배터리 보유 여부 확정. 이후 변경 안 함.
+        if hasBatterySource == nil {
+            hasBatterySource = snapshot.hasBattery
+        }
+
         if snapshot.isOnACPower != isOnACPower {
             isOnACPower = snapshot.isOnACPower
         }
-        if snapshot.batteryLevel != batteryLevel {
-            batteryLevel = snapshot.batteryLevel
+
+        // 데스크톱은 항상 nil, 노트북은 측정값 사용.
+        let newLevel: Double? = (hasBatterySource == true) ? snapshot.batteryLevel : nil
+        if newLevel != batteryLevel {
+            batteryLevel = newLevel
         }
     }
 
     private struct Snapshot {
         let isOnACPower: Bool
         let batteryLevel: Double?
+        let hasBattery: Bool
     }
 
-    private static func snapshot() -> Snapshot {
+    /// IOKit에서 현재 power source를 읽는다. 실패 시 nil — 호출자가 직전 상태 유지.
+    private static func snapshot() -> Snapshot? {
         guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
-            // 정보를 못 얻으면 안전을 위해 AC라고 가정(데스크톱 기본 동작).
-            return Snapshot(isOnACPower: true, batteryLevel: nil)
+            return nil
         }
-        guard let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef], !list.isEmpty else {
-            return Snapshot(isOnACPower: true, batteryLevel: nil)
+        guard let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef] else {
+            return nil
+        }
+
+        if list.isEmpty {
+            // 배터리 없는 데스크톱 Mac — 항상 AC.
+            return Snapshot(isOnACPower: true, batteryLevel: nil, hasBattery: false)
         }
 
         var onAC = true
@@ -83,6 +103,6 @@ final class PowerSourceMonitor: ObservableObject {
             }
         }
 
-        return Snapshot(isOnACPower: onAC, batteryLevel: level)
+        return Snapshot(isOnACPower: onAC, batteryLevel: level, hasBattery: true)
     }
 }

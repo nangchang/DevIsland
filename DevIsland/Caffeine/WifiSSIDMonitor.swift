@@ -1,6 +1,21 @@
 import Foundation
 import Combine
 import CoreWLAN
+import CoreLocation
+
+enum WifiScanError: Error, Equatable {
+    case permissionDenied
+    case radioOff
+    case unknown(NSError)
+
+    static func == (lhs: WifiScanError, rhs: WifiScanError) -> Bool {
+        switch (lhs, rhs) {
+        case (.permissionDenied, .permissionDenied), (.radioOff, .radioOff): return true
+        case (.unknown(let a), .unknown(let b)): return a.domain == b.domain && a.code == b.code
+        default: return false
+        }
+    }
+}
 
 /// 현재 연결된 Wi-Fi SSID를 추적하고, 주변 SSID 스캔 API를 제공한다.
 ///
@@ -42,16 +57,27 @@ final class WifiSSIDMonitor: NSObject, ObservableObject {
         client.delegate = nil
     }
 
-    /// 주변 Wi-Fi 네트워크를 스캔한다. Location 권한 없으면 결과 비어 있거나 실패.
+    /// 주변 Wi-Fi 네트워크를 스캔한다. 실패 시 `WifiScanError` throw.
     /// 메인 스레드를 블로킹하지 않도록 background queue에서 실행.
-    func scanForNetworks() async throws -> [String] {
-        try await Task.detached(priority: .userInitiated) {
-            let interface = CWWiFiClient.shared().interface()
-            guard let networks = try interface?.scanForNetworks(withName: nil) else {
-                return [String]()
+    static func scanForNetworks() async throws -> [String] {
+        // Location 권한 사전 체크 — denied/restricted는 명확히 보고.
+        let auth = CLLocationManager().authorizationStatus
+        if auth == .denied || auth == .restricted {
+            throw WifiScanError.permissionDenied
+        }
+
+        return try await Task.detached(priority: .userInitiated) {
+            let client = CWWiFiClient.shared()
+            guard let interface = client.interface(), interface.powerOn() else {
+                throw WifiScanError.radioOff
             }
-            let ssids = networks.compactMap { $0.ssid }
-            return Array(Set(ssids)).sorted()
+            do {
+                let networks = try interface.scanForNetworks(withName: nil)
+                let ssids = networks.compactMap { $0.ssid }
+                return Array(Set(ssids)).sorted()
+            } catch {
+                throw WifiScanError.unknown(error as NSError)
+            }
         }.value
     }
 

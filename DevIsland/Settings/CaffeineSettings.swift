@@ -97,7 +97,7 @@ private struct CaffeineSSIDPickerSheet: View {
     @StateObject private var permission = LocationPermissionRequester()
     @State private var scanResults: [String] = []
     @State private var isScanning = true
-    @State private var scanFailed = false
+    @State private var scanError: WifiScanError? = nil
     @State private var selection = Set<String>()
     @State private var manualEntry: String = ""
 
@@ -121,27 +121,12 @@ private struct CaffeineSSIDPickerSheet: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            if permission.status == .denied || permission.status == .restricted {
-                HStack {
-                    Text(l10n.lblScanFailed)
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                    Spacer()
-                    Button("Open System Settings") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
-                    .buttonStyle(.link)
-                }
-            } else if isScanning {
+            if isScanning {
                 ProgressView()
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 8)
-            } else if scanFailed {
-                Text(l10n.lblScanFailed)
-                    .font(.caption)
-                    .foregroundColor(.orange)
+            } else if let error = scanError {
+                scanErrorView(for: error)
             } else {
                 List(scanResults.filter { $0 != connectedSSID && !existing.contains($0) }, id: \.self) { ssid in
                     Toggle(isOn: bindingForSelection(ssid)) {
@@ -182,9 +167,36 @@ private struct CaffeineSSIDPickerSheet: View {
         .onChange(of: permission.status) { _, newStatus in
             if newStatus == .authorizedAlways || newStatus == .authorized {
                 isScanning = true
-                scanFailed = false
+                scanError = nil
                 Task { await runScan() }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func scanErrorView(for error: WifiScanError) -> some View {
+        switch error {
+        case .permissionDenied:
+            HStack {
+                Text(l10n.lblScanErrorPermission)
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                Spacer()
+                Button(l10n.btnOpenLocationSettings) {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.link)
+            }
+        case .radioOff:
+            Text(l10n.lblScanErrorRadioOff)
+                .font(.caption)
+                .foregroundColor(.orange)
+        case .unknown(let nsError):
+            Text(l10n.lblScanErrorUnknown(nsError.localizedDescription))
+                .font(.caption)
+                .foregroundColor(.orange)
         }
     }
 
@@ -198,13 +210,13 @@ private struct CaffeineSSIDPickerSheet: View {
     }
 
     private func runScan() async {
-        let monitor = WifiSSIDMonitor()
         do {
-            let results = try await monitor.scanForNetworks()
-            scanResults = results
-            scanFailed = false
+            scanResults = try await WifiSSIDMonitor.scanForNetworks()
+            scanError = nil
+        } catch let error as WifiScanError {
+            scanError = error
         } catch {
-            scanFailed = true
+            scanError = .unknown(error as NSError)
         }
         isScanning = false
     }

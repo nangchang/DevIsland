@@ -25,10 +25,16 @@ final class SleepAssertion {
         }
     }
 
-    /// assertion 생성/유지. 이미 보유 중이면 no-op.
+    enum AcquireResult: Equatable {
+        case acquired
+        case alreadyHeld
+        case failed(IOReturn)
+    }
+
+    /// assertion 생성/유지. 이미 보유 중이면 `.alreadyHeld`.
     @discardableResult
-    func acquire() -> Bool {
-        guard !held else { return true }
+    func acquire() -> AcquireResult {
+        guard !held else { return .alreadyHeld }
         var newID: IOPMAssertionID = IOPMAssertionID(0)
         let status = IOPMAssertionCreateWithName(
             assertionType,
@@ -37,11 +43,11 @@ final class SleepAssertion {
             &newID
         )
         guard status == kIOReturnSuccess else {
-            return false
+            return .failed(status)
         }
         id = newID
         held = true
-        return true
+        return .acquired
     }
 
     /// assertion 해제. 보유 중이 아니면 no-op.

@@ -75,6 +75,31 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.settings.notchAnimationEnabled)
     }
 
+    func testCaffeineDefaultsWhenKeysAbsent() {
+        // 빈 UserDefaults에서 신규 Caffeine 필드가 default로 채워지는지 검증
+        // (기존 사용자 업그레이드 시나리오)
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+        XCTAssertTrue(store.settings.caffeineEnabled)
+        XCTAssertEqual(store.settings.caffeineExcludedSSIDs, [])
+    }
+
+    func testCaffeinePersistsExcludedSSIDs() {
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+        store.settings.caffeineExcludedSSIDs = ["Office-Internal", "Guest"]
+        store.settings.caffeineEnabled = false
+
+        let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+        XCTAssertFalse(reloaded.settings.caffeineEnabled)
+        XCTAssertEqual(reloaded.settings.caffeineExcludedSSIDs, ["Office-Internal", "Guest"])
+    }
+
+    func testCaffeineExcludedSSIDsFallbackOnWrongType() {
+        // 손상된 데이터(잘못된 타입)에서도 default 빈 배열로 회귀
+        defaults.set(["not": "an array"], forKey: SettingsStore.DefaultsKey.caffeineExcludedSSIDs)
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+        XCTAssertEqual(store.settings.caffeineExcludedSSIDs, [])
+    }
+
     func testSettingsPersistAndReload() {
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
         store.settings.claudeSessionApprovalMode = .hybrid

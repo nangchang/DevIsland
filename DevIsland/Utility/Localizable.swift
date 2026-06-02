@@ -204,6 +204,12 @@ extension L10n {
     var lblConnectedSSID:             String { s("Connected",                                 "연결됨") }
     var lblManualSSIDEntry:           String { s("Enter SSID manually",                       "SSID 직접 입력") }
     var lblScanFailed:                String { s("Scan failed (Location permission required)", "스캔 실패 (위치 권한 필요)") }
+    var lblScanErrorPermission:       String { s("Location permission required to scan Wi-Fi", "Wi-Fi 스캔에 위치 권한이 필요합니다") }
+    var lblScanErrorRadioOff:         String { s("Wi-Fi is turned off",                       "Wi-Fi가 꺼져 있습니다") }
+    func lblScanErrorUnknown(_ detail: String) -> String {
+        s("Scan failed: \(detail)", "스캔 실패: \(detail)")
+    }
+    var btnOpenLocationSettings:      String { s("Open System Settings",                      "시스템 설정 열기") }
     var hintCaffeineRule:             String { s("Active while on AC power. Always off on excluded Wi-Fi or when battery is ≤ 20%.", "전원 연결 시 활성화됩니다. 예외 Wi-Fi 또는 배터리 20% 이하에서는 항상 비활성화됩니다.") }
     var menuCaffeineToggle:           String { s("Caffeine",                                  "Caffeine") }
     var menuCaffeineOnAC:             String { s("Preventing sleep — AC power",               "슬립 차단 중 — AC 전원") }
@@ -212,6 +218,10 @@ extension L10n {
     var menuCaffeineLowBattery:       String { s("Off — low battery",                         "비활성 — 배터리 부족") }
     func menuCaffeineExcludedSSID(_ ssid: String) -> String {
         s("Off — excluded Wi-Fi (\(ssid))", "비활성 — 예외 Wi-Fi (\(ssid))")
+    }
+    func menuCaffeineFailure(_ code: Int32) -> String {
+        s("Failed to acquire sleep assertion (code \(code))",
+          "슬립 차단 활성화 실패 (코드 \(code))")
     }
 
     // Integrations tab

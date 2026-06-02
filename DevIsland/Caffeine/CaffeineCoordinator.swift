@@ -1,26 +1,24 @@
 import Foundation
 import Combine
+import IOKit
 
-/// Caffeine 동작 사유 — UI 라벨/로그에 사용.
 enum CaffeineReason: Equatable {
-    case off                  // 마스터 OFF
-    case onAC                 // AC 연결, 정상 차단 중
-    case excludedSSID(String) // 제외 SSID 매칭으로 OFF
-    case onBattery            // AC 분리로 OFF
-    case lowBattery(Double)   // 배터리 임계 이하로 OFF
+    case off
+    case onAC
+    case excludedSSID(String)
+    case onBattery
+    case lowBattery(Double)
+    case failure(IOReturn)
 }
 
 /// 입력 신호(전원/SSID/설정)를 결합해 IOPMAssertion 보유 여부를 결정한다.
 final class CaffeineCoordinator: ObservableObject {
-    /// 저전력 OFF 임계 (≤ 20%)
     static let lowBatteryOffThreshold: Double = 0.20
-    /// 저전력 복귀 임계 (≥ 23%) — 깜빡임 방지 히스테리시스
     static let lowBatteryOnThreshold: Double = 0.23
 
     @Published private(set) var isHoldingAssertion: Bool = false
     @Published private(set) var reason: CaffeineReason = .off
 
-    /// 입력 신호 — 외부에서 publish.
     @Published var caffeineEnabled: Bool = true
     @Published var excludedSSIDs: [String] = []
     @Published var isOnACPower: Bool = true
@@ -29,43 +27,48 @@ final class CaffeineCoordinator: ObservableObject {
 
     private let assertion: SleepAssertion
     private var cancellables = Set<AnyCancellable>()
-    /// 히스테리시스를 위해 직전 저전력 상태를 유지.
     private var lastLowBattery: Bool = false
 
     init(assertion: SleepAssertion = SleepAssertion()) {
         self.assertion = assertion
     }
 
-    deinit {
-        // deinit은 nonisolated → assertion만 직접 release.
-        // SleepAssertion의 deinit이 동일 처리하므로 명시 호출 불필요.
-    }
-
-    /// 모든 input publisher를 구독해 자동 재평가.
     func bind() {
         let aggregate = Publishers.CombineLatest4($caffeineEnabled, $isOnACPower, $batteryLevel, $currentSSID)
             .combineLatest($excludedSSIDs)
         aggregate
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.evaluate() }
             .store(in: &cancellables)
         evaluate()
     }
 
-    /// 외부에서 강제 재평가가 필요할 때.
     func evaluate() {
-        let (hold, why) = decide()
-        if hold {
-            if assertion.acquire() {
-                if !isHoldingAssertion { isHoldingAssertion = true }
+        let (nextLow, intended) = decide(prevLowBattery: lastLowBattery)
+        lastLowBattery = nextLow
+
+        let finalReason: CaffeineReason
+        let shouldHold: Bool
+        switch intended {
+        case .onAC:
+            switch assertion.acquire() {
+            case .acquired, .alreadyHeld:
+                shouldHold = true
+                finalReason = .onAC
+            case .failed(let status):
+                shouldHold = false
+                finalReason = .failure(status)
             }
-        } else {
+        default:
             assertion.release()
-            if isHoldingAssertion { isHoldingAssertion = false }
+            shouldHold = false
+            finalReason = intended
         }
-        if reason != why { reason = why }
+
+        if isHoldingAssertion != shouldHold { isHoldingAssertion = shouldHold }
+        if reason != finalReason { reason = finalReason }
     }
 
-    /// 종료 시 명시적 해제.
     func shutdown() {
         cancellables.removeAll()
         assertion.release()
@@ -73,48 +76,45 @@ final class CaffeineCoordinator: ObservableObject {
         reason = .off
     }
 
-    // MARK: - Decision
+    // MARK: - Decision (pure)
 
-    /// 상태 결정 로직 — 단위 테스트용으로 분리.
-    func decide() -> (hold: Bool, reason: CaffeineReason) {
+    /// 입력과 직전 히스테리시스 상태에서 다음 상태와 의도된 사유를 반환한다.
+    /// 부수효과 없음 — 호출자가 `nextLowBattery`를 명시적으로 적용해야 함.
+    func decide(prevLowBattery: Bool) -> (nextLowBattery: Bool, reason: CaffeineReason) {
         guard caffeineEnabled else { return (false, .off) }
 
         if let ssid = currentSSID, excludedSSIDs.contains(ssid) {
-            return (false, .excludedSSID(ssid))
+            // 제외 SSID는 hysteresis와 무관. 직전 상태 유지.
+            return (prevLowBattery, .excludedSSID(ssid))
         }
+
+        let nextLow = nextLowBatteryState(prev: prevLowBattery, level: batteryLevel)
 
         if !isOnACPower {
-            // AC 분리 시 저전력 진입 여부 갱신.
-            if let level = batteryLevel {
-                updateLowBatteryHysteresis(level: level)
-                if lastLowBattery {
-                    return (false, .lowBattery(level))
-                }
+            if nextLow, let level = batteryLevel {
+                return (nextLow, .lowBattery(level))
             }
-            return (false, .onBattery)
+            return (nextLow, .onBattery)
         }
 
-        // AC 연결 상태 — 충전 중이지만 잔량이 OFF 임계 이하라면 안전을 위해 OFF.
-        if let level = batteryLevel {
-            updateLowBatteryHysteresis(level: level)
-            if lastLowBattery {
-                return (false, .lowBattery(level))
-            }
+        if nextLow, let level = batteryLevel {
+            return (nextLow, .lowBattery(level))
         }
 
-        return (true, .onAC)
+        return (nextLow, .onAC)
     }
 
-    private func updateLowBatteryHysteresis(level: Double) {
-        if lastLowBattery {
-            // OFF 상태 → ON 복귀 임계 도달 시 해제
-            if level >= Self.lowBatteryOnThreshold {
-                lastLowBattery = false
-            }
+    /// 저전력 hysteresis 다음 상태를 계산한다(부수효과 없음).
+    static func nextLowBatteryState(prev: Bool, level: Double?) -> Bool {
+        guard let level else { return false }
+        if prev {
+            return level < lowBatteryOnThreshold
         } else {
-            if level <= Self.lowBatteryOffThreshold {
-                lastLowBattery = true
-            }
+            return level <= lowBatteryOffThreshold
         }
+    }
+
+    private func nextLowBatteryState(prev: Bool, level: Double?) -> Bool {
+        Self.nextLowBatteryState(prev: prev, level: level)
     }
 }
