@@ -83,12 +83,20 @@ jobs:
             /opt/homebrew/bin/create-dmg
             /opt/homebrew/Cellar/xcodegen
             /opt/homebrew/Cellar/create-dmg
+            /opt/homebrew/share/create-dmg
+            /opt/homebrew/share/xcodegen
           key: ${{ runner.os }}-brew-tools-${{ hashFiles('.github/workflows/nightly.yml') }}
 
       - name: Install dependencies
         if: steps.check_commits.outputs.skip != 'true' && steps.cache-tools.outputs.cache-hit != 'true'
         run: |
           brew install xcodegen create-dmg
+
+      - name: Link Homebrew Tools
+        if: steps.check_commits.outputs.skip != 'true' && steps.cache-tools.outputs.cache-hit == 'true'
+        run: |
+          brew link --overwrite create-dmg
+          brew link --overwrite xcodegen
 
       - name: Cache DerivedData
         if: steps.check_commits.outputs.skip != 'true'
@@ -105,12 +113,15 @@ jobs:
       - name: Run Tests
         if: steps.check_commits.outputs.skip != 'true'
         run: |
+          set -o pipefail
           HOST_ARCH="$(uname -m)"
           xcodebuild test \
             -project DevIsland.xcodeproj \
             -scheme DevIsland \
             -destination "platform=macOS,arch=${HOST_ARCH}" \
             -derivedDataPath /tmp/DevIsland-Nightly-DerivedData \
+            ARCHS="${HOST_ARCH}" \
+            ONLY_ACTIVE_ARCH=YES \
             -quiet 2>&1 | awk '
               /DVTErrorPresenter: Unable to load simulator devices\./ { skip = 1; next }
               skip && /^--$/ { skipDashCount += 1; if (skipDashCount >= 2) { skip = 0; skipDashCount = 0 }; next }
