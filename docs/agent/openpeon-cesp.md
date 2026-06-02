@@ -60,6 +60,8 @@ Failure detection is intentionally conservative. Claude tool execution failure i
 - `openPeonMutedCategories`
 - `openPeonDebounceMilliseconds`
 
+The settings window presents these under the user-facing **Sound** tab. Keep the persisted `openPeon` names because they describe the CESP implementation and preserve existing preferences.
+
 Defaults:
 
 | Setting | Default |

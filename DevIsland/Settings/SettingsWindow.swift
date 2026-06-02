@@ -122,30 +122,20 @@ struct SettingsWindowView: View {
             GeneralSettingsPane(store: store)
                 .tabItem { Label(l10n.tabGeneral, systemImage: "gearshape") }
 
-            DisplaySettingsPane(displayPrefs: appState.displayPrefs, store: store)
-                .tabItem { Label(l10n.tabDisplay, systemImage: "display") }
-
-            ExpandSettingsPane(store: store)
-                .tabItem { Label(l10n.tabExpand, systemImage: "arrow.up.left.and.arrow.down.right") }
+            IslandSettingsPane(displayPrefs: appState.displayPrefs, store: store)
+                .tabItem { Label(l10n.tabIsland, systemImage: "sparkles.rectangle.stack") }
 
             ApprovalSettingsPane(appState: appState, store: store)
                 .tabItem { Label(l10n.tabApproval, systemImage: "hand.raised") }
 
-            ProviderSettingsPane(geminiState: appState.geminiState, store: store)
-                .tabItem { Label(l10n.tabProviders, systemImage: "person.3.sequence") }
-
-            BridgeIPCSettingsPane(store: store)
-                .tabItem { Label(l10n.tabBridge, systemImage: "cable.connector") }
-
             OpenPeonSettingsPane(store: store)
-                .tabItem { Label(l10n.tabOpenPeon, systemImage: "speaker.wave.2") }
-
-            ExperimentalPTYSettingsPane()
-                .environmentObject(store)
-                .tabItem { Label(l10n.tabExperimental, systemImage: "testtube.2") }
+                .tabItem { Label(l10n.tabSound, systemImage: "speaker.wave.2") }
 
             IntegrationsSettingsPane(store: store)
                 .tabItem { Label(l10n.tabIntegrations, systemImage: "puzzlepiece.extension") }
+
+            AdvancedSettingsPane(geminiState: appState.geminiState, store: store)
+                .tabItem { Label(l10n.tabAdvanced, systemImage: "slider.horizontal.3") }
         }
         .padding(16)
         .frame(minWidth: 700, minHeight: 500)
@@ -230,7 +220,7 @@ private struct GeneralSettingsPane: View {
     }
 }
 
-private struct DisplaySettingsPane: View {
+private struct IslandSettingsPane: View {
     @ObservedObject var displayPrefs: NotchDisplayPreferences
     @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
@@ -356,6 +346,63 @@ private struct DisplaySettingsPane: View {
                     }
                 }
             }
+
+            Section(l10n.secNotchAutoExpand) {
+                Toggle(l10n.lblNotchAutoExpand, isOn: store.binding(\.notchAutoExpandEnabled))
+
+                Picker(l10n.lblUnreadDotPosition, selection: store.binding(\.notchUnreadDotPosition)) {
+                    ForEach(NotchUnreadDotPosition.allCases) { pos in
+                        Text(pos.label).tag(pos)
+                    }
+                }
+            }
+
+            Section(l10n.secNotchExpandTriggers) {
+                let enabled = store.settings.notchAutoExpandEnabled
+                triggerRow(
+                    label: l10n.lblExpandOnNotification,
+                    hint: l10n.hintExpandOnNotification,
+                    binding: store.binding(\.expandOnNotification),
+                    enabled: enabled
+                )
+                let notifEnabled = enabled && store.settings.expandOnNotification
+                subTriggerRow(
+                    label: l10n.lblExpandOnTaskCompletion,
+                    hint: l10n.hintExpandOnTaskCompletion,
+                    binding: store.binding(\.expandOnTaskCompletion),
+                    enabled: notifEnabled
+                )
+                subTriggerRow(
+                    label: l10n.lblExpandOnIdlePrompt,
+                    hint: l10n.hintExpandOnIdlePrompt,
+                    binding: store.binding(\.expandOnIdlePrompt),
+                    enabled: notifEnabled
+                )
+                subTriggerRow(
+                    label: l10n.lblExpandOnNotificationMessage,
+                    hint: l10n.hintExpandOnNotificationMessage,
+                    binding: store.binding(\.expandOnNotificationMessage),
+                    enabled: notifEnabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnApprovalRequest,
+                    hint: l10n.hintExpandOnApprovalRequest,
+                    binding: store.binding(\.expandOnApprovalRequest),
+                    enabled: enabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnQuestionResponse,
+                    hint: l10n.hintExpandOnQuestionResponse,
+                    binding: store.binding(\.expandOnQuestionResponse),
+                    enabled: enabled
+                )
+                triggerRow(
+                    label: l10n.lblExpandOnInteractiveTool,
+                    hint: l10n.hintExpandOnInteractiveTool,
+                    binding: store.binding(\.expandOnInteractiveTool),
+                    enabled: enabled
+                )
+            }
         }
         .formStyle(.grouped)
     }
@@ -364,6 +411,24 @@ private struct DisplaySettingsPane: View {
         let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 1
         let role = screen == NSScreen.main ? l10n.monitorMain() : l10n.monitorN(index)
         return "\(role) · \(Int(screen.frame.width))×\(Int(screen.frame.height))"
+    }
+
+    private func triggerRow(label: String, hint: String, binding: Binding<Bool>, enabled: Bool) -> some View {
+        Toggle(isOn: binding) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                Text(hint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .disabled(!enabled)
+    }
+
+    /// 들여쓰기가 적용된 하위 토글 행 (부모 토글 아래에 종류별 옵션 표시용)
+    private func subTriggerRow(label: String, hint: String, binding: Binding<Bool>, enabled: Bool) -> some View {
+        triggerRow(label: label, hint: hint, binding: binding, enabled: enabled)
+            .padding(.leading, 20)
     }
 }
 
@@ -466,92 +531,6 @@ private struct NotchCharacterControl: View {
     }
 }
 
-private struct ExpandSettingsPane: View {
-    @ObservedObject var store: SettingsStore
-    @ObservedObject private var l10n = L10n.shared
-
-    var body: some View {
-        Form {
-            Section(l10n.secNotchAutoExpand) {
-                Toggle(l10n.lblNotchAutoExpand, isOn: store.binding(\.notchAutoExpandEnabled))
-
-                Picker(l10n.lblUnreadDotPosition, selection: store.binding(\.notchUnreadDotPosition)) {
-                    ForEach(NotchUnreadDotPosition.allCases) { pos in
-                        Text(pos.label).tag(pos)
-                    }
-                }
-                .disabled(store.settings.notchAutoExpandEnabled)
-            }
-
-            Section(l10n.secNotchExpandTriggers) {
-                let enabled = store.settings.notchAutoExpandEnabled
-                triggerRow(
-                    label: l10n.lblExpandOnNotification,
-                    hint: l10n.hintExpandOnNotification,
-                    binding: store.binding(\.expandOnNotification),
-                    enabled: enabled
-                )
-                let notifEnabled = enabled && store.settings.expandOnNotification
-                subTriggerRow(
-                    label: l10n.lblExpandOnTaskCompletion,
-                    hint: l10n.hintExpandOnTaskCompletion,
-                    binding: store.binding(\.expandOnTaskCompletion),
-                    enabled: notifEnabled
-                )
-                subTriggerRow(
-                    label: l10n.lblExpandOnIdlePrompt,
-                    hint: l10n.hintExpandOnIdlePrompt,
-                    binding: store.binding(\.expandOnIdlePrompt),
-                    enabled: notifEnabled
-                )
-                subTriggerRow(
-                    label: l10n.lblExpandOnNotificationMessage,
-                    hint: l10n.hintExpandOnNotificationMessage,
-                    binding: store.binding(\.expandOnNotificationMessage),
-                    enabled: notifEnabled
-                )
-                triggerRow(
-                    label: l10n.lblExpandOnApprovalRequest,
-                    hint: l10n.hintExpandOnApprovalRequest,
-                    binding: store.binding(\.expandOnApprovalRequest),
-                    enabled: enabled
-                )
-                triggerRow(
-                    label: l10n.lblExpandOnQuestionResponse,
-                    hint: l10n.hintExpandOnQuestionResponse,
-                    binding: store.binding(\.expandOnQuestionResponse),
-                    enabled: enabled
-                )
-                triggerRow(
-                    label: l10n.lblExpandOnInteractiveTool,
-                    hint: l10n.hintExpandOnInteractiveTool,
-                    binding: store.binding(\.expandOnInteractiveTool),
-                    enabled: enabled
-                )
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    private func triggerRow(label: String, hint: String, binding: Binding<Bool>, enabled: Bool) -> some View {
-        Toggle(isOn: binding) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                Text(hint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .disabled(!enabled)
-    }
-
-    /// 들여쓰기가 적용된 하위 토글 행 (부모 토글 아래에 종류별 옵션 표시용)
-    private func subTriggerRow(label: String, hint: String, binding: Binding<Bool>, enabled: Bool) -> some View {
-        triggerRow(label: label, hint: hint, binding: binding, enabled: enabled)
-            .padding(.leading, 20)
-    }
-}
-
 private struct ApprovalSettingsPane: View {
     @ObservedObject var appState: AppState
     @ObservedObject var store: SettingsStore
@@ -584,6 +563,64 @@ private struct ApprovalSettingsPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct AdvancedSettingsPane: View {
+    @ObservedObject var geminiState: GeminiSessionState
+    @ObservedObject var store: SettingsStore
+    @ObservedObject private var l10n = L10n.shared
+    @State private var selection: AdvancedSettingsSection = .providers
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Picker("", selection: $selection) {
+                ForEach(AdvancedSettingsSection.allCases) { section in
+                    Label(section.label, systemImage: section.systemImage)
+                        .tag(section)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            Group {
+                switch selection {
+                case .providers:
+                    ProviderSettingsPane(geminiState: geminiState, store: store)
+                case .bridge:
+                    BridgeIPCSettingsPane(store: store)
+                case .experimental:
+                    ExperimentalPTYSettingsPane()
+                        .environmentObject(store)
+                }
+            }
+        }
+        .padding()
+    }
+
+    private enum AdvancedSettingsSection: String, CaseIterable, Identifiable {
+        case providers
+        case bridge
+        case experimental
+
+        var id: String { rawValue }
+
+        var label: String {
+            let l = L10n.shared
+            switch self {
+            case .providers:    return l.tabProviders
+            case .bridge:       return l.tabBridge
+            case .experimental: return l.tabExperimental
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .providers:    return "person.3.sequence"
+            case .bridge:       return "cable.connector"
+            case .experimental: return "testtube.2"
+            }
+        }
     }
 }
 
