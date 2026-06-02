@@ -355,7 +355,6 @@ private struct IslandSettingsPane: View {
                         Text(pos.label).tag(pos)
                     }
                 }
-                .disabled(store.settings.notchAutoExpandEnabled)
             }
 
             Section(l10n.secNotchExpandTriggers) {
@@ -571,18 +570,56 @@ private struct AdvancedSettingsPane: View {
     @ObservedObject var geminiState: GeminiSessionState
     @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
+    @State private var selection: AdvancedSettingsSection = .providers
 
     var body: some View {
-        TabView {
-            ProviderSettingsPane(geminiState: geminiState, store: store)
-                .tabItem { Label(l10n.tabProviders, systemImage: "person.3.sequence") }
+        VStack(spacing: 12) {
+            Picker("", selection: $selection) {
+                ForEach(AdvancedSettingsSection.allCases) { section in
+                    Label(section.label, systemImage: section.systemImage)
+                        .tag(section)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
-            BridgeIPCSettingsPane(store: store)
-                .tabItem { Label(l10n.tabBridge, systemImage: "cable.connector") }
+            Group {
+                switch selection {
+                case .providers:
+                    ProviderSettingsPane(geminiState: geminiState, store: store)
+                case .bridge:
+                    BridgeIPCSettingsPane(store: store)
+                case .experimental:
+                    ExperimentalPTYSettingsPane()
+                        .environmentObject(store)
+                }
+            }
+        }
+        .padding()
+    }
 
-            ExperimentalPTYSettingsPane()
-                .environmentObject(store)
-                .tabItem { Label(l10n.tabExperimental, systemImage: "testtube.2") }
+    private enum AdvancedSettingsSection: String, CaseIterable, Identifiable {
+        case providers
+        case bridge
+        case experimental
+
+        var id: String { rawValue }
+
+        var label: String {
+            let l = L10n.shared
+            switch self {
+            case .providers:    return l.tabProviders
+            case .bridge:       return l.tabBridge
+            case .experimental: return l.tabExperimental
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .providers:    return "person.3.sequence"
+            case .bridge:       return "cable.connector"
+            case .experimental: return "testtube.2"
+            }
         }
     }
 }
