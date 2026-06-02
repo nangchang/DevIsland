@@ -83,12 +83,20 @@ jobs:
             /opt/homebrew/bin/create-dmg
             /opt/homebrew/Cellar/xcodegen
             /opt/homebrew/Cellar/create-dmg
+            /opt/homebrew/share/create-dmg
+            /opt/homebrew/share/xcodegen
           key: ${{ runner.os }}-brew-tools-${{ hashFiles('.github/workflows/nightly.yml') }}
 
       - name: Install dependencies
         if: steps.check_commits.outputs.skip != 'true' && steps.cache-tools.outputs.cache-hit != 'true'
         run: |
           brew install xcodegen create-dmg
+
+      - name: Link Homebrew Tools
+        if: steps.check_commits.outputs.skip != 'true' && steps.cache-tools.outputs.cache-hit == 'true'
+        run: |
+          brew link --overwrite create-dmg
+          brew link --overwrite xcodegen
 
       - name: Cache DerivedData
         if: steps.check_commits.outputs.skip != 'true'
