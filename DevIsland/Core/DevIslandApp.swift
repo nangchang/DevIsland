@@ -5,6 +5,7 @@ struct DevIslandApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject private var state = AppState.shared
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
+    @ObservedObject private var caffeine = AppState.shared.caffeineCoordinator
 
     @MainActor
     init() {
@@ -17,13 +18,33 @@ struct DevIslandApp: App {
             MenuBarMenu()
         } label: {
             HStack(spacing: 3) {
-                Image("StatusBarIcon")
+                Image(nsImage: Self.statusBarIcon(active: caffeine.isHoldingAssertion))
                 if sessionStore.pendingCount > 0 {
                     Text("\(sessionStore.pendingCount)")
                         .font(.system(size: 10, weight: .bold))
                 }
             }
         }
+    }
+
+    /// caffeine 활성 시 파란색(Red Bull) 틴트, 비활성 시 시스템 기본 template.
+    private static func statusBarIcon(active: Bool) -> NSImage {
+        let base = NSImage(named: "StatusBarIcon") ?? NSImage()
+        guard active else { return base }
+        return tinted(base, with: NSColor(red: 0.0, green: 0.38, blue: 0.93, alpha: 1.0))
+    }
+
+    private static func tinted(_ source: NSImage, with color: NSColor) -> NSImage {
+        let size = source.size
+        let result = NSImage(size: size)
+        result.lockFocus()
+        color.set()
+        NSRect(origin: .zero, size: size).fill()
+        source.draw(at: .zero, from: NSRect(origin: .zero, size: size),
+                    operation: .destinationIn, fraction: 1.0)
+        result.unlockFocus()
+        result.isTemplate = false
+        return result
     }
 }
 
