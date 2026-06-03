@@ -438,6 +438,7 @@ struct PluginFailure {
 ```swift
 enum PluginUISlot: String, Codable, CaseIterable {
     case notchCompactLeading   = "notch.compact.leading"
+    case notchCompactCenter    = "notch.compact.center"
     case notchCompactTrailing  = "notch.compact.trailing"
     case notchExpandedActivity = "notch.expanded.activity"
     case notchExpandedDetails  = "notch.expanded.details"
@@ -460,17 +461,49 @@ enum PluginUISlot: String, Codable, CaseIterable {
 | `session.message` | 세션 메시지 창(`SessionMessageView`) 헤더/툴바 | 세션별 부가 정보 accessory | 세션 | v1.1 |
 | `session.detail.timeline` | 세션 히스토리 타임라인 | 특정 시점의 주석 (Annotation) | 세션 | v2 |
 | `session.detail.summary` | 세션 상세 상단 | 세션별 요약 카드 | 세션 | v2 |
-| `notch.compact.leading` | Collapsed Notch 왼쪽 | 에이전트 상태 배지 옆 부가 정보 | 전역 | v2 |
-| `notch.compact.trailing` | Collapsed Notch 오른쪽 | 알림 개수나 작은 아이콘 | 전역 | v2 |
+| `notch.compact.leading` | Collapsed Notch 왼쪽 (좌 버디 영역) | 에이전트 상태 배지 옆 부가 정보 | 전역 | v2 |
+| `notch.compact.center` | Collapsed Notch 중앙 (`notchCenterText` 영역) | 중앙 텍스트 대체/부가 정보 | 전역 | v2 |
+| `notch.compact.trailing` | Collapsed Notch 오른쪽 (우 버디 영역) | 알림 개수나 작은 아이콘 | 전역 | v2 |
 
 `menubar.menu`는 메뉴 스타일 `MenuBarExtra`의 top-level `MenuBarMenu`에 직접 렌더링한다. 별도 window popover(`.menuBarExtraStyle(.window)`)는 현재 구현과 다르므로 v2로 미룬다.
 
 첫 구현은 `notch.expanded.activity`, `menubar.menu` 두 슬롯만 연다. 설정 화면은 플러그인 contribution slot이 아니라 DevIsland host가 manifest·enable 상태·safemode·storage 삭제 기능을 렌더링하는 `PluginSettingsView`다. 플러그인별 custom settings schema는 v1.1 이후 별도로 검토한다.
-`SessionRowView`, `SessionMessageView`, `SessionHistoryWindow`에 닿는 세션별 슬롯은 UI 접점이 여러 곳이라 v1.1로 분리한다. collapsed notch 슬롯은 현재 mascot/unread dot 레이아웃과 충돌 가능성이 높으므로 v2에서 별도 compact renderer를 설계한다.
+`SessionRowView`, `SessionMessageView`, `SessionHistoryWindow`에 닿는 세션별 슬롯은 UI 접점이 여러 곳이라 v1.1로 분리한다. collapsed notch 3영역(`leading`/`center`/`trailing`)은 현재 좌·우 버디와 중앙 `notchCenterText`가 점유하고 unread dot까지 겹쳐 가산 contribution이 들어갈 공간이 없다. 따라서 v2에서 별도 compact renderer를 설계하되, 가산 슬롯이 아니라 §7.1의 exclusive region provider 모델로 렌더하는 방향을 우선 검토한다.
 
 슬롯별 제약: 최대 contribution 수, 텍스트 최대 길이, 우선순위 정렬 기준은 각 슬롯 렌더러가 정의한다. 동일 priority는 pluginID 알파벳 순으로 deterministic ordering을 적용한다.
 
 **slot scope (전역 vs 세션)**: `session.*` 슬롯은 특정 세션에 종속된다. 해당 contribution은 `targetSessionID`를 채우고, `PluginUIContext.session`으로 대상 세션 스냅샷을 받는다. 렌더러는 우클릭/상세 대상 세션의 `targetSessionID`로 필터링한다. 캐시 dedup도 `(pluginID, targetSessionID)` 기준이며, `session.ended` 이벤트 수신 시 Host가 해당 `targetSessionID` contribution을 evict한다. 전역 슬롯은 `targetSessionID == nil`로 둔다.
+
+### 7.1. (v1.1+ 개념) Exclusive Region Provider — 노치 영역 교체
+
+> 이 절은 **개념과 경계**만 정의한다. 구현 스펙이 아니며 v1 범위 밖이다. 좁은 collapsed 노치(아일랜드)의 영역을 다룰 때의 설계 방향을 기록한다.
+
+Collapsed 노치(아일랜드)는 좌(버디)·중앙(`notchCenterText`)·우(버디)의 **세 영역**으로 구성되며, 세 영역 모두 이미 core 요소가 점유한다. 공간이 극도로 좁아 가산(additive) contribution이 들어갈 자리가 없다.
+
+따라서 노치 영역에 한해 가산 슬롯과 **다른 의미론**을 검토한다.
+
+| 모델 | 의미 | 적합한 surface |
+| :--- | :--- | :--- |
+| Additive contribution (기본) | 컴포넌트를 *더함*, priority로 누적, core chrome 유지 | expanded notch, menubar, session.* |
+| **Exclusive region provider** | 영역의 점유물을 *하나의 provider가 교체*, 단일 승자 | collapsed notch 3영역 |
+
+기존 `NotchCharacterMode`(`hidden`/`random`/`specific`)가 이미 영역별 점유물 선택자다. 여기에 `plugin` 선택지를 더하면, 버디는 "기본 built-in region provider"가 되고 플러그인은 대체 provider로 경쟁한다.
+
+**비주얼 경계 (3단계)** — 무엇으로 교체할 수 있는가:
+
+| 단계 | 교체 내용 | 가능 여부 |
+| :--- | :--- | :--- |
+| 선언형 교체 (v1.1) | 버디 대신 `metric`/`badge`/`text`/SF Symbol `icon` 하나를 배타적으로 렌더 | ✅ Surface Host 유지 |
+| 리치 비주얼 교체 (v2) | 버디 같은 커스텀 스프라이트·캔버스·애니메이션 | ❌ 임의 View 주입 = "Declarative UI"·"Surface Host" 원칙 위반 → v2 에셋 팩 / 외부 런타임 |
+
+핵심 비대칭: 버디 자체가 커스텀 픽셀아트라 core는 그릴 수 있으나, 선언형 모델의 플러그인은 동등하게 그릴 수 없다. "버디만큼 리치한 교체"는 비주얼 capability(에셋 팩)가 생기는 v2 영역이다.
+
+**안전 규칙 (이 모델 도입 시 준수):**
+
+1. **영역별 사용자 opt-in** — `NotchCharacterMode`에 `plugin` 선택지를 추가하는 방식. 플러그인이 영역을 몰래 점유하지 않으며, 사용자가 좌/중앙/우마다 명시적으로 선택한다(개인화 > 플러그인 원칙).
+2. **단일 승자(exclusive)** — 가산 리스트 슬롯과 의미론이 다르다.
+3. **Fail-safe fallback** — provider 실패·safemode·만료 시 영역은 기본값(버디 또는 hidden)으로 복귀한다. 기존 `expiresAt`·safemode 기계를 재사용한다.
+4. **Cached rendering 유지** — 영역은 plugin의 cached contribution만 읽고 렌더 경로에서 plugin을 호출하지 않는다.
 
 ## 8. Utility Plugin 모델
 
@@ -1241,6 +1274,13 @@ struct PluginSlotView: View {
 | `SQLiteApprovalStore`, `ReplayRecorder`, PTY transcript persistence | durable core DB와 raw transcript는 plugin storage와 분리한다. |
 | terminal focus / AppleScript / Accessibility shortcut | 사용자 환경 권한과 시스템 side effect가 크므로 core command로 유지한다. |
 | app relocation, launch at login, update install | 앱 배포·시스템 설정 영역이며 plugin failure와 분리되어야 한다. |
+| hook 설치/제거 메뉴 (`BridgeInstaller`, MenuBar의 Install Hooks 섹션) | bridge script와 provider settings를 직접 수정하는 경로다. 우리가 "수정하지 않는다"고 약속한 hook 전달 경로 위에 있으므로 core command로 유지한다. |
+| Claude 구조화 질문/응답 (`ClaudeQuestionState`, AskUserQuestion reply) | approval prompt와 같은 provider response path 위에 있다. 플러그인은 응답을 만들거나 지연하면 안 된다. |
+
+**구조적 경계 — 자유 텍스트 입력이 필요한 기능은 v1 플러그인 대상이 아니다.**
+v1 `PluginUIComponentType`은 `metric`/`badge`/`button`/`text`뿐이며 입력 필드(text field, editable form)가 없다.
+따라서 사용자 자유 입력이 필요한 기능 — 예: 세션 라벨(`AppState.sessionLabels`), 메모/주석 작성 — 은 declarative contribution으로 표현할 수 없으므로 core에 유지하거나, v2의 input component 또는 custom settings schema가 생긴 뒤에 검토한다.
+이 기능들은 "관찰 전용 + 선언형 출력" 모델에 맞지 않으므로 전환 후보로 올리지 않는다.
 
 기존 기능 전환은 PR 0–11의 플러그인 플랫폼이 안정화된 뒤 별도 migration track으로 진행한다.
 첫 migration 후보는 OpenPeon sound가 가장 적합하다. 이미 best-effort side effect이고, 실패해도 approval/deny 동작을 바꾸면 안 된다는 기존 원칙과 플러그인 Fail-Safe 원칙이 잘 맞기 때문이다.
