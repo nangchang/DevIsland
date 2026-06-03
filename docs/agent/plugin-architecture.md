@@ -1197,6 +1197,55 @@ struct PluginSlotView: View {
 
 각 단계는 이전 단계의 동작을 바꾸지 않으며, `enablePlugins` 플래그로 전체를 끌 수 있다.
 
+### 12.9. 기존 기능의 Built-in Plugin 전환 후보
+
+플러그인 플랫폼을 도입한다고 해서 기존 기능을 모두 플러그인으로 옮기지는 않는다.
+전환 대상은 "없어져도 core hook/approval 동작이 변하지 않는 부가 기능"으로 제한한다.
+
+전환 기준:
+
+- sanitized `PluginEvent` 관찰만으로 동작할 수 있다.
+- UI는 `PluginUIContribution` 또는 host-owned settings UI로 표현할 수 있다.
+- 실패·disable·safemode가 provider response, approval decision, session lifecycle을 바꾸지 않는다.
+- storage는 plugin storage나 기존 host service의 read-only/status API로 충분하다.
+- bridge script, `HookSocketServer`, `ProviderAdapter`, `ApprovalProxyController`, `SQLiteApprovalStore` 수정을 요구하지 않는다.
+
+전환 후보:
+
+| 현재 기능 | 현재 위치 | Built-in plugin 형태 | 우선순위 | 전환 조건 |
+| :--- | :--- | :--- | :--- | :--- |
+| OpenPeon CESP sound playback | `OpenPeon/*`, `AppState.playOpenPeonSound`, `OpenPeonSettingsPane` | `OpenPeonSoundPlugin`이 hook/session/notification event를 관찰하고 host-owned `sound.playCESP` effect를 요청 | 높음 | sound pack scan, validation, `AVAudioPlayer` 재생은 host service에 남긴다. 플러그인은 pack file path나 raw payload를 직접 다루지 않는다. |
+| 세션 경과 시간/현재 상태 표시 | 신규 `SessionTimerPlugin` | `notch.expanded.activity` metric contribution | 높음 | core 상태를 바꾸지 않고 `readSessionEvents`만 사용한다. |
+| provider/session 통계 | 신규 `ProviderStatsPlugin` 또는 `SessionStatsPlugin` | `notch.expanded.activity`, `menubar.menu` 요약 metric | 중간 | `readHookSummaries`, `readSessionEvents`, v1.1 `approval.decided`만 사용한다. replay DB를 직접 조회하지 않는다. |
+| 세션 메시지/행 accessory | `SessionMessageWindow`, `SessionRowView`, `SessionHistoryWindow` 일부 표시 | `session.message`, `notch.session.row`, `session.context-menu` contribution | 중간 | v1.1 세션별 slot이 열린 뒤 진행한다. 메시지 창과 replay loading 자체는 core에 남긴다. |
+| update 상태 표시 | `UpdateChecker`, `MenuBarMenu` | update 가능 여부 badge/menu row | 낮음 | update 확인·다운로드·설치는 core에 남긴다. 외부 network permission이 생기기 전까지 플러그인은 host-owned update status만 표시한다. |
+| 메뉴의 보조 command | `MenuBarMenu` 일부 부가 row | `menubar.menu` contribution | 낮음 | settings, approval rules, replay, quit처럼 core command는 유지한다. 플러그인 command는 부가 기능에만 사용한다. |
+
+부분 전환 후보:
+
+| 현재 기능 | 플러그인으로 옮길 수 있는 부분 | core에 남길 부분 |
+| :--- | :--- | :--- |
+| OpenPeon | event-to-sound 정책, mute 상태 표시, preview button contribution | pack scanning/validation, audio playback, settings persistence |
+| Replay Log / Session History | session별 annotation, 요약 badge, menubar quick action | `SQLiteApprovalStore`, replay query, replay execution |
+| PTY Transcript | transcript 존재 여부 badge, session accessory | PTY capture, transcript storage, raw transcript viewer |
+| Settings | plugin enable/disable, safemode, storage reset | core app settings, bridge config, approval settings |
+
+전환 제외:
+
+| 기능 | 제외 이유 |
+| :--- | :--- |
+| approval decision / approval prompt response | 플러그인은 결정을 바꾸거나 provider response를 지연하면 안 된다. |
+| bridge scripts / `HookSocketServer` / IPC framing | hook response path의 안정성 경계다. |
+| `ProviderAdapter` response JSON | provider별 의미론 보존이 core 책임이다. |
+| `SessionStore` lifecycle ownership | 플러그인은 session snapshot을 관찰만 한다. |
+| `SQLiteApprovalStore`, `ReplayRecorder`, PTY transcript persistence | durable core DB와 raw transcript는 plugin storage와 분리한다. |
+| terminal focus / AppleScript / Accessibility shortcut | 사용자 환경 권한과 시스템 side effect가 크므로 core command로 유지한다. |
+| app relocation, launch at login, update install | 앱 배포·시스템 설정 영역이며 plugin failure와 분리되어야 한다. |
+
+기존 기능 전환은 PR 0–11의 플러그인 플랫폼이 안정화된 뒤 별도 migration track으로 진행한다.
+첫 migration 후보는 OpenPeon sound가 가장 적합하다. 이미 best-effort side effect이고, 실패해도 approval/deny 동작을 바꾸면 안 된다는 기존 원칙과 플러그인 Fail-Safe 원칙이 잘 맞기 때문이다.
+다만 OpenPeon을 옮기더라도 CESP pack store와 audio player는 host-owned service로 남겨야 한다.
+
 ## 13. 단계별 롤아웃 계획 (Rollout Plan)
 
 아래 단계는 구현 범위를 논리적으로 묶은 것이며, 단계와 PR은 1:1로 대응하지 않는다.
@@ -1212,6 +1261,7 @@ struct PluginSlotView: View {
 | 5 | `PluginStorageProvider` 구현 및 quota 적용 | 플러그인이 앱 재시작 후에도 상태 유지, approval DB와 큐 공유 없음 | PR 9 |
 | 6 | Settings UI — `PluginSettingsView` 목록, 활성화 토글, safemode 상태, storage 삭제 | enable/disable이 contribution cache와 tick 대상에 반영 | PR 10 |
 | 7 | Safemode 임계값·timeout 적용 | 의도적 오류 유발 → safemode 전환, core UI/approval 계속 동작 | PR 11 |
+| M | 기존 기능 migration track: OpenPeon sound 등 부가 기능을 built-in plugin 후보로 전환 | 기능 disable/safemode가 core hook/approval/session 동작을 바꾸지 않음 | Migration PR M0+ |
 | 8 | v1.1 세션별 슬롯: `notch.session.row`, `session.context-menu`, `session.message` | 세션별 contribution target/dedup/evict 검증 | v1.1 |
 | 9 | v1.1 optional `approval.decided` 관찰 이벤트 | response 이후 통계용 event만 발행, 결정 변경 불가 | v1.1 |
 | 10 | (v2) declarative utility preset 검토 | 코드 없는 JSON preset이 capability를 조합 | v2 |

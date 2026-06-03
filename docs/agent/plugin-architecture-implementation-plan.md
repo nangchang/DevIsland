@@ -441,6 +441,124 @@ MenuBar 렌더링 제약:
 
 - `./scripts/run-tests.sh`
 
+### Migration Track. 기존 기능 Built-in Plugin 전환
+
+PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
+기존 기능 전환은 platform, settings, safemode가 동작한 뒤 별도 migration PR로 진행한다.
+
+전환 원칙:
+
+- core hook/approval response path를 건드리지 않는다.
+- 기능 disable 또는 safemode가 기존 approval/session 동작을 바꾸지 않는다.
+- raw payload, replay DB, PTY transcript, terminal focus 권한을 플러그인에 넘기지 않는다.
+- 기존 host service를 plugin 내부로 옮기지 않고, 필요한 경우 host-owned effect/status API를 추가한다.
+
+#### Migration PR M0. 후보 인벤토리와 feature guard
+
+목표:
+
+- 기존 기능별 plugin화 후보와 제외 대상을 코드 기준으로 확정한다.
+- migration 대상마다 기존 설정과 plugin enable 상태의 관계를 정의한다.
+
+주요 작업:
+
+- `plugin-architecture.md` §12.9 기준으로 후보 목록 재검토
+- OpenPeon, Replay/Session History, PTY Transcript, UpdateChecker, MenuBar command를 `전환`, `부분 전환`, `core 유지`로 분류
+- 기존 기능을 plugin으로 옮기더라도 user setting migration이 필요 없는지 확인
+- built-in plugin disable 시 기존 기능을 끌지, core fallback을 유지할지 기능별로 결정
+
+검증:
+
+- 문서 및 feature guard 테스트
+- 기존 설정 기본값이 바뀌지 않는지 확인
+
+#### Migration PR M1. OpenPeonSoundPlugin
+
+목표:
+
+- OpenPeon sound playback 정책을 첫 기존 기능 migration 후보로 검증한다.
+- 사운드 재생은 best-effort side effect로 유지한다.
+
+주요 작업:
+
+- built-in `OpenPeonSoundPlugin` 추가
+- `sound.playCESP` 같은 built-in-only host effect capability 정의
+- plugin은 `hook.received`, `session.started`, `session.updated`, `session.ended`, `notification.shown`을 관찰해 CESP category 요청만 반환
+- `CESPPackStore`, `CESPPackValidator`, `CESPAudioPlayer`, OpenPeon settings persistence는 host service로 유지
+- `AppState.playOpenPeonSound` 직접 호출부를 event/effect 경로로 단계적으로 대체
+
+주의:
+
+- plugin이 pack path, audio file path, raw hook payload를 직접 보지 않게 한다.
+- sound failure는 plugin failure/log로만 남기고 provider response에 영향 주지 않는다.
+- OpenPeon settings UI는 custom plugin settings schema가 생기기 전까지 기존 Settings pane을 유지한다.
+
+검증:
+
+- 기존 OpenPeon settings 조합별 playback 동작 유지
+- invalid pack, missing sound, mute 상태에서 approval 동작 불변
+- plugin disable/safemode 시 sound만 중지되고 hook/session UI는 정상 동작
+
+#### Migration PR M2. SessionStatsPlugin / ProviderStatsPlugin
+
+목표:
+
+- 기존 session/hook 관찰 데이터에서 통계성 UI를 built-in plugin으로 제공한다.
+
+주요 작업:
+
+- `readSessionEvents`, `readHookSummaries` 기반 metric contribution 추가
+- `notch.expanded.activity`, `menubar.menu`에 짧은 통계 표시
+- v1.1 `approval.decided`가 추가되기 전에는 approval 통계 제외
+- replay DB 직접 조회 금지
+
+검증:
+
+- raw payload와 replay row가 plugin DTO에 포함되지 않는지
+- 긴 provider/tool name truncation
+- plugin disable 시 contribution 즉시 제거
+
+#### Migration PR M3. Session accessory plugins
+
+목표:
+
+- 세션별 UI slot이 열린 뒤 message/row accessory를 plugin contribution으로 검증한다.
+
+전제:
+
+- `notch.session.row`
+- `session.context-menu`
+- `session.message`
+
+주요 작업:
+
+- 세션 행 badge, 세션 메시지 header accessory, 간단한 context action을 contribution으로 이동
+- `targetSessionID` dedup/evict 검증
+- SessionMessageWindow와 SessionHistoryWindow의 data loading은 core에 유지
+
+검증:
+
+- session ended 시 세션별 contribution evict
+- 세션 팝아웃 창이 열려 있을 때 contribution 업데이트
+- replay/session history query가 plugin storage로 새지 않는지
+
+#### Migration PR M4. Update status contribution
+
+목표:
+
+- update 가능 여부를 부가 UI contribution으로 표시할 수 있는지 검토한다.
+
+주의:
+
+- update check, download, install은 core `UpdateChecker` 책임으로 유지한다.
+- 외부 network permission이 생기기 전까지 plugin은 network를 직접 사용하지 않는다.
+- 이 PR은 낮은 우선순위이며, v2 network/runtime 설계 후로 미룰 수 있다.
+
+검증:
+
+- update status 표시만 plugin contribution으로 분리
+- install action은 host command로만 실행
+
 ## 6. v1.1 후보
 
 v1이 안정화된 뒤 다음 순서로 확장한다.
@@ -474,6 +592,7 @@ v1이 안정화된 뒤 다음 순서로 확장한다.
 | Storage | namespace isolation, quota, snapshot, increment |
 | Settings | enable/disable, reset storage, safemode reset |
 | AppState seam | response payload 불변, session ended 누락 없음 |
+| Migration | 기존 기능 setting 유지, disable/safemode 영향 범위, host service와 plugin effect 경계 |
 
 ## 9. 수동 smoke check
 
@@ -485,6 +604,8 @@ v1이 안정화된 뒤 다음 순서로 확장한다.
 - expanded notch에서 contribution이 approval UI를 가리지 않는지
 - MenuBarExtra에서 plugin row가 기존 메뉴 동작을 방해하지 않는지
 - plugin disable 시 UI contribution이 즉시 사라지는지
+- migration PR에서는 기존 기능의 설정값과 기본 동작이 유지되는지
+- migration 대상 plugin이 safemode에 들어가도 core hook/approval/session 동작이 유지되는지
 
 ## 10. 중단 기준
 
