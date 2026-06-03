@@ -220,6 +220,8 @@ MenuBar 렌더링 제약:
 - `SessionStoreChange` neutral event 정의
 - `SessionStore.onSessionChanged` callback 추가
 - `AppState`가 callback을 받아 `PluginEventFactory`로 `session.started`, `session.updated`, `session.ended` 생성
+- `session.ended`용 change는 제거 전 `ActiveSession` snapshot을 포함하도록 설계
+- `AppState`가 직접 `sessionStore.activeSessions.remove(...)` 하는 경로를 `SessionStore` 메서드로 중앙화
 - `handleParsedEvent`에서 `hook.received` 발행
 - `handleNotificationEvent`에서 실제 표시 상태 변화 후 `notification.shown` 발행
 - `approval.decided`는 아직 발행하지 않는다
@@ -229,11 +231,14 @@ MenuBar 렌더링 제약:
 - `SessionStore`가 `PluginHost`나 plugin type을 import하지 않게 한다.
 - provider response 전송 전에 plugin processing을 기다리지 않는다.
 - emission 실패는 log만 남기고 core flow에 영향 주지 않는다.
+- 제거 후에는 `ActiveSession` snapshot을 복원할 수 없으므로 removal callback은 mutation 전에 만들어야 한다.
 
 테스트:
 
 - session update callback이 new/update/remove를 구분하는지
+- remove callback이 제거 전 snapshot을 전달하는지
 - pruned/superseded/dismissed session이 모두 `session.ended`로 이어지는지
+- manual approval 완료 후 lifecycle-untracked session 제거도 `session.ended`로 이어지는지
 - hook response payload가 변경되지 않는지
 
 검증:
@@ -257,6 +262,7 @@ MenuBar 렌더링 제약:
 주요 작업:
 
 - `PluginHost.startTicking()`, `stopTicking()` 구현
+- `AppDelegate.applicationDidFinishLaunching`의 delayed block에서 `AppState.shared` 초기화 이후 `pluginHost.startTicking()` 호출
 - app start 시 `plugin.started`, `app.started` 발행
 - app termination 시 tick cancel
 - UI surface visible state 보고
@@ -267,6 +273,7 @@ MenuBar 렌더링 제약:
 - tick 필요한 플러그인이 없으면 tick event 없음
 - visible surface 변경이 `needsTick` 판단에 반영
 - disable/safemode plugin은 tick 대상 제외
+- 다른 DevIsland 인스턴스 종료 대기 후 delayed start 경로에서도 tick이 1회만 시작
 
 검증:
 

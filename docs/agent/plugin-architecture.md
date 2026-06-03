@@ -107,7 +107,7 @@ plugin enable/disable, safemode 전환, visible surface 변경은 tick loop를 �
 | `session.updated` | notification, auto-approval, policy approval, manual request enqueue 등으로 `ActiveSession`이 갱신된 뒤 | `PendingRequest.responseHandler`나 approval decision에는 접근하지 않는다. |
 | `session.ended` | `handleStopEvent`, `dismissSession`, inactive pruning, Codex superseded session removal 직후 | 해당 session의 `session.*` contribution을 즉시 evict한다. |
 | `notification.shown` | `handleNotificationEvent`에서 실제 노치 확장 또는 unread 표시가 발생한 뒤 | 모든 notification hook이 아니라 사용자에게 표시된 상태 변화만 대상으로 한다. |
-| `approval.decided` | `sendDecision` 또는 approval 요청에 대한 automatic/policy response가 이미 전송되고 replay decision 기록이 끝난 뒤 | v1 첫 구현에서는 후순위다. 발행하더라도 관찰 전용이며 approval 결과를 바꾸지 못한다. |
+| `approval.decided` | `sendDecision` 또는 approval 요청에 대한 automatic/policy response가 이미 전송되고 replay decision 기록 요청이 enqueue된 뒤 | v1 첫 구현에서는 후순위다. 발행하더라도 관찰 전용이며 approval 결과를 바꾸지 못한다. SQLite 기록 완료를 기다리지 않는다. |
 
 `respondWithReplay`는 notification에도 decision log를 남기므로, `approval.decided`를 단순히 모든 `respondWithReplay` 호출에 붙이면 noise가 커진다. 이 이벤트는 `isApproval == true`였던 요청, `PendingRequest`, 또는 `ApprovalPolicyDecision`에서 나온 결정으로 제한한다.
 
@@ -463,7 +463,7 @@ enum PluginUISlot: String, Codable, CaseIterable {
 | `notch.compact.leading` | Collapsed Notch 왼쪽 | 에이전트 상태 배지 옆 부가 정보 | 전역 | v2 |
 | `notch.compact.trailing` | Collapsed Notch 오른쪽 | 알림 개수나 작은 아이콘 | 전역 | v2 |
 
-`menubar.menu`는 메뉴 스타일 `MenuBarExtra`(`DevIslandApp.MenuBarMenu`)에 직접 렌더링한다. 별도 window popover(`.menuBarExtraStyle(.window)`)는 현재 구현과 다르므로 v2로 미룬다.
+`menubar.menu`는 메뉴 스타일 `MenuBarExtra`의 top-level `MenuBarMenu`에 직접 렌더링한다. 별도 window popover(`.menuBarExtraStyle(.window)`)는 현재 구현과 다르므로 v2로 미룬다.
 
 첫 구현은 `notch.expanded.activity`, `menubar.menu` 두 슬롯만 연다. 설정 화면은 플러그인 contribution slot이 아니라 DevIsland host가 manifest·enable 상태·safemode·storage 삭제 기능을 렌더링하는 `PluginSettingsView`다. 플러그인별 custom settings schema는 v1.1 이후 별도로 검토한다.
 `SessionRowView`, `SessionMessageView`, `SessionHistoryWindow`에 닿는 세션별 슬롯은 UI 접점이 여러 곳이라 v1.1로 분리한다. collapsed notch 슬롯은 현재 mascot/unread dot 레이아웃과 충돌 가능성이 높으므로 v2에서 별도 compact renderer를 설계한다.
@@ -1128,17 +1128,17 @@ private func emitPluginEvent(_ event: PluginEvent) {
 
 | PluginEvent | 발행 위치 (현재 symbol) | 비고 |
 | :--- | :--- | :--- |
-| `app.started` | `AppDelegate.applicationDidFinishLaunching` | 여기서 `pluginHost.startTicking()`도 호출 |
+| `app.started` | `AppDelegate.applicationDidFinishLaunching`의 delayed block에서 `AppState.shared` 초기화 이후 | 여기서 `pluginHost.startTicking()`도 호출 |
 | `session.started` / `session.updated` | `SessionStore.updateActiveSession(...)` 이후의 neutral callback | `SessionStore`는 PluginHost를 모르고, AppState가 callback을 받아 PluginEvent로 변환한다. |
-| `session.ended` | `SessionStore`의 세션 제거 callback | `removeSession`·`pruneInactiveSessions`·`removeSupersededCodexSessions` 결과를 AppState가 PluginEvent로 변환한다. |
+| `session.ended` | `SessionStore`의 세션 제거 callback | `removeSession`·`pruneInactiveSessions`·`removeSupersededCodexSessions`가 제거 전 `ActiveSession` snapshot을 callback에 포함하고, AppState가 이를 PluginEvent로 변환한다. |
 | `hook.received` | `handleParsedEvent`, `recordReplayHookEvent(...)` 직후 | factory가 `ParsedHookEvent` → `PluginHookSummary` 변환 |
-| `approval.decided` | `sendDecision`에서 `currentResponseHandler?(payload)` **직후**, `recordReplayDecision` 옆 | 응답이 이미 전송된 뒤라 Fail-Safe 보장 |
+| `approval.decided` | `sendDecision`에서 `currentResponseHandler?(payload)` 호출과 `recordReplayDecision` enqueue 이후 | 응답이 이미 전송된 뒤라 Fail-Safe 보장. SQLite 기록 완료는 기다리지 않는다. |
 | `notification.shown` | `handleNotificationEvent` | |
 | `settings.changed` | `SettingsStore` mutation | |
 
 **핵심 설계 결정 — SessionStore는 PluginHost를 모른다.**
 세션 종료 경로는 `handleStopEvent`, `dismissSession`, `pruneInactiveSessions`, `removeSupersededCodexSessions` 등 여러 군데로 흩어져 있다. `AppState` 호출부마다 emission을 박으면 한 경로만 빠져도 `session.ended`가 누락된다.
-따라서 `SessionStore`는 plugin 전용 타입이 아니라 neutral event callback, 예를 들어 `onSessionChanged: (SessionStoreChange) -> Void`, 만 제공한다. `AppState`가 이 callback을 받아 `PluginEventFactory`로 DTO를 만들고 `PluginHost.enqueue(_:)`를 호출한다. 이러면 제거 경로 누락은 막으면서도 `SessionStore`가 plugin platform에 의존하지 않는다.
+따라서 `SessionStore`는 plugin 전용 타입이 아니라 neutral event callback, 예를 들어 `onSessionChanged: (SessionStoreChange) -> Void`, 만 제공한다. 제거 이벤트는 `SessionStoreChange.removed(ActiveSession)`처럼 제거 전 snapshot을 포함해야 하며, `AppState`가 이 callback을 받아 `PluginEventFactory`로 DTO를 만들고 `PluginHost.enqueue(_:)`를 호출한다. 이러면 제거 경로 누락과 제거 후 snapshot 손실을 막으면서도 `SessionStore`가 plugin platform에 의존하지 않는다. `AppState`가 `activeSessions`를 직접 remove하는 경로는 이 callback을 우회하므로, 구현 PR에서 `SessionStore` 메서드로 중앙화한다.
 
 ### 12.5. PluginEventFactory의 위치와 역할
 
