@@ -740,14 +740,16 @@ final class PluginHost: ObservableObject {
     // PluginHost가 @MainActor이므로 이 메서드도 MainActor 격리 상태다.
     // nextEvent()·applySnapshots()·isDraining 접근은 별도 MainActor.run 래핑이 필요 없다.
     // await 지점에서 MainActor가 풀려도 pendingEvents FIFO가 다음 event 처리 순서를 보존한다.
+    // applySnapshots()는 suspension point 없이 contributions를 갱신하고, effects만 commit 이후 await한다.
     private func drainEvents() async {
         while let queued = nextEvent() {
             let snapshots = await eventProcessor.process(queued)
-            await applySnapshots(snapshots)
+            let effectBatches = applySnapshots(snapshots)
             // 세션 종료 시 해당 세션에 묶인 session.* contribution을 정리한다.
             if queued.baseEvent.kind == .sessionEnded, let sid = queued.baseEvent.session?.id {
                 evictSessionContributions(sessionID: sid)
             }
+            await processEffectBatches(effectBatches)
         }
         isDraining = false
     }
@@ -760,8 +762,11 @@ final class PluginHost: ObservableObject {
         contributions = updated
     }
 
-    private func applySnapshots(_ snapshots: [PluginContributionSnapshot]) async {
+    private typealias PendingEffectBatch = (pluginID: String, effects: [PluginEffect])
+
+    private func applySnapshots(_ snapshots: [PluginContributionSnapshot]) -> [PendingEffectBatch] {
         var updated = contributions
+        var effectBatches: [PendingEffectBatch] = []
         for snapshot in snapshots {
             if let failure = snapshot.failure {
                 recordFailure(failure)
@@ -770,7 +775,9 @@ final class PluginHost: ObservableObject {
                     continue
                 }
             }
-            await processEffects(snapshot.effects, pluginID: snapshot.pluginID)
+            if !snapshot.effects.isEmpty {
+                effectBatches.append((pluginID: snapshot.pluginID, effects: snapshot.effects))
+            }
             for (slot, contribution) in snapshot.contributions {
                 // 전역 슬롯은 (pluginID), 세션 슬롯은 (pluginID, targetSessionID)로 dedup.
                 updated[slot, default: []].removeAll {
@@ -783,6 +790,13 @@ final class PluginHost: ObservableObject {
             }
         }
         contributions = updated  // @Published 단일 대입 → objectWillChange 1회
+        return effectBatches
+    }
+
+    private func processEffectBatches(_ batches: [PendingEffectBatch]) async {
+        for batch in batches {
+            await processEffects(batch.effects, pluginID: batch.pluginID)
+        }
     }
 
     private func processEffects(_ effects: [PluginEffect], pluginID: String) async {
@@ -980,9 +994,13 @@ extension PluginHost {
         guard tickTask == nil else { return }   // 중복 시작 방지
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard let self else { break }
-                await self.tickIfNeeded()
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                    guard let self else { break }
+                    await self.tickIfNeeded()
+                } catch {
+                    break
+                }
             }
         }
     }
