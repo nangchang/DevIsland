@@ -210,7 +210,7 @@ extension L10n {
         s("Scan failed: \(detail)", "스캔 실패: \(detail)")
     }
     var btnOpenLocationSettings:      String { s("Open System Settings",                      "시스템 설정 열기") }
-    var hintCaffeineRule:             String { s("Active while on AC power. Always off on excluded Wi-Fi or when battery is ≤ 20%.", "전원 연결 시 활성화됩니다. 예외 Wi-Fi 또는 배터리 20% 이하에서는 항상 비활성화됩니다.") }
+    var hintCaffeineRule:             String { s("When enabled, sleep is prevented while on AC power; always off on excluded Wi-Fi or when battery is ≤ 20%.", "켰을 때만 동작합니다. 전원 연결 시 슬립이 차단되며, 예외 Wi-Fi 또는 배터리 20% 이하에서는 항상 비활성화됩니다.") }
     var menuCaffeineToggle:           String { s("Caffeine",                                  "Caffeine") }
     var menuCaffeineOnAC:             String { s("Preventing sleep — AC power",               "슬립 차단 중 — AC 전원") }
     var menuCaffeineOff:              String { s("Off",                                       "비활성") }

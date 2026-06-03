@@ -76,20 +76,20 @@ final class SettingsStoreTests: XCTestCase {
     }
 
     func testCaffeineDefaultsWhenKeysAbsent() {
-        // 빈 UserDefaults에서 신규 Caffeine 필드가 default로 채워지는지 검증
-        // (기존 사용자 업그레이드 시나리오)
+        // 빈 UserDefaults에서 신규 Caffeine 필드가 default로 채워지는지 검증.
+        // 기본은 OFF — 사용자가 명시적으로 켜야 자동 규칙이 동작한다.
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
-        XCTAssertTrue(store.settings.caffeineEnabled)
+        XCTAssertFalse(store.settings.caffeineEnabled)
         XCTAssertEqual(store.settings.caffeineExcludedSSIDs, [])
     }
 
     func testCaffeinePersistsExcludedSSIDs() {
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
         store.settings.caffeineExcludedSSIDs = ["Office-Internal", "Guest"]
-        store.settings.caffeineEnabled = false
+        store.settings.caffeineEnabled = true
 
         let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
-        XCTAssertFalse(reloaded.settings.caffeineEnabled)
+        XCTAssertTrue(reloaded.settings.caffeineEnabled)
         XCTAssertEqual(reloaded.settings.caffeineExcludedSSIDs, ["Office-Internal", "Guest"])
     }
 

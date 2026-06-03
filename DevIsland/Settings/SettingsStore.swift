@@ -305,7 +305,7 @@ struct AppSettings: Equatable {
         processVSCodeEnabled: false,
         processClaudeDesktopEnabled: false,
         notchAnimationEnabled: true,
-        caffeineEnabled: true,
+        caffeineEnabled: false,
         caffeineExcludedSSIDs: []
     )
 }
