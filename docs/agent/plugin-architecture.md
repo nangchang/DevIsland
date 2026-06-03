@@ -71,7 +71,7 @@ plugin enable/disable, safemode 전환, visible surface 변경은 tick loop를 �
 | **PluginHost** | 생명주기 관리, `@MainActor` FIFO `pendingEvents`로 이벤트 도착 순서 보존, Contribution Cache 소유, `@MainActor ObservableObject` |
 | **PluginEventProcessor** | 한 이벤트에 해당하는 runner들을 `withTaskGroup`으로 fan-out 실행. 자체적으로 큐잉·순서 보존은 하지 않는다 |
 | **PluginRunner** | 플러그인 하나를 `actor`로 감싸 가변 상태 보호(플러그인은 plain class로 작성), 이벤트 처리 순서 보장, timeout 측정 |
-| **PluginEventFactory** | `ActiveSession` 등 내부 모델 → sanitized DTO 변환, 민감 정보 및 permission 기반 필드 redaction (§6.3) |
+| **PluginEventFactory** | `ActiveSession` 등 내부 모델 → sanitized DTO 변환, 민감 정보 및 permission 기반 필드 redaction (§6.3). **Sendable value type(struct)으로 구현**하여 runner fan-out task에서 안전하게 공유될 수 있도록 한다. |
 | **PluginContributionRenderer** | `PluginUIComponentDTO` → SwiftUI 컴포넌트 변환 및 렌더링 |
 
 ### 4.3. 현재 소스코드 기준 연결점
@@ -1076,6 +1076,7 @@ DevIsland/
     SettingsStore.swift        — core settings만 유지; plugin enable/disable persistence는 PluginSettingsStore로 분리
     SettingsWindow.swift       — PluginSettingsView 탭 또는 Integrations pane 하단 연결
     PluginSettingsView.swift    — 목록, enable/disable, safemode 상태, storage 삭제
+    PluginSettingsStore.swift   — 신규: 플러그인 전용 활성화 상태 및 설정 persistence
 ```
 
 현재 소스 기준 첫 PR에서 `HookSocketServer.swift`, bridge scripts, `ApprovalProxyController.swift`, `ProviderAdapter.swift`, `SQLiteApprovalStore.swift`는 수정하지 않는 것을 성공 조건으로 둔다. 이 파일을 건드려야 한다면 플러그인이 approval/IPC 경로에 침투하고 있다는 신호이므로 설계를 다시 확인한다.
