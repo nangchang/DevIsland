@@ -180,17 +180,18 @@ extension L10n {
 
     // Tab labels
     var tabGeneral:          String { s("General",      "일반") }
-    var tabDisplay:          String { s("Display",      "디스플레이") }
-    var tabExpand:           String { s("Expand",       "펼침") }
+    var tabIsland:           String { s("Island",       "아일랜드") }
     var tabApproval:         String { s("Approval",     "승인") }
     var tabProviders:        String { s("Providers",    "공급자") }
     var tabBridge:           String { s("Bridge / IPC", "브리지 / IPC") }
-    var tabOpenPeon:         String { s("OpenPeon",     "OpenPeon") }
+    var tabSound:            String { s("Sound",        "사운드") }
     var tabExperimental:     String { s("Experimental", "실험적") }
     var tabIntegrations:     String { s("Integrations", "통합") }
+    var tabExtras:           String { s("Extras",       "부가기능") }
+    var tabAdvanced:         String { s("Advanced",     "고급") }
     var tabCaffeine:         String { s("Caffeine",    "Caffeine") }
 
-    // Caffeine tab
+    // Caffeine (Extras section)
     var secCaffeineStatus:            String { s("Status",                                    "현재 상태") }
     var secCaffeineBehavior:          String { s("Behavior",                                  "동작") }
     var secCaffeineExcludedSSIDs:     String { s("Excluded Wi-Fi Networks",                   "예외 Wi-Fi 네트워크") }
@@ -247,21 +248,22 @@ extension L10n {
     var secUpdates:                   String { s("Updates",                                 "업데이트") }
     var lblCheckForUpdatesOnStartup:  String { s("Check for updates on startup",            "시작 시 업데이트 확인") }
 
-    // Display tab
-    var secNotch:            String { s("Notch",                         "노치") }
+    // Island tab
+    var secNotch:            String { s("Island",                        "아일랜드") }
     var lblDisplay:          String { s("Display",                       "표시") }
     var lblMonitor:          String { s("Monitor",                       "모니터") }
     var lblShowFullScreen:   String { s("Show above full-screen apps",   "전체화면 앱 위에 표시") }
     func lblPanelOpacity(_ percent: Int) -> String { s("Panel opacity: \(percent)%", "패널 불투명도: \(percent)%") }
     var lblNotchShadow:      String { s("Backdrop shadow",               "백드롭 그림자") }
     var lblNotchAnimation:   String { s("Expand/collapse animation",     "펼침/접힘 애니메이션") }
+    func lblAnimationSpeed(_ value: Double) -> String { s("Animation speed: \(String(format: "%.2f", value))×", "애니메이션 속도: \(String(format: "%.2f", value))×") }
     var lblNotchShapeStyle:  String { s("Shape style",                  "모양 스타일") }
-    var notchShapeClassic:   String { s("Notch (classic)",              "노치 (기본)") }
+    var notchShapeClassic:   String { s("Classic Island",               "기본 아일랜드") }
     var notchShapeDynamicIsland: String { s("Dynamic Island",           "다이나믹 아일랜드") }
-    func lblCollapsedNotchWidth(_ px: Int) -> String { s("Collapsed width: \(px) px", "접힌 노치 너비: \(px) px") }
-    func lblCollapsedNotchHeight(_ px: Int) -> String { s("Collapsed height: \(px) px", "접힌 노치 높이: \(px) px") }
-    func lblExpandedNotchWidth(_ px: Int) -> String { s("Expanded width: \(px) px", "확장 윈도우 너비: \(px) px") }
-    func lblExpandedNotchHeight(_ px: Int) -> String { s("Expanded height: \(px) px", "확장 윈도우 높이: \(px) px") }
+    func lblCollapsedNotchWidth(_ px: Int) -> String { s("Compact Island width: \(px) px", "컴팩트 아일랜드 너비: \(px) px") }
+    func lblCollapsedNotchHeight(_ px: Int) -> String { s("Compact Island height: \(px) px", "컴팩트 아일랜드 높이: \(px) px") }
+    func lblExpandedNotchWidth(_ px: Int) -> String { s("Expanded Island width: \(px) px", "확장 아일랜드 너비: \(px) px") }
+    func lblExpandedNotchHeight(_ px: Int) -> String { s("Expanded Island height: \(px) px", "확장 아일랜드 높이: \(px) px") }
     var lblNotchAutoExpand:   String { s("Auto-expand on events",        "이벤트 시 자동 펼침") }
     var lblUnreadDotPosition: String { s("Unread dot position",          "알림 dot 위치") }
     var posLeft:   String { s("Left",   "왼쪽") }
@@ -291,13 +293,13 @@ extension L10n {
                                                 "도구 사용 승인 요청이 수신될 때") }
     var hintExpandOnQuestionResponse: String { s("When the agent sends a question and waits for a response.",
                                                "에이전트가 사용자에게 질문을 보내고 응답을 기다릴 때") }
-    var secNotchCharacters:  String { s("Notch characters",              "노치 캐릭터") }
-    var lblLeftCharacter:    String { s("Left character",                "왼쪽 캐릭터") }
-    var lblRightCharacter:   String { s("Right character",               "오른쪽 캐릭터") }
-    var lblCharacter:        String { s("Character",                     "캐릭터") }
-    var lblRandomIncludes:   String { s("Random includes",               "랜덤 포함 캐릭터") }
-    func lblCharacterHorizontalInset(_ px: Int) -> String { s("Character horizontal position: \(px) px", "캐릭터 가로 위치: \(px) px") }
-    func lblCharacterVerticalOffset(_ px: Int) -> String { s("Character vertical position: \(px) px", "캐릭터 세로 위치: \(px) px") }
+    var secNotchCharacters:  String { s("Buddies",                       "버디") }
+    var lblLeftCharacter:    String { s("Left Buddy",                    "왼쪽 버디") }
+    var lblRightCharacter:   String { s("Right Buddy",                   "오른쪽 버디") }
+    var lblCharacter:        String { s("Buddy",                         "버디") }
+    var lblRandomIncludes:   String { s("Random Buddies",                "랜덤 버디") }
+    func lblCharacterHorizontalInset(_ px: Int) -> String { s("Buddy horizontal position: \(px) px", "버디 가로 위치: \(px) px") }
+    func lblCharacterVerticalOffset(_ px: Int) -> String { s("Buddy vertical position: \(px) px", "버디 세로 위치: \(px) px") }
     var lblNotchCenterText:  String { s("Center text",                   "가운데 텍스트") }
     var secRequests:         String { s("Requests",                      "요청") }
     var lblRequestDisplay:   String { s("Request display",               "요청 표시") }
@@ -338,17 +340,17 @@ extension L10n {
     var lblResponseTimeout:  String { s("Response timeout",              "응답 타임아웃") }
     func labelSeconds(_ n: Int) -> String { s("\(n) seconds", "\(n)초") }
 
-    // OpenPeon tab
+    // Sound tab
     var secOpenPeonSoundPacks:       String { s("Sound packs",                   "사운드팩") }
-    var lblOpenPeonEnable:           String { s("Enable OpenPeon sounds",        "OpenPeon 사운드 활성화") }
-    var lblOpenPeonMuteAll:          String { s("Mute all OpenPeon sounds",      "모든 OpenPeon 사운드 음소거") }
+    var lblOpenPeonEnable:           String { s("Enable sounds",                 "사운드 활성화") }
+    var lblOpenPeonMuteAll:          String { s("Mute all sounds",               "모든 사운드 음소거") }
     var phOpenPeonPacksFolder:       String { s("Packs folder",                  "팩 폴더") }
     var btnReload:                   String { s("Reload",                        "다시 불러오기") }
     var btnOpen:                     String { s("Open",                          "열기") }
     var btnPlayPreview:              String { s("Play preview",                  "미리듣기 재생") }
     var lblOpenPeonActivePack:       String { s("Active pack",                   "활성 팩") }
     var lblOpenPeonFirstValidPack:   String { s("First valid pack",              "첫 번째 유효한 팩") }
-    var lblOpenPeonNoPacks:          String { s("No OpenPeon packs found.",      "OpenPeon 팩을 찾을 수 없습니다.") }
+    var lblOpenPeonNoPacks:          String { s("No sound packs found.",         "사운드팩을 찾을 수 없습니다.") }
     var lblOpenPeonNoSoundFile:      String { s("No sound file for this event",  "이 이벤트에 대한 사운드 파일이 없습니다") }
     var secOpenPeonPlayback:         String { s("Playback",                      "재생") }
     var lblOpenPeonMasterVolume:     String { s("Master volume",                 "마스터 볼륨") }
@@ -427,7 +429,7 @@ extension L10n {
     func errExportCodexRules(_ err: String) -> String { s("Failed to export Codex rules: \(err)", "Codex 규칙 내보내기 실패: \(err)") }
     func addAllRisk(_ name: String) -> String { s("Add all \(name) tools", "\(name) 도구 모두 추가") }
 
-    // DisplaySettingsPane — monitor name
+    // IslandSettingsPane — monitor name
     func monitorMain() -> String { s("Main monitor", "주 모니터") }
     func monitorN(_ n: Int) -> String { s("Monitor \(n)", "모니터 \(n)") }
 
@@ -443,7 +445,7 @@ extension L10n {
     var notchAutoCollapseOff:   String { s("Off",            "끔") }
 
     // Enum labels — RequestDisplayTarget
-    var reqNotch:   String { s("Notch display",  "노치 화면") }
+    var reqNotch:   String { s("Island display", "아일랜드 화면") }
     var reqFocused: String { s("Focus display",  "포커스 화면") }
     var reqMouse:   String { s("Mouse display",  "마우스 화면") }
 

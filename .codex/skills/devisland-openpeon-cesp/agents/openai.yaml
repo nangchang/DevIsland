@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevIsland OpenPeon CESP"
+  short_description: "Work on DevIsland CESP audio packs."
+  default_prompt: "Use this skill when changing DevIsland OpenPeon CESP behavior."
