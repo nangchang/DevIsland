@@ -89,7 +89,6 @@ class AppState: ObservableObject {
     let caffeineCoordinator: CaffeineCoordinator
     private let powerSourceMonitor: PowerSourceMonitor
     private let wifiMonitor: WifiSSIDMonitor
-    private var caffeineCancellables = Set<AnyCancellable>()
 
     private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
@@ -2462,44 +2461,38 @@ class AppState: ObservableObject {
         powerSourceMonitor.start()
         wifiMonitor.start()
 
-        // 모니터 → coordinator 입력 신호 전달
+        // assign(to:&)는 대상 @Published의 라이프사이클에 따라 자동 정리되므로
+        // 별도 cancellables 보관이 필요 없고 retain cycle 위험도 없다.
         powerSourceMonitor.$isOnACPower
             .receive(on: DispatchQueue.main)
-            .assign(to: \.isOnACPower, on: caffeineCoordinator)
-            .store(in: &caffeineCancellables)
+            .assign(to: &caffeineCoordinator.$isOnACPower)
 
         powerSourceMonitor.$batteryLevel
             .receive(on: DispatchQueue.main)
-            .assign(to: \.batteryLevel, on: caffeineCoordinator)
-            .store(in: &caffeineCancellables)
+            .assign(to: &caffeineCoordinator.$batteryLevel)
 
         wifiMonitor.$currentSSID
             .receive(on: DispatchQueue.main)
-            .assign(to: \.currentSSID, on: caffeineCoordinator)
-            .store(in: &caffeineCancellables)
+            .assign(to: &caffeineCoordinator.$currentSSID)
 
-        // 설정 변경 → coordinator
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+        DispatchQueue.main.async { [caffeineCoordinator] in
             let store = SettingsStore.shared
-            self.caffeineCoordinator.caffeineEnabled = store.settings.caffeineEnabled
-            self.caffeineCoordinator.excludedSSIDs = store.settings.caffeineExcludedSSIDs
+            caffeineCoordinator.caffeineEnabled = store.settings.caffeineEnabled
+            caffeineCoordinator.excludedSSIDs = store.settings.caffeineExcludedSSIDs
 
             store.$settings
                 .map(\.caffeineEnabled)
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
-                .assign(to: \.caffeineEnabled, on: self.caffeineCoordinator)
-                .store(in: &self.caffeineCancellables)
+                .assign(to: &caffeineCoordinator.$caffeineEnabled)
 
             store.$settings
                 .map(\.caffeineExcludedSSIDs)
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
-                .assign(to: \.excludedSSIDs, on: self.caffeineCoordinator)
-                .store(in: &self.caffeineCancellables)
+                .assign(to: &caffeineCoordinator.$excludedSSIDs)
 
-            self.caffeineCoordinator.bind()
+            caffeineCoordinator.bind()
         }
     }
 }

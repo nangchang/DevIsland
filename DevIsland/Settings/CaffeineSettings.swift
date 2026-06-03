@@ -146,9 +146,9 @@ private struct CaffeineSSIDPickerSheet: View {
 
             HStack {
                 Spacer()
-                Button("Cancel", action: onCancel)
+                Button(l10n.btnCancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button("Add") {
+                Button(l10n.btnAdd) {
                     var picked = Array(selection)
                     let trimmed = manualEntry.trimmingCharacters(in: .whitespaces)
                     if !trimmed.isEmpty { picked.append(trimmed) }
@@ -203,7 +203,8 @@ private struct CaffeineSSIDPickerSheet: View {
                     .foregroundColor(.orange)
                 Spacer()
                 Button(l10n.btnOpenLocationSettings) {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
+                    // macOS 13+ 정식 경로. deploymentTarget이 15.0이므로 안전.
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.Settings.extension.Privacy.Location") {
                         NSWorkspace.shared.open(url)
                     }
                 }

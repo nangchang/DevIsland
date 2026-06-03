@@ -35,14 +35,15 @@ struct DevIslandApp: App {
     }
 
     private static func tinted(_ source: NSImage, with color: NSColor) -> NSImage {
-        let size = source.size
-        let result = NSImage(size: size)
-        result.lockFocus()
-        color.set()
-        NSRect(origin: .zero, size: size).fill()
-        source.draw(at: .zero, from: NSRect(origin: .zero, size: size),
-                    operation: .destinationIn, fraction: 1.0)
-        result.unlockFocus()
+        let result = NSImage(size: source.size, flipped: false) { rect in
+            color.set()
+            rect.fill()
+            source.draw(in: rect,
+                        from: NSRect(origin: .zero, size: source.size),
+                        operation: .destinationIn,
+                        fraction: 1.0)
+            return true
+        }
         result.isTemplate = false
         return result
     }
