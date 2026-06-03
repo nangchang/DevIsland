@@ -219,6 +219,8 @@ struct AppSettings: Equatable {
     var processClaudeDesktopEnabled: Bool
     var notchAnimationEnabled: Bool
     var notchAnimationSpeed: Double
+    var caffeineEnabled: Bool
+    var caffeineExcludedSSIDs: [String]
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -304,7 +306,9 @@ struct AppSettings: Equatable {
         processVSCodeEnabled: false,
         processClaudeDesktopEnabled: false,
         notchAnimationEnabled: true,
-        notchAnimationSpeed: 1.0
+        notchAnimationSpeed: 1.0,
+        caffeineEnabled: false,
+        caffeineExcludedSSIDs: []
     )
 }
 
@@ -387,6 +391,8 @@ final class SettingsStore: ObservableObject {
         static let processClaudeDesktopEnabled = "processClaudeDesktopEnabled"
         static let notchAnimationEnabled = "notchAnimationEnabled"
         static let notchAnimationSpeed = "notchAnimationSpeed"
+        static let caffeineEnabled = "caffeineEnabled"
+        static let caffeineExcludedSSIDs = "caffeineExcludedSSIDs"
     }
 
     private let userDefaults: UserDefaults
@@ -466,6 +472,8 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.processClaudeDesktopEnabled, forKey: DefaultsKey.processClaudeDesktopEnabled)
         userDefaults.set(settings.notchAnimationEnabled, forKey: DefaultsKey.notchAnimationEnabled)
         userDefaults.set(settings.notchAnimationSpeed, forKey: DefaultsKey.notchAnimationSpeed)
+        userDefaults.set(settings.caffeineEnabled, forKey: DefaultsKey.caffeineEnabled)
+        userDefaults.set(settings.caffeineExcludedSSIDs, forKey: DefaultsKey.caffeineExcludedSSIDs)
         // 브리지 관련 필드가 변경된 경우에만 파일 쓰기 (드래그 리사이즈 등 빈번한 UI 변경 시 파일 I/O 방지)
         let bridgeChanged = previous.map { BridgeRuntimeConfig(settings: settings) != BridgeRuntimeConfig(settings: $0) } ?? true
         if bridgeChanged {
@@ -787,7 +795,13 @@ final class SettingsStore: ObservableObject {
                 from: userDefaults,
                 default: defaults.notchAnimationSpeed,
                 range: 0.5...2.0
-            )
+            ),
+            caffeineEnabled: bool(
+                key: DefaultsKey.caffeineEnabled,
+                from: userDefaults,
+                default: defaults.caffeineEnabled
+            ),
+            caffeineExcludedSSIDs: (userDefaults.stringArray(forKey: DefaultsKey.caffeineExcludedSSIDs) ?? defaults.caffeineExcludedSSIDs)
         )
     }
 

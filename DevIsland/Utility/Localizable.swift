@@ -189,10 +189,41 @@ extension L10n {
     var tabIntegrations:     String { s("Integrations", "통합") }
     var tabExtras:           String { s("Extras",       "부가기능") }
     var tabAdvanced:         String { s("Advanced",     "고급") }
+    var tabCaffeine:         String { s("Caffeine",    "Caffeine") }
 
-    // Extras tab
-    var lblExtrasEmpty:          String { s("No extras available.",                                               "등록된 부가기능이 없습니다.") }
-    var descExtrasEmpty:         String { s("Additional features will appear here as they are added.",            "추가 기능이 생기면 여기에 표시됩니다.") }
+    // Caffeine (Extras section)
+    var secCaffeineStatus:            String { s("Status",                                    "현재 상태") }
+    var secCaffeineBehavior:          String { s("Behavior",                                  "동작") }
+    var secCaffeineExcludedSSIDs:     String { s("Excluded Wi-Fi Networks",                   "예외 Wi-Fi 네트워크") }
+    var lblCaffeineEnabled:           String { s("Enable Caffeine",                           "Caffeine 사용") }
+    var lblCurrentSSID:               String { s("Current Wi-Fi",                             "현재 Wi-Fi") }
+    var lblOnAC:                      String { s("On AC Power",                               "전원 연결") }
+    var lblBatteryLevel:              String { s("Battery",                                   "배터리") }
+    var lblHoldingAssertion:          String { s("Preventing sleep",                          "슬립 차단 중") }
+    var btnAddSSID:                   String { s("Add SSID…",                                 "SSID 추가…") }
+    var lblScanNearbyWifi:            String { s("Nearby Wi-Fi",                              "주변 Wi-Fi") }
+    var lblConnectedSSID:             String { s("Connected",                                 "연결됨") }
+    var lblManualSSIDEntry:           String { s("Enter SSID manually",                       "SSID 직접 입력") }
+    var lblScanFailed:                String { s("Scan failed (Location permission required)", "스캔 실패 (위치 권한 필요)") }
+    var lblScanErrorPermission:       String { s("Location permission required to scan Wi-Fi", "Wi-Fi 스캔에 위치 권한이 필요합니다") }
+    var lblScanErrorRadioOff:         String { s("Wi-Fi is turned off",                       "Wi-Fi가 꺼져 있습니다") }
+    func lblScanErrorUnknown(_ detail: String) -> String {
+        s("Scan failed: \(detail)", "스캔 실패: \(detail)")
+    }
+    var btnOpenLocationSettings:      String { s("Open System Settings",                      "시스템 설정 열기") }
+    var hintCaffeineRule:             String { s("When enabled, sleep is prevented while on AC power; always off on excluded Wi-Fi or when battery is ≤ 20%.", "켰을 때만 동작합니다. 전원 연결 시 슬립이 차단되며, 예외 Wi-Fi 또는 배터리 20% 이하에서는 항상 비활성화됩니다.") }
+    var menuCaffeineToggle:           String { s("Caffeine",                                  "Caffeine") }
+    var menuCaffeineOnAC:             String { s("Preventing sleep — AC power",               "슬립 차단 중 — AC 전원") }
+    var menuCaffeineOff:              String { s("Off",                                       "비활성") }
+    var menuCaffeineOnBattery:        String { s("Off — on battery",                          "비활성 — 배터리 사용 중") }
+    var menuCaffeineLowBattery:       String { s("Off — low battery",                         "비활성 — 배터리 부족") }
+    func menuCaffeineExcludedSSID(_ ssid: String) -> String {
+        s("Off — excluded Wi-Fi (\(ssid))", "비활성 — 예외 Wi-Fi (\(ssid))")
+    }
+    func menuCaffeineFailure(_ code: Int32) -> String {
+        s("Failed to acquire sleep assertion (code \(code))",
+          "슬립 차단 활성화 실패 (코드 \(code))")
+    }
 
     // Integrations tab
     var secAppIntegrations:           String { s("App Integrations",                                               "앱 통합") }

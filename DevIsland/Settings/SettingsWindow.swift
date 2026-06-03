@@ -134,7 +134,7 @@ struct SettingsWindowView: View {
             IntegrationsSettingsPane(store: store)
                 .tabItem { Label(l10n.tabIntegrations, systemImage: "puzzlepiece.extension") }
 
-            ExtrasSettingsPane()
+            ExtrasSettingsPane(appState: appState, store: store)
                 .tabItem { Label(l10n.tabExtras, systemImage: "square.stack.3d.up") }
 
             AdvancedSettingsPane(geminiState: appState.geminiState, store: store)
@@ -1212,23 +1212,46 @@ private struct ApprovalRulesWindowView: View {
 //     }
 // }
 // ─────────────────────────────────────────────────────────────────────────────
+private enum ExtrasSection: String, CaseIterable, Identifiable {
+    case caffeine
+
+    var id: String { rawValue }
+
+    var label: String {
+        let l = L10n.shared
+        switch self {
+        case .caffeine: return l.tabCaffeine
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .caffeine: return "cup.and.saucer"
+        }
+    }
+}
+
 private struct ExtrasSettingsPane: View {
+    @ObservedObject var appState: AppState
+    @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
+    @State private var selection: ExtrasSection = .caffeine
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "square.stack.3d.up")
-                .font(.system(size: 36))
-                .foregroundStyle(.secondary)
-            Text(l10n.lblExtrasEmpty)
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            Text(l10n.descExtrasEmpty)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
+            Picker("", selection: $selection) {
+                ForEach(ExtrasSection.allCases) { section in
+                    Label(section.label, systemImage: section.systemImage).tag(section)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            switch selection {
+            case .caffeine:
+                CaffeineSettingsPane(store: store, coordinator: appState.caffeineCoordinator)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
     }
 }
