@@ -72,13 +72,19 @@
 
 주요 작업:
 
-- `PluginPermission`, `PluginManifest`, `PluginKind` 정의
-- `PluginEventKind`, `PluginEvent`, `PluginSessionSnapshot`, `PluginHookSummary`, `PluginActionEvent` 정의
-- `PluginUIContribution`, `PluginUIComponentDTO`, `PluginUIActionDTO`, `PluginUISlot` 정의
+- 설계 문서 §6 전체 타입을 정의한다. 프로토콜·DTO·host skeleton이 같은 PR에서 컴파일되어야 하므로 아래를 모두 포함한다.
+  - identity/permission: `PluginPermission`, `PluginManifest`, `PluginKind`
+  - event: `PluginEventKind`, `PluginEvent`, `PluginSessionSnapshot`, `PluginHookSummary`, `PluginActionEvent`, `PluginApprovalSummary`
+  - 실행 컨텍스트/effect: `PluginContext`, `PluginEffect`
+  - UI: `PluginUIContribution`, `PluginUIComponentDTO`, `PluginUIActionDTO`, `PluginUISlot`, `PluginUIContext`, `PluginSurfaceState`, `PluginActionRouting`, `PluginUIComponentType`, `PluginUITone`
+  - 결과/오류: `PluginContributionSnapshot`, `PluginFailure`
+- `DevIslandPlugin` 프로토콜 정의 (`onEvent`는 `PluginContext`/`[PluginEffect]`, `makeUIContribution`은 `PluginUIContext`, `needsTick`은 `PluginSurfaceState`에 의존하므로 위 타입이 선행되어야 함)
 - `PluginHost` skeleton 추가
 - `AppState`에 `let pluginHost: PluginHost` 추가
 - `AppState.init`에 `enablePlugins: Bool = true` 주입 옵션 추가
 - `enablePlugins == false`이면 host가 no-op이 되도록 구성
+
+`PluginEvent.approval` 필드는 v1 struct에 포함하되 v1에서는 항상 `nil`로 둔다(실제 `approval.decided` emission은 v1.1, §6 참고). 필드를 미리 둬서 v1.1에서 struct 시그니처가 바뀌지 않게 한다.
 
 주의:
 
@@ -136,6 +142,7 @@
 - `DevIsland/Plugins/PluginRunner.swift`
 - `DevIsland/Plugins/PluginEventProcessor.swift`
 - `DevIsland/Plugins/PluginEffectExecutor.swift`
+- `DevIsland/Plugins/PluginStorage.swift` (stub `PluginStorageProvider`만; 실구현은 PR9)
 
 주요 작업:
 
@@ -149,6 +156,7 @@
 - contribution dedup 기준 구현
   - 전역 slot: `(pluginID)`
   - session slot: `(pluginID, targetSessionID)`
+- **stub `PluginStorageProvider` 추가**: `PluginEventProcessor`와 `PluginEffectExecutor`가 설계 §10.2상 `init(storageProvider:)`를 받고 `snapshot(forPluginID:)`를 호출하므로, 빈 snapshot(`[:]`) 반환·write no-op 형태의 stub을 먼저 둔다. 실제 SQLite 구현은 PR9에서 이 stub을 대체한다.
 - `PluginEffectExecutor`는 이 PR에서 no-op 또는 logging-only로 시작 가능
 
 테스트:
@@ -347,12 +355,13 @@ MenuBar 렌더링 제약:
 - plugin별 durable key-value storage를 구현한다.
 - approval DB와 queue는 공유하지 않는다.
 
-신규 파일:
+변경 파일:
 
-- `DevIsland/Plugins/PluginStorage.swift`
+- `DevIsland/Plugins/PluginStorage.swift` (PR3의 stub `PluginStorageProvider`를 실제 SQLite 구현으로 대체)
 
 주요 작업:
 
+- `PluginStorage` protocol + SQLite wrapper 구현 (설계 §11 파일 레이아웃)
 - plugin ID별 namespace
 - `snapshot(limit:)`
 - `set`, `delete`, `increment`
@@ -482,7 +491,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주요 작업:
 
 - built-in `OpenPeonSoundPlugin` 추가
-- `sound.playCESP` 같은 built-in-only host effect capability 정의
+- `sound.playCESP` 같은 built-in-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 "built-in-only, permission 불필요" 행 추가)
 - plugin은 `hook.received`, `session.started`, `session.updated`, `session.ended`, `notification.shown`을 관찰해 CESP category 요청만 반환
 - `CESPPackStore`, `CESPPackValidator`, `CESPAudioPlayer`, OpenPeon settings persistence는 host service로 유지
 - `AppState.playOpenPeonSound` 직접 호출부를 event/effect 경로로 단계적으로 대체
