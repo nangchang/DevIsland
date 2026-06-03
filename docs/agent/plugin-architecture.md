@@ -739,11 +739,11 @@ final class PluginHost: ObservableObject {
 
     // PluginHost가 @MainActor이므로 이 메서드도 MainActor 격리 상태다.
     // nextEvent()·applySnapshots()·isDraining 접근은 별도 MainActor.run 래핑이 필요 없다.
-    // eventProcessor.process(_:) await 지점에서만 MainActor가 풀려 다른 enqueue가 끼어들 수 있다.
+    // await 지점에서 MainActor가 풀려도 pendingEvents FIFO가 다음 event 처리 순서를 보존한다.
     private func drainEvents() async {
         while let queued = nextEvent() {
             let snapshots = await eventProcessor.process(queued)
-            applySnapshots(snapshots)
+            await applySnapshots(snapshots)
             // 세션 종료 시 해당 세션에 묶인 session.* contribution을 정리한다.
             if queued.baseEvent.kind == .sessionEnded, let sid = queued.baseEvent.session?.id {
                 evictSessionContributions(sessionID: sid)
@@ -760,7 +760,7 @@ final class PluginHost: ObservableObject {
         contributions = updated
     }
 
-    private func applySnapshots(_ snapshots: [PluginContributionSnapshot]) {
+    private func applySnapshots(_ snapshots: [PluginContributionSnapshot]) async {
         var updated = contributions
         for snapshot in snapshots {
             if let failure = snapshot.failure {
@@ -770,7 +770,7 @@ final class PluginHost: ObservableObject {
                     continue
                 }
             }
-            processEffects(snapshot.effects, pluginID: snapshot.pluginID)
+            await processEffects(snapshot.effects, pluginID: snapshot.pluginID)
             for (slot, contribution) in snapshot.contributions {
                 // 전역 슬롯은 (pluginID), 세션 슬롯은 (pluginID, targetSessionID)로 dedup.
                 updated[slot, default: []].removeAll {
@@ -785,12 +785,10 @@ final class PluginHost: ObservableObject {
         contributions = updated  // @Published 단일 대입 → objectWillChange 1회
     }
 
-    private func processEffects(_ effects: [PluginEffect], pluginID: String) {
+    private func processEffects(_ effects: [PluginEffect], pluginID: String) async {
         // Validate capability + permission on MainActor, then hand execution off.
         let allowed = effects.filter { isCapabilityAllowed($0.capability, forPluginID: pluginID) }
-        Task {
-            await effectExecutor.enqueue(allowed, pluginID: pluginID)
-        }
+        await effectExecutor.enqueue(allowed, pluginID: pluginID)
     }
 
     private func recordFailure(_ failure: PluginFailure) {
@@ -983,7 +981,8 @@ extension PluginHost {
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
-                await self?.tickIfNeeded()
+                guard let self else { break }
+                await self.tickIfNeeded()
             }
         }
     }
@@ -1022,7 +1021,7 @@ extension PluginHost {
 ```swift
 @MainActor
 extension PluginHost {
-    func handleAction(pluginID: String, componentID: String, action: PluginUIActionDTO) {
+    func handleAction(pluginID: String, componentID: String, action: PluginUIActionDTO) async {
         guard !isInSafemode(pluginID),
               isCapabilityAllowed(action.capability, forPluginID: pluginID)
         else { return }
@@ -1030,8 +1029,8 @@ extension PluginHost {
         switch action.routing {
         case .hostExecuted:
             // hostExecuted 액션도 동일한 effect processor를 탄다 (§6.7 참고).
-            processEffects([PluginEffect(capability: action.capability, payload: action.payload)],
-                           pluginID: pluginID)
+            await processEffects([PluginEffect(capability: action.capability, payload: action.payload)],
+                                 pluginID: pluginID)
         case .pluginEvent:
             let event = PluginEvent(
                 id: UUID(), kind: .pluginActionInvoked, timestamp: Date(),
