@@ -1062,6 +1062,15 @@ extension PluginHost {
         }
         return isCapabilityAllowed(capability, for: runner.manifest.permissions)
     }
+
+    /// built-in-only capability(`sound.playCESP` 등)를 허용할 plugin ID allowlist.
+    /// DevIsland가 컴파일해 넣은 특정 built-in plugin만 포함하는 static set이며,
+    /// 외부 plugin이나 declarative preset의 ID는 절대 포함하지 않는다.
+    private func isBuiltInSoundPlugin(_ pluginID: String) -> Bool {
+        Self.builtInSoundPluginIDs.contains(pluginID)
+    }
+
+    private static let builtInSoundPluginIDs: Set<String> = ["com.devisland.openpeon.sound"]
 }
 ```
 
