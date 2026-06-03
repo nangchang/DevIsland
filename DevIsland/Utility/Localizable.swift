@@ -187,7 +187,12 @@ extension L10n {
     var tabSound:            String { s("Sound",        "사운드") }
     var tabExperimental:     String { s("Experimental", "실험적") }
     var tabIntegrations:     String { s("Integrations", "통합") }
+    var tabExtras:           String { s("Extras",       "부가기능") }
     var tabAdvanced:         String { s("Advanced",     "고급") }
+
+    // Extras tab
+    var lblExtrasEmpty:          String { s("No extras available.",                                               "등록된 부가기능이 없습니다.") }
+    var descExtrasEmpty:         String { s("Additional features will appear here as they are added.",            "추가 기능이 생기면 여기에 표시됩니다.") }
 
     // Integrations tab
     var secAppIntegrations:           String { s("App Integrations",                                               "앱 통합") }

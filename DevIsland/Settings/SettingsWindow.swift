@@ -134,6 +134,9 @@ struct SettingsWindowView: View {
             IntegrationsSettingsPane(store: store)
                 .tabItem { Label(l10n.tabIntegrations, systemImage: "puzzlepiece.extension") }
 
+            ExtrasSettingsPane()
+                .tabItem { Label(l10n.tabExtras, systemImage: "square.stack.3d.up") }
+
             AdvancedSettingsPane(geminiState: appState.geminiState, store: store)
                 .tabItem { Label(l10n.tabAdvanced, systemImage: "slider.horizontal.3") }
         }
@@ -1160,6 +1163,73 @@ private struct ApprovalRulesWindowView: View {
             sessionStore.sessionAutoApproveTypes[sessionId] = []
         }
         sessionStore.sessionAutoApproveTypes[sessionId]?.insert(tool)
+    }
+}
+
+// ── 부가기능 하위 탭 추가 방법 ───────────────────────────────────────────────
+//
+// 아래 전체 구조체를 그대로 복사해 사용한다.
+// ExtrasSection 케이스와 MyFeatureSettingsPane 을 실제 기능으로 교체하면 된다.
+//
+// private enum ExtrasSection: String, CaseIterable, Identifiable {
+//     case myFeature          // ← 케이스 추가
+//
+//     var id: String { rawValue }
+//
+//     var label: String {
+//         let l = L10n.shared
+//         switch self {
+//         case .myFeature: return l.s("My Feature", "내 기능")
+//         }
+//     }
+//
+//     var systemImage: String {
+//         switch self {
+//         case .myFeature: return "star"
+//         }
+//     }
+// }
+//
+// private struct ExtrasSettingsPane: View {
+//     @ObservedObject private var l10n = L10n.shared
+//     @State private var selection: ExtrasSection = .myFeature  // ← 첫 케이스로 초기화
+//
+//     var body: some View {
+//         VStack(spacing: 12) {
+//             Picker("", selection: $selection) {
+//                 ForEach(ExtrasSection.allCases) { section in
+//                     Label(section.label, systemImage: section.systemImage).tag(section)
+//                 }
+//             }
+//             .pickerStyle(.segmented)
+//             .labelsHidden()
+//
+//             switch selection {
+//             case .myFeature: MyFeatureSettingsPane()   // ← 뷰 연결
+//             }
+//         }
+//         .padding()
+//     }
+// }
+// ─────────────────────────────────────────────────────────────────────────────
+private struct ExtrasSettingsPane: View {
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "square.stack.3d.up")
+                .font(.system(size: 36))
+                .foregroundStyle(.secondary)
+            Text(l10n.lblExtrasEmpty)
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            Text(l10n.descExtrasEmpty)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
 }
 
