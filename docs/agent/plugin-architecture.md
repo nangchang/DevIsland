@@ -437,9 +437,6 @@ struct PluginFailure {
 
 ```swift
 enum PluginUISlot: String, Codable, CaseIterable {
-    case notchCompactLeading   = "notch.compact.leading"
-    case notchCompactCenter    = "notch.compact.center"
-    case notchCompactTrailing  = "notch.compact.trailing"
     case notchExpandedActivity = "notch.expanded.activity"
     case notchExpandedDetails  = "notch.expanded.details"
     case notchSessionRow       = "notch.session.row"
@@ -461,14 +458,11 @@ enum PluginUISlot: String, Codable, CaseIterable {
 | `session.message` | 세션 메시지 창(`SessionMessageView`) 헤더/툴바 | 세션별 부가 정보 accessory | 세션 | v1.1 |
 | `session.detail.timeline` | 세션 히스토리 타임라인 | 특정 시점의 주석 (Annotation) | 세션 | v2 |
 | `session.detail.summary` | 세션 상세 상단 | 세션별 요약 카드 | 세션 | v2 |
-| `notch.compact.leading` | Collapsed Notch 왼쪽 (좌 버디 영역) | 에이전트 상태 배지 옆 부가 정보 | 전역 | v2 |
-| `notch.compact.center` | Collapsed Notch 중앙 (`notchCenterText` 영역) | 중앙 텍스트 대체/부가 정보 | 전역 | v2 |
-| `notch.compact.trailing` | Collapsed Notch 오른쪽 (우 버디 영역) | 알림 개수나 작은 아이콘 | 전역 | v2 |
 
 `menubar.menu`는 메뉴 스타일 `MenuBarExtra`의 top-level `MenuBarMenu`에 직접 렌더링한다. 별도 window popover(`.menuBarExtraStyle(.window)`)는 현재 구현과 다르므로 v2로 미룬다.
 
 첫 구현은 `notch.expanded.activity`, `menubar.menu` 두 슬롯만 연다. 설정 화면은 플러그인 contribution slot이 아니라 DevIsland host가 manifest·enable 상태·safemode·storage 삭제 기능을 렌더링하는 `PluginSettingsView`다. 플러그인별 custom settings schema는 v1.1 이후 별도로 검토한다.
-`SessionRowView`, `SessionMessageView`, `SessionHistoryWindow`에 닿는 세션별 슬롯은 UI 접점이 여러 곳이라 v1.1로 분리한다. collapsed notch 3영역(`leading`/`center`/`trailing`)은 현재 좌·우 버디와 중앙 `notchCenterText`가 점유하고 unread dot까지 겹쳐 가산 contribution이 들어갈 공간이 없다. 따라서 v2에서 별도 compact renderer를 설계하되, 가산 슬롯이 아니라 §7.1의 exclusive region provider 모델로 렌더하는 방향을 우선 검토한다.
+`SessionRowView`, `SessionMessageView`, `SessionHistoryWindow`에 닿는 세션별 슬롯은 UI 접점이 여러 곳이라 v1.1로 분리한다. collapsed notch 3영역(`leading`/`center`/`trailing`)은 현재 좌·우 버디와 중앙 `notchCenterText`가 점유하고 unread dot까지 겹쳐 가산 contribution이 들어갈 공간이 없다. 따라서 `PluginUISlot`에 넣지 않고, §7.1의 exclusive region provider 모델로 별도 설계한다.
 
 슬롯별 제약: 최대 contribution 수, 텍스트 최대 길이, 우선순위 정렬 기준은 각 슬롯 렌더러가 정의한다. 동일 priority는 pluginID 알파벳 순으로 deterministic ordering을 적용한다.
 
@@ -481,6 +475,16 @@ enum PluginUISlot: String, Codable, CaseIterable {
 Collapsed 노치(아일랜드)는 좌(버디)·중앙(`notchCenterText`)·우(버디)의 **세 영역**으로 구성되며, 세 영역 모두 이미 core 요소가 점유한다. 공간이 극도로 좁아 가산(additive) contribution이 들어갈 자리가 없다.
 
 따라서 노치 영역에 한해 가산 슬롯과 **다른 의미론**을 검토한다.
+
+`Exclusive region provider`는 `PluginUISlot`이 아니다. contribution cache에 여러 item을 쌓고 priority로 정렬하는 모델이 아니라, 사용자가 선택한 영역마다 단일 provider를 고르는 별도 v2 개념이다.
+
+```swift
+enum PluginRegionID: String, Codable, CaseIterable {
+    case notchCompactLeading  = "notch.compact.leading"
+    case notchCompactCenter   = "notch.compact.center"
+    case notchCompactTrailing = "notch.compact.trailing"
+}
+```
 
 | 모델 | 의미 | 적합한 surface |
 | :--- | :--- | :--- |
@@ -520,8 +524,10 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 | `storage.keyValue` | `writePluginStorage` | effect processor가 격리 저장소 read/write 수행 |
 | `storage.increment` | `writePluginStorage` | effect processor가 카운터 atomic 증가 수행 |
 | `notification.show` | `showNotification` | DevIsland 알림 렌더링 요청 |
+| `sound.playCESP` | built-in allowlist only | Host-owned OpenPeon audio service에 sanitized CESP category 재생을 요청. 외부 plugin/declarative preset에는 열지 않는다. |
 
 `timer.*`처럼 민감 자원에 접근하지 않고 플러그인 내부 상태만 다루는 capability는 permission 없이 허용한다. 외부 자원(저장소, 알림 등)에 닿는 capability는 반드시 대응 permission을 manifest에 선언해야 한다.
+`sound.playCESP`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
 
 `PomodoroPlugin` built-in 구현 예시:
 
@@ -1018,8 +1024,7 @@ extension PluginHost {
 extension PluginHost {
     func handleAction(pluginID: String, componentID: String, action: PluginUIActionDTO) {
         guard !isInSafemode(pluginID),
-              let runner = runners[pluginID],
-              isCapabilityAllowed(action.capability, for: runner.manifest.permissions)
+              isCapabilityAllowed(action.capability, forPluginID: pluginID)
         else { return }
 
         switch action.routing {
@@ -1052,12 +1057,15 @@ extension PluginHost {
     /// 등록되지 않은 plugin이나 매핑되지 않은 capability는 거부한다.
     private func isCapabilityAllowed(_ capability: String, forPluginID pluginID: String) -> Bool {
         guard let runner = runners[pluginID] else { return false }
+        if capability == "sound.playCESP" {
+            return isBuiltInSoundPlugin(pluginID)
+        }
         return isCapabilityAllowed(capability, for: runner.manifest.permissions)
     }
 }
 ```
 
-`isCapabilityAllowed`와 `processEffects`는 동일한 매핑을 공유한다. 매핑되지 않은 capability는 거부한다.
+`isCapabilityAllowed`와 `processEffects`는 동일한 매핑을 공유한다. 매핑되지 않은 capability는 거부한다. `sound.playCESP` 같은 built-in-only capability는 permission 집합만으로 허용하지 않고 plugin ID allowlist를 함께 확인한다.
 
 ### 10.7. Contribution 만료 처리
 
@@ -1202,16 +1210,16 @@ struct PluginSlotView: View {
 
 구체 삽입 지점:
 
-| 슬롯 | 삽입 뷰 (현재 symbol) |
+| 슬롯/영역 | 삽입 뷰 (현재 symbol) |
 | :--- | :--- |
-| `notch.compact.*` | `NotchCollapsedView` |
 | `notch.expanded.*` | `NotchView` 확장 영역 |
 | `notch.session.row` | `SessionRowView` (sessionID 전달) |
 | `menubar.menu` | `MenuBarMenu` |
 | `session.message` | `SessionMessageView` (sessionID 전달) |
 | `session.context-menu` | `SessionRowView`/`SessionHistoryWindow`의 `.contextMenu` |
+| v2 `PluginRegionID.notchCompact*` | `NotchCollapsedView` exclusive region provider. `PluginSlotView`가 아니다. |
 
-기존 뷰는 `PluginSlotView(...)` 한 줄을 추가하는 수준으로만 바뀐다. contribution이 없으면 `PluginSlotView`는 빈 뷰라 레이아웃 영향이 없다.
+가산 슬롯의 기존 뷰는 `PluginSlotView(...)` 한 줄을 추가하는 수준으로만 바뀐다. contribution이 없으면 `PluginSlotView`는 빈 뷰라 레이아웃 영향이 없다. compact region provider는 v2 별도 모델이므로 이 규칙에 포함하지 않는다.
 
 ### 12.7. 테스트 seam
 
@@ -1247,7 +1255,7 @@ struct PluginSlotView: View {
 
 | 현재 기능 | 현재 위치 | Built-in plugin 형태 | 우선순위 | 전환 조건 |
 | :--- | :--- | :--- | :--- | :--- |
-| OpenPeon CESP sound playback | `OpenPeon/*`, `AppState.playOpenPeonSound`, `OpenPeonSettingsPane` | `OpenPeonSoundPlugin`이 hook/session/notification event를 관찰하고 host-owned `sound.playCESP` effect를 요청 | 높음 | sound pack scan, validation, `AVAudioPlayer` 재생은 host service에 남긴다. 플러그인은 pack file path나 raw payload를 직접 다루지 않는다. |
+| OpenPeon CESP sound playback | `OpenPeon/*`, `AppState.playOpenPeonSound`, `OpenPeonSettingsPane` | `OpenPeonSoundPlugin`이 host-computed sound hint를 관찰하고 host-owned `sound.playCESP` effect를 요청 | 높음 | `CESPEventMapper`의 raw payload 기반 category 산출, sound pack scan, validation, `AVAudioPlayer` 재생은 host service에 남긴다. 플러그인은 pack file path나 raw payload를 직접 다루지 않는다. |
 | 세션 경과 시간/현재 상태 표시 | 신규 `SessionTimerPlugin` | `notch.expanded.activity` metric contribution | 높음 | core 상태를 바꾸지 않고 `readSessionEvents`만 사용한다. |
 | provider/session 통계 | 신규 `ProviderStatsPlugin` 또는 `SessionStatsPlugin` | `notch.expanded.activity`, `menubar.menu` 요약 metric | 중간 | `readHookSummaries`, `readSessionEvents`, v1.1 `approval.decided`만 사용한다. replay DB를 직접 조회하지 않는다. |
 | 세션 메시지/행 accessory | `SessionMessageWindow`, `SessionRowView`, `SessionHistoryWindow` 일부 표시 | `session.message`, `notch.session.row`, `session.context-menu` contribution | 중간 | v1.1 세션별 slot이 열린 뒤 진행한다. 메시지 창과 replay loading 자체는 core에 남긴다. |
@@ -1258,7 +1266,7 @@ struct PluginSlotView: View {
 
 | 현재 기능 | 플러그인으로 옮길 수 있는 부분 | core에 남길 부분 |
 | :--- | :--- | :--- |
-| OpenPeon | event-to-sound 정책, mute 상태 표시, preview button contribution | pack scanning/validation, audio playback, settings persistence |
+| OpenPeon | sanitized sound hint를 사용할지 결정하는 정책, mute 상태 표시, preview button contribution | raw payload 기반 `CESPEventMapper`, pack scanning/validation, audio playback, settings persistence |
 | Replay Log / Session History | session별 annotation, 요약 badge, menubar quick action | `SQLiteApprovalStore`, replay query, replay execution |
 | PTY Transcript | transcript 존재 여부 badge, session accessory | PTY capture, transcript storage, raw transcript viewer |
 | Settings | plugin enable/disable, safemode, storage reset | core app settings, bridge config, approval settings |
@@ -1284,7 +1292,7 @@ v1 `PluginUIComponentType`은 `metric`/`badge`/`button`/`text`뿐이며 입력 �
 
 기존 기능 전환은 PR 0–11의 플러그인 플랫폼이 안정화된 뒤 별도 migration track으로 진행한다.
 첫 migration 후보는 OpenPeon sound가 가장 적합하다. 이미 best-effort side effect이고, 실패해도 approval/deny 동작을 바꾸면 안 된다는 기존 원칙과 플러그인 Fail-Safe 원칙이 잘 맞기 때문이다.
-다만 OpenPeon을 옮기더라도 CESP pack store와 audio player는 host-owned service로 남겨야 한다.
+다만 OpenPeon을 옮기더라도 `CESPEventMapper`, CESP pack store와 audio player는 host-owned service로 남겨야 한다. `CESPEventMapper`는 현재 provider별 raw payload를 보고 category를 계산하므로, 이 계산을 plugin으로 옮기면 raw payload 금지 원칙을 깨게 된다. M1에서는 `PluginEventFactory` 또는 별도 host service가 optional `PluginSoundHint(category:)` 같은 sanitized DTO를 만들고, plugin은 이 hint를 사용할지와 `sound.playCESP` effect 요청 여부만 결정한다.
 
 ## 13. 단계별 롤아웃 계획 (Rollout Plan)
 

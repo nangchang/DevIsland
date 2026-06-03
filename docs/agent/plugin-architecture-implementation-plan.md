@@ -491,20 +491,23 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주요 작업:
 
 - built-in `OpenPeonSoundPlugin` 추가
-- `sound.playCESP` 같은 built-in-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 "built-in-only, permission 불필요" 행 추가)
-- plugin은 `hook.received`, `session.started`, `session.updated`, `session.ended`, `notification.shown`을 관찰해 CESP category 요청만 반환
+- `sound.playCESP` 같은 built-in-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 "built-in allowlist only" 행 추가)
+- `CESPEventMapper`는 host service에 유지하고, raw payload 기반 category 계산은 `PluginEventFactory` 또는 별도 host sound-hint factory에서 수행
+- plugin은 `hook.received`, `session.started`, `session.updated`, `session.ended`, `notification.shown`에 포함된 sanitized sound hint를 관찰해 CESP category 요청만 반환
 - `CESPPackStore`, `CESPPackValidator`, `CESPAudioPlayer`, OpenPeon settings persistence는 host service로 유지
 - `AppState.playOpenPeonSound` 직접 호출부를 event/effect 경로로 단계적으로 대체
 
 주의:
 
-- plugin이 pack path, audio file path, raw hook payload를 직접 보지 않게 한다.
+- plugin이 pack path, audio file path, raw hook payload, parsed provider payload를 직접 보지 않게 한다.
+- `sound.playCESP`는 permission 기반 공개 capability가 아니라 compiled built-in plugin ID allowlist로만 허용한다.
 - sound failure는 plugin failure/log로만 남기고 provider response에 영향 주지 않는다.
 - OpenPeon settings UI는 custom plugin settings schema가 생기기 전까지 기존 Settings pane을 유지한다.
 
 검증:
 
 - 기존 OpenPeon settings 조합별 playback 동작 유지
+- CESP category 산출 테스트는 host sound-hint factory/`CESPEventMapper`에 남고 plugin 테스트에는 raw payload fixture를 넘기지 않음
 - invalid pack, missing sound, mute 상태에서 approval 동작 불변
 - plugin disable/safemode 시 sound만 중지되고 hook/session UI는 정상 동작
 
