@@ -118,6 +118,30 @@ final class CaffeineCoordinatorTests: XCTestCase {
         XCTAssertEqual(reason, .onAC)
     }
 
+    func testHysteresisProgressesDuringExcludedSSID() {
+        // 제외 SSID에 머무는 동안에도 배터리 hysteresis는 갱신되어야 한다.
+        // (regression: 이전에는 .excludedSSID 분기에서 prev를 그대로 반환해
+        // SSID를 벗어났을 때 hysteresis가 깨졌다.)
+        let c = makeCoordinator()
+        c.caffeineEnabled = true
+        c.isOnACPower = true
+        c.excludedSSIDs = ["Office-Internal"]
+        c.currentSSID = "Office-Internal"
+
+        // 예외 SSID + 18% → low로 진입해야 함
+        c.batteryLevel = 0.18
+        let (next1, reason1) = c.decide(prevLowBattery: false)
+        XCTAssertTrue(next1, "제외 SSID 분기에서도 low battery 상태로 진입해야 함")
+        XCTAssertEqual(reason1, .excludedSSID("Office-Internal"))
+
+        // 예외에서 벗어나고 21%(데드존) → 여전히 low 유지
+        c.currentSSID = "Home"
+        c.batteryLevel = 0.21
+        let (next2, reason2) = c.decide(prevLowBattery: next1)
+        XCTAssertTrue(next2)
+        XCTAssertEqual(reason2, .lowBattery(0.21))
+    }
+
     func testDecideIsIdempotent() {
         // pure 함수 — 같은 입력 + prev에 대해 호출 횟수 무관하게 동일 결과
         let c = makeCoordinator()

@@ -162,13 +162,33 @@ private struct CaffeineSSIDPickerSheet: View {
         .frame(minWidth: 420, minHeight: 460)
         .task {
             permission.requestIfNeeded()
-            await runScan()
+            // .notDetermined 상태에서는 권한 응답을 기다린다 — onChange가 처리.
+            // 이미 결정된 상태에서만 즉시 스캔/오류 표시.
+            switch permission.status {
+            case .authorizedAlways, .authorizedWhenInUse:
+                await runScan()
+            case .denied, .restricted:
+                isScanning = false
+                scanError = .permissionDenied
+            case .notDetermined:
+                isScanning = false
+            @unknown default:
+                isScanning = false
+            }
         }
         .onChange(of: permission.status) { _, newStatus in
-            if newStatus == .authorizedAlways || newStatus == .authorized {
+            switch newStatus {
+            case .authorizedAlways, .authorizedWhenInUse:
                 isScanning = true
                 scanError = nil
                 Task { await runScan() }
+            case .denied, .restricted:
+                isScanning = false
+                scanError = .permissionDenied
+            case .notDetermined:
+                break
+            @unknown default:
+                break
             }
         }
     }
