@@ -1198,20 +1198,23 @@ struct PluginSlotView: View {
 
 ## 13. 단계별 롤아웃 계획 (Rollout Plan)
 
-| 단계 | 내용 | 검증 기준 |
-| :--- | :--- | :--- |
-| 0 | 소스 기준 준비: `AppState` event emission 위치와 renderer 삽입 위치 확정 | `HookSocketServer`/approval/provider 파일 수정 없음 |
-| 1 | 타입 정의 + `PluginEventFactory` + `PluginHost` skeleton + 빈 registry | 빌드 성공, 기존 hook/approval 동작 유지 |
-| 2 | `PluginRunner` actor + contribution cache + no-op `PluginContributionRenderer` | 빈 contribution으로 Notch/MenuBar UI 크래시 없음 |
-| 3 | `notch.expanded.activity` 슬롯만 연결 + `SessionTimerPlugin` built-in | expanded notch에 경과 시간 표시, approval UI와 레이아웃 충돌 없음 |
-| 4 | `menubar.menu` 슬롯 연결 + `PomodoroPlugin` built-in | hook·session 없이 menu에서 pomodoro 독립 동작 |
-| 5 | `PluginStorageProvider` 구현 및 quota 적용 | 플러그인이 앱 재시작 후에도 상태 유지, approval DB와 큐 공유 없음 |
-| 6 | Settings UI — `PluginSettingsView` 목록, 활성화 토글, safemode 상태, storage 삭제 | enable/disable이 contribution cache와 tick 대상에 반영 |
-| 7 | Safemode 임계값·timeout 적용 | 의도적 오류 유발 → safemode 전환, core UI/approval 계속 동작 |
-| 8 | v1.1 세션별 슬롯: `notch.session.row`, `session.context-menu`, `session.message` | 세션별 contribution target/dedup/evict 검증 |
-| 9 | v1.1 optional `approval.decided` 관찰 이벤트 | response 이후 통계용 event만 발행, 결정 변경 불가 |
-| 10 | (v2) declarative utility preset 검토 | 코드 없는 JSON preset이 capability를 조합 |
-| 11 | (v2) 외부 plugin runtime — worker process or JavaScriptCore | — |
+아래 단계는 구현 범위를 논리적으로 묶은 것이며, 단계와 PR은 1:1로 대응하지 않는다.
+세부 PR 분할과 각 PR의 신규 파일·테스트 항목은 `plugin-architecture-implementation-plan.md` §5 참고.
+
+| 단계 | 내용 | 검증 기준 | 해당 PR |
+| :--- | :--- | :--- | :--- |
+| 0 | 소스 기준 준비: `AppState` event emission 위치와 renderer 삽입 위치 확정 | `HookSocketServer`/approval/provider 파일 수정 없음 | PR 0 |
+| 1 | 타입 정의 + `PluginEventFactory` + `PluginHost` skeleton + 빈 registry | 빌드 성공, 기존 hook/approval 동작 유지 | PR 1–2 |
+| 2 | `PluginRunner` actor + contribution cache + no-op `PluginContributionRenderer` | 빈 contribution으로 Notch/MenuBar UI 크래시 없음 | PR 3–4 |
+| 3 | `notch.expanded.activity` 슬롯만 연결 + `SessionTimerPlugin` built-in | expanded notch에 경과 시간 표시, approval UI와 레이아웃 충돌 없음 | PR 5–7 |
+| 4 | `menubar.menu` 슬롯 연결 + `PomodoroPlugin` built-in | hook·session 없이 menu에서 pomodoro 독립 동작 | PR 8 |
+| 5 | `PluginStorageProvider` 구현 및 quota 적용 | 플러그인이 앱 재시작 후에도 상태 유지, approval DB와 큐 공유 없음 | PR 9 |
+| 6 | Settings UI — `PluginSettingsView` 목록, 활성화 토글, safemode 상태, storage 삭제 | enable/disable이 contribution cache와 tick 대상에 반영 | PR 10 |
+| 7 | Safemode 임계값·timeout 적용 | 의도적 오류 유발 → safemode 전환, core UI/approval 계속 동작 | PR 11 |
+| 8 | v1.1 세션별 슬롯: `notch.session.row`, `session.context-menu`, `session.message` | 세션별 contribution target/dedup/evict 검증 | v1.1 |
+| 9 | v1.1 optional `approval.decided` 관찰 이벤트 | response 이후 통계용 event만 발행, 결정 변경 불가 | v1.1 |
+| 10 | (v2) declarative utility preset 검토 | 코드 없는 JSON preset이 capability를 조합 | v2 |
+| 11 | (v2) 외부 plugin runtime — worker process or JavaScriptCore | — | v2 |
 
 ## 14. 향후 확장 (Future Extensions)
 

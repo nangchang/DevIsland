@@ -111,6 +111,7 @@
 - `readTerminalMetadata`가 없으면 `cwd`, `terminalApp` 제거
 - `readSessionEvents`가 없으면 hook event의 `session` snapshot 제거
 - `readRawPayload`, `readPtyTranscript`는 v1에서 어떤 DTO에도 포함하지 않음
+- `PluginEventFactory`를 mutable 상태 없는 `Sendable` value type(`struct`)으로 구현 — runner fan-out task에서 공유되므로 내부 cache·mutable formatter 보관 금지 (아키텍처 문서 §10.2 참고)
 
 테스트:
 
@@ -441,7 +442,8 @@ v1이 안정화된 뒤 다음 순서로 확장한다.
 2. `notch.session.row`
 3. `session.context-menu`
 4. `session.message`
-5. plugin custom settings schema
+5. `settings.changed` 이벤트 — `SettingsStore` mutation 시 발행. 플러그인이 설정 변경에 반응할 수 있게 한다. 발행 위치는 아키텍처 문서 §12.4 seam 표 참고.
+6. plugin custom settings schema
 
 각 항목은 별도 PR로 진행한다.
 
