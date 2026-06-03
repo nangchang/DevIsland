@@ -1166,26 +1166,13 @@ private struct ApprovalRulesWindowView: View {
     }
 }
 
-// ── 부가기능 탭 ──────────────────────────────────────────────────────────────
+// ── 부가기능 하위 탭 추가 방법 ───────────────────────────────────────────────
 //
-// 하위 탭(세그먼트) 추가 방법:
-//
-//   1. ExtrasSection enum에 케이스 추가
-//        case myFeature
-//
-//   2. label / systemImage 반환값 추가
-//        case .myFeature: return "내 기능"  / return "star"
-//
-//   3. @State var selection 초기값을 첫 케이스로 설정
-//        @State private var selection: ExtrasSection = .myFeature
-//
-//   4. body의 switch에 해당 뷰 연결
-//        case .myFeature: MyFeatureSettingsPane()
-//
-// ─────────────────────────────────────────────────────────────────────────────
+// 아래 전체 구조체를 그대로 복사해 사용한다.
+// ExtrasSection 케이스와 MyFeatureSettingsPane 을 실제 기능으로 교체하면 된다.
 //
 // private enum ExtrasSection: String, CaseIterable, Identifiable {
-//     case myFeature          // ← 여기에 케이스 추가
+//     case myFeature          // ← 케이스 추가
 //
 //     var id: String { rawValue }
 //
@@ -1203,21 +1190,26 @@ private struct ApprovalRulesWindowView: View {
 //     }
 // }
 //
-// var body: some View {
-//     VStack(spacing: 12) {
-//         Picker("", selection: $selection) {
-//             ForEach(ExtrasSection.allCases) { section in
-//                 Label(section.label, systemImage: section.systemImage).tag(section)
+// private struct ExtrasSettingsPane: View {
+//     @ObservedObject private var l10n = L10n.shared
+//     @State private var selection: ExtrasSection = .myFeature  // ← 첫 케이스로 초기화
+//
+//     var body: some View {
+//         VStack(spacing: 12) {
+//             Picker("", selection: $selection) {
+//                 ForEach(ExtrasSection.allCases) { section in
+//                     Label(section.label, systemImage: section.systemImage).tag(section)
+//                 }
+//             }
+//             .pickerStyle(.segmented)
+//             .labelsHidden()
+//
+//             switch selection {
+//             case .myFeature: MyFeatureSettingsPane()   // ← 뷰 연결
 //             }
 //         }
-//         .pickerStyle(.segmented)
-//         .labelsHidden()
-//
-//         switch selection {
-//         case .myFeature: MyFeatureSettingsPane()   // ← 여기에 뷰 연결
-//         }
+//         .padding()
 //     }
-//     .padding()
 // }
 // ─────────────────────────────────────────────────────────────────────────────
 private struct ExtrasSettingsPane: View {
