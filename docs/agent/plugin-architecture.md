@@ -525,9 +525,10 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 | `storage.increment` | `writePluginStorage` | effect processor가 카운터 atomic 증가 수행 |
 | `notification.show` | `showNotification` | DevIsland 알림 렌더링 요청 |
 | `sound.playCESP` | built-in allowlist only | Host-owned OpenPeon audio service에 sanitized CESP category 재생을 요청. 외부 plugin/declarative preset에는 열지 않는다. |
+| `power.preventIdleSleep` | built-in allowlist only | Host-owned Caffeine service에 display sleep 방지 assertion 보유/해제를 요청. 외부 plugin/declarative preset에는 열지 않는다. |
 
 `timer.*`처럼 민감 자원에 접근하지 않고 플러그인 내부 상태만 다루는 capability는 permission 없이 허용한다. 외부 자원(저장소, 알림 등)에 닿는 capability는 반드시 대응 permission을 manifest에 선언해야 한다.
-`sound.playCESP`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
+`sound.playCESP`, `power.preventIdleSleep`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
 
 `PomodoroPlugin` built-in 구현 예시:
 
@@ -1282,6 +1283,7 @@ struct PluginSlotView: View {
 | 현재 기능 | 현재 위치 | Built-in plugin 형태 | 우선순위 | 전환 조건 |
 | :--- | :--- | :--- | :--- | :--- |
 | OpenPeon CESP sound playback | `OpenPeon/*`, `AppState.playOpenPeonSound`, `OpenPeonSettingsPane` | `OpenPeonSoundPlugin`이 host-computed sound hint를 관찰하고 host-owned `sound.playCESP` effect를 요청 | 높음 | `CESPEventMapper`의 raw payload 기반 category 산출, sound pack scan, validation, `AVAudioPlayer` 재생은 host service에 남긴다. 플러그인은 pack file path나 raw payload를 직접 다루지 않는다. |
+| Caffeine sleep prevention | `Caffeine/*`, `AppState.setupCaffeine`, `CaffeineSettingsPane`, `CaffeineMenuItem` | `CaffeinePlugin`이 host-provided power/SSID/settings status를 관찰하고 host-owned `power.preventIdleSleep` effect를 요청 | 중간 | `IOPMAssertion`, 전원/SSID 모니터링, 위치 권한 요청, Wi-Fi 스캔, SSID 설정 UI와 settings persistence는 host service에 남긴다. 플러그인은 sleep assertion을 직접 만들거나 Location/CoreWLAN API를 직접 호출하지 않는다. |
 | 세션 경과 시간/현재 상태 표시 | 신규 `SessionTimerPlugin` | `notch.expanded.activity` metric contribution | 높음 | core 상태를 바꾸지 않고 `readSessionEvents`만 사용한다. |
 | provider/session 통계 | 신규 `ProviderStatsPlugin` 또는 `SessionStatsPlugin` | `notch.expanded.activity`, `menubar.menu` 요약 metric | 중간 | `readHookSummaries`, `readSessionEvents`, v1.1 `approval.decided`만 사용한다. replay DB를 직접 조회하지 않는다. |
 | 세션 메시지/행 accessory | `SessionMessageWindow`, `SessionRowView`, `SessionHistoryWindow` 일부 표시 | `session.message`, `notch.session.row`, `session.context-menu` contribution | 중간 | v1.1 세션별 slot이 열린 뒤 진행한다. 메시지 창과 replay loading 자체는 core에 남긴다. |
@@ -1293,6 +1295,7 @@ struct PluginSlotView: View {
 | 현재 기능 | 플러그인으로 옮길 수 있는 부분 | core에 남길 부분 |
 | :--- | :--- | :--- |
 | OpenPeon | sanitized sound hint를 사용할지 결정하는 정책, mute 상태 표시, preview button contribution | raw payload 기반 `CESPEventMapper`, pack scanning/validation, audio playback, settings persistence |
+| Caffeine | sleep 방지 정책 판단, 메뉴/노치 상태 contribution, built-in-only `power.preventIdleSleep` effect 요청 | `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence |
 | Replay Log / Session History | session별 annotation, 요약 badge, menubar quick action | `SQLiteApprovalStore`, replay query, replay execution |
 | PTY Transcript | transcript 존재 여부 badge, session accessory | PTY capture, transcript storage, raw transcript viewer |
 | Settings | plugin enable/disable, safemode, storage reset | core app settings, bridge config, approval settings |
@@ -1319,6 +1322,8 @@ v1 `PluginUIComponentType`은 `metric`/`badge`/`button`/`text`뿐이며 입력 �
 기존 기능 전환은 PR 0–11의 플러그인 플랫폼이 안정화된 뒤 별도 migration track으로 진행한다.
 첫 migration 후보는 OpenPeon sound가 가장 적합하다. 이미 best-effort side effect이고, 실패해도 approval/deny 동작을 바꾸면 안 된다는 기존 원칙과 플러그인 Fail-Safe 원칙이 잘 맞기 때문이다.
 다만 OpenPeon을 옮기더라도 `CESPEventMapper`, CESP pack store와 audio player는 host-owned service로 남겨야 한다. `CESPEventMapper`는 현재 provider별 raw payload를 보고 category를 계산하므로, 이 계산을 plugin으로 옮기면 raw payload 금지 원칙을 깨게 된다. M1에서는 `PluginEventFactory` 또는 별도 host service가 optional `PluginSoundHint(category:)` 같은 sanitized DTO를 만들고, plugin은 이 hint를 사용할지와 `sound.playCESP` effect 요청 여부만 결정한다.
+
+Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned 경계가 더 중요하다. Caffeine은 `IOPMAssertion`, Location permission, CoreWLAN scan처럼 시스템 권한과 사용자 환경 side effect를 다루므로, 플러그인은 host가 제공한 sanitized status만 보고 assertion 보유/해제 의도를 effect로 반환한다. `caffeineEnabled`와 `caffeineExcludedSSIDs`는 기존 core setting으로 유지하고, plugin enable/disable·safemode는 추가 feature guard로만 작동한다. 따라서 plugin disabled 또는 safemode 상태에서는 host가 assertion을 반드시 release해야 하며, 기존 기본값(`caffeineEnabled == false`)은 바뀌지 않는다.
 
 ## 13. 단계별 롤아웃 계획 (Rollout Plan)
 

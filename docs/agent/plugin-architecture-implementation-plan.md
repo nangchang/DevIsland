@@ -472,14 +472,16 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주요 작업:
 
 - `plugin-architecture.md` §12.9 기준으로 후보 목록 재검토
-- OpenPeon, Replay/Session History, PTY Transcript, UpdateChecker, MenuBar command를 `전환`, `부분 전환`, `core 유지`로 분류
+- OpenPeon, Caffeine, Replay/Session History, PTY Transcript, UpdateChecker, MenuBar command를 `전환`, `부분 전환`, `core 유지`로 분류
 - 기존 기능을 plugin으로 옮기더라도 user setting migration이 필요 없는지 확인
 - built-in plugin disable 시 기존 기능을 끌지, core fallback을 유지할지 기능별로 결정
+- Caffeine은 기존 `caffeineEnabled`/`caffeineExcludedSSIDs` 설정을 core setting으로 유지하고, plugin enable/safemode는 assertion effect를 막는 추가 feature guard로만 정의
 
 검증:
 
 - 문서 및 feature guard 테스트
 - 기존 설정 기본값이 바뀌지 않는지 확인
+- Caffeine 기본값이 계속 off이며, plugin disabled/safemode 상태에서 sleep assertion이 release되는지 확인
 
 #### Migration PR M1. OpenPeonSoundPlugin
 
@@ -511,7 +513,38 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - invalid pack, missing sound, mute 상태에서 approval 동작 불변
 - plugin disable/safemode 시 sound만 중지되고 hook/session UI는 정상 동작
 
-#### Migration PR M2. SessionStatsPlugin / ProviderStatsPlugin
+#### Migration PR M2. CaffeinePlugin
+
+목표:
+
+- Caffeine을 built-in plugin migration 후보에 포함하되, 시스템 sleep side effect와 권한 처리는 host-owned service로 유지한다.
+- 기존 Caffeine 설정값과 기본 동작을 바꾸지 않는다.
+
+주요 작업:
+
+- built-in `CaffeinePlugin` 추가
+- `power.preventIdleSleep` 같은 built-in-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 "built-in allowlist only" 행 추가)
+- `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence는 host service로 유지
+- host가 power/SSID/settings 상태를 sanitized `PluginCaffeineStatus` 또는 equivalent status DTO로 제공
+- plugin은 host-provided status만 관찰해 assertion 보유/해제 의도를 `power.preventIdleSleep` effect로 반환
+- `CaffeineMenuItem`의 상태 표시는 가능하면 `menubar.menu` contribution으로 단계적으로 대체하되, 자유 입력이 필요한 `CaffeineSettingsPane`은 custom plugin settings schema가 생기기 전까지 유지
+
+주의:
+
+- plugin이 `IOPMAssertion`, Location, CoreWLAN API를 직접 호출하지 않게 한다.
+- `power.preventIdleSleep`는 permission 기반 공개 capability가 아니라 compiled built-in plugin ID allowlist로만 허용한다.
+- `caffeineEnabled`는 사용자 기능 토글이고, plugin enable/safemode는 상위 feature guard다. 둘 중 하나라도 off이면 host는 assertion을 release해야 한다.
+- Caffeine settings UI는 SSID scan과 자유 텍스트 입력이 필요하므로 v1 contribution UI로 옮기지 않는다.
+
+검증:
+
+- 기존 `caffeineEnabled == false` 기본값 유지
+- AC/battery/low-battery/SSID 제외 조건별 assertion 판단 유지
+- plugin disable/safemode 시 assertion release
+- Location permission denied, Wi-Fi scan 실패, assertion acquire 실패가 provider response와 approval 동작에 영향 주지 않음
+- 앱 종료 또는 coordinator shutdown 시 assertion release 유지
+
+#### Migration PR M3. SessionStatsPlugin / ProviderStatsPlugin
 
 목표:
 
@@ -530,7 +563,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - 긴 provider/tool name truncation
 - plugin disable 시 contribution 즉시 제거
 
-#### Migration PR M3. Session accessory plugins
+#### Migration PR M4. Session accessory plugins
 
 목표:
 
@@ -554,7 +587,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - 세션 팝아웃 창이 열려 있을 때 contribution 업데이트
 - replay/session history query가 plugin storage로 새지 않는지
 
-#### Migration PR M4. Update status contribution
+#### Migration PR M5. Update status contribution
 
 목표:
 
@@ -605,6 +638,7 @@ v1이 안정화된 뒤 다음 순서로 확장한다.
 | Settings | enable/disable, reset storage, safemode reset |
 | AppState seam | response payload 불변, session ended 누락 없음 |
 | Migration | 기존 기능 setting 유지, disable/safemode 영향 범위, host service와 plugin effect 경계 |
+| Caffeine migration | 기본값 off 유지, host-owned assertion release, Location/CoreWLAN 권한 경계, low-battery hysteresis 유지 |
 
 ## 9. 수동 smoke check
 
