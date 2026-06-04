@@ -607,27 +607,79 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - update status 표시만 plugin contribution으로 분리
 - install action은 host command로만 실행
 
-## 6. v1.1 후보
+## 6. 고도화 후보
 
-v1이 안정화된 뒤 다음 순서로 확장한다.
+v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확장한다.
+각 항목은 별도 PR 또는 작은 PR 묶음으로 진행한다.
 
-1. `approval.decided` 관찰 이벤트
-2. `notch.session.row`
-3. `session.context-menu`
-4. `session.message`
-5. `settings.changed` 이벤트 — `SettingsStore` mutation 시 발행. 플러그인이 설정 변경에 반응할 수 있게 한다. 발행 위치는 아키텍처 문서 §12.4 seam 표 참고.
-6. plugin custom settings schema
+### v1.1 Session Surfaces
 
-각 항목은 별도 PR로 진행한다.
+- `approval.decided` 관찰 이벤트 — provider response 전송 이후 통계용으로만 발행
+- `notch.session.row` — 세션 행 badge, 짧은 metric, status accessory
+- `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending 세션에만 허용
+- `session.message` — 세션 메시지 창 header/toolbar accessory
 
-## 7. v2 후보
+검증:
 
-- declarative utility preset
-- signed plugin package
-- external worker process
-- JavaScriptCore runtime
+- 세션별 contribution `targetSessionID` dedup/evict
+- pending/current approval 세션에 destructive action이 적용되지 않는지
+- approval decision이 plugin event로 변경되거나 지연되지 않는지
+
+### v1.2 Host Command Catalog
+
+- `session.dismiss`: idle/non-pending only
+- `session.focusTerminal`: 기존 `TerminalFocuser` 경유
+- `session.copyResumeCommand`: host가 sanitized command 생성
+- `session.openWorkspace`: workspace root가 있는 세션만 허용
+- `sound.playCESP`, `power.preventIdleSleep`, `notification.show`를 같은 command/effect validation 경로로 정리
+
+검증:
+
+- command별 permission/capability 검증
+- 실패한 command가 provider response, approval queue, session lifecycle ownership을 바꾸지 않는지
+- pending/current approval 세션에 대한 destructive command가 거부되는지
+
+### v1.3 Plugin Settings Schema
+
+- boolean toggle, enum picker, number stepper/slider, short text input만 우선 허용
+- `settings.changed` 이벤트 — 플러그인 자신의 설정 변경에만 반응
+- path picker, Wi-Fi scan, Location permission, pack validation UI는 host-owned settings pane으로 유지
+
+검증:
+
+- schema validation과 default fallback
+- plugin setting 변경이 contribution/tick/action에 반영되는지
+- core app settings, bridge settings, approval settings를 plugin이 직접 mutate하지 않는지
+
+### v1.4 Session List Presentation
+
+- `notch.session.list` 또는 equivalent list-level presentation surface 검토
+- summary row, filter chip, group label, sort hint만 contribution으로 허용
+- 실제 적용 여부는 host-owned `SessionListPresentationPolicy`가 결정
+
+검증:
+
+- pending/current approval, missed approval, unread 세션이 plugin hint로 숨겨지지 않는지
+- `SessionStore.activeSessions` mutation은 core에만 남는지
+- list hint가 세션별 `targetSessionID` contribution evict와 충돌하지 않는지
+
+## 7. v2+ 후보
+
+### v2 External Plugin Runtime
+
+- worker process runtime 우선, JavaScriptCore는 차선
+- manifest API version, permission consent UI, audit log
+- crash/safemode 자동 격리
 - network permission with allowlist
-- raw payload permission with explicit user consent
+- `readRawPayload`, `networkAccess`, `runProcess`는 explicit user consent와 revocation UI를 갖춘 뒤 추가
+
+### v2.1 Signed Plugin Distribution
+
+- signed plugin package
+- checksum과 API version compatibility 검사
+- trusted local plugin과 signed third-party plugin 구분
+- uninstall/storage cleanup
+- plugin health diagnostics
 
 ## 8. 테스트 매트릭스
 

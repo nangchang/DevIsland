@@ -1345,18 +1345,58 @@ Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned �
 | 6 | Settings UI — `PluginSettingsView` 목록, 활성화 토글, safemode 상태, storage 삭제 | enable/disable이 contribution cache와 tick 대상에 반영 | PR 10 |
 | 7 | Safemode 임계값·timeout 적용 | 의도적 오류 유발 → safemode 전환, core UI/approval 계속 동작 | PR 11 |
 | M | 기존 기능 migration track: OpenPeon sound 등 부가 기능을 built-in plugin 후보로 전환 | 기능 disable/safemode가 core hook/approval/session 동작을 바꾸지 않음 | Migration PR M0+ |
-| 8 | v1.1 세션별 슬롯: `notch.session.row`, `session.context-menu`, `session.message` | 세션별 contribution target/dedup/evict 검증 | v1.1 |
-| 9 | v1.1 optional `approval.decided` 관찰 이벤트 | response 이후 통계용 event만 발행, 결정 변경 불가 | v1.1 |
-| 10 | (v2) declarative utility preset 검토 | 코드 없는 JSON preset이 capability를 조합 | v2 |
-| 11 | (v2) 외부 plugin runtime — worker process or JavaScriptCore | — | v2 |
+| 8 | v1.1 Session Surfaces: `notch.session.row`, `session.context-menu`, `session.message`, `approval.decided` | 세션별 contribution target/dedup/evict, response 이후 approval 통계 event 검증 | v1.1 |
+| 9 | v1.2 Host Command Catalog | 플러그인이 직접 시스템 API를 만지지 않고 host-validated command만 요청 | v1.2 |
+| 10 | v1.3 Plugin Settings Schema | 단순 입력 UI를 manifest/schema 기반으로 렌더링하되 권한성 UI는 host-owned 유지 | v1.3 |
+| 11 | v1.4 Session List Presentation | 목록-level summary/filter/sort hint를 host policy로 검증 후 적용 | v1.4 |
+| 12 | v2 External Plugin Runtime | worker process 격리, permission consent, audit log | v2 |
+| 13 | v2.1 Signed Plugin Distribution | 서명·호환성·uninstall/storage cleanup 검증 | v2.1 |
 
 ## 14. 향후 확장 (Future Extensions)
 
-1. **Declarative Utility Presets**: JSON으로 작성하는 코드 없는 소형 utility. DevIsland가 이미 아는 component·action만 조합하므로 JS engine 없이 구현 가능.
-2. **External Plugin Runtime**: crash isolation이 필요하면 worker process를 우선, JavaScriptCore는 차선으로 검토.
-3. **Plugin Settings Schema**: manifest 선언 기반 입력 UI 자동 생성.
-4. **Signed Plugin Packages**: 외부 배포 지원 시 checksum·서명·API version compatibility 검사 추가.
-5. **Higher-Risk Permissions**: `readRawPayload`, `networkAccess`, `runProcess`는 사용자 동의·감사 로그·revocation UI를 갖춘 뒤 별도로 추가.
+### v1.1 Session Surfaces
+
+세션별 UI를 먼저 연다. `notch.session.row`는 행 안의 짧은 badge·metric·status accessory만 허용하고, `session.context-menu`는 host가 검증한 action만 실행한다. `session.message`는 메시지 창 header/toolbar accessory만 담당하며, replay loading과 message rendering은 core에 남긴다.
+
+`approval.decided`는 provider response가 이미 전송된 뒤 발행되는 관찰 이벤트로만 추가한다. 플러그인은 승인/거부 결정을 바꾸거나 되돌릴 수 없고, 통계·히스토리·badge 갱신에만 사용한다.
+
+### v1.2 Host Command Catalog
+
+플러그인이 직접 AppKit, AppleScript, IOKit, filesystem, provider response handler를 만지지 않도록 host-owned command catalog를 둔다. command는 `PluginEffect`/`PluginUIActionDTO.capability`와 같은 검증 경로를 탄다.
+
+초기 command 후보:
+
+- `session.dismiss`: idle/non-pending only
+- `session.focusTerminal`: 기존 `TerminalFocuser` 경유, 권한과 대상 세션 상태를 host가 확인
+- `session.copyResumeCommand`: host가 sanitized command를 생성해 pasteboard에 복사
+- `session.openWorkspace`: workspace root가 있는 세션만 Finder로 열기
+- `sound.playCESP`: built-in allowlist only
+- `power.preventIdleSleep`: built-in allowlist only
+- `notification.show`: `showNotification` permission 필요
+
+host command는 실패해도 provider response, approval decision, session lifecycle ownership을 바꾸지 않는다. pending/current approval 세션에 대한 destructive action은 허용하지 않는다.
+
+### v1.3 Plugin Settings Schema
+
+built-in plugin이 늘어난 뒤 단순 설정 UI만 schema로 연다. v1.3의 schema는 boolean toggle, enum picker, number stepper/slider, short text input처럼 검증 가능한 입력으로 제한한다. path picker, Wi-Fi scan, Location permission, pack validation처럼 권한·외부 I/O·자유 입력이 섞인 UI는 host-owned settings pane으로 유지한다.
+
+`settings.changed` 이벤트는 이 단계에서 함께 추가한다. 플러그인은 자신의 설정 변경에 반응할 수 있지만, core app settings와 bridge/approval settings를 직접 mutate하지 않는다.
+
+### v1.4 Session List Presentation
+
+세션 목록 전체를 플러그인이 소유하게 하지 않는다. 대신 `notch.session.list` 같은 목록-level presentation surface를 검토해 summary row, filter chip, group label, sort hint를 contribution으로 받을 수 있게 한다. 실제 필터/정렬 적용 여부는 Host의 `SessionListPresentationPolicy`가 결정한다.
+
+Host policy는 pending/current approval, missed approval, unread 세션을 숨기지 않는다. 플러그인의 list hint는 표시 순서와 보조 UI에만 영향을 주며, `SessionStore.activeSessions` mutation은 core가 계속 소유한다.
+
+### v2 External Plugin Runtime
+
+외부 플러그인은 crash isolation 때문에 worker process를 우선 검토한다. JavaScriptCore는 프로세스 격리가 약하므로 차선이다. v2에는 manifest API version, permission consent UI, audit log, crash/safemode 자동 격리, network allowlist를 포함한다.
+
+`readRawPayload`, `networkAccess`, `runProcess`는 고위험 권한으로 별도 사용자 동의와 revocation UI, 감사 로그가 준비된 뒤에만 연다.
+
+### v2.1 Signed Plugin Distribution
+
+배포 단계에서는 signed plugin package, checksum, compatibility range, uninstall/storage cleanup, plugin health diagnostics를 추가한다. built-in plugin과 trusted local plugin, signed third-party plugin은 UI와 권한 정책에서 구분한다.
 
 Cross-Plugin IPC는 v1 목표와 맞지 않아 우선순위를 낮춘다. 필요성이 검증되기 전까지는 플러그인 간 직접 통신 대신 DevIsland core가 제공하는 제한된 shared context를 사용한다.
 
