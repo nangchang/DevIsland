@@ -468,6 +468,8 @@ enum PluginUISlot: String, Codable, CaseIterable {
 
 **slot scope (전역 vs 세션)**: `session.*` 슬롯은 특정 세션에 종속된다. 해당 contribution은 `targetSessionID`를 채우고, `PluginUIContext.session`으로 대상 세션 스냅샷을 받는다. 렌더러는 우클릭/상세 대상 세션의 `targetSessionID`로 필터링한다. 캐시 dedup도 `(pluginID, targetSessionID)` 기준이며, `session.ended` 이벤트 수신 시 Host가 해당 `targetSessionID` contribution을 evict한다. 전역 슬롯은 `targetSessionID == nil`로 둔다.
 
+**세션 제거 액션 경계**: 플러그인은 `session.context-menu`에서 `session.dismiss` action을 제안할 수 있지만, 실제 제거는 Host가 대상 세션 상태를 다시 확인한 뒤 실행한다. 허용 대상은 `isPending == false`이고 status가 idle인 세션으로 제한한다. pending approval, 현재 응답 대기 세션, missed approval 또는 unread 상태처럼 사용자 확인이 필요한 세션은 플러그인 action으로 제거하지 않는다. 기존 core-owned dismiss 버튼은 현재처럼 `AppState.dismissSession`을 호출할 수 있지만, plugin action은 provider response를 pass하거나 approval queue를 비우는 경로에 닿으면 안 된다.
+
 ### 7.1. (v1.1+ 개념) Exclusive Region Provider — 노치 영역 교체
 
 > 이 절은 **개념과 경계**만 정의한다. 구현 스펙이 아니며 v1 범위 밖이다. 좁은 collapsed 노치(아일랜드)의 영역을 다룰 때의 설계 방향을 기록한다.
@@ -526,6 +528,7 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 | `notification.show` | `showNotification` | DevIsland 알림 렌더링 요청 |
 | `sound.playCESP` | built-in allowlist only | Host-owned OpenPeon audio service에 sanitized CESP category 재생을 요청. 외부 plugin/declarative preset에는 열지 않는다. |
 | `power.preventIdleSleep` | built-in allowlist only | Host-owned Caffeine service에 display sleep 방지 assertion 보유/해제를 요청. 외부 plugin/declarative preset에는 열지 않는다. |
+| `session.dismiss` | `showSessionSurface` + host validation | v1.1 세션 context action. 대상 세션이 idle/non-pending일 때만 host가 목록에서 제거한다. |
 
 `timer.*`처럼 민감 자원에 접근하지 않고 플러그인 내부 상태만 다루는 capability는 permission 없이 허용한다. 외부 자원(저장소, 알림 등)에 닿는 capability는 반드시 대응 permission을 manifest에 선언해야 한다.
 `sound.playCESP`, `power.preventIdleSleep`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
@@ -1305,6 +1308,7 @@ struct PluginSlotView: View {
 | 기능 | 제외 이유 |
 | :--- | :--- |
 | approval decision / approval prompt response | 플러그인은 결정을 바꾸거나 provider response를 지연하면 안 된다. |
+| pending/current approval session removal | `AppState.dismissSession`은 pending request를 pass 처리할 수 있으므로, 플러그인은 idle/non-pending 세션에 대한 host-validated `session.dismiss`만 요청할 수 있다. |
 | bridge scripts / `HookSocketServer` / IPC framing | hook response path의 안정성 경계다. |
 | `ProviderAdapter` response JSON | provider별 의미론 보존이 core 책임이다. |
 | `SessionStore` lifecycle ownership | 플러그인은 session snapshot을 관찰만 한다. |

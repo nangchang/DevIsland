@@ -578,12 +578,15 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주요 작업:
 
 - 세션 행 badge, 세션 메시지 header accessory, 간단한 context action을 contribution으로 이동
+- `session.dismiss` host-executed action은 idle/non-pending 세션에만 허용하고, pending/current approval 세션은 host validation에서 거부
 - `targetSessionID` dedup/evict 검증
 - SessionMessageWindow와 SessionHistoryWindow의 data loading은 core에 유지
 
 검증:
 
 - session ended 시 세션별 contribution evict
+- idle/non-pending 세션의 `session.dismiss` action은 세션 목록에서 제거되고 `session.ended` contribution evict로 이어지는지
+- pending/current approval 세션의 `session.dismiss` action은 거부되고 provider response, pending queue, approval UI가 변하지 않는지
 - 세션 팝아웃 창이 열려 있을 때 contribution 업데이트
 - replay/session history query가 plugin storage로 새지 않는지
 
