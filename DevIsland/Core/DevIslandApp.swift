@@ -58,9 +58,10 @@ struct MenuBarMenu: View {
     @ObservedObject private var updateChecker = UpdateChecker.shared
 
     static let versionString: String = {
+        let appName = Bundle.main.infoDictionary?["CFBundleName"] as? String ?? "DevIsland"
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-        return "DevIsland v\(version) (\(build))"
+        return "\(appName) v\(version) (\(build))"
     }()
 
     var body: some View {
@@ -680,8 +681,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let myPID = ProcessInfo.processInfo.processIdentifier
+        let managedBundleIds: Set<String> = [
+            "kr.or.nes.DevIsland",
+            "kr.or.nes.DevIsland.dev"
+        ]
         let others = NSWorkspace.shared.runningApplications
-            .filter { $0.localizedName == "DevIsland" && $0.processIdentifier != myPID }
+            .filter { app in
+                guard let bundleID = app.bundleIdentifier else { return false }
+                return app.processIdentifier != myPID && managedBundleIds.contains(bundleID)
+            }
         if !others.isEmpty {
             print("[DevIsland] Found \(others.count) other instances. Terminating them.")
             others.forEach { 
