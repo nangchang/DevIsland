@@ -1346,11 +1346,11 @@ Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned �
 | 7 | Safemode 임계값·timeout 적용 | 의도적 오류 유발 → safemode 전환, core UI/approval 계속 동작 | PR 11 |
 | M | 기존 기능 migration track: OpenPeon sound 등 부가 기능을 built-in plugin 후보로 전환 | 기능 disable/safemode가 core hook/approval/session 동작을 바꾸지 않음 | Migration PR M0+ |
 | 8 | v1.1 Session Surfaces: `notch.session.row`, `session.context-menu`, `session.message`, `approval.decided` | 세션별 contribution target/dedup/evict, response 이후 approval 통계 event 검증 | v1.1 |
-| 9 | v1.2 Host Command Catalog | 플러그인이 직접 시스템 API를 만지지 않고 host-validated command만 요청 | v1.2 |
+| 9 | v1.2 Host Command Catalog expansion | v1.1 최소 command path를 공통 catalog로 확장 | v1.2 |
 | 10 | v1.3 Plugin Settings Schema | 단순 입력 UI를 manifest/schema 기반으로 렌더링하되 권한성 UI는 host-owned 유지 | v1.3 |
-| 11 | v1.4 Session List Presentation | 목록-level summary/filter/sort hint를 host policy로 검증 후 적용 | v1.4 |
-| 12 | v2 External Plugin Runtime | worker process 격리, permission consent, audit log | v2 |
-| 13 | v2.1 Signed Plugin Distribution | 서명·호환성·uninstall/storage cleanup 검증 | v2.1 |
+| 11 | v2 External Plugin Runtime | worker process 격리, permission consent, audit log | v2 |
+| 12 | v2.1 Signed Plugin Distribution | 서명·호환성·uninstall/storage cleanup 검증 | v2.1 |
+| D | Deferred Session List Presentation | built-in plugin에서 실제 필요 사례가 검증된 뒤 목록-level hint 검토 | v2+ deferred |
 
 ## 14. 향후 확장 (Future Extensions)
 
@@ -1360,10 +1360,12 @@ Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned �
 
 `approval.decided`는 provider response가 이미 전송된 뒤 발행되는 관찰 이벤트로만 추가한다. 플러그인은 승인/거부 결정을 바꾸거나 되돌릴 수 없고, 통계·히스토리·badge 갱신에만 사용한다.
 
-### v1.2 Host Command Catalog
+`session.context-menu`에서 `session.dismiss`를 열 때는 임시 특수 경로를 만들지 않는다. v1.1 안에서 최소 Host Command Catalog 골격을 먼저 두고, idle/non-pending 검증을 같은 capability validation 경로로 처리한다.
+
+### v1.2 Host Command Catalog Expansion
 
 플러그인이 직접 AppKit, AppleScript, IOKit, filesystem, provider response handler를 만지지 않도록 host-owned command catalog를 둔다. command는 `PluginEffect`/`PluginUIActionDTO.capability`와 같은 검증 경로를 탄다.
-v1.1 session surface에서 먼저 도입된 command는 이 단계에서 공통 capability validation, logging, failure handling 경로로 통합·정규화한다.
+v1.1 session surface에서 도입한 최소 command path를 이 단계에서 logging, failure handling, audit metadata, 추가 command 등록 구조까지 확장한다.
 
 초기 command 후보:
 
@@ -1383,11 +1385,7 @@ built-in plugin이 늘어난 뒤 단순 설정 UI만 schema로 연다. v1.3의 s
 
 `settings.changed` 이벤트는 이 단계에서 함께 추가한다. 플러그인은 자신의 설정 변경에 반응할 수 있지만, core app settings와 bridge/approval settings를 직접 mutate하지 않는다.
 
-### v1.4 Session List Presentation
-
-세션 목록 전체를 플러그인이 소유하게 하지 않는다. 대신 `notch.session.list` 같은 목록-level presentation surface를 검토해 summary row, filter chip, group label, sort hint를 contribution으로 받을 수 있게 한다. 실제 필터/정렬 적용 여부는 Host의 `SessionListPresentationPolicy`가 결정한다.
-
-Host policy는 pending/current approval, missed approval, unread 세션을 숨기지 않는다. 플러그인의 list hint는 표시 순서와 보조 UI에만 영향을 주며, `SessionStore.activeSessions` mutation은 core가 계속 소유한다.
+Caffeine처럼 권한성 UI가 핵심인 built-in plugin은 schema가 생긴 뒤에도 host-owned settings pane을 유지할 수 있다. schema는 Pomodoro처럼 단순하고 권한 없는 utility plugin부터 적용한다.
 
 ### v2 External Plugin Runtime
 
@@ -1398,6 +1396,12 @@ Host policy는 pending/current approval, missed approval, unread 세션을 숨�
 ### v2.1 Signed Plugin Distribution
 
 배포 단계에서는 signed plugin package, checksum, compatibility range, uninstall/storage cleanup, plugin health diagnostics를 추가한다. built-in plugin과 trusted local plugin, signed third-party plugin은 UI와 권한 정책에서 구분한다.
+
+### Deferred Session List Presentation
+
+세션 목록 전체를 플러그인이 소유하게 하지 않는다. `notch.session.list` 같은 목록-level presentation surface는 built-in plugin에서 summary row, filter chip, group label, sort hint의 실제 필요성이 검증된 뒤 v2+에서 다시 검토한다. 필요하더라도 실제 필터/정렬 적용 여부는 Host의 `SessionListPresentationPolicy`가 결정한다.
+
+Host policy는 pending/current approval, missed approval, unread 세션을 숨기지 않는다. 플러그인의 list hint는 표시 순서와 보조 UI에만 영향을 주며, `SessionStore.activeSessions` mutation은 core가 계속 소유한다.
 
 Cross-Plugin IPC는 v1 목표와 맞지 않아 우선순위를 낮춘다. 필요성이 검증되기 전까지는 플러그인 간 직접 통신 대신 DevIsland core가 제공하는 제한된 shared context를 사용한다.
 

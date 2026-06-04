@@ -485,6 +485,11 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 
 #### Migration PR M1. OpenPeonSoundPlugin
 
+선행 조건:
+
+- PR 3의 `PluginEffectExecutor`가 built-in-only capability allowlist를 검증할 수 있어야 한다.
+- `sound.playCESP` capability는 M1에서 추가하되 permission 기반 공개 capability가 아니라 built-in plugin ID allowlist로만 허용한다.
+
 목표:
 
 - OpenPeon sound playback 정책을 첫 기존 기능 migration 후보로 검증한다.
@@ -514,6 +519,11 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - plugin disable/safemode 시 sound만 중지되고 hook/session UI는 정상 동작
 
 #### Migration PR M2. CaffeinePlugin
+
+선행 조건:
+
+- built-in-only capability allowlist와 effect executor 경로가 M1 또는 M2 시작 시점에 준비되어 있어야 한다.
+- `power.preventIdleSleep` capability는 M2에서 추가하되 permission 기반 공개 capability가 아니라 built-in plugin ID allowlist로만 허용한다.
 
 목표:
 
@@ -592,6 +602,11 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 
 #### Migration PR M5. Update status contribution
 
+선행 조건:
+
+- 외부 network permission 또는 host-owned update status API의 경계가 정리되어 있어야 한다.
+- network/runtime 설계 전에는 update 확인·다운로드·설치를 plugin capability로 열지 않는다.
+
 목표:
 
 - update 가능 여부를 부가 UI contribution으로 표시할 수 있는지 검토한다.
@@ -618,6 +633,7 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 - `notch.session.row` — 세션 행 badge, 짧은 metric, status accessory
 - `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending 세션에만 허용
 - `session.message` — 세션 메시지 창 header/toolbar accessory
+- `session.dismiss`를 열기 전에 최소 Host Command Catalog 골격을 먼저 두고, 임시 특수 경로를 만들지 않는다.
 
 검증:
 
@@ -625,10 +641,10 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 - pending/current approval 세션에 destructive action이 적용되지 않는지
 - approval decision이 plugin event로 변경되거나 지연되지 않는지
 
-### v1.2 Host Command Catalog
+### v1.2 Host Command Catalog Expansion
 
-v1.1에서 개별 session surface 구현과 함께 도입된 command를 이 단계에서 catalog 구조로 통합·정규화한다.
-따라서 `session.dismiss`는 v1.1에서 `session.context-menu` 검증용으로 먼저 열 수 있지만, v1.2에서는 같은 command를 공통 capability validation, logging, failure handling 경로로 정리한다.
+v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 이 단계에서 catalog 구조로 확장한다.
+따라서 `session.dismiss`는 v1.1에서 이미 공통 capability validation 경로를 타야 하며, v1.2에서는 logging, failure handling, audit metadata, 추가 command 등록 구조를 정리한다.
 
 - `session.dismiss`: idle/non-pending only
 - `session.focusTerminal`: 기존 `TerminalFocuser` 경유
@@ -647,24 +663,13 @@ v1.1에서 개별 session surface 구현과 함께 도입된 command를 이 단�
 - boolean toggle, enum picker, number stepper/slider, short text input만 우선 허용
 - `settings.changed` 이벤트 — 플러그인 자신의 설정 변경에만 반응
 - path picker, Wi-Fi scan, Location permission, pack validation UI는 host-owned settings pane으로 유지
+- Caffeine처럼 권한성 UI가 핵심인 built-in plugin은 schema가 생긴 뒤에도 host-owned settings pane을 유지할 수 있다.
 
 검증:
 
 - schema validation과 default fallback
 - plugin setting 변경이 contribution/tick/action에 반영되는지
 - core app settings, bridge settings, approval settings를 plugin이 직접 mutate하지 않는지
-
-### v1.4 Session List Presentation
-
-- `notch.session.list` 또는 equivalent list-level presentation surface 검토
-- summary row, filter chip, group label, sort hint만 contribution으로 허용
-- 실제 적용 여부는 host-owned `SessionListPresentationPolicy`가 결정
-
-검증:
-
-- pending/current approval, missed approval, unread 세션이 plugin hint로 숨겨지지 않는지
-- `SessionStore.activeSessions` mutation은 core에만 남는지
-- list hint가 세션별 `targetSessionID` contribution evict와 충돌하지 않는지
 
 ## 7. v2+ 후보
 
@@ -683,6 +688,18 @@ v1.1에서 개별 session surface 구현과 함께 도입된 command를 이 단�
 - trusted local plugin과 signed third-party plugin 구분
 - uninstall/storage cleanup
 - plugin health diagnostics
+
+### Deferred Session List Presentation
+
+- `notch.session.list` 또는 equivalent list-level presentation surface는 built-in plugin에서 실제 필요 사례가 검증된 뒤 v2+에서 재검토
+- summary row, filter chip, group label, sort hint만 contribution 후보로 둔다
+- 실제 적용 여부는 host-owned `SessionListPresentationPolicy`가 결정
+
+검증:
+
+- pending/current approval, missed approval, unread 세션이 plugin hint로 숨겨지지 않는지
+- `SessionStore.activeSessions` mutation은 core에만 남는지
+- list hint가 세션별 `targetSessionID` contribution evict와 충돌하지 않는지
 
 ## 8. 테스트 매트릭스
 
