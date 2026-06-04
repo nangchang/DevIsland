@@ -525,7 +525,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - built-in `CaffeinePlugin` 추가
 - `power.preventIdleSleep` 같은 built-in-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 "built-in allowlist only" 행 추가)
 - `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence는 host service로 유지
-- host가 power/SSID/settings 상태를 sanitized `PluginCaffeineStatus` 또는 equivalent status DTO로 제공
+- host가 power/SSID/settings 상태를 sanitized caffeine status DTO로 제공
 - plugin은 host-provided status만 관찰해 assertion 보유/해제 의도를 `power.preventIdleSleep` effect로 반환
 - `CaffeineMenuItem`의 상태 표시는 가능하면 `menubar.menu` contribution으로 단계적으로 대체하되, 자유 입력이 필요한 `CaffeineSettingsPane`은 custom plugin settings schema가 생기기 전까지 유지
 
@@ -626,6 +626,9 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 - approval decision이 plugin event로 변경되거나 지연되지 않는지
 
 ### v1.2 Host Command Catalog
+
+v1.1에서 개별 session surface 구현과 함께 도입된 command를 이 단계에서 catalog 구조로 통합·정규화한다.
+따라서 `session.dismiss`는 v1.1에서 `session.context-menu` 검증용으로 먼저 열 수 있지만, v1.2에서는 같은 command를 공통 capability validation, logging, failure handling 경로로 정리한다.
 
 - `session.dismiss`: idle/non-pending only
 - `session.focusTerminal`: 기존 `TerminalFocuser` 경유

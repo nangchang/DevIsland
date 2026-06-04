@@ -1363,6 +1363,7 @@ Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned �
 ### v1.2 Host Command Catalog
 
 플러그인이 직접 AppKit, AppleScript, IOKit, filesystem, provider response handler를 만지지 않도록 host-owned command catalog를 둔다. command는 `PluginEffect`/`PluginUIActionDTO.capability`와 같은 검증 경로를 탄다.
+v1.1 session surface에서 먼저 도입된 command는 이 단계에서 공통 capability validation, logging, failure handling 경로로 통합·정규화한다.
 
 초기 command 후보:
 
