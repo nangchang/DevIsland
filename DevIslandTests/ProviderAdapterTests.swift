@@ -312,4 +312,85 @@ final class ProviderAdapterTests: XCTestCase {
 
         XCTAssertEqual(output?["decision"]?.rawValue as? String, "deny")
     }
+
+    // MARK: - Normalized event name tests
+
+    func testClaudePreToolUseLowercaseEventRoutes() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "denied",
+            event: "pretooluse",
+            provider: .claude,
+            toolName: "Bash",
+            denialMessage: "Denied by DevIsland."
+        )
+
+        let hookOutput = output?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        XCTAssertEqual(hookOutput?["hookEventName"] as? String, "PreToolUse")
+        XCTAssertEqual(hookOutput?["permissionDecision"] as? String, "deny")
+    }
+
+    func testClaudePreToolUseMixedCaseEventRoutes() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "approved",
+            event: "pre_tool_use",
+            provider: .claude,
+            toolName: "Bash",
+            toolInput: ["command": .string("ls")]
+        )
+
+        XCTAssertEqual(output?["continue"]?.rawValue as? Bool, true)
+        XCTAssertEqual(output?["suppressOutput"]?.rawValue as? Bool, true)
+    }
+
+    func testClaudePermissionRequestLowercaseEventRoutes() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "approved",
+            event: "permissionrequest",
+            provider: .claude
+        )
+
+        let hookOutput = output?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        XCTAssertEqual(hookOutput?["hookEventName"] as? String, "PermissionRequest")
+        let decision = hookOutput?["decision"] as? [String: Any]
+        XCTAssertEqual(decision?["behavior"] as? String, "allow")
+    }
+
+    func testClaudePermissionRequestUppercaseEventRoutes() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "denied",
+            event: "PERMISSIONREQUEST",
+            provider: .claude,
+            denialMessage: "Denied by DevIsland."
+        )
+
+        let hookOutput = output?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        XCTAssertEqual(hookOutput?["hookEventName"] as? String, "PermissionRequest")
+        let decision = hookOutput?["decision"] as? [String: Any]
+        XCTAssertEqual(decision?["behavior"] as? String, "deny")
+    }
+
+    func testClaudePassPermissionRequestLowercaseFallsThrough() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "pass",
+            event: "permissionrequest",
+            source: "claude"
+        )
+
+        // pass + permissionrequest → empty dict (native UI fallback)
+        XCTAssertNotNil(output)
+        XCTAssertTrue(output?.isEmpty == true)
+    }
+
+    func testCodexPreToolUseLowercaseEventRoutes() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "denied",
+            event: "pretooluse",
+            source: "codex",
+            denialMessage: "Denied by DevIsland."
+        )
+
+        let hookOutput = output?["hookSpecificOutput"]?.rawValue as? [String: Any]
+        XCTAssertEqual(hookOutput?["hookEventName"] as? String, "PreToolUse")
+        XCTAssertEqual(hookOutput?["permissionDecision"] as? String, "deny")
+    }
 }

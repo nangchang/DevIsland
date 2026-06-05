@@ -60,8 +60,10 @@ struct ProviderAdapter {
     ) -> [String: AnyJSON]? {
         guard let decision else { return nil }
 
+        let normalizedEvent = HookEventNormalizer.normalizedName(event)
+
         if decision == "pass" {
-            if provider == .claude && event != "PermissionRequest" {
+            if provider == .claude && normalizedEvent != "permissionrequest" {
                 return [
                     "continue": .bool(true),
                     "suppressOutput": .bool(true)
@@ -76,7 +78,7 @@ struct ProviderAdapter {
         }
 
         if provider == .codex {
-            if event == "PreToolUse" {
+            if normalizedEvent == "pretooluse" {
                 if allow { return [:] }
                 return [
                     "hookSpecificOutput": .object([
@@ -86,12 +88,10 @@ struct ProviderAdapter {
                     ])
                 ]
             }
-            if event != "PermissionRequest" {
+            if normalizedEvent != "permissionrequest" {
                 return ["continue": .bool(true)]
             }
         }
-
-        let normalizedEvent = HookEventNormalizer.normalizedName(event)
 
         if provider == .claude, normalizedEvent == "userpromptsubmit" {
             return claudeUserPromptSubmitOutput(allow: allow, denialMessage: denialMessage)
@@ -101,7 +101,7 @@ struct ProviderAdapter {
             return claudeElicitationOutput(allow: allow)
         }
 
-        if provider == .claude, event == "PreToolUse" {
+        if provider == .claude, normalizedEvent == "pretooluse" {
             return claudePreToolUseOutput(
                 allow: allow,
                 toolName: toolName,
@@ -110,7 +110,7 @@ struct ProviderAdapter {
             )
         }
 
-        if event == "PermissionRequest", decision == "approved" || decision == "denied" {
+        if normalizedEvent == "permissionrequest", decision == "approved" || decision == "denied" {
             var hookDecision: [String: AnyJSON] = [
                 "behavior": .string(allow ? "allow" : "deny")
             ]
