@@ -543,5 +543,6 @@ extension L10n {
     var statusBypassed:      String { s("Bypassed",       "우회됨") }
     var statusAutoApproved:  String { s("Auto-Approved",  "자동 승인됨") }
     var statusPolicyApproved:String { s("Policy-Approved","정책 승인됨") }
+    var statusPolicyDenied:  String { s("Policy-Denied",  "정책 거부됨") }
     var statusAutoEdit:      String { s("Auto-Edit",      "자동 편집") }
 }

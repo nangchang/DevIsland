@@ -860,7 +860,7 @@ class AppState: ObservableObject {
                     isPending: false,
                     preserveMessage: true,
                     isLifecycleTracked: true,
-                    status: .policyApproved(Date()),
+                    status: policyDecision.action == .allow ? .policyApproved(Date()) : .policyDenied(Date()),
                     workspaceRoot: h.workspaceRoot
                 )
                 return
