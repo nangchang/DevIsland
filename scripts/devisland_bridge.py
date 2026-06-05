@@ -33,6 +33,15 @@ PASSIVE_EVENTS = {
     "AfterAgent",
 }
 
+
+def _normalize_event(name: str) -> str:
+    """Mirror HookEventNormalizer.normalizedName in Swift: lowercase, strip _ and -."""
+    return name.lower().replace("_", "").replace("-", "")
+
+
+# Pre-normalized allow-list so the membership test is case- and separator-insensitive.
+_PASSIVE_EVENTS_NORMALIZED = frozenset(_normalize_event(e) for e in PASSIVE_EVENTS)
+
 _APP_SUPPORT = Path("~/Library/Application Support/DevIsland").expanduser()
 _TOKEN_PATH = _APP_SUPPORT / "bridge-token"
 _CONFIG_PATH = _APP_SUPPORT / "bridge-config.json"
@@ -318,7 +327,7 @@ def main() -> int:
     log(f"Raw Payload: {dump(payload)}")
     log(f"Event Detected: {event} (Source: {cli_source})")
 
-    if event not in PASSIVE_EVENTS:
+    if _normalize_event(event) not in _PASSIVE_EVENTS_NORMALIZED:
         log(f"Passive event suppressed before app: {event}")
         print('{"continue":true,"suppressOutput":true}')
         return 0
