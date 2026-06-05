@@ -156,4 +156,78 @@ final class ApprovalPolicyEngineTests: XCTestCase {
         ))
         XCTAssertEqual(denied, .prompt)
     }
+
+    func testEqualityDiffersOnToolInput() {
+        let base = ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "run_shell_command",
+            toolInput: ["command": "git status"],
+            now: Date(timeIntervalSince1970: 0)
+        )
+
+        // Same toolInput → equal
+        let same = ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "run_shell_command",
+            toolInput: ["command": "git status"],
+            now: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertEqual(base, same)
+
+        // Different command value → not equal
+        let diffCommand = ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "run_shell_command",
+            toolInput: ["command": "rm -rf /"],
+            now: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertNotEqual(base, diffCommand)
+
+        // Different path value → not equal
+        let pathBase = ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "write_file",
+            toolInput: ["file_path": "/tmp/safe.txt"],
+            now: Date(timeIntervalSince1970: 0)
+        )
+        let diffPath = ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "write_file",
+            toolInput: ["file_path": "/etc/passwd"],
+            now: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertNotEqual(pathBase, diffPath)
+
+        // nil vs non-nil → not equal
+        let nilInput = ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "run_shell_command",
+            toolInput: nil,
+            now: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertNotEqual(base, nilInput)
+
+        // both nil → equal
+        let nilBase = ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "run_shell_command",
+            toolInput: nil,
+            now: Date(timeIntervalSince1970: 0)
+        )
+        let nilOther = ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "run_shell_command",
+            toolInput: nil,
+            now: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertEqual(nilBase, nilOther)
+    }
 }

@@ -125,7 +125,21 @@ extension ApprovalPolicyRequest: Equatable {
         lhs.sessionId == rhs.sessionId &&
         lhs.toolName == rhs.toolName &&
         lhs.workspaceRoot == rhs.workspaceRoot &&
-        lhs.now == rhs.now
+        lhs.now == rhs.now &&
+        toolInputEqual(lhs.toolInput, rhs.toolInput)
+    }
+
+    private static func toolInputEqual(_ lhs: [String: Any]?, _ rhs: [String: Any]?) -> Bool {
+        switch (lhs, rhs) {
+        case (.none, .none): return true
+        case (.some, .none), (.none, .some): return false
+        case let (.some(l), .some(r)):
+            guard JSONSerialization.isValidJSONObject(l), JSONSerialization.isValidJSONObject(r),
+                  let ld = try? JSONSerialization.data(withJSONObject: l, options: .sortedKeys),
+                  let rd = try? JSONSerialization.data(withJSONObject: r, options: .sortedKeys)
+            else { return false }
+            return ld == rd
+        }
     }
 }
 
