@@ -475,13 +475,13 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - OpenPeon, Caffeine, Replay/Session History, PTY Transcript, UpdateChecker, MenuBar command를 `전환`, `부분 전환`, `core 유지`로 분류
 - 기존 기능을 plugin으로 옮기더라도 user setting migration이 필요 없는지 확인
 - built-in plugin disable 시 기존 기능을 끌지, core fallback을 유지할지 기능별로 결정
-- Caffeine은 기존 `caffeineEnabled`/`caffeineExcludedSSIDs` 설정을 core setting으로 유지하고, plugin enable/safemode는 assertion effect를 막는 추가 feature guard로만 정의
+- Caffeine은 기존 `SettingsStore`의 `caffeineEnabled`/`caffeineExcludedSSIDs` 설정을 core setting으로 유지하고, plugin enable/safemode는 assertion effect를 막는 추가 feature guard로만 정의
 
 검증:
 
 - 문서 및 feature guard 테스트
 - 기존 설정 기본값이 바뀌지 않는지 확인
-- Caffeine 기본값이 계속 off이며, plugin disabled/safemode 상태에서 sleep assertion이 release되는지 확인
+- `SettingsStore`의 Caffeine 사용자 기본값이 계속 off이며, plugin disabled/safemode 상태에서 sleep assertion이 release되는지 확인
 
 #### Migration PR M1. OpenPeonSoundPlugin
 
@@ -543,12 +543,12 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 
 - plugin이 `IOPMAssertion`, Location, CoreWLAN API를 직접 호출하지 않게 한다.
 - `power.preventIdleSleep`는 permission 기반 공개 capability가 아니라 compiled built-in plugin ID allowlist로만 허용한다.
-- `caffeineEnabled`는 사용자 기능 토글이고, plugin enable/safemode는 상위 feature guard다. 둘 중 하나라도 off이면 host는 assertion을 release해야 한다.
+- `SettingsStore.caffeineEnabled`는 사용자 기능 토글이고, plugin enable/safemode는 상위 feature guard다. 둘 중 하나라도 off이면 host는 assertion을 release해야 한다.
 - Caffeine settings UI는 SSID scan과 자유 텍스트 입력이 필요하므로 v1 contribution UI로 옮기지 않는다.
 
 검증:
 
-- 기존 `caffeineEnabled == false` 기본값 유지
+- 기존 `SettingsStore.caffeineEnabled == false` 사용자 기본값 유지
 - AC/battery/low-battery/SSID 제외 조건별 assertion 판단 유지
 - plugin disable/safemode 시 assertion release
 - Location permission denied, Wi-Fi scan 실패, assertion acquire 실패가 provider response와 approval 동작에 영향 주지 않음
@@ -588,15 +588,15 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주요 작업:
 
 - 세션 행 badge, 세션 메시지 header accessory, 간단한 context action을 contribution으로 이동
-- `session.dismiss` host-executed action은 idle/non-pending 세션에만 허용하고, pending/current approval 세션은 host validation에서 거부
+- `session.dismiss` host-executed action은 idle/non-pending이면서 `hasMissedApproval == false`, `isUnread == false`인 세션에만 허용하고, pending/current approval/missed/unread 세션은 host validation에서 거부
 - `targetSessionID` dedup/evict 검증
 - SessionMessageWindow와 SessionHistoryWindow의 data loading은 core에 유지
 
 검증:
 
 - session ended 시 세션별 contribution evict
-- idle/non-pending 세션의 `session.dismiss` action은 세션 목록에서 제거되고 `session.ended` contribution evict로 이어지는지
-- pending/current approval 세션의 `session.dismiss` action은 거부되고 provider response, pending queue, approval UI가 변하지 않는지
+- idle/non-pending이고 missed/unread가 아닌 세션의 `session.dismiss` action은 세션 목록에서 제거되고 `session.ended` contribution evict로 이어지는지
+- pending/current approval/missed/unread 세션의 `session.dismiss` action은 거부되고 provider response, pending queue, approval UI가 변하지 않는지
 - 세션 팝아웃 창이 열려 있을 때 contribution 업데이트
 - replay/session history query가 plugin storage로 새지 않는지
 
@@ -631,14 +631,14 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 
 - `approval.decided` 관찰 이벤트 — provider response 전송 이후 통계용으로만 발행
 - `notch.session.row` — 세션 행 badge, 짧은 metric, status accessory
-- `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending 세션에만 허용
+- `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending이고 missed/unread가 아닌 세션에만 허용
 - `session.message` — 세션 메시지 창 header/toolbar accessory
 - `session.dismiss`를 열기 전에 최소 Host Command Catalog 골격을 먼저 두고, 임시 특수 경로를 만들지 않는다.
 
 검증:
 
 - 세션별 contribution `targetSessionID` dedup/evict
-- pending/current approval 세션에 destructive action이 적용되지 않는지
+- pending/current approval/missed/unread 세션에 destructive action이 적용되지 않는지
 - approval decision이 plugin event로 변경되거나 지연되지 않는지
 
 ### v1.2 Host Command Catalog Expansion
@@ -646,7 +646,7 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 이 단계에서 catalog 구조로 확장한다.
 따라서 `session.dismiss`는 v1.1에서 이미 공통 capability validation 경로를 타야 하며, v1.2에서는 logging, failure handling, audit metadata, 추가 command 등록 구조를 정리한다.
 
-- `session.dismiss`: idle/non-pending only
+- `session.dismiss`: idle/non-pending only, excluding missed/unread sessions
 - `session.focusTerminal`: 기존 `TerminalFocuser` 경유
 - `session.copyResumeCommand`: host가 sanitized command 생성
 - `session.openWorkspace`: workspace root가 있는 세션만 허용
@@ -656,7 +656,7 @@ v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 �
 
 - command별 permission/capability 검증
 - 실패한 command가 provider response, approval queue, session lifecycle ownership을 바꾸지 않는지
-- pending/current approval 세션에 대한 destructive command가 거부되는지
+- pending/current approval/missed/unread 세션에 대한 destructive command가 거부되는지
 
 ### v1.3 Plugin Settings Schema
 

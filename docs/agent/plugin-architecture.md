@@ -468,7 +468,7 @@ enum PluginUISlot: String, Codable, CaseIterable {
 
 **slot scope (전역 vs 세션)**: `session.*` 슬롯은 특정 세션에 종속된다. 해당 contribution은 `targetSessionID`를 채우고, `PluginUIContext.session`으로 대상 세션 스냅샷을 받는다. 렌더러는 우클릭/상세 대상 세션의 `targetSessionID`로 필터링한다. 캐시 dedup도 `(pluginID, targetSessionID)` 기준이며, `session.ended` 이벤트 수신 시 Host가 해당 `targetSessionID` contribution을 evict한다. 전역 슬롯은 `targetSessionID == nil`로 둔다.
 
-**세션 제거 액션 경계**: 플러그인은 `session.context-menu`에서 `session.dismiss` action을 제안할 수 있지만, 실제 제거는 Host가 대상 세션 상태를 다시 확인한 뒤 실행한다. 허용 대상은 `isPending == false`이고 status가 idle인 세션으로 제한한다. pending approval, 현재 응답 대기 세션, missed approval 또는 unread 상태처럼 사용자 확인이 필요한 세션은 플러그인 action으로 제거하지 않는다. 기존 core-owned dismiss 버튼은 현재처럼 `AppState.dismissSession`을 호출할 수 있지만, plugin action은 provider response를 pass하거나 approval queue를 비우는 경로에 닿으면 안 된다.
+**세션 제거 액션 경계**: 플러그인은 `session.context-menu`에서 `session.dismiss` action을 제안할 수 있지만, 실제 제거는 Host가 대상 세션 상태를 다시 확인한 뒤 실행한다. 허용 대상은 `isPending == false`, status가 idle, `hasMissedApproval == false`, `isUnread == false`인 세션으로 제한한다. pending approval, 현재 응답 대기 세션, missed approval 또는 unread 상태처럼 사용자 확인이 필요한 세션은 플러그인 action으로 제거하지 않는다. 기존 core-owned dismiss 버튼은 현재처럼 `AppState.dismissSession`을 호출할 수 있지만, plugin action은 provider response를 pass하거나 approval queue를 비우는 경로에 닿으면 안 된다.
 
 ### 7.1. (v1.1+ 개념) Exclusive Region Provider — 노치 영역 교체
 
@@ -528,7 +528,7 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 | `notification.show` | `showNotification` | DevIsland 알림 렌더링 요청 |
 | `sound.playCESP` | built-in allowlist only | Host-owned OpenPeon audio service에 sanitized CESP category 재생을 요청. 외부 plugin/declarative preset에는 열지 않는다. |
 | `power.preventIdleSleep` | built-in allowlist only | Host-owned Caffeine service에 display sleep 방지 assertion 보유/해제를 요청. 외부 plugin/declarative preset에는 열지 않는다. |
-| `session.dismiss` | `showSessionSurface` + host validation | v1.1 세션 context action. 대상 세션이 idle/non-pending일 때만 host가 목록에서 제거한다. |
+| `session.dismiss` | `showSessionSurface` + host validation | v1.1 세션 context action. 대상 세션이 idle/non-pending이고 missed/unread가 아닐 때만 host가 목록에서 제거한다. |
 
 `timer.*`처럼 민감 자원에 접근하지 않고 플러그인 내부 상태만 다루는 capability는 permission 없이 허용한다. 외부 자원(저장소, 알림 등)에 닿는 capability는 반드시 대응 permission을 manifest에 선언해야 한다.
 `sound.playCESP`, `power.preventIdleSleep`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
@@ -1308,7 +1308,7 @@ struct PluginSlotView: View {
 | 기능 | 제외 이유 |
 | :--- | :--- |
 | approval decision / approval prompt response | 플러그인은 결정을 바꾸거나 provider response를 지연하면 안 된다. |
-| pending/current approval session removal | `AppState.dismissSession`은 pending request를 pass 처리할 수 있으므로, 플러그인은 idle/non-pending 세션에 대한 host-validated `session.dismiss`만 요청할 수 있다. |
+| pending/current approval/missed/unread session removal | `AppState.dismissSession`은 pending request를 pass 처리할 수 있고 missed/unread 세션은 사용자 확인이 필요하므로, 플러그인은 idle/non-pending이고 missed/unread가 아닌 세션에 대한 host-validated `session.dismiss`만 요청할 수 있다. |
 | bridge scripts / `HookSocketServer` / IPC framing | hook response path의 안정성 경계다. |
 | `ProviderAdapter` response JSON | provider별 의미론 보존이 core 책임이다. |
 | `SessionStore` lifecycle ownership | 플러그인은 session snapshot을 관찰만 한다. |
@@ -1327,7 +1327,7 @@ v1 `PluginUIComponentType`은 `metric`/`badge`/`button`/`text`뿐이며 입력 �
 첫 migration 후보는 OpenPeon sound가 가장 적합하다. 이미 best-effort side effect이고, 실패해도 approval/deny 동작을 바꾸면 안 된다는 기존 원칙과 플러그인 Fail-Safe 원칙이 잘 맞기 때문이다.
 다만 OpenPeon을 옮기더라도 `CESPEventMapper`, CESP pack store와 audio player는 host-owned service로 남겨야 한다. `CESPEventMapper`는 현재 provider별 raw payload를 보고 category를 계산하므로, 이 계산을 plugin으로 옮기면 raw payload 금지 원칙을 깨게 된다. M1에서는 `PluginEventFactory` 또는 별도 host service가 optional `PluginSoundHint(category:)` 같은 sanitized DTO를 만들고, plugin은 이 hint를 사용할지와 `sound.playCESP` effect 요청 여부만 결정한다.
 
-Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned 경계가 더 중요하다. Caffeine은 `IOPMAssertion`, Location permission, CoreWLAN scan처럼 시스템 권한과 사용자 환경 side effect를 다루므로, 플러그인은 host가 제공한 sanitized status만 보고 assertion 보유/해제 의도를 effect로 반환한다. `caffeineEnabled`와 `caffeineExcludedSSIDs`는 기존 core setting으로 유지하고, plugin enable/disable·safemode는 추가 feature guard로만 작동한다. 따라서 plugin disabled 또는 safemode 상태에서는 host가 assertion을 반드시 release해야 하며, 기존 기본값(`caffeineEnabled == false`)은 바뀌지 않는다.
+Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned 경계가 더 중요하다. Caffeine은 `IOPMAssertion`, Location permission, CoreWLAN scan처럼 시스템 권한과 사용자 환경 side effect를 다루므로, 플러그인은 host가 제공한 sanitized status만 보고 assertion 보유/해제 의도를 effect로 반환한다. `SettingsStore.caffeineEnabled`와 `caffeineExcludedSSIDs`는 기존 core setting으로 유지하고, plugin enable/disable·safemode는 추가 feature guard로만 작동한다. 따라서 plugin disabled 또는 safemode 상태에서는 host가 assertion을 반드시 release해야 하며, 기존 사용자 설정 기본값(`SettingsStore.caffeineEnabled == false`)은 바뀌지 않는다.
 
 ## 13. 단계별 롤아웃 계획 (Rollout Plan)
 
@@ -1360,7 +1360,7 @@ Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned �
 
 `approval.decided`는 provider response가 이미 전송된 뒤 발행되는 관찰 이벤트로만 추가한다. 플러그인은 승인/거부 결정을 바꾸거나 되돌릴 수 없고, 통계·히스토리·badge 갱신에만 사용한다.
 
-`session.context-menu`에서 `session.dismiss`를 열 때는 임시 특수 경로를 만들지 않는다. v1.1 안에서 최소 Host Command Catalog 골격을 먼저 두고, idle/non-pending 검증을 같은 capability validation 경로로 처리한다.
+`session.context-menu`에서 `session.dismiss`를 열 때는 임시 특수 경로를 만들지 않는다. v1.1 안에서 최소 Host Command Catalog 골격을 먼저 두고, idle/non-pending 및 missed/unread exclusion 검증을 같은 capability validation 경로로 처리한다.
 
 ### v1.2 Host Command Catalog Expansion
 
@@ -1369,7 +1369,7 @@ v1.1 session surface에서 도입한 최소 command path를 이 단계에서 log
 
 초기 command 후보:
 
-- `session.dismiss`: idle/non-pending only
+- `session.dismiss`: idle/non-pending only, excluding missed/unread sessions
 - `session.focusTerminal`: 기존 `TerminalFocuser` 경유, 권한과 대상 세션 상태를 host가 확인
 - `session.copyResumeCommand`: host가 sanitized command를 생성해 pasteboard에 복사
 - `session.openWorkspace`: workspace root가 있는 세션만 Finder로 열기
