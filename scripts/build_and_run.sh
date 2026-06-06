@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="DevIsland"
+SCHEME_NAME="DevIsland"
+APP_NAME="DevIsland Dev"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/.build"
 APP_BUNDLE="$BUILD_DIR/Build/Products/Debug/$APP_NAME.app"
@@ -31,9 +32,9 @@ echo "Generating Xcode project..."
 xcodegen generate --quiet
 
 # xcodebuild: SPM 패키지 해소 + 컴파일 + 번들 조립 모두 처리
-echo "Building $APP_NAME..."
+echo "Building $SCHEME_NAME..."
 xcodebuild build \
-  -scheme "$APP_NAME" \
+  -scheme "$SCHEME_NAME" \
   -destination 'platform=macOS' \
   -derivedDataPath "$BUILD_DIR" \
   -configuration Debug \

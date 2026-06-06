@@ -42,11 +42,18 @@ targets:
     dependencies:
       - package: Textual
     settings:
-      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-      PRODUCT_NAME: "$(TARGET_NAME)"
-      OTHER_LDFLAGS:
-        - "$(inherited)"
-        - "-lsqlite3"
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        PRODUCT_BUNDLE_IDENTIFIER: kr.or.nes.DevIsland
+        PRODUCT_MODULE_NAME: DevIsland
+        PRODUCT_NAME: "$(TARGET_NAME)"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-lsqlite3"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: kr.or.nes.DevIsland.dev
+          PRODUCT_NAME: "DevIsland Dev"
   DevIslandTests:
     type: bundle.unit-test
     platform: macOS
@@ -56,7 +63,12 @@ targets:
     dependencies:
       - target: DevIsland
     settings:
-      GENERATE_INFOPLIST_FILE: YES
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+      configs:
+        Debug:
+          BUNDLE_LOADER: "$(TEST_HOST)"
+          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/DevIsland Dev.app/Contents/MacOS/DevIsland Dev"
 schemes:
   DevIsland:
     build:
