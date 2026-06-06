@@ -19,13 +19,14 @@ final class PluginHost: ObservableObject {
     private lazy var effectExecutor = PluginEffectExecutor(storageProvider: storageProvider)
     private var pendingEvents: [QueuedPluginEvent] = []
     private var isDraining = false
+    private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private(set) var failures: [PluginFailure] = []
 
     nonisolated init(enablePlugins: Bool = true) {
         self.isEnabled = enablePlugins
     }
 
-    func register(_ plugins: [any DevIslandPlugin]) {
+    func register(_ plugins: [any DevIslandPlugin & Sendable]) {
         guard isEnabled else { return }
         runners = Dictionary(
             uniqueKeysWithValues: plugins.map { plugin in
@@ -48,8 +49,9 @@ final class PluginHost: ObservableObject {
     }
 
     func waitUntilIdle() async {
-        while isDraining {
-            await Task.yield()
+        guard isDraining else { return }
+        await withCheckedContinuation { continuation in
+            idleWaiters.append(continuation)
         }
     }
 
@@ -83,7 +85,14 @@ final class PluginHost: ObservableObject {
             }
             await processEffectBatches(effectBatches)
         }
+        finishDraining()
+    }
+
+    private func finishDraining() {
         isDraining = false
+        let waiters = idleWaiters
+        idleWaiters.removeAll()
+        waiters.forEach { $0.resume() }
     }
 
     private func nextEvent() -> QueuedPluginEvent? {

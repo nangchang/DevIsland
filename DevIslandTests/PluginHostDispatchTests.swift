@@ -163,15 +163,25 @@ final class PluginHostDispatchTests: XCTestCase {
     }
 }
 
-private final class RecordingPlugin: DevIslandPlugin {
+private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
     struct TestError: Error {}
 
     let manifest: PluginManifest
     let contribution: PluginUIContribution?
     let throwOnKinds: Set<PluginEventKind>
     let delay: TimeInterval
-    private(set) var receivedEvents: [PluginEvent] = []
-    var receivedKinds: [PluginEventKind] { receivedEvents.map(\.kind) }
+    private let lock = NSLock()
+    private var _receivedEvents: [PluginEvent] = []
+    var receivedEvents: [PluginEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _receivedEvents
+    }
+    var receivedKinds: [PluginEventKind] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _receivedEvents.map(\.kind)
+    }
 
     init(
         id: String,
@@ -203,7 +213,9 @@ private final class RecordingPlugin: DevIslandPlugin {
         if throwOnKinds.contains(event.kind) {
             throw TestError()
         }
-        receivedEvents.append(event)
+        lock.lock()
+        _receivedEvents.append(event)
+        lock.unlock()
         return []
     }
 

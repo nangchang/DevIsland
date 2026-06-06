@@ -2,9 +2,9 @@ import Foundation
 
 actor PluginRunner {
     nonisolated let manifest: PluginManifest
-    private let plugin: any DevIslandPlugin
+    private let plugin: any DevIslandPlugin & Sendable
 
-    init(plugin: any DevIslandPlugin) {
+    init(plugin: any DevIslandPlugin & Sendable) {
         self.plugin = plugin
         self.manifest = plugin.manifest
     }
@@ -70,4 +70,3 @@ actor PluginRunner {
         }
     }
 }
-
