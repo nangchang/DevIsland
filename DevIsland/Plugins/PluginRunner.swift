@@ -39,6 +39,8 @@ actor PluginRunner {
                 }
             }
 
+            // Built-in plugin execution is measured after completion in PR 3.
+            // It is not interrupted; worker/process isolation is a later runtime concern.
             let elapsed = startedAt.duration(to: ContinuousClock.now)
             return PluginContributionSnapshot(
                 pluginID: manifest.id,
@@ -47,7 +49,7 @@ actor PluginRunner {
                 failure: elapsed > .milliseconds(50)
                     ? PluginFailure(
                         pluginID: manifest.id,
-                        message: "Plugin exceeded 50ms budget",
+                        message: "Plugin exceeded 50ms measurement budget",
                         occurredAt: event.timestamp,
                         clearsContribution: false
                     )

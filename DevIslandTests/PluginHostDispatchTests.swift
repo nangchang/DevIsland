@@ -114,7 +114,7 @@ final class PluginHostDispatchTests: XCTestCase {
             permissions: [.showNotchCard],
             activationEvents: [.pluginStarted],
             contribution: makeContribution(pluginID: "com.devisland.test.slow"),
-            delay: 0.06
+            delay: 0.12
         )
         let host = PluginHost()
         host.register([plugin])
