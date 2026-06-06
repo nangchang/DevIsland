@@ -1,6 +1,17 @@
 import Foundation
 
 struct PluginEventFactory: Sendable {
+    private static let userHomeRegex = try! NSRegularExpression(pattern: #"/Users/[^/\s'"]+(?=/|\b)"#)
+    private static let credentialRegex = try! NSRegularExpression(
+        pattern: #"(?i)\b(api[_-]?key|token|secret|password)\s*[:=]\s*['"]?[^\s'"]+"#
+    )
+    private static let tokenPrefixRegex = try! NSRegularExpression(
+        pattern: #"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|xox[a-zA-Z]-[A-Za-z0-9-]{20,})\b"#
+    )
+    private static let heredocMarkerRegex = try! NSRegularExpression(
+        pattern: #"<<-?\s*['"\\]?([A-Za-z_][A-Za-z0-9_]*)['"\\]?"#
+    )
+
     func makeHookReceivedEvent(
         from hook: ParsedHookEvent,
         session: ActiveSession? = nil,
@@ -94,13 +105,9 @@ struct PluginEventFactory: Sendable {
 
     private func redactSensitiveText(_ text: String) -> String {
         var redacted = redactHeredocBodies(text)
-        redacted = replace(pattern: #"/Users/[^/\s'"]+(?=/|\b)"#, in: redacted, with: "~")
-        redacted = replace(
-            pattern: #"(?i)\b(api[_-]?key|token|secret|password)\s*[:=]\s*['"]?[^\s'"]+"#,
-            in: redacted,
-            with: "$1=[redacted]"
-        )
-        redacted = replace(pattern: #"\b[A-Za-z0-9_=-]{32,}\b"#, in: redacted, with: "[redacted-token]")
+        redacted = replace(Self.userHomeRegex, in: redacted, with: "~")
+        redacted = replace(Self.credentialRegex, in: redacted, with: "$1=[redacted]")
+        redacted = replace(Self.tokenPrefixRegex, in: redacted, with: "[redacted-token]")
         return redacted
     }
 
@@ -118,9 +125,7 @@ struct PluginEventFactory: Sendable {
                 var didRedact = false
                 while index < lines.count {
                     if lines[index].trimmingCharacters(in: .whitespacesAndNewlines) == marker {
-                        if didRedact {
-                            output.append(lines[index])
-                        }
+                        output.append(lines[index])
                         break
                     }
                     if !didRedact {
@@ -138,18 +143,18 @@ struct PluginEventFactory: Sendable {
     }
 
     private func heredocMarker(in line: String) -> String? {
-        guard let range = line.range(of: "<<") else { return nil }
-        let rawMarker = line[range.upperBound...]
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
-        guard rawMarker.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil else {
+        let range = NSRange(line.startIndex..., in: line)
+        guard let match = Self.heredocMarkerRegex.firstMatch(in: line, options: [], range: range),
+              match.numberOfRanges > 1,
+              let markerRange = Range(match.range(at: 1), in: line) else {
             return nil
         }
-        return rawMarker
+        return String(line[markerRange])
     }
 
-    private func replace(pattern: String, in text: String, with replacement: String) -> String {
-        text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+    private func replace(_ regex: NSRegularExpression, in text: String, with replacement: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: replacement)
     }
 
     private func providerName(for kind: BuddyKind) -> String {

@@ -62,6 +62,49 @@ final class PluginEventFactoryTests: XCTestCase {
         XCTAssertTrue(event.hook?.commandSummary?.contains("[redacted heredoc]") == true)
     }
 
+    func testCommandSummaryRedactsDashHeredocWithTrailingShellOperators() {
+        let hook = makeHook(
+            displayToolName: "Bash",
+            displayMsg: """
+            cat <<-EOF > file.txt && echo done
+            secret body
+            EOF
+            """
+        )
+
+        let event = factory.makeHookReceivedEvent(from: hook)
+
+        XCTAssertFalse(event.hook?.commandSummary?.contains("secret body") == true)
+        XCTAssertTrue(event.hook?.commandSummary?.contains("[redacted heredoc]") == true)
+        XCTAssertTrue(event.hook?.commandSummary?.contains("EOF") == true)
+    }
+
+    func testCommandSummaryKeepsEmptyHeredocClosingMarker() {
+        let hook = makeHook(
+            displayToolName: "Bash",
+            displayMsg: """
+            cat <<EOF
+            EOF
+            """
+        )
+
+        let event = factory.makeHookReceivedEvent(from: hook)
+
+        XCTAssertTrue(event.hook?.commandSummary?.contains("EOF") == true)
+    }
+
+    func testCommandSummaryDoesNotRedactOrdinaryLongHexValues() {
+        let sha = "0123456789abcdef0123456789abcdef01234567"
+        let hook = makeHook(
+            displayToolName: "Git",
+            displayMsg: "show \(sha)"
+        )
+
+        let event = factory.makeHookReceivedEvent(from: hook)
+
+        XCTAssertTrue(event.hook?.commandSummary?.contains(sha) == true)
+    }
+
     func testRedactedEventRemovesTerminalMetadataWithoutPermission() {
         let hook = makeHook(
             terminalApp: "iTerm",
