@@ -87,6 +87,7 @@ class AppState: ObservableObject {
     let ruleService: ApprovalRuleService
     let claudeQuestionState: ClaudeQuestionState
     let caffeineCoordinator: CaffeineCoordinator
+    let pluginHost: PluginHost
     private let powerSourceMonitor: PowerSourceMonitor
     private let wifiMonitor: WifiSSIDMonitor
 
@@ -137,6 +138,7 @@ class AppState: ObservableObject {
         frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost,
         approvalProxy: ApprovalProxyController? = nil,
         codexRuleSyncAdapter: CodexRuleSyncAdapter = CodexJSONRuleSyncAdapter(),
+        enablePlugins: Bool = true,
         openPeonSoundPlayer: @escaping OpenPeonSoundPlayer = { category in
             Task { @MainActor in
                 CESPAudioPlayer.shared.play(category: category)
@@ -158,6 +160,7 @@ class AppState: ObservableObject {
         self.powerSourceMonitor = PowerSourceMonitor()
         self.wifiMonitor = WifiSSIDMonitor()
         self.caffeineCoordinator = CaffeineCoordinator()
+        self.pluginHost = PluginHost(enablePlugins: enablePlugins)
         self.ptyCoordinator = PTYCoordinator(
             ptyBuffer: PTYSessionBuffer(),
             approvalProxy: approvalProxy,
