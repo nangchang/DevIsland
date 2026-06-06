@@ -54,25 +54,29 @@ struct PluginEventFactory: Sendable {
     }
 
     func redactedEvent(from event: PluginEvent, permissions: Set<PluginPermission>) -> PluginEvent {
+        let canReadHookSummaries = permissions.contains(.readHookSummaries)
         let canReadTerminalMetadata = permissions.contains(.readTerminalMetadata)
         let canReadSessionEvents = permissions.contains(.readSessionEvents)
+        let metadata = canReadTerminalMetadata
+            ? (cwd: event.hook?.cwd, terminalApp: event.hook?.terminalApp)
+            : nil
 
         return PluginEvent(
             id: event.id,
             kind: event.kind,
             timestamp: event.timestamp,
             session: canReadSessionEvents ? event.session : nil,
-            hook: event.hook.map { hook in
+            hook: canReadHookSummaries ? event.hook.map { hook in
                 PluginHookSummary(
                     provider: hook.provider,
                     eventType: hook.eventType,
                     commandSummary: hook.commandSummary,
-                    cwd: canReadTerminalMetadata ? hook.cwd : nil,
-                    terminalApp: canReadTerminalMetadata ? hook.terminalApp : nil
+                    cwd: metadata?.cwd,
+                    terminalApp: metadata?.terminalApp
                 )
-            },
+            } : nil,
             action: event.action,
-            approval: event.approval
+            approval: canReadHookSummaries ? event.approval : nil
         )
     }
 
@@ -166,4 +170,3 @@ struct PluginEventFactory: Sendable {
         return trimmed.isEmpty ? nil : trimmed
     }
 }
-

@@ -102,6 +102,15 @@ final class PluginEventFactoryTests: XCTestCase {
         XCTAssertNil(redacted.session)
     }
 
+    func testRedactedHookEventRemovesHookSummaryWithoutPermission() {
+        let event = factory.makeHookReceivedEvent(from: makeHook())
+
+        let redacted = factory.redactedEvent(from: event, permissions: [])
+
+        XCTAssertNotNil(event.hook)
+        XCTAssertNil(redacted.hook)
+    }
+
     private func makeHook(
         parsedJSON: [String: Any] = [:],
         displayToolName: String = "Edit",
@@ -172,4 +181,3 @@ final class PluginEventFactoryTests: XCTestCase {
         )
     }
 }
-
