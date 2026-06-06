@@ -76,7 +76,9 @@ struct PluginEventFactory: Sendable {
             id: event.id,
             kind: event.kind,
             timestamp: event.timestamp,
-            session: canReadSessionEvents ? event.session : nil,
+            session: canReadSessionEvents
+                ? redactedSession(event.session, canReadTerminalMetadata: canReadTerminalMetadata)
+                : nil,
             hook: canReadHookSummaries ? event.hook.map { hook in
                 PluginHookSummary(
                     provider: hook.provider,
@@ -88,6 +90,23 @@ struct PluginEventFactory: Sendable {
             } : nil,
             action: event.action,
             approval: canReadHookSummaries ? event.approval : nil
+        )
+    }
+
+    private func redactedSession(
+        _ session: PluginSessionSnapshot?,
+        canReadTerminalMetadata: Bool
+    ) -> PluginSessionSnapshot? {
+        guard let session else { return nil }
+        guard !canReadTerminalMetadata else { return session }
+        return PluginSessionSnapshot(
+            id: session.id,
+            agentKind: session.agentKind,
+            startTime: session.startTime,
+            lastActiveAt: session.lastActiveAt,
+            lastToolName: session.lastToolName,
+            lastEventName: session.lastEventName,
+            workspaceRoot: nil
         )
     }
 

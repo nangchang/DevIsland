@@ -157,6 +157,23 @@ final class PluginEventFactoryTests: XCTestCase {
         XCTAssertNil(redacted.session)
     }
 
+    func testRedactedSessionRemovesWorkspaceWithoutTerminalMetadataPermission() {
+        let session = makeSession(
+            lastToolName: "Edit",
+            lastEventName: "PreToolUse",
+            workspaceRoot: "/Users/alice/project"
+        )
+        let event = factory.makeHookReceivedEvent(from: makeHook(), session: session)
+
+        let redacted = factory.redactedEvent(
+            from: event,
+            permissions: [.readHookSummaries, .readSessionEvents]
+        )
+
+        XCTAssertEqual(redacted.session?.id, "session-1")
+        XCTAssertNil(redacted.session?.workspaceRoot)
+    }
+
     func testRedactedHookEventRemovesHookSummaryWithoutPermission() {
         let event = factory.makeHookReceivedEvent(from: makeHook())
 
