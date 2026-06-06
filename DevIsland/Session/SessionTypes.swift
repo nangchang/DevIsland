@@ -36,6 +36,7 @@ enum SessionStatus: Equatable {
     case timeoutBypassed(Date)
     case autoApproved(Date)
     case policyApproved(Date)
+    case policyDenied(Date)
 
     var isTimeoutBypassed: Bool {
         if case .timeoutBypassed = self { return true }
