@@ -40,13 +40,14 @@
 ## 현재 진행 현황
 
 - 기준 브랜치: `origin/main`
-- 작업 브랜치: `codex/plugin-host-skeleton`
+- 작업 브랜치: `codex/plugin-event-factory`
 - 완료 단계:
   - PR 1. 타입 정의와 빈 `PluginHost` — `0792d2c feat: add plugin host skeleton`
+  - PR 2. `PluginEventFactory`와 permission redaction — 완료 (`feat: add plugin event factory`)
 - 마지막 검증:
   - `./scripts/run-tests.sh` 통과 (2026-06-06)
 - 다음 단계:
-  - PR 2. `PluginEventFactory`와 permission redaction
+  - PR 3. `PluginRunner`와 `PluginHost` dispatch
 
 ## 5. PR 분할
 
