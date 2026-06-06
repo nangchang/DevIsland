@@ -145,7 +145,12 @@ final class PluginHost: ObservableObject {
 
     private func processEffectBatches(_ batches: [PendingEffectBatch]) async {
         for batch in batches {
-            await effectExecutor.enqueue(batch.effects, pluginID: batch.pluginID)
+            let permissions = runners[batch.pluginID]?.manifest.permissions ?? []
+            await effectExecutor.enqueue(
+                batch.effects,
+                pluginID: batch.pluginID,
+                permissions: permissions
+            )
         }
     }
 

@@ -28,7 +28,7 @@ actor PluginRunner {
             let effects = try plugin.onEvent(event, context: context)
             var contributions: [PluginUISlot: PluginUIContribution] = [:]
 
-            for slot in manifest.surfaces {
+            for slot in manifest.surfaces where Self.isSurfaceAllowed(slot, permissions: manifest.permissions) {
                 let context = PluginUIContext(
                     slot: slot,
                     timestamp: event.timestamp,
@@ -67,6 +67,24 @@ actor PluginRunner {
                 ),
                 timestamp: event.timestamp
             )
+        }
+    }
+
+    private nonisolated static func isSurfaceAllowed(
+        _ slot: PluginUISlot,
+        permissions: Set<PluginPermission>
+    ) -> Bool {
+        switch slot {
+        case .notchExpandedActivity, .notchExpandedDetails:
+            return permissions.contains(.showNotchCard)
+        case .menubarMenu:
+            return permissions.contains(.showMenubarMenu)
+        case .notchSessionRow,
+             .sessionDetailTimeline,
+             .sessionDetailSummary,
+             .sessionContextMenu,
+             .sessionMessage:
+            return permissions.contains(.showSessionSurface)
         }
     }
 }

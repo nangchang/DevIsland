@@ -7,9 +7,31 @@ actor PluginEffectExecutor {
         self.storageProvider = storageProvider
     }
 
-    func enqueue(_ effects: [PluginEffect], pluginID: String) async {
-        for effect in effects {
+    func enqueue(
+        _ effects: [PluginEffect],
+        pluginID: String,
+        permissions: Set<PluginPermission>
+    ) async {
+        for effect in effects where isCapabilityAllowed(effect.capability, permissions: permissions) {
             await execute(effect, pluginID: pluginID)
+        }
+    }
+
+    private func isCapabilityAllowed(
+        _ capability: String,
+        permissions: Set<PluginPermission>
+    ) -> Bool {
+        switch capability {
+        case "timer.tick", "timer.startStop":
+            return true
+        case "storage.keyValue", "storage.increment":
+            return permissions.contains(.writePluginStorage)
+        case "notification.show":
+            return permissions.contains(.showNotification)
+        case "session.dismiss":
+            return permissions.contains(.showSessionSurface)
+        default:
+            return false
         }
     }
 
@@ -19,4 +41,3 @@ actor PluginEffectExecutor {
         }
     }
 }
-

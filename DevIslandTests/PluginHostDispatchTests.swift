@@ -88,6 +88,7 @@ final class PluginHostDispatchTests: XCTestCase {
     func testFailureClearsExistingContributions() async {
         let plugin = RecordingPlugin(
             id: "com.devisland.test.failure",
+            permissions: [.showNotchCard],
             activationEvents: [.pluginStarted, .pluginTick],
             contribution: makeContribution(pluginID: "com.devisland.test.failure"),
             throwOnKinds: [.pluginTick]
@@ -110,6 +111,7 @@ final class PluginHostDispatchTests: XCTestCase {
     func testSlowPluginRecordsTimeoutFailureWithoutClearingContribution() async {
         let plugin = RecordingPlugin(
             id: "com.devisland.test.slow",
+            permissions: [.showNotchCard],
             activationEvents: [.pluginStarted],
             contribution: makeContribution(pluginID: "com.devisland.test.slow"),
             delay: 0.06
@@ -123,6 +125,55 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(host.contributions[.notchExpandedActivity]?.count, 1)
         XCTAssertEqual(host.failures.last?.pluginID, "com.devisland.test.slow")
         XCTAssertEqual(host.failures.last?.clearsContribution, false)
+    }
+
+    func testRunnerDropsContributionForUnauthorizedSurface() async {
+        let plugin = RecordingPlugin(
+            id: "com.devisland.test.surface",
+            activationEvents: [.pluginStarted],
+            contribution: makeContribution(
+                pluginID: "com.devisland.test.surface",
+                slot: .menubarMenu
+            ),
+            surfaces: [.menubarMenu]
+        )
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(host.contributions.isEmpty)
+    }
+
+    func testEffectExecutorRejectsStorageEffectWithoutPermission() async {
+        let storage = PluginStorageProvider()
+        let executor = PluginEffectExecutor(storageProvider: storage)
+        let effect = PluginEffect(capability: "storage.keyValue", payload: ["key": "count"])
+
+        await executor.enqueue(
+            [effect],
+            pluginID: "com.devisland.test.storage",
+            permissions: []
+        )
+
+        let applied = await storage.appliedStorageEffects()
+        XCTAssertTrue(applied.isEmpty)
+    }
+
+    func testEffectExecutorAllowsStorageEffectWithPermission() async {
+        let storage = PluginStorageProvider()
+        let executor = PluginEffectExecutor(storageProvider: storage)
+        let effect = PluginEffect(capability: "storage.keyValue", payload: ["key": "count"])
+
+        await executor.enqueue(
+            [effect],
+            pluginID: "com.devisland.test.storage",
+            permissions: [.writePluginStorage]
+        )
+
+        let applied = await storage.appliedStorageEffects()
+        XCTAssertEqual(applied.count, 1)
     }
 
     private func makeEvent(
@@ -141,11 +192,15 @@ final class PluginHostDispatchTests: XCTestCase {
         )
     }
 
-    private func makeContribution(pluginID: String) -> PluginUIContribution {
+    private func makeContribution(
+        pluginID: String,
+        slot: PluginUISlot = .notchExpandedActivity,
+        targetSessionID: String? = nil
+    ) -> PluginUIContribution {
         PluginUIContribution(
             pluginID: pluginID,
-            slot: .notchExpandedActivity,
-            targetSessionID: nil,
+            slot: slot,
+            targetSessionID: targetSessionID,
             priority: 10,
             expiresAt: nil,
             components: [
@@ -188,6 +243,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
         permissions: Set<PluginPermission> = [],
         activationEvents: Set<PluginEventKind>,
         contribution: PluginUIContribution? = nil,
+        surfaces: Set<PluginUISlot> = [.notchExpandedActivity],
         throwOnKinds: Set<PluginEventKind> = [],
         delay: TimeInterval = 0
     ) {
@@ -198,7 +254,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
             apiVersion: 1,
             kind: .utility,
             permissions: permissions,
-            surfaces: [.notchExpandedActivity],
+            surfaces: surfaces,
             activationEvents: Set(activationEvents.map(\.rawValue))
         )
         self.contribution = contribution
