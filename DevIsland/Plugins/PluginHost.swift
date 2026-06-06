@@ -118,9 +118,11 @@ final class PluginHost: ObservableObject {
             }
 
             for (slot, contribution) in snapshot.contributions {
-                updated[slot, default: []].removeAll {
-                    $0.pluginID == snapshot.pluginID &&
-                        $0.targetSessionID == contribution.targetSessionID
+                updated[slot, default: []].removeAll { existing in
+                    guard existing.pluginID == snapshot.pluginID else { return false }
+                    return Self.isSessionScoped(slot)
+                        ? existing.targetSessionID == contribution.targetSessionID
+                        : true
                 }
                 updated[slot, default: []].append(contribution)
                 updated[slot]?.sort {
@@ -167,5 +169,20 @@ final class PluginHost: ObservableObject {
 
     private func recordFailure(_ failure: PluginFailure) {
         failures.append(failure)
+    }
+
+    private nonisolated static func isSessionScoped(_ slot: PluginUISlot) -> Bool {
+        switch slot {
+        case .notchSessionRow,
+             .sessionDetailTimeline,
+             .sessionDetailSummary,
+             .sessionContextMenu,
+             .sessionMessage:
+            return true
+        case .notchExpandedActivity,
+             .notchExpandedDetails,
+             .menubarMenu:
+            return false
+        }
     }
 }

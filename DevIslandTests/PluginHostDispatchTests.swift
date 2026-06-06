@@ -176,6 +176,26 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(applied.count, 1)
     }
 
+    func testGlobalContributionsDeduplicateByPluginOnly() async {
+        let plugin = RotatingContributionPlugin(
+            id: "com.devisland.test.global-dedupe",
+            slot: .menubarMenu,
+            targetSessionIDs: ["session-a", "session-b"],
+            permissions: [.showMenubarMenu]
+        )
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+
+        let contributions = host.contributions[.menubarMenu] ?? []
+        XCTAssertEqual(contributions.count, 1)
+        XCTAssertEqual(contributions.first?.targetSessionID, "session-b")
+    }
+
     private func makeEvent(
         kind: PluginEventKind,
         hook: PluginHookSummary? = nil,
@@ -280,6 +300,74 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
         context: PluginUIContext
     ) throws -> PluginUIContribution? {
         contribution
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+private final class RotatingContributionPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let lock = NSLock()
+    private let slot: PluginUISlot
+    private let targetSessionIDs: [String?]
+    private var index = 0
+
+    init(
+        id: String,
+        slot: PluginUISlot,
+        targetSessionIDs: [String?],
+        permissions: Set<PluginPermission>
+    ) {
+        self.slot = slot
+        self.targetSessionIDs = targetSessionIDs
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: permissions,
+            surfaces: [slot],
+            activationEvents: [
+                PluginEventKind.pluginStarted.rawValue,
+                PluginEventKind.pluginTick.rawValue
+            ]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        []
+    }
+
+    func makeUIContribution(
+        for slot: PluginUISlot,
+        context: PluginUIContext
+    ) throws -> PluginUIContribution? {
+        lock.lock()
+        let targetSessionID = targetSessionIDs[min(index, targetSessionIDs.count - 1)]
+        index += 1
+        lock.unlock()
+
+        return PluginUIContribution(
+            pluginID: manifest.id,
+            slot: slot,
+            targetSessionID: targetSessionID,
+            priority: 10,
+            expiresAt: nil,
+            components: [
+                PluginUIComponentDTO(
+                    id: "status",
+                    type: .text,
+                    label: "Status",
+                    value: targetSessionID ?? "global",
+                    tone: nil,
+                    iconName: nil,
+                    action: nil
+                )
+            ]
+        )
     }
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
