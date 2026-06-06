@@ -22,6 +22,18 @@ final class PluginEventFactoryTests: XCTestCase {
         XCTAssertEqual(snapshot.workspaceRoot, "/Users/alice/project")
     }
 
+    func testMakeSessionEventUsesRequestedKindAndOnlySessionPayload() {
+        let session = makeSession(lastToolName: "Edit", lastEventName: "PreToolUse")
+
+        let event = factory.makeSessionEvent(kind: .sessionStarted, from: session)
+
+        XCTAssertEqual(event.kind, .sessionStarted)
+        XCTAssertEqual(event.session?.id, "session-1")
+        XCTAssertNil(event.hook)
+        XCTAssertNil(event.action)
+        XCTAssertNil(event.approval)
+    }
+
     func testHookEventContainsSummaryWithoutRawPayloadFields() throws {
         let hook = makeHook(
             parsedJSON: [

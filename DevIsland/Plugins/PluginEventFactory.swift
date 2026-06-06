@@ -97,7 +97,7 @@ struct PluginEventFactory: Sendable {
             .filter { !$0.isEmpty }
         guard !candidates.isEmpty else { return nil }
 
-        let source = candidates.dropFirst().contains(candidates[0])
+        let source = candidates.dropFirst().allSatisfy { $0 == candidates[0] }
             ? candidates[0]
             : candidates.joined(separator: ": ")
         return redactSensitiveText(source)
