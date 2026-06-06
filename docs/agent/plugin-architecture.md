@@ -35,7 +35,9 @@ enum PluginKind: String, Codable {
 | `integration` | 외부 서비스나 파일 시스템을 활용한다. | GitHub Issue, Calendar | v2 이후 |
 | `runtime` | 외부 코드 실행으로 자유도를 높인다. | JS worker, native bundle | v2 이후 검토 |
 
-v1 `utility` 플러그인은 사용자가 코드를 작성하는 방식이 아니라 앱에 컴파일된 built-in Swift 구현으로 제공한다.
+`coreAware` 플러그인은 `readSessionEvents` 또는 `readHookSummaries` 권한을 선언해 sanitized session/hook 이벤트를 관찰하고, DevIsland core 상태를 직접 수정하지 않는다.
+`utility` 플러그인은 session/hook 이벤트 권한 없이 `plugin.started`, `plugin.tick`, `plugin.action.invoked` 같은 host lifecycle 이벤트와 제한된 host-owned capability만 사용한다.
+두 kind 모두 v1에서는 앱에 컴파일된 built-in Swift 구현으로만 제공되며, lifecycle runner와 contribution cache 처리는 동일하다.
 
 ## 4. 아키텍처 구조 (Architecture)
 
@@ -253,8 +255,8 @@ struct PluginSessionSnapshot: Codable {
     let agentKind: String        // "claude", "gemini", "codex"
     let startTime: Date
     let lastActiveAt: Date
-    let lastToolName: String
-    let lastEventName: String
+    let lastToolName: String?
+    let lastEventName: String?
     let workspaceRoot: String?
 }
 
@@ -360,7 +362,7 @@ struct PluginUIContribution: Codable {
 }
 
 struct PluginUIComponentDTO: Codable {
-    let id: String?                    // action 라운드트립에 사용. action이 있으면 필수
+    let id: String                     // contribution 안에서 stable component identity로 사용
     let type: PluginUIComponentType    // .metric, .badge, .button, .text
     let label: String?
     let value: String?
@@ -415,6 +417,7 @@ v2 declarative preset은 임의 로직이 없으므로 기본적으로 `hostExec
 ### 6.8. PluginContributionSnapshot
 
 `PluginRunner`가 `onEvent` → `makeUIContribution` 처리 후 `PluginHost`에 반환하는 결과 묶음이다.
+이 타입과 `PluginFailure`는 runner와 host 사이의 메모리 전용 상태이며, plugin IPC나 durable storage 계약에 포함하지 않는다.
 
 ```swift
 struct PluginContributionSnapshot {

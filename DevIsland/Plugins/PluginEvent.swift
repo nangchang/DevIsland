@@ -29,8 +29,8 @@ struct PluginSessionSnapshot: Codable, Equatable {
     let agentKind: String
     let startTime: Date
     let lastActiveAt: Date
-    let lastToolName: String
-    let lastEventName: String
+    let lastToolName: String?
+    let lastEventName: String?
     let workspaceRoot: String?
 }
 
@@ -55,4 +55,3 @@ struct PluginApprovalSummary: Codable, Equatable {
     let toolName: String
     let scope: String
 }
-

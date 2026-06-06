@@ -31,7 +31,7 @@ struct PluginUIContribution: Codable, Equatable {
 }
 
 struct PluginUIComponentDTO: Codable, Equatable {
-    let id: String?
+    let id: String
     let type: PluginUIComponentType
     let label: String?
     let value: String?
@@ -66,6 +66,7 @@ enum PluginUITone: String, Codable {
     case error
 }
 
+// Runner-to-host result bundle kept in memory only; not part of plugin IPC or durable storage.
 struct PluginContributionSnapshot: Equatable {
     let pluginID: String
     let contributions: [PluginUISlot: PluginUIContribution]
@@ -74,10 +75,10 @@ struct PluginContributionSnapshot: Equatable {
     let timestamp: Date
 }
 
+// Runtime failure metadata kept in memory only; safemode persistence will use a separate store.
 struct PluginFailure: Equatable {
     let pluginID: String
     let message: String
     let occurredAt: Date
     let clearsContribution: Bool
 }
-
