@@ -1,6 +1,24 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Truncation Helpers (internal for testing)
+
+func truncatedPluginLabel(_ text: String?) -> String? {
+    text.flatMap { $0.isEmpty ? nil : String($0.prefix(pluginLabelMaxLength)) }
+}
+
+func truncatedPluginValue(_ text: String?) -> String? {
+    text.flatMap { $0.isEmpty ? nil : String($0.prefix(pluginValueMaxLength)) }
+}
+
+func truncatedMenuText(_ text: String?) -> String {
+    String((text ?? "").prefix(pluginMenuMaxLength))
+}
+
+let pluginLabelMaxLength = 40
+let pluginValueMaxLength = 60
+let pluginMenuMaxLength = 40
+
 // MARK: - Notch Plugin Slot View
 
 /// Renders PluginUIContributions for a given slot in the expanded notch panel.
@@ -8,16 +26,16 @@ import SwiftUI
 struct PluginSlotView: View {
     let contributions: [PluginUIContribution]
 
+    @ViewBuilder
     var body: some View {
-        if !contributions.isEmpty {
+        let valid = contributions.filter { !$0.components.isEmpty }
+        if !valid.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(contributions, id: \.pluginID) { contribution in
-                    if !contribution.components.isEmpty {
-                        PluginContributionRow(
-                            pluginID: contribution.pluginID,
-                            components: contribution.components
-                        )
-                    }
+                ForEach(valid, id: \.pluginID) { contribution in
+                    PluginContributionRow(
+                        pluginID: contribution.pluginID,
+                        components: contribution.components
+                    )
                 }
             }
         }
@@ -43,16 +61,8 @@ private struct PluginComponentView: View {
     let pluginID: String
     let component: PluginUIComponentDTO
 
-    private static let maxLabelLength = 40
-    private static let maxValueLength = 60
-
-    private var label: String? {
-        component.label.flatMap { $0.isEmpty ? nil : String($0.prefix(Self.maxLabelLength)) }
-    }
-
-    private var value: String? {
-        component.value.flatMap { $0.isEmpty ? nil : String($0.prefix(Self.maxValueLength)) }
-    }
+    private var label: String? { truncatedPluginLabel(component.label) }
+    private var value: String? { truncatedPluginValue(component.value) }
 
     private var toneColor: Color {
         switch component.tone ?? .default {
@@ -63,6 +73,7 @@ private struct PluginComponentView: View {
         }
     }
 
+    @ViewBuilder
     var body: some View {
         switch component.type {
         case .metric:  metricView
@@ -174,14 +185,16 @@ func validatedIcon(_ name: String?) -> String? {
 // MARK: - MenuBar Plugin Items
 
 /// Renders PluginUIContributions for the .menubarMenu slot as SwiftUI menu content.
-/// Emits a Divider only when contributions are non-empty.
+/// Emits a Divider only when contributions with non-empty components exist.
 struct PluginMenuItemsView: View {
     let contributions: [PluginUIContribution]
 
+    @ViewBuilder
     var body: some View {
-        if !contributions.isEmpty {
+        let valid = contributions.filter { !$0.components.isEmpty }
+        if !valid.isEmpty {
             Divider()
-            ForEach(contributions, id: \.pluginID) { contribution in
+            ForEach(valid, id: \.pluginID) { contribution in
                 ForEach(contribution.components, id: \.id) { component in
                     PluginMenuComponentView(pluginID: contribution.pluginID, component: component)
                 }
@@ -194,39 +207,33 @@ private struct PluginMenuComponentView: View {
     let pluginID: String
     let component: PluginUIComponentDTO
 
-    private static let maxLength = 40
+    private var label: String { truncatedMenuText(component.label) }
+    private var value: String { truncatedMenuText(component.value) }
 
-    private var truncatedLabel: String {
-        String((component.label ?? "").prefix(Self.maxLength))
-    }
-
-    private var truncatedValue: String {
-        String((component.value ?? "").prefix(Self.maxLength))
-    }
-
+    @ViewBuilder
     var body: some View {
         switch component.type {
         case .metric:
-            if truncatedLabel.isEmpty && truncatedValue.isEmpty {
+            if label.isEmpty && value.isEmpty {
                 EmptyView()
-            } else if truncatedLabel.isEmpty {
-                Text(truncatedValue).foregroundStyle(.secondary)
-            } else if truncatedValue.isEmpty {
-                Text(truncatedLabel).foregroundStyle(.secondary)
+            } else if label.isEmpty {
+                Text(value).foregroundStyle(.secondary)
+            } else if value.isEmpty {
+                Text(label).foregroundStyle(.secondary)
             } else {
-                Text("\(truncatedLabel): \(truncatedValue)").foregroundStyle(.secondary)
+                Text("\(label): \(value)").foregroundStyle(.secondary)
             }
 
         case .text, .badge:
-            if !truncatedLabel.isEmpty {
-                Text(truncatedLabel).foregroundStyle(.secondary)
+            if !label.isEmpty {
+                Text(label).foregroundStyle(.secondary)
             }
 
         case .button:
             if let action = component.action {
-                let label = truncatedLabel.isEmpty ? truncatedValue : truncatedLabel
-                if !label.isEmpty {
-                    Button(label) {
+                let title = label.isEmpty ? value : label
+                if !title.isEmpty {
+                    Button(title) {
                         AppState.shared.pluginHost.handleAction(action, from: pluginID)
                     }
                 }

@@ -25,20 +25,34 @@ final class PluginContributionRendererTests: XCTestCase {
 
     func testLabelTruncatedAt40Characters() {
         let long = String(repeating: "a", count: 80)
-        let component = makeComponent(type: .metric, label: long, value: nil)
-        XCTAssertEqual(component.label.map { String($0.prefix(40)) }, String(repeating: "a", count: 40))
+        XCTAssertEqual(truncatedPluginLabel(long), String(repeating: "a", count: 40))
+    }
+
+    func testLabelUnder40IsUnchanged() {
+        XCTAssertEqual(truncatedPluginLabel("short"), "short")
+    }
+
+    func testEmptyLabelReturnsNil() {
+        XCTAssertNil(truncatedPluginLabel(""))
+        XCTAssertNil(truncatedPluginLabel(nil))
     }
 
     func testValueTruncatedAt60Characters() {
         let long = String(repeating: "b", count: 120)
-        let component = makeComponent(type: .metric, label: nil, value: long)
-        XCTAssertEqual(component.value.map { String($0.prefix(60)) }, String(repeating: "b", count: 60))
+        XCTAssertEqual(truncatedPluginValue(long), String(repeating: "b", count: 60))
     }
 
-    func testMenuLabelTruncatedAt40Characters() {
+    func testValueUnder60IsUnchanged() {
+        XCTAssertEqual(truncatedPluginValue("hello"), "hello")
+    }
+
+    func testMenuTextTruncatedAt40Characters() {
         let long = String(repeating: "c", count: 100)
-        let truncated = String(long.prefix(40))
-        XCTAssertEqual(truncated.count, 40)
+        XCTAssertEqual(truncatedMenuText(long), String(repeating: "c", count: 40))
+    }
+
+    func testMenuTextNilReturnsEmptyString() {
+        XCTAssertEqual(truncatedMenuText(nil), "")
     }
 
     // MARK: - PluginSlotView — empty contributions render nothing
