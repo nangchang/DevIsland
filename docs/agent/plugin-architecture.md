@@ -468,6 +468,8 @@ enum PluginUISlot: String, Codable, CaseIterable {
 
 **slot scope (전역 vs 세션)**: `session.*` 슬롯은 특정 세션에 종속된다. 해당 contribution은 `targetSessionID`를 채우고, `PluginUIContext.session`으로 대상 세션 스냅샷을 받는다. 렌더러는 우클릭/상세 대상 세션의 `targetSessionID`로 필터링한다. 캐시 dedup도 `(pluginID, targetSessionID)` 기준이며, `session.ended` 이벤트 수신 시 Host가 해당 `targetSessionID` contribution을 evict한다. 전역 슬롯은 `targetSessionID == nil`로 둔다.
 
+**세션 제거 액션 경계**: 플러그인은 `session.context-menu`에서 `session.dismiss` action을 제안할 수 있지만, 실제 제거는 Host가 대상 세션 상태를 다시 확인한 뒤 실행한다. 허용 대상은 `isPending == false`, status가 idle, `hasMissedApproval == false`, `isUnread == false`인 세션으로 제한한다. pending approval, 현재 응답 대기 세션, missed approval 또는 unread 상태처럼 사용자 확인이 필요한 세션은 플러그인 action으로 제거하지 않는다. 기존 core-owned dismiss 버튼은 현재처럼 `AppState.dismissSession`을 호출할 수 있지만, plugin action은 provider response를 pass하거나 approval queue를 비우는 경로에 닿으면 안 된다.
+
 ### 7.1. (v1.1+ 개념) Exclusive Region Provider — 노치 영역 교체
 
 > 이 절은 **개념과 경계**만 정의한다. 구현 스펙이 아니며 v1 범위 밖이다. 좁은 collapsed 노치(아일랜드)의 영역을 다룰 때의 설계 방향을 기록한다.
@@ -525,9 +527,11 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 | `storage.increment` | `writePluginStorage` | effect processor가 카운터 atomic 증가 수행 |
 | `notification.show` | `showNotification` | DevIsland 알림 렌더링 요청 |
 | `sound.playCESP` | built-in allowlist only | Host-owned OpenPeon audio service에 sanitized CESP category 재생을 요청. 외부 plugin/declarative preset에는 열지 않는다. |
+| `power.preventIdleSleep` | built-in allowlist only | Host-owned Caffeine service에 display sleep 방지 assertion 보유/해제를 요청. 외부 plugin/declarative preset에는 열지 않는다. |
+| `session.dismiss` | `showSessionSurface` + host validation | v1.1 세션 context action. 대상 세션이 idle/non-pending이고 missed/unread가 아닐 때만 host가 목록에서 제거한다. |
 
 `timer.*`처럼 민감 자원에 접근하지 않고 플러그인 내부 상태만 다루는 capability는 permission 없이 허용한다. 외부 자원(저장소, 알림 등)에 닿는 capability는 반드시 대응 permission을 manifest에 선언해야 한다.
-`sound.playCESP`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
+`sound.playCESP`, `power.preventIdleSleep`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
 
 `PomodoroPlugin` built-in 구현 예시:
 
@@ -1282,6 +1286,7 @@ struct PluginSlotView: View {
 | 현재 기능 | 현재 위치 | Built-in plugin 형태 | 우선순위 | 전환 조건 |
 | :--- | :--- | :--- | :--- | :--- |
 | OpenPeon CESP sound playback | `OpenPeon/*`, `AppState.playOpenPeonSound`, `OpenPeonSettingsPane` | `OpenPeonSoundPlugin`이 host-computed sound hint를 관찰하고 host-owned `sound.playCESP` effect를 요청 | 높음 | `CESPEventMapper`의 raw payload 기반 category 산출, sound pack scan, validation, `AVAudioPlayer` 재생은 host service에 남긴다. 플러그인은 pack file path나 raw payload를 직접 다루지 않는다. |
+| Caffeine sleep prevention | `Caffeine/*`, `AppState.setupCaffeine`, `CaffeineSettingsPane`, `CaffeineMenuItem` | `CaffeinePlugin`이 host-provided power/SSID/settings status를 관찰하고 host-owned `power.preventIdleSleep` effect를 요청 | 중간 | `IOPMAssertion`, 전원/SSID 모니터링, 위치 권한 요청, Wi-Fi 스캔, SSID 설정 UI와 settings persistence는 host service에 남긴다. 플러그인은 sleep assertion을 직접 만들거나 Location/CoreWLAN API를 직접 호출하지 않는다. |
 | 세션 경과 시간/현재 상태 표시 | 신규 `SessionTimerPlugin` | `notch.expanded.activity` metric contribution | 높음 | core 상태를 바꾸지 않고 `readSessionEvents`만 사용한다. |
 | provider/session 통계 | 신규 `ProviderStatsPlugin` 또는 `SessionStatsPlugin` | `notch.expanded.activity`, `menubar.menu` 요약 metric | 중간 | `readHookSummaries`, `readSessionEvents`, v1.1 `approval.decided`만 사용한다. replay DB를 직접 조회하지 않는다. |
 | 세션 메시지/행 accessory | `SessionMessageWindow`, `SessionRowView`, `SessionHistoryWindow` 일부 표시 | `session.message`, `notch.session.row`, `session.context-menu` contribution | 중간 | v1.1 세션별 slot이 열린 뒤 진행한다. 메시지 창과 replay loading 자체는 core에 남긴다. |
@@ -1293,6 +1298,7 @@ struct PluginSlotView: View {
 | 현재 기능 | 플러그인으로 옮길 수 있는 부분 | core에 남길 부분 |
 | :--- | :--- | :--- |
 | OpenPeon | sanitized sound hint를 사용할지 결정하는 정책, mute 상태 표시, preview button contribution | raw payload 기반 `CESPEventMapper`, pack scanning/validation, audio playback, settings persistence |
+| Caffeine | sleep 방지 정책 판단, 메뉴/노치 상태 contribution, built-in-only `power.preventIdleSleep` effect 요청 | `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence |
 | Replay Log / Session History | session별 annotation, 요약 badge, menubar quick action | `SQLiteApprovalStore`, replay query, replay execution |
 | PTY Transcript | transcript 존재 여부 badge, session accessory | PTY capture, transcript storage, raw transcript viewer |
 | Settings | plugin enable/disable, safemode, storage reset | core app settings, bridge config, approval settings |
@@ -1302,6 +1308,7 @@ struct PluginSlotView: View {
 | 기능 | 제외 이유 |
 | :--- | :--- |
 | approval decision / approval prompt response | 플러그인은 결정을 바꾸거나 provider response를 지연하면 안 된다. |
+| pending/current approval/missed/unread session removal | `AppState.dismissSession`은 pending request를 pass 처리할 수 있고 missed/unread 세션은 사용자 확인이 필요하므로, 플러그인은 idle/non-pending이고 missed/unread가 아닌 세션에 대한 host-validated `session.dismiss`만 요청할 수 있다. |
 | bridge scripts / `HookSocketServer` / IPC framing | hook response path의 안정성 경계다. |
 | `ProviderAdapter` response JSON | provider별 의미론 보존이 core 책임이다. |
 | `SessionStore` lifecycle ownership | 플러그인은 session snapshot을 관찰만 한다. |
@@ -1320,6 +1327,8 @@ v1 `PluginUIComponentType`은 `metric`/`badge`/`button`/`text`뿐이며 입력 �
 첫 migration 후보는 OpenPeon sound가 가장 적합하다. 이미 best-effort side effect이고, 실패해도 approval/deny 동작을 바꾸면 안 된다는 기존 원칙과 플러그인 Fail-Safe 원칙이 잘 맞기 때문이다.
 다만 OpenPeon을 옮기더라도 `CESPEventMapper`, CESP pack store와 audio player는 host-owned service로 남겨야 한다. `CESPEventMapper`는 현재 provider별 raw payload를 보고 category를 계산하므로, 이 계산을 plugin으로 옮기면 raw payload 금지 원칙을 깨게 된다. M1에서는 `PluginEventFactory` 또는 별도 host service가 optional `PluginSoundHint(category:)` 같은 sanitized DTO를 만들고, plugin은 이 hint를 사용할지와 `sound.playCESP` effect 요청 여부만 결정한다.
 
+Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned 경계가 더 중요하다. Caffeine은 `IOPMAssertion`, Location permission, CoreWLAN scan처럼 시스템 권한과 사용자 환경 side effect를 다루므로, 플러그인은 host가 제공한 sanitized status만 보고 assertion 보유/해제 의도를 effect로 반환한다. `SettingsStore.caffeineEnabled`와 `caffeineExcludedSSIDs`는 기존 core setting으로 유지하고, plugin enable/disable·safemode는 추가 feature guard로만 작동한다. 따라서 plugin disabled 또는 safemode 상태에서는 host가 assertion을 반드시 release해야 하며, 기존 사용자 설정 기본값(`SettingsStore.caffeineEnabled == false`)은 바뀌지 않는다.
+
 ## 13. 단계별 롤아웃 계획 (Rollout Plan)
 
 아래 단계는 구현 범위를 논리적으로 묶은 것이며, 단계와 PR은 1:1로 대응하지 않는다.
@@ -1336,18 +1345,63 @@ v1 `PluginUIComponentType`은 `metric`/`badge`/`button`/`text`뿐이며 입력 �
 | 6 | Settings UI — `PluginSettingsView` 목록, 활성화 토글, safemode 상태, storage 삭제 | enable/disable이 contribution cache와 tick 대상에 반영 | PR 10 |
 | 7 | Safemode 임계값·timeout 적용 | 의도적 오류 유발 → safemode 전환, core UI/approval 계속 동작 | PR 11 |
 | M | 기존 기능 migration track: OpenPeon sound 등 부가 기능을 built-in plugin 후보로 전환 | 기능 disable/safemode가 core hook/approval/session 동작을 바꾸지 않음 | Migration PR M0+ |
-| 8 | v1.1 세션별 슬롯: `notch.session.row`, `session.context-menu`, `session.message` | 세션별 contribution target/dedup/evict 검증 | v1.1 |
-| 9 | v1.1 optional `approval.decided` 관찰 이벤트 | response 이후 통계용 event만 발행, 결정 변경 불가 | v1.1 |
-| 10 | (v2) declarative utility preset 검토 | 코드 없는 JSON preset이 capability를 조합 | v2 |
-| 11 | (v2) 외부 plugin runtime — worker process or JavaScriptCore | — | v2 |
+| 8 | v1.1 Session Surfaces: `notch.session.row`, `session.context-menu`, `session.message`, `approval.decided` | 세션별 contribution target/dedup/evict, response 이후 approval 통계 event 검증 | v1.1 |
+| 9 | v1.2 Host Command Catalog expansion | v1.1 최소 command path를 공통 catalog로 확장 | v1.2 |
+| 10 | v1.3 Plugin Settings Schema | 단순 입력 UI를 manifest/schema 기반으로 렌더링하되 권한성 UI는 host-owned 유지 | v1.3 |
+| 11 | v2 External Plugin Runtime | worker process 격리, permission consent, audit log | v2 |
+| 12 | v2.1 Signed Plugin Distribution | 서명·호환성·uninstall/storage cleanup 검증 | v2.1 |
+| D | Deferred Session List Presentation | built-in plugin에서 실제 필요 사례가 검증된 뒤 목록-level hint 검토 | v2+ deferred |
 
 ## 14. 향후 확장 (Future Extensions)
 
-1. **Declarative Utility Presets**: JSON으로 작성하는 코드 없는 소형 utility. DevIsland가 이미 아는 component·action만 조합하므로 JS engine 없이 구현 가능.
-2. **External Plugin Runtime**: crash isolation이 필요하면 worker process를 우선, JavaScriptCore는 차선으로 검토.
-3. **Plugin Settings Schema**: manifest 선언 기반 입력 UI 자동 생성.
-4. **Signed Plugin Packages**: 외부 배포 지원 시 checksum·서명·API version compatibility 검사 추가.
-5. **Higher-Risk Permissions**: `readRawPayload`, `networkAccess`, `runProcess`는 사용자 동의·감사 로그·revocation UI를 갖춘 뒤 별도로 추가.
+### v1.1 Session Surfaces
+
+세션별 UI를 먼저 연다. `notch.session.row`는 행 안의 짧은 badge·metric·status accessory만 허용하고, `session.context-menu`는 host가 검증한 action만 실행한다. `session.message`는 메시지 창 header/toolbar accessory만 담당하며, replay loading과 message rendering은 core에 남긴다.
+
+`approval.decided`는 provider response가 이미 전송된 뒤 발행되는 관찰 이벤트로만 추가한다. 플러그인은 승인/거부 결정을 바꾸거나 되돌릴 수 없고, 통계·히스토리·badge 갱신에만 사용한다.
+
+`session.context-menu`에서 `session.dismiss`를 열 때는 임시 특수 경로를 만들지 않는다. v1.1 안에서 최소 Host Command Catalog 골격을 먼저 두고, idle/non-pending 및 missed/unread exclusion 검증을 같은 capability validation 경로로 처리한다.
+
+### v1.2 Host Command Catalog Expansion
+
+플러그인이 직접 AppKit, AppleScript, IOKit, filesystem, provider response handler를 만지지 않도록 host-owned command catalog를 둔다. command는 `PluginEffect`/`PluginUIActionDTO.capability`와 같은 검증 경로를 탄다.
+v1.1 session surface에서 도입한 최소 command path를 이 단계에서 logging, failure handling, audit metadata, 추가 command 등록 구조까지 확장한다.
+
+초기 command 후보:
+
+- `session.dismiss`: idle/non-pending only, excluding missed/unread sessions
+- `session.focusTerminal`: 기존 `TerminalFocuser` 경유, 권한과 대상 세션 상태를 host가 확인
+- `session.copyResumeCommand`: host가 sanitized command를 생성해 pasteboard에 복사
+- `session.openWorkspace`: workspace root가 있는 세션만 Finder로 열기
+- `sound.playCESP`: built-in allowlist only
+- `power.preventIdleSleep`: built-in allowlist only
+- `notification.show`: `showNotification` permission 필요
+
+host command는 실패해도 provider response, approval decision, session lifecycle ownership을 바꾸지 않는다. pending/current approval 세션에 대한 destructive action은 허용하지 않는다.
+
+### v1.3 Plugin Settings Schema
+
+built-in plugin이 늘어난 뒤 단순 설정 UI만 schema로 연다. v1.3의 schema는 boolean toggle, enum picker, number stepper/slider, short text input처럼 검증 가능한 입력으로 제한한다. path picker, Wi-Fi scan, Location permission, pack validation처럼 권한·외부 I/O·자유 입력이 섞인 UI는 host-owned settings pane으로 유지한다.
+
+`settings.changed` 이벤트는 이 단계에서 함께 추가한다. 플러그인은 자신의 설정 변경에 반응할 수 있지만, core app settings와 bridge/approval settings를 직접 mutate하지 않는다.
+
+Caffeine처럼 권한성 UI가 핵심인 built-in plugin은 schema가 생긴 뒤에도 host-owned settings pane을 유지할 수 있다. schema는 Pomodoro처럼 단순하고 권한 없는 utility plugin부터 적용한다.
+
+### v2 External Plugin Runtime
+
+외부 플러그인은 crash isolation 때문에 worker process를 우선 검토한다. JavaScriptCore는 프로세스 격리가 약하므로 차선이다. v2에는 manifest API version, permission consent UI, audit log, crash/safemode 자동 격리, network allowlist를 포함한다.
+
+`readRawPayload`, `networkAccess`, `runProcess`는 고위험 권한으로 별도 사용자 동의와 revocation UI, 감사 로그가 준비된 뒤에만 연다.
+
+### v2.1 Signed Plugin Distribution
+
+배포 단계에서는 signed plugin package, checksum, compatibility range, uninstall/storage cleanup, plugin health diagnostics를 추가한다. built-in plugin과 trusted local plugin, signed third-party plugin은 UI와 권한 정책에서 구분한다.
+
+### Deferred Session List Presentation
+
+세션 목록 전체를 플러그인이 소유하게 하지 않는다. `notch.session.list` 같은 목록-level presentation surface는 built-in plugin에서 summary row, filter chip, group label, sort hint의 실제 필요성이 검증된 뒤 v2+에서 다시 검토한다. 필요하더라도 실제 필터/정렬 적용 여부는 Host의 `SessionListPresentationPolicy`가 결정한다.
+
+Host policy는 pending/current approval, missed approval, unread 세션을 숨기지 않는다. 플러그인의 list hint는 표시 순서와 보조 UI에만 영향을 주며, `SessionStore.activeSessions` mutation은 core가 계속 소유한다.
 
 Cross-Plugin IPC는 v1 목표와 맞지 않아 우선순위를 낮춘다. 필요성이 검증되기 전까지는 플러그인 간 직접 통신 대신 DevIsland core가 제공하는 제한된 shared context를 사용한다.
 
