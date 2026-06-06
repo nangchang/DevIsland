@@ -37,6 +37,17 @@
 - storage I/O는 `PluginStorageProvider` actor 또는 전용 serial queue에서 처리한다.
 - plugin enable/disable, safemode, storage reset 상태는 core settings와 분리한다.
 
+## 현재 진행 현황
+
+- 기준 브랜치: `origin/main`
+- 작업 브랜치: `codex/plugin-host-skeleton`
+- 완료 단계:
+  - PR 1. 타입 정의와 빈 `PluginHost` — `0792d2c feat: add plugin host skeleton`
+- 마지막 검증:
+  - `./scripts/run-tests.sh` 통과 (2026-06-06)
+- 다음 단계:
+  - PR 2. `PluginEventFactory`와 permission redaction
+
 ## 5. PR 분할
 
 ### PR 0. 문서 및 경계 확인
