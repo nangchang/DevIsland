@@ -1,6 +1,16 @@
 import Foundation
 import Combine
 
+/// Neutral description of a session list change. Contains a pre-mutation snapshot
+/// so callers can act on the session state regardless of insertion or removal order.
+/// SessionStore never imports PluginHost or any plugin type — consumers map this to
+/// their own domain events.
+enum SessionStoreChange {
+    case started(ActiveSession)
+    case updated(ActiveSession)
+    case ended(ActiveSession)  // snapshot captured before removal
+}
+
 /// Owns the live session list, pending approval queue, and per-session auto-approve cache.
 ///
 /// AppState holds an instance and delegates all session-level state mutations here.
@@ -21,6 +31,9 @@ final class SessionStore: ObservableObject {
     private(set) var pendingQueue: [PendingRequest] = []
 
     var pendingCount: Int { pendingItems.count }
+
+    /// Called on the main thread after each session insert/update, and before each removal.
+    var onSessionChanged: ((SessionStoreChange) -> Void)?
 
     private let timeoutDuration: Double
     private let lifecycleSessionTimeout: Double
@@ -82,6 +95,7 @@ final class SessionStore: ObservableObject {
             if let root = workspaceRoot, activeSessions[index].workspaceRoot == nil {
                 activeSessions[index].workspaceRoot = root
             }
+            onSessionChanged?(.updated(activeSessions[index]))
         } else {
             let session = ActiveSession(
                 id: sessionId,
@@ -110,6 +124,7 @@ final class SessionStore: ObservableObject {
                 workspaceRoot: workspaceRoot
             )
             activeSessions.insert(session, at: 0)
+            onSessionChanged?(.started(session))
         }
     }
 
@@ -145,8 +160,10 @@ final class SessionStore: ObservableObject {
             .map(\.id)
 
         guard !ids.isEmpty else { return [] }
+        let snapshots = activeSessions.filter { ids.contains($0.id) }
         ids.forEach { sessionAutoApproveTypes.removeValue(forKey: $0) }
         activeSessions.removeAll { ids.contains($0.id) }
+        snapshots.forEach { onSessionChanged?(.ended($0)) }
         return ids
     }
 
@@ -206,6 +223,7 @@ final class SessionStore: ObservableObject {
         }
         let ids = sessionsToPrune.map(\.id)
         activeSessions.removeAll { s in ids.contains(s.id) }
+        sessionsToPrune.forEach { onSessionChanged?(.ended($0)) }
         return ids
     }
 
@@ -254,7 +272,9 @@ final class SessionStore: ObservableObject {
 
     /// Removes `sessionId` from activeSessions and clears session-scoped auto-approve cache.
     func removeSession(id sessionId: String) {
+        let snapshot = activeSessions.first { $0.id == sessionId }
         sessionAutoApproveTypes.removeValue(forKey: sessionId)
         activeSessions.removeAll { $0.id == sessionId }
+        snapshot.map { onSessionChanged?(.ended($0)) }
     }
 }

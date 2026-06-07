@@ -131,6 +131,7 @@ class AppState: ObservableObject {
     private static let replayTerminalApp = "DevIsland Replay"
     private static let replayTimestampFormatter = ISO8601DateFormatter()
     private let replayRecorder: ReplayRecorder
+    private let pluginEventFactory = PluginEventFactory()
 
     init(
         startServer: Bool = true,
@@ -227,6 +228,23 @@ class AppState: ObservableObject {
 
         if let proxy = approvalProxy {
             restoreOpenSessions(from: proxy)
+        }
+
+        // Register after restoreOpenSessions so restored sessions don't emit spurious events.
+        sessionStore.onSessionChanged = { [weak self] change in
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                let event: PluginEvent
+                switch change {
+                case .started(let session):
+                    event = self.pluginEventFactory.makeSessionEvent(kind: .sessionStarted, from: session)
+                case .updated(let session):
+                    event = self.pluginEventFactory.makeSessionEvent(kind: .sessionUpdated, from: session)
+                case .ended(let session):
+                    event = self.pluginEventFactory.makeSessionEvent(kind: .sessionEnded, from: session)
+                }
+                self.pluginHost.enqueue(event)
+            }
         }
 
         setupCaffeine()
@@ -497,6 +515,11 @@ class AppState: ObservableObject {
             toolName: h.toolName,
             payload: h.parsedJSON
         )
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let session = self.sessionStore.activeSessions.first { $0.id == h.sessionId }
+            self.pluginHost.enqueue(self.pluginEventFactory.makeHookReceivedEvent(from: h, session: session))
+        }
         if displayToolName.isEmpty {
             if normalizedEvent == "elicitation" {
                 if let serverName = h.parsedJSON["mcp_server_name"] as? String, !serverName.isEmpty {
@@ -1294,6 +1317,12 @@ class AppState: ObservableObject {
             if isInformational && !isStartEvent && !sessionMessage.isEmpty && !isCurrentlyViewed {
                 self.sessionStore.setUnread(true, sessionId: fullSessionId)
             }
+            if isInformational && !isStartEvent,
+               let session = self.sessionStore.activeSessions.first(where: { $0.id == fullSessionId }) {
+                MainActor.assumeIsolated {
+                    self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: session))
+                }
+            }
 
             let expandEnabled = MainActor.assumeIsolated {
                 let s = SettingsStore.shared.settings
@@ -2081,7 +2110,7 @@ class AppState: ObservableObject {
                         self.sessionStore.activeSessions[index].status = status ?? .idle
                         self.sessionStore.activeSessions[index].lastActiveAt = Date()
                     } else if !self.sessionStore.activeSessions[index].isLifecycleTracked {
-                        self.sessionStore.activeSessions.remove(at: index)
+                        self.sessionStore.removeSession(id: removed.sessionId)
                     } else {
                         self.sessionStore.activeSessions[index].isPending = false
                         self.sessionStore.activeSessions[index].status = status ?? .idle
