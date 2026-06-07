@@ -20,6 +20,7 @@ actor PluginRunner {
         let startedAt = ContinuousClock.now
         let evaluatedSlots = manifest.surfaces.filter {
             Self.isSurfaceAllowed($0, permissions: manifest.permissions)
+                && Self.shouldEvaluate($0, for: event)
         }
 
         do {
@@ -94,6 +95,29 @@ actor PluginRunner {
              .sessionContextMenu,
              .sessionMessage:
             return permissions.contains(.showSessionSurface)
+        }
+    }
+
+    private nonisolated static func shouldEvaluate(
+        _ slot: PluginUISlot,
+        for event: PluginEvent
+    ) -> Bool {
+        guard isSessionScoped(slot) else { return true }
+        return event.session != nil
+    }
+
+    private nonisolated static func isSessionScoped(_ slot: PluginUISlot) -> Bool {
+        switch slot {
+        case .notchSessionRow,
+             .sessionDetailTimeline,
+             .sessionDetailSummary,
+             .sessionContextMenu,
+             .sessionMessage:
+            return true
+        case .notchExpandedActivity,
+             .notchExpandedDetails,
+             .menubarMenu:
+            return false
         }
     }
 }

@@ -233,6 +233,29 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(delivered.value, ["Done :: Focus session complete"])
     }
 
+    func testEffectExecutorPromotesBodyOnlyNotificationToTitle() async {
+        let storage = PluginStorageProvider()
+        let delivered = LockIsolated<[String]>([])
+        let executor = PluginEffectExecutor(
+            storageProvider: storage,
+            notificationHandler: { title, body in
+                delivered.withValue { $0.append([title, body].compactMap { $0 }.joined(separator: " :: ")) }
+            }
+        )
+        let effect = PluginEffect(
+            capability: "notification.show",
+            payload: ["body": "Focus session complete"]
+        )
+
+        await executor.enqueue(
+            [effect],
+            pluginID: "com.devisland.test.notification",
+            permissions: [.showNotification]
+        )
+
+        XCTAssertEqual(delivered.value, ["Focus session complete"])
+    }
+
     func testEffectExecutorAllowsStorageEffectWithPermission() async {
         let storage = PluginStorageProvider()
         let executor = PluginEffectExecutor(storageProvider: storage)
@@ -334,7 +357,7 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(contributions.first?.targetSessionID, "session-b")
     }
 
-    func testGlobalEventClearsSessionScopedContributionWhenPluginReturnsNil() async {
+    func testGlobalEventPreservesSessionScopedContributionCache() async {
         let plugin = GlobalToggleSessionScopedContributionPlugin(id: "com.devisland.test.session-global-toggle")
         let host = PluginHost()
         host.register([plugin])
@@ -351,7 +374,8 @@ final class PluginHostDispatchTests: XCTestCase {
         await host.waitUntilIdle()
 
         contributions = host.contributions[.sessionDetailSummary] ?? []
-        XCTAssertTrue(contributions.isEmpty)
+        XCTAssertEqual(contributions.count, 2)
+        XCTAssertEqual(Set(contributions.compactMap(\.targetSessionID)), ["session-a", "session-b"])
     }
 
     private func makeEvent(

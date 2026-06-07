@@ -245,8 +245,6 @@ final class PluginHost: ObservableObject {
                     updated[slot]?.removeAll {
                         $0.pluginID == pluginID && $0.targetSessionID == sessionID
                     }
-                } else {
-                    updated[slot]?.removeAll { $0.pluginID == pluginID }
                 }
             } else {
                 updated[slot]?.removeAll { $0.pluginID == pluginID }

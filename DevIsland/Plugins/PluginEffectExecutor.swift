@@ -48,7 +48,7 @@ actor PluginEffectExecutor {
             let title = normalizedText(effect.payload["title"])
             let body = normalizedText(effect.payload["body"])
             guard let message = title ?? body else { return }
-            await notificationHandler?(message, body)
+            await notificationHandler?(message, title == nil ? nil : body)
         }
     }
 

@@ -67,10 +67,10 @@ HELPER_DEST="$BRIDGE_INSTALL_DIR/devisland_bridge.py"
 BRIDGE_SOURCE="$ROOT_DIR/scripts/devisland-bridge.sh"
 HELPER_SOURCE="$ROOT_DIR/scripts/devisland_bridge.py"
 if [[ -e "$BRIDGE_DEST" ]]; then
-  if [[ ! -e "$BRIDGE_DEST" || ! "$BRIDGE_SOURCE" -ef "$BRIDGE_DEST" ]]; then
+  if ! cmp -s "$BRIDGE_SOURCE" "$BRIDGE_DEST"; then
     cp "$BRIDGE_SOURCE" "$BRIDGE_DEST"
   fi
-  if [[ ! -e "$HELPER_DEST" || ! "$HELPER_SOURCE" -ef "$HELPER_DEST" ]]; then
+  if ! cmp -s "$HELPER_SOURCE" "$HELPER_DEST"; then
     cp "$HELPER_SOURCE" "$HELPER_DEST"
   fi
   chmod 755 "$BRIDGE_DEST" "$HELPER_DEST"
