@@ -64,9 +64,15 @@ fi
 BRIDGE_INSTALL_DIR="$HOME/Library/Application Support/DevIsland"
 BRIDGE_DEST="$BRIDGE_INSTALL_DIR/devisland-bridge.sh"
 HELPER_DEST="$BRIDGE_INSTALL_DIR/devisland_bridge.py"
+BRIDGE_SOURCE="$ROOT_DIR/scripts/devisland-bridge.sh"
+HELPER_SOURCE="$ROOT_DIR/scripts/devisland_bridge.py"
 if [[ -e "$BRIDGE_DEST" ]]; then
-  cp "$ROOT_DIR/scripts/devisland-bridge.sh" "$BRIDGE_DEST"
-  cp "$ROOT_DIR/scripts/devisland_bridge.py" "$HELPER_DEST"
+  if [[ ! -e "$BRIDGE_DEST" || ! "$BRIDGE_SOURCE" -ef "$BRIDGE_DEST" ]]; then
+    cp "$BRIDGE_SOURCE" "$BRIDGE_DEST"
+  fi
+  if [[ ! -e "$HELPER_DEST" || ! "$HELPER_SOURCE" -ef "$HELPER_DEST" ]]; then
+    cp "$HELPER_SOURCE" "$HELPER_DEST"
+  fi
   chmod 755 "$BRIDGE_DEST" "$HELPER_DEST"
   echo "브릿지 스크립트 갱신 완료: $BRIDGE_DEST"
 fi
