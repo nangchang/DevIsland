@@ -171,6 +171,25 @@ final class PluginContributionRendererTests: XCTestCase {
     }
 
     @MainActor
+    func testPluginCustomActionEnqueuesEvent() async {
+        let plugin = ActionCapturingPlugin(id: "com.test.custom")
+        let host = PluginHost()
+        host.register([plugin])
+
+        let action = PluginUIActionDTO(
+            id: "custom1",
+            capability: "plugin.customAction",
+            routing: .pluginEvent,
+            payload: ["mode": "focus"]
+        )
+        host.handleAction(action, from: "com.test.custom", componentID: "custom1")
+        await host.waitUntilIdle()
+
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.capability, "plugin.customAction")
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.payload, ["mode": "focus"])
+    }
+
+    @MainActor
     func testHostExecutedActionDoesNotDispatchPluginEvent() async {
         let plugin = ActionCapturingPlugin(id: "com.test.host", permissions: [.writePluginStorage])
         let host = PluginHost()
@@ -186,6 +205,24 @@ final class PluginContributionRendererTests: XCTestCase {
         await host.waitUntilIdle()
 
         XCTAssertFalse(plugin.receivedKinds.contains(.pluginActionInvoked))
+    }
+
+    @MainActor
+    func testUnsupportedHostExecutedActionIsRejected() async {
+        let plugin = ActionCapturingPlugin(id: "com.test.unsupported-host", permissions: [.showNotification])
+        let host = PluginHost()
+        host.register([plugin])
+
+        let action = PluginUIActionDTO(
+            id: "notify1",
+            capability: "notification.show",
+            routing: .hostExecuted,
+            payload: ["title": "Done"]
+        )
+        host.handleAction(action, from: "com.test.unsupported-host", componentID: "notify1")
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(plugin.receivedEvents.isEmpty)
     }
 
     @MainActor

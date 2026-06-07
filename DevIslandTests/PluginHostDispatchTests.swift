@@ -195,6 +195,21 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertTrue(applied.isEmpty)
     }
 
+    func testEffectExecutorRejectsUnsupportedHostEffect() async {
+        let storage = PluginStorageProvider()
+        let executor = PluginEffectExecutor(storageProvider: storage)
+        let effect = PluginEffect(capability: "notification.show", payload: ["title": "Done"])
+
+        await executor.enqueue(
+            [effect],
+            pluginID: "com.devisland.test.notification",
+            permissions: [.showNotification]
+        )
+
+        let applied = await storage.appliedStorageEffects()
+        XCTAssertTrue(applied.isEmpty)
+    }
+
     func testEffectExecutorAllowsStorageEffectWithPermission() async {
         let storage = PluginStorageProvider()
         let executor = PluginEffectExecutor(storageProvider: storage)

@@ -12,24 +12,18 @@ actor PluginEffectExecutor {
         pluginID: String,
         permissions: Set<PluginPermission>
     ) async {
-        for effect in effects where Self.isCapabilityAllowed(effect.capability, permissions: permissions) {
+        for effect in effects where Self.isHostEffectSupported(effect.capability, permissions: permissions) {
             await execute(effect, pluginID: pluginID)
         }
     }
 
-    nonisolated static func isCapabilityAllowed(
+    nonisolated static func isHostEffectSupported(
         _ capability: String,
         permissions: Set<PluginPermission>
     ) -> Bool {
         switch capability {
-        case "timer.tick", "timer.startStop":
-            return true
         case "storage.keyValue", "storage.increment":
             return permissions.contains(.writePluginStorage)
-        case "notification.show":
-            return permissions.contains(.showNotification)
-        case "session.dismiss":
-            return permissions.contains(.showSessionSurface)
         default:
             return false
         }

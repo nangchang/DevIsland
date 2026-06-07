@@ -45,20 +45,21 @@ final class PluginHost: ObservableObject {
     /// `.pluginEvent` routing enqueues a pluginActionInvoked event back to that plugin.
     /// `.hostExecuted` routing sends the action through the same host effect executor.
     func handleAction(_ action: PluginUIActionDTO, from pluginID: String, componentID: String) {
-        guard let runner = runners[pluginID],
-              PluginEffectExecutor.isCapabilityAllowed(
-                action.capability,
-                permissions: runner.manifest.permissions
-              ) else { return }
+        guard let runner = runners[pluginID] else { return }
 
         switch action.routing {
         case .hostExecuted:
+            guard PluginEffectExecutor.isHostEffectSupported(
+                action.capability,
+                permissions: runner.manifest.permissions
+            ) else { return }
             let effect = PluginEffect(capability: action.capability, payload: action.payload)
             let permissions = runner.manifest.permissions
             Task { [effectExecutor] in
                 await effectExecutor.enqueue([effect], pluginID: pluginID, permissions: permissions)
             }
         case .pluginEvent:
+            guard Self.isPluginEventCapabilityAllowed(action.capability) else { return }
             let event = PluginEvent(
                 id: UUID(),
                 kind: .pluginActionInvoked,
@@ -77,6 +78,10 @@ final class PluginHost: ObservableObject {
             )
             enqueue(event)
         }
+    }
+
+    private nonisolated static func isPluginEventCapabilityAllowed(_ capability: String) -> Bool {
+        capability.hasPrefix("plugin.") || capability.hasPrefix("timer.")
     }
 
     func enqueue(_ event: PluginEvent) {
