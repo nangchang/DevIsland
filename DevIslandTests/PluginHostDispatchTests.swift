@@ -198,7 +198,31 @@ final class PluginHostDispatchTests: XCTestCase {
     func testEffectExecutorRejectsUnsupportedHostEffect() async {
         let storage = PluginStorageProvider()
         let executor = PluginEffectExecutor(storageProvider: storage)
-        let effect = PluginEffect(capability: "notification.show", payload: ["title": "Done"])
+        let effect = PluginEffect(capability: "power.preventIdleSleep", payload: [:])
+
+        await executor.enqueue(
+            [effect],
+            pluginID: "com.devisland.test.power",
+            permissions: [.showNotification]
+        )
+
+        let applied = await storage.appliedStorageEffects()
+        XCTAssertTrue(applied.isEmpty)
+    }
+
+    func testEffectExecutorDeliversNotificationEffect() async {
+        let storage = PluginStorageProvider()
+        let delivered = LockIsolated<[String]>([])
+        let executor = PluginEffectExecutor(
+            storageProvider: storage,
+            notificationHandler: { title, body in
+                delivered.withValue { $0.append([title, body].compactMap { $0 }.joined(separator: " :: ")) }
+            }
+        )
+        let effect = PluginEffect(
+            capability: "notification.show",
+            payload: ["title": "Done", "body": "Focus session complete"]
+        )
 
         await executor.enqueue(
             [effect],
@@ -206,8 +230,7 @@ final class PluginHostDispatchTests: XCTestCase {
             permissions: [.showNotification]
         )
 
-        let applied = await storage.appliedStorageEffects()
-        XCTAssertTrue(applied.isEmpty)
+        XCTAssertEqual(delivered.value, ["Done :: Focus session complete"])
     }
 
     func testEffectExecutorAllowsStorageEffectWithPermission() async {
@@ -309,6 +332,26 @@ final class PluginHostDispatchTests: XCTestCase {
         contributions = host.contributions[.sessionDetailSummary] ?? []
         XCTAssertEqual(contributions.count, 1)
         XCTAssertEqual(contributions.first?.targetSessionID, "session-b")
+    }
+
+    func testGlobalEventClearsSessionScopedContributionWhenPluginReturnsNil() async {
+        let plugin = GlobalToggleSessionScopedContributionPlugin(id: "com.devisland.test.session-global-toggle")
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .sessionUpdated, sessionID: "session-a"))
+        await host.waitUntilIdle()
+        host.enqueue(makeEvent(kind: .sessionUpdated, sessionID: "session-b"))
+        await host.waitUntilIdle()
+
+        var contributions = host.contributions[.sessionDetailSummary] ?? []
+        XCTAssertEqual(contributions.count, 2)
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+
+        contributions = host.contributions[.sessionDetailSummary] ?? []
+        XCTAssertTrue(contributions.isEmpty)
     }
 
     private func makeEvent(
@@ -716,5 +759,87 @@ private final class ToggleSessionScopedContributionPlugin: DevIslandPlugin, @unc
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
         false
+    }
+}
+
+private final class GlobalToggleSessionScopedContributionPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let lock = NSLock()
+    private var hideAll = false
+
+    init(id: String) {
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: [.readSessionEvents, .showSessionSurface],
+            surfaces: [.sessionDetailSummary],
+            activationEvents: [
+                PluginEventKind.sessionUpdated.rawValue,
+                PluginEventKind.pluginTick.rawValue
+            ]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        if event.kind == .pluginTick {
+            lock.lock()
+            hideAll = true
+            lock.unlock()
+        }
+        return []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        lock.lock()
+        let shouldHide = hideAll
+        lock.unlock()
+        guard !shouldHide, let sessionID = context.session?.id else { return nil }
+
+        return PluginUIContribution(
+            pluginID: manifest.id,
+            slot: slot,
+            targetSessionID: sessionID,
+            priority: 10,
+            expiresAt: nil,
+            components: [
+                PluginUIComponentDTO(
+                    id: "summary-\(sessionID)",
+                    type: .text,
+                    label: sessionID,
+                    value: "Active",
+                    tone: nil,
+                    iconName: nil,
+                    action: nil
+                )
+            ]
+        )
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+private final class LockIsolated<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: Value
+
+    init(_ value: Value) {
+        self.storage = value
+    }
+
+    var value: Value {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func withValue(_ body: (inout Value) -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        body(&storage)
     }
 }

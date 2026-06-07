@@ -20,7 +20,12 @@ final class PluginHost: ObservableObject {
         storageProvider: storageProvider,
         eventFactory: eventFactory
     )
-    private lazy var effectExecutor = PluginEffectExecutor(storageProvider: storageProvider)
+    private lazy var effectExecutor = PluginEffectExecutor(
+        storageProvider: storageProvider,
+        notificationHandler: { title, body in
+            await AppState.presentSharedPluginNotification(title: title, body: body)
+        }
+    )
     private var pendingEvents: [QueuedPluginEvent] = []
     private var isDraining = false
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -236,9 +241,12 @@ final class PluginHost: ObservableObject {
         var updated = current
         for slot in slots {
             if Self.isSessionScoped(slot) {
-                guard let sessionID else { continue }
-                updated[slot]?.removeAll {
-                    $0.pluginID == pluginID && $0.targetSessionID == sessionID
+                if let sessionID {
+                    updated[slot]?.removeAll {
+                        $0.pluginID == pluginID && $0.targetSessionID == sessionID
+                    }
+                } else {
+                    updated[slot]?.removeAll { $0.pluginID == pluginID }
                 }
             } else {
                 updated[slot]?.removeAll { $0.pluginID == pluginID }
