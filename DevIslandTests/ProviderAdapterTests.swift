@@ -288,8 +288,7 @@ final class ProviderAdapterTests: XCTestCase {
         )
 
         // PermissionRequest + pass → empty dict so Claude Code falls back to native UI
-        XCTAssertNotNil(output)
-        XCTAssertTrue(output?.isEmpty == true)
+        XCTAssertEqual(output, [:])
     }
 
     func testClaudePassNonPermissionRequestOutput() {
@@ -377,8 +376,7 @@ final class ProviderAdapterTests: XCTestCase {
         )
 
         // pass + permissionrequest → empty dict (native UI fallback)
-        XCTAssertNotNil(output)
-        XCTAssertTrue(output?.isEmpty == true)
+        XCTAssertEqual(output, [:])
     }
 
     func testCodexPreToolUseLowercaseEventRoutes() {
