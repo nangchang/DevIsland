@@ -32,7 +32,8 @@ final class SessionStore: ObservableObject {
 
     var pendingCount: Int { pendingItems.count }
 
-    /// Called on the main thread after each session insert/update, and before each removal.
+    /// Called on the main thread after each session insert/update, and after each removal
+    /// (with a pre-removal snapshot so the removed session's data is still accessible).
     var onSessionChanged: ((SessionStoreChange) -> Void)?
 
     private let timeoutDuration: Double
@@ -275,6 +276,8 @@ final class SessionStore: ObservableObject {
         let snapshot = activeSessions.first { $0.id == sessionId }
         sessionAutoApproveTypes.removeValue(forKey: sessionId)
         activeSessions.removeAll { $0.id == sessionId }
-        snapshot.map { onSessionChanged?(.ended($0)) }
+        if let snapshot {
+            onSessionChanged?(.ended(snapshot))
+        }
     }
 }

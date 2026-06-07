@@ -515,10 +515,14 @@ class AppState: ObservableObject {
             toolName: h.toolName,
             payload: h.parsedJSON
         )
-        Task { @MainActor [weak self] in
+        // Enqueue on main queue so it serializes before the session mutation dispatched
+        // from handleNotificationEvent's DispatchQueue.main.async block.
+        DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let session = self.sessionStore.activeSessions.first { $0.id == h.sessionId }
-            self.pluginHost.enqueue(self.pluginEventFactory.makeHookReceivedEvent(from: h, session: session))
+            MainActor.assumeIsolated {
+                self.pluginHost.enqueue(self.pluginEventFactory.makeHookReceivedEvent(from: h, session: session))
+            }
         }
         if displayToolName.isEmpty {
             if normalizedEvent == "elicitation" {
@@ -1317,12 +1321,6 @@ class AppState: ObservableObject {
             if isInformational && !isStartEvent && !sessionMessage.isEmpty && !isCurrentlyViewed {
                 self.sessionStore.setUnread(true, sessionId: fullSessionId)
             }
-            if isInformational && !isStartEvent,
-               let session = self.sessionStore.activeSessions.first(where: { $0.id == fullSessionId }) {
-                MainActor.assumeIsolated {
-                    self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: session))
-                }
-            }
 
             let expandEnabled = MainActor.assumeIsolated {
                 let s = SettingsStore.shared.settings
@@ -1339,7 +1337,13 @@ class AppState: ObservableObject {
                     guard let self else { return }
                     if isFrontmost {
                         self.sessionStore.setUnread(false, sessionId: fullSessionId)
-                        return
+                        return  // frontmost: UI 변화 없음 → notification.shown 발행 안 함
+                    }
+                    // NOT frontmost: unread dot 유지 확정 → notification.shown 발행
+                    if let s = self.sessionStore.activeSessions.first(where: { $0.id == fullSessionId }) {
+                        MainActor.assumeIsolated {
+                            self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: s))
+                        }
                     }
                     guard expandEnabled else { return }
                     guard self.currentResponseHandler == nil else { return }
@@ -1362,6 +1366,14 @@ class AppState: ObservableObject {
                     self.stopNotificationAutoCollapseTimer()
                     if let delay = self.notificationAutoCollapseDelay {
                         self.startNotificationAutoCollapseTimer(delay: delay)
+                    }
+                }
+            } else if isInformational && !isStartEvent && !isCurrentlyViewed && !sessionMessage.isEmpty {
+                // hasPendingForSession || currentResponseHandler != nil: frontmost 체크 없이
+                // setUnread(true)가 이미 됐으므로 notification.shown 발행
+                if let s = self.sessionStore.activeSessions.first(where: { $0.id == fullSessionId }) {
+                    MainActor.assumeIsolated {
+                        self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: s))
                     }
                 }
             }
