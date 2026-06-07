@@ -131,6 +131,7 @@ class AppState: ObservableObject {
     private static let replayTerminalApp = "DevIsland Replay"
     private static let replayTimestampFormatter = ISO8601DateFormatter()
     private let replayRecorder: ReplayRecorder
+    private let pluginEventFactory = PluginEventFactory()
 
     init(
         startServer: Bool = true,
@@ -227,6 +228,23 @@ class AppState: ObservableObject {
 
         if let proxy = approvalProxy {
             restoreOpenSessions(from: proxy)
+        }
+
+        // Register after restoreOpenSessions so restored sessions don't emit spurious events.
+        sessionStore.onSessionChanged = { [weak self] change in
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                let event: PluginEvent
+                switch change {
+                case .started(let session):
+                    event = self.pluginEventFactory.makeSessionEvent(kind: .sessionStarted, from: session)
+                case .updated(let session):
+                    event = self.pluginEventFactory.makeSessionEvent(kind: .sessionUpdated, from: session)
+                case .ended(let session):
+                    event = self.pluginEventFactory.makeSessionEvent(kind: .sessionEnded, from: session)
+                }
+                self.pluginHost.enqueue(event)
+            }
         }
 
         setupCaffeine()
@@ -497,6 +515,15 @@ class AppState: ObservableObject {
             toolName: h.toolName,
             payload: h.parsedJSON
         )
+        // Enqueue on main queue so it serializes before the session mutation dispatched
+        // from handleNotificationEvent's DispatchQueue.main.async block.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let session = self.sessionStore.activeSessions.first { $0.id == h.sessionId }
+            MainActor.assumeIsolated {
+                self.pluginHost.enqueue(self.pluginEventFactory.makeHookReceivedEvent(from: h, session: session))
+            }
+        }
         if displayToolName.isEmpty {
             if normalizedEvent == "elicitation" {
                 if let serverName = h.parsedJSON["mcp_server_name"] as? String, !serverName.isEmpty {
@@ -1310,7 +1337,13 @@ class AppState: ObservableObject {
                     guard let self else { return }
                     if isFrontmost {
                         self.sessionStore.setUnread(false, sessionId: fullSessionId)
-                        return
+                        return  // frontmost: UI 변화 없음 → notification.shown 발행 안 함
+                    }
+                    // NOT frontmost: unread dot 유지 확정 → notification.shown 발행
+                    if let s = self.sessionStore.activeSessions.first(where: { $0.id == fullSessionId }) {
+                        MainActor.assumeIsolated {
+                            self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: s))
+                        }
                     }
                     guard expandEnabled else { return }
                     guard self.currentResponseHandler == nil else { return }
@@ -1333,6 +1366,14 @@ class AppState: ObservableObject {
                     self.stopNotificationAutoCollapseTimer()
                     if let delay = self.notificationAutoCollapseDelay {
                         self.startNotificationAutoCollapseTimer(delay: delay)
+                    }
+                }
+            } else if isInformational && !isStartEvent && !isCurrentlyViewed && !sessionMessage.isEmpty {
+                // hasPendingForSession || currentResponseHandler != nil: frontmost 체크 없이
+                // setUnread(true)가 이미 됐으므로 notification.shown 발행
+                if let s = self.sessionStore.activeSessions.first(where: { $0.id == fullSessionId }) {
+                    MainActor.assumeIsolated {
+                        self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: s))
                     }
                 }
             }
@@ -2081,7 +2122,7 @@ class AppState: ObservableObject {
                         self.sessionStore.activeSessions[index].status = status ?? .idle
                         self.sessionStore.activeSessions[index].lastActiveAt = Date()
                     } else if !self.sessionStore.activeSessions[index].isLifecycleTracked {
-                        self.sessionStore.activeSessions.remove(at: index)
+                        self.sessionStore.removeSession(id: removed.sessionId)
                     } else {
                         self.sessionStore.activeSessions[index].isPending = false
                         self.sessionStore.activeSessions[index].status = status ?? .idle

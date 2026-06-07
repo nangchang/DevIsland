@@ -46,10 +46,12 @@
   - PR 2. `PluginEventFactory`와 permission redaction — 완료 (`feat: add plugin event factory`)
   - PR 3. `PluginRunner`와 `PluginHost` dispatch — 완료 (`feat: add plugin host dispatch`)
   - PR 4. `PluginContributionRenderer`와 no-op UI 삽입 — 완료 (`feat: add PluginContributionRenderer and no-op UI insertion`)
+  - PR 5. Event emission seam — 완료 (`feat: implement plugin event emission seam (PR 5)`)
 - 마지막 검증:
-  - `./scripts/run-tests.sh` 통과 (2026-06-06, PR 1–3 기준; PR 4는 Linux 환경으로 로컬 빌드 미검증)
+  - 전체 테스트 스위트 통과 (2026-06-07, PR 5 기준)
+  - SessionStoreCallbackTests 9개 추가
 - 다음 단계:
-  - PR 5. Event emission seam
+  - PR 6. Built-in plugin 구현 (첫 번째 플러그인)
 
 ## 5. PR 분할
 
