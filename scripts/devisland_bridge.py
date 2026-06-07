@@ -255,13 +255,13 @@ def final_output(*, event: str, decision: str, provider_output: dict[str, Any] |
     message = "DevIsland에서 거절되었습니다."
 
     if decision == "pass":
-        if cli_source == "claude" and event != "PermissionRequest":
+        if cli_source == "claude" and event != "permissionrequest":
             return {"continue": True, "suppressOutput": True}
         return {}
 
     allow = decision == "approved"
     if cli_source == "gemini":
-        if event == "BeforeTool":
+        if event == "beforetool":
             output: dict[str, Any] = {"decision": "allow" if allow else "deny"}
             if not allow:
                 output["reason"] = message
@@ -269,7 +269,7 @@ def final_output(*, event: str, decision: str, provider_output: dict[str, Any] |
         return {}
 
     if cli_source == "codex":
-        if event == "PreToolUse":
+        if event == "pretooluse":
             if allow:
                 return {}
             return {
@@ -279,15 +279,15 @@ def final_output(*, event: str, decision: str, provider_output: dict[str, Any] |
                     "permissionDecisionReason": message,
                 }
             }
-        if event != "PermissionRequest":
+        if event != "permissionrequest":
             return {"continue": True}
 
     if cli_source == "claude":
-        if event == "UserPromptSubmit":
+        if event == "userpromptsubmit":
             if allow:
                 return {"continue": True, "suppressOutput": True}
             return {"decision": "block", "reason": message}
-        if event == "Elicitation":
+        if event == "elicitation":
             if allow:
                 return {"continue": True, "suppressOutput": True}
             return {
@@ -297,7 +297,7 @@ def final_output(*, event: str, decision: str, provider_output: dict[str, Any] |
                 }
             }
 
-    if event == "PermissionRequest" and decision in ("approved", "denied"):
+    if event == "permissionrequest" and decision in ("approved", "denied"):
         hook_decision: dict[str, Any] = {"behavior": "allow" if allow else "deny"}
         if not allow:
             hook_decision["message"] = message
@@ -326,8 +326,9 @@ def main() -> int:
 
     log(f"Raw Payload: {dump(payload)}")
     log(f"Event Detected: {event} (Source: {cli_source})")
+    event = _normalize_event(event)
 
-    if _normalize_event(event) not in _PASSIVE_EVENTS_NORMALIZED:
+    if event not in _PASSIVE_EVENTS_NORMALIZED:
         log(f"Passive event suppressed before app: {event}")
         print('{"continue":true,"suppressOutput":true}')
         return 0

@@ -3,7 +3,7 @@
 
 import unittest
 
-from devisland_bridge import _normalize_event, _PASSIVE_EVENTS_NORMALIZED
+from devisland_bridge import _normalize_event, _PASSIVE_EVENTS_NORMALIZED, final_output
 
 
 class TestNormalizeEvent(unittest.TestCase):
@@ -60,6 +60,45 @@ class TestPassiveEventsNormalized(unittest.TestCase):
 
     def test_empty_string_is_not_passive(self):
         self.assertFalse(self._is_passive(""))
+
+
+class TestFinalOutputNormalized(unittest.TestCase):
+    """Regression: final_output must route correctly regardless of event name case."""
+
+    def test_permissionrequest_approved_claude(self):
+        out = final_output(event="permissionrequest", decision="approved", provider_output=None, cli_source="claude")
+        self.assertEqual(out.get("hookSpecificOutput", {}).get("hookEventName"), "PermissionRequest")
+        self.assertEqual(out["hookSpecificOutput"]["decision"]["behavior"], "allow")
+
+    def test_permissionrequest_denied_claude(self):
+        out = final_output(event="permissionrequest", decision="denied", provider_output=None, cli_source="claude")
+        self.assertEqual(out["hookSpecificOutput"]["decision"]["behavior"], "deny")
+
+    def test_PermissionRequest_canonical_still_works(self):
+        """Canonical-case must also work since main() normalizes before calling."""
+        out = final_output(event="permissionrequest", decision="approved", provider_output=None, cli_source="claude")
+        self.assertIn("hookSpecificOutput", out)
+
+    def test_beforetool_approved_gemini(self):
+        out = final_output(event="beforetool", decision="approved", provider_output=None, cli_source="gemini")
+        self.assertEqual(out, {"decision": "allow"})
+
+    def test_beforetool_denied_gemini(self):
+        out = final_output(event="beforetool", decision="denied", provider_output=None, cli_source="gemini")
+        self.assertEqual(out["decision"], "deny")
+        self.assertIn("reason", out)
+
+    def test_pretooluse_denied_codex(self):
+        out = final_output(event="pretooluse", decision="denied", provider_output=None, cli_source="codex")
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_userpromptsubmit_denied_claude(self):
+        out = final_output(event="userpromptsubmit", decision="denied", provider_output=None, cli_source="claude")
+        self.assertEqual(out["decision"], "block")
+
+    def test_elicitation_denied_claude(self):
+        out = final_output(event="elicitation", decision="denied", provider_output=None, cli_source="claude")
+        self.assertEqual(out["hookSpecificOutput"]["action"], "decline")
 
 
 if __name__ == "__main__":
