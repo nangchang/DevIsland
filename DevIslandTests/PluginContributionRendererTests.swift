@@ -146,6 +146,8 @@ final class PluginContributionRendererTests: XCTestCase {
 
         XCTAssertEqual(plugin.receivedEvents.last?.action?.componentID, "component-99")
         XCTAssertEqual(plugin.receivedEvents.last?.action?.actionID, "action-42")
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.capability, "timer.startStop")
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.payload, [:])
     }
 
     // MARK: - Action Routing
@@ -169,8 +171,8 @@ final class PluginContributionRendererTests: XCTestCase {
     }
 
     @MainActor
-    func testHostExecutedActionIsNoOpInV1() async {
-        let plugin = ActionCapturingPlugin(id: "com.test.host")
+    func testHostExecutedActionDoesNotDispatchPluginEvent() async {
+        let plugin = ActionCapturingPlugin(id: "com.test.host", permissions: [.writePluginStorage])
         let host = PluginHost()
         host.register([plugin])
 
@@ -183,7 +185,6 @@ final class PluginContributionRendererTests: XCTestCase {
         host.handleAction(action, from: "com.test.host", componentID: "dismiss1")
         await host.waitUntilIdle()
 
-        // hostExecuted routing is a no-op in v1 — no event dispatched
         XCTAssertFalse(plugin.receivedKinds.contains(.pluginActionInvoked))
     }
 
@@ -242,14 +243,14 @@ private final class ActionCapturingPlugin: DevIslandPlugin, @unchecked Sendable 
         return _receivedEvents
     }
 
-    init(id: String) {
+    init(id: String, permissions: Set<PluginPermission> = []) {
         self.manifest = PluginManifest(
             id: id,
             name: id,
             version: "1.0.0",
             apiVersion: 1,
             kind: .utility,
-            permissions: [],
+            permissions: permissions,
             surfaces: [.notchExpandedActivity],
             activationEvents: Set(PluginEventKind.allCases.map(\.rawValue))
         )

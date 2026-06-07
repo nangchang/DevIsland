@@ -76,6 +76,8 @@ final class PluginHostDispatchTests: XCTestCase {
                 pluginID: "com.devisland.test.target",
                 actionID: "toggle",
                 componentID: "button",
+                capability: "timer.startStop",
+                payload: [:],
                 value: nil
             )
         ))
@@ -127,6 +129,38 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(host.failures.last?.clearsContribution, false)
     }
 
+    func testNilContributionClearsPreviousContribution() async {
+        let plugin = ToggleContributionPlugin(
+            id: "com.devisland.test.toggle",
+            permissions: [.showNotchCard]
+        )
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+        XCTAssertEqual(host.contributions[.notchExpandedActivity]?.count, 1)
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(host.contributions[.notchExpandedActivity]?.isEmpty ?? true)
+    }
+
+    func testExpiredContributionIsPrunedFromHostCache() async {
+        let plugin = ExpiringContributionPlugin(
+            id: "com.devisland.test.expired",
+            permissions: [.showNotchCard]
+        )
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(host.contributions[.notchExpandedActivity]?.isEmpty ?? true)
+    }
+
     func testRunnerDropsContributionForUnauthorizedSurface() async {
         let plugin = RecordingPlugin(
             id: "com.devisland.test.surface",
@@ -174,6 +208,36 @@ final class PluginHostDispatchTests: XCTestCase {
 
         let applied = await storage.appliedStorageEffects()
         XCTAssertEqual(applied.count, 1)
+    }
+
+    func testHostExecutedActionAppliesStorageEffect() async {
+        let plugin = RecordingPlugin(
+            id: "com.devisland.test.host-action",
+            permissions: [.writePluginStorage],
+            activationEvents: [.pluginActionInvoked]
+        )
+        let host = PluginHost()
+        host.register([plugin])
+
+        let action = PluginUIActionDTO(
+            id: "store",
+            capability: "storage.keyValue",
+            routing: .hostExecuted,
+            payload: ["key": "count"]
+        )
+        host.handleAction(action, from: "com.devisland.test.host-action", componentID: "store")
+
+        let deadline = Date().addingTimeInterval(1)
+        var applied: [(pluginID: String, effect: PluginEffect)] = []
+        repeat {
+            applied = await host.appliedStorageEffects()
+            if !applied.isEmpty { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        } while applied.isEmpty && Date() < deadline
+
+        XCTAssertEqual(applied.count, 1)
+        XCTAssertEqual(applied.first?.pluginID, "com.devisland.test.host-action")
+        XCTAssertEqual(applied.first?.effect.capability, "storage.keyValue")
     }
 
     func testGlobalContributionsDeduplicateByPluginOnly() async {
@@ -362,6 +426,113 @@ private final class RotatingContributionPlugin: DevIslandPlugin, @unchecked Send
                     type: .text,
                     label: "Status",
                     value: targetSessionID ?? "global",
+                    tone: nil,
+                    iconName: nil,
+                    action: nil
+                )
+            ]
+        )
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+private final class ToggleContributionPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let lock = NSLock()
+    private var shouldRender = true
+
+    init(id: String, permissions: Set<PluginPermission>) {
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: permissions,
+            surfaces: [.notchExpandedActivity],
+            activationEvents: [
+                PluginEventKind.pluginStarted.rawValue,
+                PluginEventKind.pluginTick.rawValue
+            ]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        if event.kind == .pluginTick {
+            lock.lock()
+            shouldRender = false
+            lock.unlock()
+        }
+        return []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        lock.lock()
+        let render = shouldRender
+        lock.unlock()
+        guard render else { return nil }
+
+        return PluginUIContribution(
+            pluginID: manifest.id,
+            slot: slot,
+            targetSessionID: nil,
+            priority: 10,
+            expiresAt: nil,
+            components: [
+                PluginUIComponentDTO(
+                    id: "status",
+                    type: .text,
+                    label: "Status",
+                    value: "Ready",
+                    tone: nil,
+                    iconName: nil,
+                    action: nil
+                )
+            ]
+        )
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+private final class ExpiringContributionPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+
+    init(id: String, permissions: Set<PluginPermission>) {
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: permissions,
+            surfaces: [.notchExpandedActivity],
+            activationEvents: [PluginEventKind.pluginStarted.rawValue]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        PluginUIContribution(
+            pluginID: manifest.id,
+            slot: slot,
+            targetSessionID: nil,
+            priority: 10,
+            expiresAt: Date(timeIntervalSinceNow: -1),
+            components: [
+                PluginUIComponentDTO(
+                    id: "status",
+                    type: .text,
+                    label: "Expired",
+                    value: nil,
                     tone: nil,
                     iconName: nil,
                     action: nil

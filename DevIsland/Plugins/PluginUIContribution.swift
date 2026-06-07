@@ -30,6 +30,21 @@ struct PluginUIContribution: Codable, Equatable {
     let components: [PluginUIComponentDTO]
 }
 
+func isActivePluginContribution(
+    _ contribution: PluginUIContribution,
+    now: Date = Date()
+) -> Bool {
+    !contribution.components.isEmpty &&
+    (contribution.expiresAt == nil || contribution.expiresAt! > now)
+}
+
+func activePluginContributions(
+    _ contributions: [PluginUIContribution],
+    now: Date = Date()
+) -> [PluginUIContribution] {
+    contributions.filter { isActivePluginContribution($0, now: now) }
+}
+
 struct PluginUIComponentDTO: Codable, Equatable {
     let id: String
     let type: PluginUIComponentType
@@ -69,6 +84,7 @@ enum PluginUITone: String, Codable {
 // Runner-to-host result bundle kept in memory only; not part of plugin IPC or durable storage.
 struct PluginContributionSnapshot: Equatable {
     let pluginID: String
+    let evaluatedSlots: Set<PluginUISlot>
     let contributions: [PluginUISlot: PluginUIContribution]
     let effects: [PluginEffect]
     let failure: PluginFailure?

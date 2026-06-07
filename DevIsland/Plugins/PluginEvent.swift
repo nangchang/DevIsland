@@ -46,6 +46,8 @@ struct PluginActionEvent: Codable, Equatable {
     let pluginID: String
     let actionID: String
     let componentID: String
+    let capability: String
+    let payload: [String: String]
     let value: String?
 }
 

@@ -12,12 +12,12 @@ actor PluginEffectExecutor {
         pluginID: String,
         permissions: Set<PluginPermission>
     ) async {
-        for effect in effects where isCapabilityAllowed(effect.capability, permissions: permissions) {
+        for effect in effects where Self.isCapabilityAllowed(effect.capability, permissions: permissions) {
             await execute(effect, pluginID: pluginID)
         }
     }
 
-    private func isCapabilityAllowed(
+    nonisolated static func isCapabilityAllowed(
         _ capability: String,
         permissions: Set<PluginPermission>
     ) -> Bool {

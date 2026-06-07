@@ -3,7 +3,11 @@ import Foundation
 
 @MainActor
 final class PluginHost: ObservableObject {
-    @Published private(set) var contributions: [PluginUISlot: [PluginUIContribution]] = [:]
+    @Published private(set) var contributions: [PluginUISlot: [PluginUIContribution]] = [:] {
+        didSet {
+            scheduleExpirationPrune()
+        }
+    }
 
     nonisolated let isEnabled: Bool
 
@@ -21,6 +25,7 @@ final class PluginHost: ObservableObject {
     private var isDraining = false
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private(set) var failures: [PluginFailure] = []
+    private var expirationTimer: Timer?
 
     nonisolated init(enablePlugins: Bool = true) {
         self.isEnabled = enablePlugins
@@ -38,24 +43,40 @@ final class PluginHost: ObservableObject {
 
     /// Routes a UI action from the plugin that owns `pluginID`.
     /// `.pluginEvent` routing enqueues a pluginActionInvoked event back to that plugin.
-    /// `.hostExecuted` routing is reserved for v1.1 host commands and is a no-op here.
+    /// `.hostExecuted` routing sends the action through the same host effect executor.
     func handleAction(_ action: PluginUIActionDTO, from pluginID: String, componentID: String) {
-        guard action.routing == .pluginEvent else { return }
-        let event = PluginEvent(
-            id: UUID(),
-            kind: .pluginActionInvoked,
-            timestamp: Date(),
-            session: nil,
-            hook: nil,
-            action: PluginActionEvent(
-                pluginID: pluginID,
-                actionID: action.id,
-                componentID: componentID,
-                value: nil
-            ),
-            approval: nil
-        )
-        enqueue(event)
+        guard let runner = runners[pluginID],
+              PluginEffectExecutor.isCapabilityAllowed(
+                action.capability,
+                permissions: runner.manifest.permissions
+              ) else { return }
+
+        switch action.routing {
+        case .hostExecuted:
+            let effect = PluginEffect(capability: action.capability, payload: action.payload)
+            let permissions = runner.manifest.permissions
+            Task { [effectExecutor] in
+                await effectExecutor.enqueue([effect], pluginID: pluginID, permissions: permissions)
+            }
+        case .pluginEvent:
+            let event = PluginEvent(
+                id: UUID(),
+                kind: .pluginActionInvoked,
+                timestamp: Date(),
+                session: nil,
+                hook: nil,
+                action: PluginActionEvent(
+                    pluginID: pluginID,
+                    actionID: action.id,
+                    componentID: componentID,
+                    capability: action.capability,
+                    payload: action.payload,
+                    value: nil
+                ),
+                approval: nil
+            )
+            enqueue(event)
+        }
     }
 
     func enqueue(_ event: PluginEvent) {
@@ -139,13 +160,13 @@ final class PluginHost: ObservableObject {
                 effectBatches.append((pluginID: snapshot.pluginID, effects: snapshot.effects))
             }
 
+            updated = removeContributions(
+                pluginID: snapshot.pluginID,
+                slots: snapshot.evaluatedSlots,
+                from: updated
+            )
+
             for (slot, contribution) in snapshot.contributions {
-                updated[slot, default: []].removeAll { existing in
-                    guard existing.pluginID == snapshot.pluginID else { return false }
-                    return Self.isSessionScoped(slot)
-                        ? existing.targetSessionID == contribution.targetSessionID
-                        : true
-                }
                 updated[slot, default: []].append(contribution)
                 updated[slot]?.sort {
                     $0.priority == $1.priority
@@ -157,6 +178,16 @@ final class PluginHost: ObservableObject {
 
         contributions = updated
         return effectBatches
+    }
+
+    func pruneExpiredContributions(now: Date = Date()) {
+        let updated = pruneExpiredContributions(from: contributions, now: now)
+        guard updated != contributions else { return }
+        contributions = updated
+    }
+
+    func appliedStorageEffects() async -> [(pluginID: String, effect: PluginEffect)] {
+        await storageProvider.appliedStorageEffects()
     }
 
     private func evictSessionContributions(sessionID: String) {
@@ -182,9 +213,24 @@ final class PluginHost: ObservableObject {
         pluginID: String,
         from current: [PluginUISlot: [PluginUIContribution]]
     ) -> [PluginUISlot: [PluginUIContribution]] {
+        removeContributions(
+            pluginID: pluginID,
+            slots: Set(current.keys),
+            from: current
+        )
+    }
+
+    private func removeContributions(
+        pluginID: String,
+        slots: Set<PluginUISlot>,
+        from current: [PluginUISlot: [PluginUIContribution]]
+    ) -> [PluginUISlot: [PluginUIContribution]] {
         var updated = current
-        for slot in updated.keys {
+        for slot in slots {
             updated[slot]?.removeAll { $0.pluginID == pluginID }
+            if updated[slot]?.isEmpty == true {
+                updated.removeValue(forKey: slot)
+            }
         }
         return updated
     }
@@ -193,18 +239,44 @@ final class PluginHost: ObservableObject {
         failures.append(failure)
     }
 
-    private nonisolated static func isSessionScoped(_ slot: PluginUISlot) -> Bool {
-        switch slot {
-        case .notchSessionRow,
-             .sessionDetailTimeline,
-             .sessionDetailSummary,
-             .sessionContextMenu,
-             .sessionMessage:
-            return true
-        case .notchExpandedActivity,
-             .notchExpandedDetails,
-             .menubarMenu:
-            return false
+    private func scheduleExpirationPrune() {
+        expirationTimer?.invalidate()
+
+        let now = Date()
+        let updated = pruneExpiredContributions(from: contributions, now: now)
+        if updated != contributions {
+            contributions = updated
+            return
+        }
+
+        let nextExpiration = contributions.values
+            .flatMap { $0 }
+            .compactMap(\.expiresAt)
+            .min()
+        guard let nextExpiration else { return }
+
+        expirationTimer = Timer.scheduledTimer(
+            withTimeInterval: max(0, nextExpiration.timeIntervalSince(now)),
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.pruneExpiredContributions()
+            }
         }
     }
+
+    private func pruneExpiredContributions(
+        from current: [PluginUISlot: [PluginUIContribution]],
+        now: Date
+    ) -> [PluginUISlot: [PluginUIContribution]] {
+        var updated: [PluginUISlot: [PluginUIContribution]] = [:]
+        for (slot, slotContributions) in current {
+            let active = activePluginContributions(slotContributions, now: now)
+            if !active.isEmpty {
+                updated[slot] = active
+            }
+        }
+        return updated
+    }
+
 }

@@ -18,6 +18,9 @@ actor PluginRunner {
         storageSnapshot: [String: String]
     ) async -> PluginContributionSnapshot {
         let startedAt = ContinuousClock.now
+        let evaluatedSlots = manifest.surfaces.filter {
+            Self.isSurfaceAllowed($0, permissions: manifest.permissions)
+        }
 
         do {
             let context = PluginContext(
@@ -28,7 +31,7 @@ actor PluginRunner {
             let effects = try plugin.onEvent(event, context: context)
             var contributions: [PluginUISlot: PluginUIContribution] = [:]
 
-            for slot in manifest.surfaces where Self.isSurfaceAllowed(slot, permissions: manifest.permissions) {
+            for slot in evaluatedSlots {
                 let context = PluginUIContext(
                     slot: slot,
                     timestamp: event.timestamp,
@@ -44,6 +47,7 @@ actor PluginRunner {
             let elapsed = startedAt.duration(to: ContinuousClock.now)
             return PluginContributionSnapshot(
                 pluginID: manifest.id,
+                evaluatedSlots: Set(evaluatedSlots),
                 contributions: contributions,
                 effects: effects,
                 failure: elapsed > .milliseconds(50)
@@ -59,6 +63,7 @@ actor PluginRunner {
         } catch {
             return PluginContributionSnapshot(
                 pluginID: manifest.id,
+                evaluatedSlots: Set(evaluatedSlots),
                 contributions: [:],
                 effects: [],
                 failure: PluginFailure(
