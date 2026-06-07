@@ -84,6 +84,7 @@ enum PluginUITone: String, Codable {
 // Runner-to-host result bundle kept in memory only; not part of plugin IPC or durable storage.
 struct PluginContributionSnapshot: Equatable {
     let pluginID: String
+    let sessionID: String?
     let evaluatedSlots: Set<PluginUISlot>
     let contributions: [PluginUISlot: PluginUIContribution]
     let effects: [PluginEffect]

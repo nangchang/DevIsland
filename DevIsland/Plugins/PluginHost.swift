@@ -163,6 +163,7 @@ final class PluginHost: ObservableObject {
             updated = removeContributions(
                 pluginID: snapshot.pluginID,
                 slots: snapshot.evaluatedSlots,
+                sessionID: snapshot.sessionID,
                 from: updated
             )
 
@@ -216,6 +217,7 @@ final class PluginHost: ObservableObject {
         removeContributions(
             pluginID: pluginID,
             slots: Set(current.keys),
+            sessionID: nil,
             from: current
         )
     }
@@ -223,11 +225,19 @@ final class PluginHost: ObservableObject {
     private func removeContributions(
         pluginID: String,
         slots: Set<PluginUISlot>,
+        sessionID: String?,
         from current: [PluginUISlot: [PluginUIContribution]]
     ) -> [PluginUISlot: [PluginUIContribution]] {
         var updated = current
         for slot in slots {
-            updated[slot]?.removeAll { $0.pluginID == pluginID }
+            if Self.isSessionScoped(slot) {
+                guard let sessionID else { continue }
+                updated[slot]?.removeAll {
+                    $0.pluginID == pluginID && $0.targetSessionID == sessionID
+                }
+            } else {
+                updated[slot]?.removeAll { $0.pluginID == pluginID }
+            }
             if updated[slot]?.isEmpty == true {
                 updated.removeValue(forKey: slot)
             }
@@ -277,6 +287,21 @@ final class PluginHost: ObservableObject {
             }
         }
         return updated
+    }
+
+    private nonisolated static func isSessionScoped(_ slot: PluginUISlot) -> Bool {
+        switch slot {
+        case .notchSessionRow,
+             .sessionDetailTimeline,
+             .sessionDetailSummary,
+             .sessionContextMenu,
+             .sessionMessage:
+            return true
+        case .notchExpandedActivity,
+             .notchExpandedDetails,
+             .menubarMenu:
+            return false
+        }
     }
 
 }

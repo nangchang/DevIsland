@@ -47,6 +47,7 @@ actor PluginRunner {
             let elapsed = startedAt.duration(to: ContinuousClock.now)
             return PluginContributionSnapshot(
                 pluginID: manifest.id,
+                sessionID: event.session?.id,
                 evaluatedSlots: Set(evaluatedSlots),
                 contributions: contributions,
                 effects: effects,
@@ -63,6 +64,7 @@ actor PluginRunner {
         } catch {
             return PluginContributionSnapshot(
                 pluginID: manifest.id,
+                sessionID: event.session?.id,
                 evaluatedSlots: Set(evaluatedSlots),
                 contributions: [:],
                 effects: [],

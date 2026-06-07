@@ -260,8 +260,45 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(contributions.first?.targetSessionID, "session-b")
     }
 
+    func testSessionScopedContributionsCoexistAcrossSessions() async {
+        let plugin = SessionScopedContributionPlugin(id: "com.devisland.test.session-scope")
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .sessionUpdated, sessionID: "session-a"))
+        await host.waitUntilIdle()
+        host.enqueue(makeEvent(kind: .sessionUpdated, sessionID: "session-b"))
+        await host.waitUntilIdle()
+
+        let contributions = host.contributions[.sessionDetailSummary] ?? []
+        XCTAssertEqual(contributions.count, 2)
+        XCTAssertEqual(Set(contributions.compactMap(\.targetSessionID)), ["session-a", "session-b"])
+    }
+
+    func testNilSessionScopedContributionClearsOnlyMatchingSession() async {
+        let plugin = ToggleSessionScopedContributionPlugin(id: "com.devisland.test.session-toggle")
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .sessionUpdated, sessionID: "session-a"))
+        await host.waitUntilIdle()
+        host.enqueue(makeEvent(kind: .sessionUpdated, sessionID: "session-b"))
+        await host.waitUntilIdle()
+
+        var contributions = host.contributions[.sessionDetailSummary] ?? []
+        XCTAssertEqual(contributions.count, 2)
+
+        host.enqueue(makeEvent(kind: .pluginTick, sessionID: "session-a"))
+        await host.waitUntilIdle()
+
+        contributions = host.contributions[.sessionDetailSummary] ?? []
+        XCTAssertEqual(contributions.count, 1)
+        XCTAssertEqual(contributions.first?.targetSessionID, "session-b")
+    }
+
     private func makeEvent(
         kind: PluginEventKind,
+        sessionID: String? = nil,
         hook: PluginHookSummary? = nil,
         action: PluginActionEvent? = nil
     ) -> PluginEvent {
@@ -269,10 +306,22 @@ final class PluginHostDispatchTests: XCTestCase {
             id: UUID(),
             kind: kind,
             timestamp: Date(),
-            session: nil,
+            session: sessionID.map(makeSessionSnapshot),
             hook: hook,
             action: action,
             approval: nil
+        )
+    }
+
+    private func makeSessionSnapshot(id: String) -> PluginSessionSnapshot {
+        PluginSessionSnapshot(
+            id: id,
+            agentKind: "codex",
+            startTime: Date(timeIntervalSince1970: 0),
+            lastActiveAt: Date(timeIntervalSince1970: 0),
+            lastToolName: nil,
+            lastEventName: nil,
+            workspaceRoot: nil
         )
     }
 
@@ -533,6 +582,115 @@ private final class ExpiringContributionPlugin: DevIslandPlugin, @unchecked Send
                     type: .text,
                     label: "Expired",
                     value: nil,
+                    tone: nil,
+                    iconName: nil,
+                    action: nil
+                )
+            ]
+        )
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+private final class SessionScopedContributionPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+
+    init(id: String) {
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: [.readSessionEvents, .showSessionSurface],
+            surfaces: [.sessionDetailSummary],
+            activationEvents: [PluginEventKind.sessionUpdated.rawValue]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        guard let sessionID = context.session?.id else { return nil }
+        return PluginUIContribution(
+            pluginID: manifest.id,
+            slot: slot,
+            targetSessionID: sessionID,
+            priority: 10,
+            expiresAt: nil,
+            components: [
+                PluginUIComponentDTO(
+                    id: "summary-\(sessionID)",
+                    type: .text,
+                    label: sessionID,
+                    value: "Active",
+                    tone: nil,
+                    iconName: nil,
+                    action: nil
+                )
+            ]
+        )
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+private final class ToggleSessionScopedContributionPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let lock = NSLock()
+    private var hiddenSessionIDs: Set<String> = []
+
+    init(id: String) {
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: [.readSessionEvents, .showSessionSurface],
+            surfaces: [.sessionDetailSummary],
+            activationEvents: [
+                PluginEventKind.sessionUpdated.rawValue,
+                PluginEventKind.pluginTick.rawValue
+            ]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        if event.kind == .pluginTick, let sessionID = event.session?.id {
+            lock.lock()
+            hiddenSessionIDs.insert(sessionID)
+            lock.unlock()
+        }
+        return []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        guard let sessionID = context.session?.id else { return nil }
+        lock.lock()
+        let shouldHide = hiddenSessionIDs.contains(sessionID)
+        lock.unlock()
+        guard !shouldHide else { return nil }
+
+        return PluginUIContribution(
+            pluginID: manifest.id,
+            slot: slot,
+            targetSessionID: sessionID,
+            priority: 10,
+            expiresAt: nil,
+            components: [
+                PluginUIComponentDTO(
+                    id: "summary-\(sessionID)",
+                    type: .text,
+                    label: sessionID,
+                    value: "Active",
                     tone: nil,
                     iconName: nil,
                     action: nil
