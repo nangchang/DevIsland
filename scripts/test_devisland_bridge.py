@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Regression tests for devisland_bridge.py event-allow-list normalization."""
 
+import json
 import unittest
+from pathlib import Path
 
-from devisland_bridge import _normalize_event, _PASSIVE_EVENTS_NORMALIZED, final_output
+from devisland_bridge import _normalize_event, _PASSIVE_EVENTS_NORMALIZED, PASSIVE_EVENTS, final_output
+
+_MANIFEST_PATH = Path(__file__).parent / "hook_events.json"
 
 
 class TestNormalizeEvent(unittest.TestCase):
@@ -99,6 +103,75 @@ class TestFinalOutputNormalized(unittest.TestCase):
     def test_elicitation_denied_claude(self):
         out = final_output(event="elicitation", decision="denied", provider_output=None, cli_source="claude")
         self.assertEqual(out["hookSpecificOutput"]["action"], "decline")
+
+
+class TestHookEventsManifest(unittest.TestCase):
+    """PASSIVE_EVENTS must stay in sync with hook_events.json."""
+
+    def setUp(self):
+        with open(_MANIFEST_PATH, encoding="utf-8") as fh:
+            self._manifest = json.load(fh)
+
+    def _all_installed_events(self) -> set[str]:
+        """Union of active + lifecycle across all providers, plus _bridge_extras."""
+        events: set[str] = set()
+        for key, value in self._manifest.items():
+            if key.startswith("_"):
+                events.update(value)
+            else:
+                events.update(value.get("active", []))
+                events.update(value.get("lifecycle", []))
+        return events
+
+    def _all_retired_events(self) -> set[str]:
+        """Union of retired lists across all providers."""
+        events: set[str] = set()
+        for key, value in self._manifest.items():
+            if not key.startswith("_"):
+                events.update(value.get("retired", []))
+        return events
+
+    def test_passive_events_includes_all_manifest_events(self):
+        """PASSIVE_EVENTS must contain every installed + bridge-extra event from the manifest."""
+        required = self._all_installed_events()
+        missing = required - set(PASSIVE_EVENTS)
+        self.assertEqual(missing, set(), f"Events in manifest but not in PASSIVE_EVENTS: {missing}")
+
+    def test_passive_events_no_extra_events(self):
+        """PASSIVE_EVENTS must not contain events beyond what the manifest declares."""
+        required = self._all_installed_events()
+        extra = set(PASSIVE_EVENTS) - required
+        self.assertEqual(extra, set(), f"Events in PASSIVE_EVENTS but not in manifest: {extra}")
+
+    def test_truly_retired_events_not_in_passive_events(self):
+        """Events retired by ALL providers (and not installed by any) must be suppressed."""
+        passive_union = self._all_installed_events()
+        retired_union = self._all_retired_events()
+        # An event is only truly retired if no provider still installs it.
+        truly_retired = retired_union - passive_union
+        for event in truly_retired:
+            self.assertNotIn(
+                event, PASSIVE_EVENTS,
+                f"Truly-retired event '{event}' must not be in PASSIVE_EVENTS",
+            )
+
+    def test_passive_events_matches_original_12(self):
+        """Regression: PASSIVE_EVENTS must equal the original hardcoded 12 events."""
+        expected = frozenset({
+            "PermissionRequest",
+            "SessionStart",
+            "SessionEnd",
+            "Notification",
+            "Stop",
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "UserPromptSubmit",
+            "Elicitation",
+            "BeforeTool",
+            "AfterAgent",
+        })
+        self.assertEqual(PASSIVE_EVENTS, expected)
 
 
 if __name__ == "__main__":

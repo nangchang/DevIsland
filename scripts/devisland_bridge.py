@@ -18,20 +18,23 @@ from typing import Any
 LOG_PATH = "/tmp/DevIsland.bridge.log"
 
 # Events forwarded to the app (all others are suppressed before reaching the app).
-PASSIVE_EVENTS = {
-    "PermissionRequest",
-    "SessionStart",
-    "SessionEnd",
-    "Notification",
-    "Stop",
-    "PreToolUse",
-    "PostToolUse",
-    "PostToolUseFailure",
-    "UserPromptSubmit",
-    "Elicitation",
-    "BeforeTool",
-    "AfterAgent",
-}
+# Derived from the canonical hook_events.json manifest so this list stays in sync.
+def _load_passive_events() -> frozenset[str]:
+    manifest_path = Path(__file__).parent / "hook_events.json"
+    with open(manifest_path, encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    events: set[str] = set()
+    for key, value in manifest.items():
+        if key.startswith("_"):
+            # Special keys like _bridge_extras are treated as a flat list.
+            events.update(value)
+        else:
+            events.update(value.get("active", []))
+            events.update(value.get("lifecycle", []))
+    return frozenset(events)
+
+
+PASSIVE_EVENTS: frozenset[str] = _load_passive_events()
 
 
 def _normalize_event(name: str) -> str:
