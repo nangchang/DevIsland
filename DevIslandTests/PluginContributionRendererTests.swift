@@ -77,6 +77,77 @@ final class PluginContributionRendererTests: XCTestCase {
         XCTAssertTrue(filtered.isEmpty)
     }
 
+    // MARK: - expiresAt Filtering
+
+    func testExpiredContributionIsExcluded() {
+        let expired = PluginUIContribution(
+            pluginID: "com.test",
+            slot: .notchExpandedActivity,
+            targetSessionID: nil,
+            priority: 0,
+            expiresAt: Date(timeIntervalSinceNow: -1),
+            components: [makeComponent(type: .text, label: "stale", value: nil)]
+        )
+        let now = Date()
+        let valid = [expired].filter {
+            !$0.components.isEmpty && ($0.expiresAt == nil || $0.expiresAt! > now)
+        }
+        XCTAssertTrue(valid.isEmpty)
+    }
+
+    func testNonExpiredContributionIsIncluded() {
+        let fresh = PluginUIContribution(
+            pluginID: "com.test",
+            slot: .notchExpandedActivity,
+            targetSessionID: nil,
+            priority: 0,
+            expiresAt: Date(timeIntervalSinceNow: 60),
+            components: [makeComponent(type: .text, label: "live", value: nil)]
+        )
+        let now = Date()
+        let valid = [fresh].filter {
+            !$0.components.isEmpty && ($0.expiresAt == nil || $0.expiresAt! > now)
+        }
+        XCTAssertEqual(valid.count, 1)
+    }
+
+    func testNilExpiresAtIsAlwaysIncluded() {
+        let permanent = PluginUIContribution(
+            pluginID: "com.test",
+            slot: .notchExpandedActivity,
+            targetSessionID: nil,
+            priority: 0,
+            expiresAt: nil,
+            components: [makeComponent(type: .metric, label: "uptime", value: "42s")]
+        )
+        let now = Date()
+        let valid = [permanent].filter {
+            !$0.components.isEmpty && ($0.expiresAt == nil || $0.expiresAt! > now)
+        }
+        XCTAssertEqual(valid.count, 1)
+    }
+
+    // MARK: - componentID Routing
+
+    @MainActor
+    func testActionCarriesComponentID() async {
+        let plugin = ActionCapturingPlugin(id: "com.test.cid")
+        let host = PluginHost()
+        host.register([plugin])
+
+        let action = PluginUIActionDTO(
+            id: "action-42",
+            capability: "timer.startStop",
+            routing: .pluginEvent,
+            payload: [:]
+        )
+        host.handleAction(action, from: "com.test.cid", componentID: "component-99")
+        await host.waitUntilIdle()
+
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.componentID, "component-99")
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.actionID, "action-42")
+    }
+
     // MARK: - Action Routing
 
     @MainActor
@@ -91,7 +162,7 @@ final class PluginContributionRendererTests: XCTestCase {
             routing: .pluginEvent,
             payload: [:]
         )
-        host.handleAction(action, from: "com.test.action")
+        host.handleAction(action, from: "com.test.action", componentID: "btn1")
         await host.waitUntilIdle()
 
         XCTAssertEqual(plugin.receivedKinds.last, .pluginActionInvoked)
@@ -109,7 +180,7 @@ final class PluginContributionRendererTests: XCTestCase {
             routing: .hostExecuted,
             payload: [:]
         )
-        host.handleAction(action, from: "com.test.host")
+        host.handleAction(action, from: "com.test.host", componentID: "dismiss1")
         await host.waitUntilIdle()
 
         // hostExecuted routing is a no-op in v1 — no event dispatched
@@ -129,7 +200,7 @@ final class PluginContributionRendererTests: XCTestCase {
             routing: .pluginEvent,
             payload: [:]
         )
-        host.handleAction(action, from: "com.test.target")
+        host.handleAction(action, from: "com.test.target", componentID: "act1")
         await host.waitUntilIdle()
 
         XCTAssertTrue(target.receivedKinds.contains(.pluginActionInvoked))
@@ -161,10 +232,14 @@ final class PluginContributionRendererTests: XCTestCase {
 private final class ActionCapturingPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
     private let lock = NSLock()
-    private var _receivedKinds: [PluginEventKind] = []
+    private var _receivedEvents: [PluginEvent] = []
     var receivedKinds: [PluginEventKind] {
         lock.lock(); defer { lock.unlock() }
-        return _receivedKinds
+        return _receivedEvents.map(\.kind)
+    }
+    var receivedEvents: [PluginEvent] {
+        lock.lock(); defer { lock.unlock() }
+        return _receivedEvents
     }
 
     init(id: String) {
@@ -182,7 +257,7 @@ private final class ActionCapturingPlugin: DevIslandPlugin, @unchecked Sendable 
 
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
         lock.lock(); defer { lock.unlock() }
-        _receivedKinds.append(event.kind)
+        _receivedEvents.append(event)
         return []
     }
 

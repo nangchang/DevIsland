@@ -39,7 +39,7 @@ final class PluginHost: ObservableObject {
     /// Routes a UI action from the plugin that owns `pluginID`.
     /// `.pluginEvent` routing enqueues a pluginActionInvoked event back to that plugin.
     /// `.hostExecuted` routing is reserved for v1.1 host commands and is a no-op here.
-    func handleAction(_ action: PluginUIActionDTO, from pluginID: String) {
+    func handleAction(_ action: PluginUIActionDTO, from pluginID: String, componentID: String) {
         guard action.routing == .pluginEvent else { return }
         let event = PluginEvent(
             id: UUID(),
@@ -50,7 +50,7 @@ final class PluginHost: ObservableObject {
             action: PluginActionEvent(
                 pluginID: pluginID,
                 actionID: action.id,
-                componentID: action.id,
+                componentID: componentID,
                 value: nil
             ),
             approval: nil

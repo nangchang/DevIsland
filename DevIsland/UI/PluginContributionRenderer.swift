@@ -28,7 +28,10 @@ struct PluginSlotView: View {
 
     @ViewBuilder
     var body: some View {
-        let valid = contributions.filter { !$0.components.isEmpty }
+        let now = Date()
+        let valid = contributions.filter {
+            !$0.components.isEmpty && ($0.expiresAt == nil || $0.expiresAt! > now)
+        }
         if !valid.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(valid, id: \.pluginID) { contribution in
@@ -132,7 +135,7 @@ private struct PluginComponentView: View {
     private var buttonView: some View {
         if let action = component.action {
             Button {
-                AppState.shared.pluginHost.handleAction(action, from: pluginID)
+                AppState.shared.pluginHost.handleAction(action, from: pluginID, componentID: component.id)
             } label: {
                 buttonLabel.foregroundColor(toneColor)
             }
@@ -191,7 +194,10 @@ struct PluginMenuItemsView: View {
 
     @ViewBuilder
     var body: some View {
-        let valid = contributions.filter { !$0.components.isEmpty }
+        let now = Date()
+        let valid = contributions.filter {
+            !$0.components.isEmpty && ($0.expiresAt == nil || $0.expiresAt! > now)
+        }
         if !valid.isEmpty {
             Divider()
             ForEach(valid, id: \.pluginID) { contribution in
@@ -234,7 +240,7 @@ private struct PluginMenuComponentView: View {
                 let title = label.isEmpty ? value : label
                 if !title.isEmpty {
                     Button(title) {
-                        AppState.shared.pluginHost.handleAction(action, from: pluginID)
+                        AppState.shared.pluginHost.handleAction(action, from: pluginID, componentID: component.id)
                     }
                 }
             }
