@@ -40,15 +40,16 @@
 ## 현재 진행 현황
 
 - 기준 브랜치: `origin/main`
-- 작업 브랜치: `codex/plugin-host-dispatch`
+- 작업 브랜치: `claude/plugin-architecture-next-steps-O9L3N`
 - 완료 단계:
   - PR 1. 타입 정의와 빈 `PluginHost` — `0792d2c feat: add plugin host skeleton`
   - PR 2. `PluginEventFactory`와 permission redaction — 완료 (`feat: add plugin event factory`)
   - PR 3. `PluginRunner`와 `PluginHost` dispatch — 완료 (`feat: add plugin host dispatch`)
+  - PR 4. `PluginContributionRenderer`와 no-op UI 삽입 — 완료 (`feat: add PluginContributionRenderer and no-op UI insertion`)
 - 마지막 검증:
-  - `./scripts/run-tests.sh` 통과 (2026-06-06)
+  - `./scripts/run-tests.sh` 통과 (2026-06-06, PR 1–3 기준; PR 4는 Linux 환경으로 로컬 빌드 미검증)
 - 다음 단계:
-  - PR 4. `PluginContributionRenderer`와 no-op UI 삽입
+  - PR 5. Event emission seam
 
 ## 5. PR 분할
 

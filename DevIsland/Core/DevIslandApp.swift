@@ -56,6 +56,7 @@ struct MenuBarMenu: View {
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var updateChecker = UpdateChecker.shared
+    @ObservedObject private var pluginHost = AppState.shared.pluginHost
 
     static let versionString: String = {
         let appName = Bundle.main.infoDictionary?["CFBundleName"] as? String ?? "DevIsland"
@@ -103,6 +104,8 @@ struct MenuBarMenu: View {
         Divider()
 
         CaffeineMenuItem()
+
+        PluginMenuItemsView(contributions: pluginHost.contributions[.menubarMenu] ?? [])
 
         Divider()
 
