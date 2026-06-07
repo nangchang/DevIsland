@@ -146,6 +146,8 @@ final class PluginContributionRendererTests: XCTestCase {
 
         XCTAssertEqual(plugin.receivedEvents.last?.action?.componentID, "component-99")
         XCTAssertEqual(plugin.receivedEvents.last?.action?.actionID, "action-42")
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.capability, "timer.startStop")
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.payload, [:])
     }
 
     // MARK: - Action Routing
@@ -169,8 +171,27 @@ final class PluginContributionRendererTests: XCTestCase {
     }
 
     @MainActor
-    func testHostExecutedActionIsNoOpInV1() async {
-        let plugin = ActionCapturingPlugin(id: "com.test.host")
+    func testPluginCustomActionEnqueuesEvent() async {
+        let plugin = ActionCapturingPlugin(id: "com.test.custom")
+        let host = PluginHost()
+        host.register([plugin])
+
+        let action = PluginUIActionDTO(
+            id: "custom1",
+            capability: "plugin.customAction",
+            routing: .pluginEvent,
+            payload: ["mode": "focus"]
+        )
+        host.handleAction(action, from: "com.test.custom", componentID: "custom1")
+        await host.waitUntilIdle()
+
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.capability, "plugin.customAction")
+        XCTAssertEqual(plugin.receivedEvents.last?.action?.payload, ["mode": "focus"])
+    }
+
+    @MainActor
+    func testHostExecutedActionDoesNotDispatchPluginEvent() async {
+        let plugin = ActionCapturingPlugin(id: "com.test.host", permissions: [.writePluginStorage])
         let host = PluginHost()
         host.register([plugin])
 
@@ -183,8 +204,25 @@ final class PluginContributionRendererTests: XCTestCase {
         host.handleAction(action, from: "com.test.host", componentID: "dismiss1")
         await host.waitUntilIdle()
 
-        // hostExecuted routing is a no-op in v1 — no event dispatched
         XCTAssertFalse(plugin.receivedKinds.contains(.pluginActionInvoked))
+    }
+
+    @MainActor
+    func testUnsupportedHostExecutedActionIsRejected() async {
+        let plugin = ActionCapturingPlugin(id: "com.test.unsupported-host", permissions: [.showNotification])
+        let host = PluginHost()
+        host.register([plugin])
+
+        let action = PluginUIActionDTO(
+            id: "notify1",
+            capability: "notification.show",
+            routing: .hostExecuted,
+            payload: ["title": "Done"]
+        )
+        host.handleAction(action, from: "com.test.unsupported-host", componentID: "notify1")
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(plugin.receivedEvents.isEmpty)
     }
 
     @MainActor
@@ -242,14 +280,14 @@ private final class ActionCapturingPlugin: DevIslandPlugin, @unchecked Sendable 
         return _receivedEvents
     }
 
-    init(id: String) {
+    init(id: String, permissions: Set<PluginPermission> = []) {
         self.manifest = PluginManifest(
             id: id,
             name: id,
             version: "1.0.0",
             apiVersion: 1,
             kind: .utility,
-            permissions: [],
+            permissions: permissions,
             surfaces: [.notchExpandedActivity],
             activationEvents: Set(PluginEventKind.allCases.map(\.rawValue))
         )

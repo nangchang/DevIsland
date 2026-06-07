@@ -1,10 +1,17 @@
 import Foundation
 
 actor PluginEffectExecutor {
-    private let storageProvider: PluginStorageProvider
+    typealias NotificationHandler = @Sendable (_ title: String, _ body: String?) async -> Void
 
-    init(storageProvider: PluginStorageProvider) {
+    private let storageProvider: PluginStorageProvider
+    private let notificationHandler: NotificationHandler?
+
+    init(
+        storageProvider: PluginStorageProvider,
+        notificationHandler: NotificationHandler? = nil
+    ) {
         self.storageProvider = storageProvider
+        self.notificationHandler = notificationHandler
     }
 
     func enqueue(
@@ -12,24 +19,20 @@ actor PluginEffectExecutor {
         pluginID: String,
         permissions: Set<PluginPermission>
     ) async {
-        for effect in effects where isCapabilityAllowed(effect.capability, permissions: permissions) {
+        for effect in effects where Self.isHostEffectSupported(effect.capability, permissions: permissions) {
             await execute(effect, pluginID: pluginID)
         }
     }
 
-    private func isCapabilityAllowed(
+    nonisolated static func isHostEffectSupported(
         _ capability: String,
         permissions: Set<PluginPermission>
     ) -> Bool {
         switch capability {
-        case "timer.tick", "timer.startStop":
-            return true
         case "storage.keyValue", "storage.increment":
             return permissions.contains(.writePluginStorage)
         case "notification.show":
             return permissions.contains(.showNotification)
-        case "session.dismiss":
-            return permissions.contains(.showSessionSurface)
         default:
             return false
         }
@@ -38,6 +41,20 @@ actor PluginEffectExecutor {
     private func execute(_ effect: PluginEffect, pluginID: String) async {
         if effect.capability.hasPrefix("storage.") {
             await storageProvider.applyStorageEffect(effect, pluginID: pluginID)
+            return
         }
+
+        if effect.capability == "notification.show" {
+            let title = normalizedText(effect.payload["title"])
+            let body = normalizedText(effect.payload["body"])
+            guard let message = title ?? body else { return }
+            await notificationHandler?(message, title == nil ? nil : body)
+        }
+    }
+
+    private func normalizedText(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

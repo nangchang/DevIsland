@@ -1987,6 +1987,29 @@ class AppState: ObservableObject {
         notificationAutoCollapseProgress = 1.0
     }
 
+    @MainActor
+    private func presentPluginNotification(title: String, body: String?) {
+        guard currentResponseHandler == nil, !isShowingRequest else { return }
+
+        currentToolName = title
+        currentEventName = PluginEventKind.notificationShown.rawValue
+        currentMessage = body ?? title
+        currentSessionId = ""
+        isNotchExpanded = true
+        isExpandingFromRequest = false
+
+        stopNotificationAutoCollapseTimer()
+        if let delay = notificationAutoCollapseDelay {
+            startNotificationAutoCollapseTimer(delay: delay)
+        }
+    }
+
+    nonisolated static func presentSharedPluginNotification(title: String, body: String?) async {
+        await MainActor.run {
+            AppState.shared.presentPluginNotification(title: title, body: body)
+        }
+    }
+
     private func sendDecision(
         approved: Bool,
         reason: String? = nil,

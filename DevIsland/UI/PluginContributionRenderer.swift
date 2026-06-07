@@ -28,10 +28,7 @@ struct PluginSlotView: View {
 
     @ViewBuilder
     var body: some View {
-        let now = Date()
-        let valid = contributions.filter {
-            !$0.components.isEmpty && ($0.expiresAt == nil || $0.expiresAt! > now)
-        }
+        let valid = activePluginContributions(contributions)
         if !valid.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(valid, id: \.pluginID) { contribution in
@@ -194,10 +191,7 @@ struct PluginMenuItemsView: View {
 
     @ViewBuilder
     var body: some View {
-        let now = Date()
-        let valid = contributions.filter {
-            !$0.components.isEmpty && ($0.expiresAt == nil || $0.expiresAt! > now)
-        }
+        let valid = activePluginContributions(contributions)
         if !valid.isEmpty {
             Divider()
             ForEach(valid, id: \.pluginID) { contribution in

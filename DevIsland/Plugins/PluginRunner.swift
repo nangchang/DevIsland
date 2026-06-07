@@ -18,6 +18,10 @@ actor PluginRunner {
         storageSnapshot: [String: String]
     ) async -> PluginContributionSnapshot {
         let startedAt = ContinuousClock.now
+        let evaluatedSlots = manifest.surfaces.filter {
+            Self.isSurfaceAllowed($0, permissions: manifest.permissions)
+                && Self.shouldEvaluate($0, for: event)
+        }
 
         do {
             let context = PluginContext(
@@ -28,7 +32,7 @@ actor PluginRunner {
             let effects = try plugin.onEvent(event, context: context)
             var contributions: [PluginUISlot: PluginUIContribution] = [:]
 
-            for slot in manifest.surfaces where Self.isSurfaceAllowed(slot, permissions: manifest.permissions) {
+            for slot in evaluatedSlots {
                 let context = PluginUIContext(
                     slot: slot,
                     timestamp: event.timestamp,
@@ -44,6 +48,8 @@ actor PluginRunner {
             let elapsed = startedAt.duration(to: ContinuousClock.now)
             return PluginContributionSnapshot(
                 pluginID: manifest.id,
+                sessionID: event.session?.id,
+                evaluatedSlots: Set(evaluatedSlots),
                 contributions: contributions,
                 effects: effects,
                 failure: elapsed > .milliseconds(50)
@@ -59,6 +65,8 @@ actor PluginRunner {
         } catch {
             return PluginContributionSnapshot(
                 pluginID: manifest.id,
+                sessionID: event.session?.id,
+                evaluatedSlots: Set(evaluatedSlots),
                 contributions: [:],
                 effects: [],
                 failure: PluginFailure(
@@ -87,6 +95,29 @@ actor PluginRunner {
              .sessionContextMenu,
              .sessionMessage:
             return permissions.contains(.showSessionSurface)
+        }
+    }
+
+    private nonisolated static func shouldEvaluate(
+        _ slot: PluginUISlot,
+        for event: PluginEvent
+    ) -> Bool {
+        guard isSessionScoped(slot) else { return true }
+        return event.session != nil
+    }
+
+    private nonisolated static func isSessionScoped(_ slot: PluginUISlot) -> Bool {
+        switch slot {
+        case .notchSessionRow,
+             .sessionDetailTimeline,
+             .sessionDetailSummary,
+             .sessionContextMenu,
+             .sessionMessage:
+            return true
+        case .notchExpandedActivity,
+             .notchExpandedDetails,
+             .menubarMenu:
+            return false
         }
     }
 }
