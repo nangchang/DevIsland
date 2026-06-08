@@ -1,0 +1,23 @@
+{
+  "claude": {
+    "active": ["PermissionRequest"],
+    "lifecycle": [
+      "SessionStart",
+      "SessionEnd",
+      "Notification",
+      "Stop",
+      "PreToolUse",
+      "PostToolUse",
+      "PostToolUseFailure",
+      "UserPromptSubmit",
+      "Elicitation"
+    ],
+    "retired": ["SubagentStop", "PreCompact", "StopFailure"]
+  },
+  "codex": {
+    "active": ["PermissionRequest"],
+    "lifecycle": ["SessionStart", "PreToolUse", "PostToolUse", "Stop"],
+    "retired": ["SessionEnd"]
+  },
+  "_bridge_extras": ["BeforeTool", "AfterAgent"]
+}
