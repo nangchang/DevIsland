@@ -22,6 +22,9 @@ targets:
       - path: scripts/devisland_bridge.py
         group: Resources
         type: resource
+      - path: scripts/hook_events.json
+        group: Resources
+        type: resource
       - path: scripts/install-bridge.sh
         group: Resources
         type: resource

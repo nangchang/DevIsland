@@ -194,6 +194,7 @@ enum BridgeInstaller {
     private static let sharedBridgePath = "Library/Application Support/DevIsland"
     private static let bridgeFileName = "devisland-bridge.sh"
     private static let bridgeHelperFileName = "devisland_bridge.py"
+    private static let bridgeManifestFileName = "hook_events.json"
 
     private struct InstallPaths {
         let home: URL
@@ -204,6 +205,7 @@ enum BridgeInstaller {
     private enum BridgeInstallerError: LocalizedError {
         case missingBridgeScript
         case missingBridgeHelper
+        case missingBridgeManifest
 
         var errorDescription: String? {
             switch self {
@@ -211,6 +213,8 @@ enum BridgeInstaller {
                 return L10n.shared.alertBundleNoScript
             case .missingBridgeHelper:
                 return L10n.shared.alertBundleNoHelper
+            case .missingBridgeManifest:
+                return L10n.shared.alertBundleNoManifest
             }
         }
     }
@@ -266,21 +270,23 @@ enum BridgeInstaller {
     private static func installClaudeHooks() throws {
         let bridgeURL = try bridgeScriptURL()
         let helperURL = try bridgeHelperURL()
+        let manifestURL = try bridgeManifestURL()
         let paths = installPaths()
         let settingsURL = paths.home.appendingPathComponent(".claude/settings.json")
 
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
         try patchClaudeSettings(at: settingsURL, bridgePath: paths.destURL.path)
     }
 
     private static func installCodexHooks() throws {
         let bridgeURL = try bridgeScriptURL()
         let helperURL = try bridgeHelperURL()
+        let manifestURL = try bridgeManifestURL()
         let paths = installPaths()
         let codexHooksURL  = paths.home.appendingPathComponent(".codex/hooks.json")
         let codexConfigURL = paths.home.appendingPathComponent(".codex/config.toml")
 
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
         try patchCodexHooks(at: codexHooksURL, bridgePath: paths.destURL.path)
         ensureCodexFeatureFlag(at: codexConfigURL)
     }
@@ -288,10 +294,11 @@ enum BridgeInstaller {
     private static func installGeminiHooks() throws {
         let bridgeURL = try bridgeScriptURL()
         let helperURL = try bridgeHelperURL()
+        let manifestURL = try bridgeManifestURL()
         let paths = installPaths()
         let geminiSettingsURL = paths.home.appendingPathComponent(".gemini/settings.json")
 
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
         try patchGeminiSettings(at: geminiSettingsURL, bridgePath: paths.destURL.path)
     }
 
@@ -321,15 +328,26 @@ enum BridgeInstaller {
         return url
     }
 
+    private static func bridgeManifestURL() throws -> URL {
+        guard let url = Bundle.main.url(forResource: "hook_events", withExtension: "json") else {
+            throw BridgeInstallerError.missingBridgeManifest
+        }
+        return url
+    }
+
     /// 브리지 스크립트와 Python helper를 bridgeDir에 복사하고 실행 권한을 부여한다.
-    private static func prepare(bridgeURL: URL, helperURL: URL, destURL: URL, hooksDir bridgeDir: URL) throws {
+    /// helper가 import 시점에 읽는 hook_events.json manifest도 함께 복사한다.
+    private static func prepare(bridgeURL: URL, helperURL: URL, manifestURL: URL, destURL: URL, hooksDir bridgeDir: URL) throws {
         let fm = FileManager.default
         let helperDestURL = bridgeDir.appendingPathComponent(bridgeHelperFileName)
+        let manifestDestURL = bridgeDir.appendingPathComponent(bridgeManifestFileName)
         try fm.createDirectory(at: bridgeDir, withIntermediateDirectories: true)
         if fm.fileExists(atPath: destURL.path) { try fm.removeItem(at: destURL) }
         if fm.fileExists(atPath: helperDestURL.path) { try fm.removeItem(at: helperDestURL) }
+        if fm.fileExists(atPath: manifestDestURL.path) { try fm.removeItem(at: manifestDestURL) }
         try fm.copyItem(at: bridgeURL, to: destURL)
         try fm.copyItem(at: helperURL, to: helperDestURL)
+        try fm.copyItem(at: manifestURL, to: manifestDestURL)
         try fm.setAttributes([.posixPermissions: 0o755 as NSNumber], ofItemAtPath: destURL.path)
         try fm.setAttributes([.posixPermissions: 0o755 as NSNumber], ofItemAtPath: helperDestURL.path)
     }

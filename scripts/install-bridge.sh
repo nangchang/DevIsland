@@ -8,11 +8,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # -------------------------------------------------------------------
 BRIDGE_SRC="$SCRIPT_DIR/devisland-bridge.sh"
 PY_BRIDGE_SRC="$SCRIPT_DIR/devisland_bridge.py"
+MANIFEST_SRC="$SCRIPT_DIR/hook_events.json"
 if [ ! -f "$BRIDGE_SRC" ]; then
     BUNDLE_SRC="/Applications/DevIsland.app/Contents/Resources/devisland-bridge.sh"
     if [ -f "$BUNDLE_SRC" ]; then
         BRIDGE_SRC="$BUNDLE_SRC"
         PY_BRIDGE_SRC="/Applications/DevIsland.app/Contents/Resources/devisland_bridge.py"
+        MANIFEST_SRC="/Applications/DevIsland.app/Contents/Resources/hook_events.json"
     else
         echo "오류: devisland-bridge.sh 를 찾을 수 없습니다."
         echo "DevIsland.app 이 /Applications 에 설치되어 있는지 확인해주세요."
@@ -21,6 +23,11 @@ if [ ! -f "$BRIDGE_SRC" ]; then
 fi
 if [ ! -f "$PY_BRIDGE_SRC" ]; then
     echo "오류: devisland_bridge.py 를 찾을 수 없습니다."
+    echo "DevIsland.app 이 /Applications 에 설치되어 있는지 확인해주세요."
+    exit 1
+fi
+if [ ! -f "$MANIFEST_SRC" ]; then
+    echo "오류: hook_events.json 를 찾을 수 없습니다."
     echo "DevIsland.app 이 /Applications 에 설치되어 있는지 확인해주세요."
     exit 1
 fi
@@ -69,17 +76,21 @@ done
 HOOKS_DIR="$HOME/Library/Application Support/DevIsland"
 BRIDGE_DEST="$HOOKS_DIR/devisland-bridge.sh"
 PY_BRIDGE_DEST="$HOOKS_DIR/devisland_bridge.py"
+MANIFEST_DEST="$HOOKS_DIR/hook_events.json"
 
 mkdir -p "$HOOKS_DIR"
 rm -f "$BRIDGE_DEST"
 rm -f "$PY_BRIDGE_DEST"
+rm -f "$MANIFEST_DEST"
 if [[ "$SCRIPT_DIR" == *.app/Contents/Resources* ]]; then
     cp "$BRIDGE_SRC" "$BRIDGE_DEST"
     cp "$PY_BRIDGE_SRC" "$PY_BRIDGE_DEST"
+    cp "$MANIFEST_SRC" "$MANIFEST_DEST"
     echo "✓ 브리지 스크립트 복사 완료: $BRIDGE_DEST"
 else
     ln -sf "$BRIDGE_SRC" "$BRIDGE_DEST"
     ln -sf "$PY_BRIDGE_SRC" "$PY_BRIDGE_DEST"
+    ln -sf "$MANIFEST_SRC" "$MANIFEST_DEST"
     echo "✓ 브리지 스크립트 링크 생성: $BRIDGE_DEST"
 fi
 chmod +x "$BRIDGE_DEST"
