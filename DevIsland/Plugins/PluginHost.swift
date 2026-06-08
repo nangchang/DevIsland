@@ -144,6 +144,13 @@ final class PluginHost: ObservableObject {
         tickTask = nil
     }
 
+    /// `[weak self]` already prevents the tick loop from retaining the host, so there
+    /// is no leak; this defensively stops a lingering sleep cycle if a host is dropped
+    /// without `stopTicking()` (e.g. short-lived test instances).
+    deinit {
+        tickTask?.cancel()
+    }
+
     /// Emits `plugin.tick` only when at least one active runner reports it needs a tick.
     /// safemode exclusion is added in PR 11; for now only host-level disable gates ticking.
     func tickIfNeeded() async {
