@@ -497,12 +497,16 @@ class AppState: ObservableObject {
         let ud = self.userDefaults
         let processVSCode = ud.object(forKey: "processVSCodeEnabled") as? Bool ?? false
         let processClaudeDesktop = ud.object(forKey: "processClaudeDesktopEnabled") as? Bool ?? false
+        // When integrations are disabled, we return "pass" to bypass DevIsland's approval.
+        // For Claude/Codex, this delegates to their native terminal prompts.
+        // For Gemini, BeforeTool hook returns {} which does not enforce auto-approval itself;
+        // rather, Gemini CLI preserves its own configured approval behavior (interactive prompt or --auto-approve).
         switch h.terminalApp {
         case "VSCode" where !processVSCode:
-            responseHandler("{\"response\": \"approved\"}")
+            responseHandler("{\"response\": \"pass\"}")
             return
         case "ClaudeDesktop" where !processClaudeDesktop:
-            responseHandler("{\"response\": \"approved\"}")
+            responseHandler("{\"response\": \"pass\"}")
             return
         default:
             break
