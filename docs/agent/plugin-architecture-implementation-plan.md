@@ -48,11 +48,14 @@
   - PR 4. `PluginContributionRenderer`와 no-op UI 삽입 — 완료 (`feat: add PluginContributionRenderer and no-op UI insertion`)
   - PR 5. Event emission seam — 완료 (`feat: implement plugin event emission seam (PR 5)`)
   - PR 6. Tick lifecycle — 완료 (`feat: add plugin tick lifecycle (PR 6)`)
+  - PR 7. SessionTimerPlugin built-in — 완료 (`feat: add SessionTimerPlugin built-in (PR 7)`)
 - 마지막 검증:
-  - 전체 테스트 스위트 통과 (2026-06-08, PR 6 기준)
-  - PluginHostDispatchTests에 tick 테스트 4개 추가 (총 23개)
+  - 전체 테스트 스위트 통과 (2026-06-09, PR 7 기준)
+  - SessionTimerPluginTests 7개 추가 (elapsed metric, hour 포맷, 종료 시 evict, 최근 활동 세션 선택, needsTick 게이팅, 전역 슬롯 host evict, readSessionEvents 게이팅)
+  - 수동 smoke check(expanded notch 시각 확인)는 잔여 항목
+  - `AppState.init`에서 built-in plugin registry 연결 (`builtInPlugins()` → `pluginHost.register`)
 - 다음 단계:
-  - PR 7. SessionTimerPlugin built-in (첫 번째 core-aware 플러그인)
+  - PR 8. PomodoroPlugin built-in and menubar.menu
 
 ## 5. PR 분할
 
