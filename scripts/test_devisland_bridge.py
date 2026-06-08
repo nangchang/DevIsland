@@ -5,7 +5,13 @@ import json
 import unittest
 from pathlib import Path
 
-from devisland_bridge import _normalize_event, _PASSIVE_EVENTS_NORMALIZED, PASSIVE_EVENTS, final_output
+from devisland_bridge import (
+    _FALLBACK_PASSIVE_EVENTS,
+    _normalize_event,
+    _PASSIVE_EVENTS_NORMALIZED,
+    PASSIVE_EVENTS,
+    final_output,
+)
 
 _MANIFEST_PATH = Path(__file__).parent / "hook_events.json"
 
@@ -172,6 +178,14 @@ class TestHookEventsManifest(unittest.TestCase):
             "AfterAgent",
         })
         self.assertEqual(PASSIVE_EVENTS, expected)
+
+    def test_fallback_matches_manifest(self):
+        """The import-time fallback snapshot must not drift from the manifest.
+
+        PASSIVE_EVENTS is manifest-derived when the file is present, so equality
+        guarantees the hardcoded safety net stays in sync with hook_events.json.
+        """
+        self.assertEqual(_FALLBACK_PASSIVE_EVENTS, PASSIVE_EVENTS)
 
 
 if __name__ == "__main__":
