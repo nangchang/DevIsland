@@ -324,7 +324,6 @@ struct NotchView: View {
                     isExpanded = true
                 }
             }
-            reportPluginSurfaces(expanded: state.isNotchExpanded)
         }
         .onChange(of: state.isNotchExpanded) { _, newValue in
             if newValue {
@@ -334,14 +333,7 @@ struct NotchView: View {
             } else {
                 isExpanded = false
             }
-            reportPluginSurfaces(expanded: newValue)
         }
-    }
-
-    /// Reports notch surface visibility so plugins can tick only while expanded.
-    /// v1 only opens the `notch.expanded.activity` surface here.
-    private func reportPluginSurfaces(expanded: Bool) {
-        pluginHost.setVisibleSurfaces(expanded ? [.notchExpandedActivity] : [])
     }
 
     private var notchBackground: some View {

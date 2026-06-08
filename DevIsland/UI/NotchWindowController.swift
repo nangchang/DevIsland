@@ -392,6 +392,19 @@ class NotchWindowController: NSWindowController {
                 }
             }
         }
+
+        reportPluginSurfaceVisibility()
+    }
+
+    /// Reports whether the expanded notch surface is actually on screen so plugins
+    /// tick only while visible. Accounts for the modal/fullscreen hide paths that
+    /// order the panel out without changing `isNotchExpanded`. v1 exposes only the
+    /// `notch.expanded.activity` surface.
+    private func reportPluginSurfaceVisibility() {
+        let expandedVisible = AppState.shared.isNotchExpanded
+            && !isShowingModal
+            && !isHiddenForFullScreen
+        AppState.shared.pluginHost.setVisibleSurfaces(expandedVisible ? [.notchExpandedActivity] : [])
     }
 
     private func focusExpandedPanelForTextInput() {
@@ -443,11 +456,13 @@ class NotchWindowController: NSWindowController {
         pendingSettle = nil
         window?.orderOut(nil)
         expandedPanel.orderOut(nil)
+        reportPluginSurfaceVisibility()
     }
 
     func restoreAfterModal() {
         isShowingModal = false
         window?.orderFrontRegardless()
+        reportPluginSurfaceVisibility()
     }
 
     func expandFromCollapsedWindow() {
@@ -508,6 +523,7 @@ class NotchWindowController: NSWindowController {
             isHiddenForFullScreen = true
             window.orderOut(nil)
             expandedPanel.orderOut(nil)
+            reportPluginSurfaceVisibility()
             return
         }
 
@@ -518,6 +534,7 @@ class NotchWindowController: NSWindowController {
         } else {
             window.orderFrontRegardless()
         }
+        reportPluginSurfaceVisibility()
     }
 
     private func targetScreen(for window: NSWindow) -> NSScreen {
