@@ -466,10 +466,9 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Built-in plugins compiled into DevIsland, registered once at init. v1 ships
-    /// SessionTimer only; later built-ins (e.g. Pomodoro) are added to this list.
+    /// Built-in plugins compiled into DevIsland, registered once at init.
     private static func builtInPlugins() -> [any DevIslandPlugin & Sendable] {
-        [SessionTimerPlugin()]
+        [SessionTimerPlugin(), PomodoroPlugin()]
     }
 
     /// Starts the plugin platform once the app has finished launching: emits the
