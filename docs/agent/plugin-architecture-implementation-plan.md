@@ -47,11 +47,12 @@
   - PR 3. `PluginRunner`와 `PluginHost` dispatch — 완료 (`feat: add plugin host dispatch`)
   - PR 4. `PluginContributionRenderer`와 no-op UI 삽입 — 완료 (`feat: add PluginContributionRenderer and no-op UI insertion`)
   - PR 5. Event emission seam — 완료 (`feat: implement plugin event emission seam (PR 5)`)
+  - PR 6. Tick lifecycle — 완료 (`feat: add plugin tick lifecycle (PR 6)`)
 - 마지막 검증:
-  - 전체 테스트 스위트 통과 (2026-06-07, PR 5 기준)
-  - SessionStoreCallbackTests 9개 추가
+  - 전체 테스트 스위트 통과 (2026-06-08, PR 6 기준)
+  - PluginHostDispatchTests에 tick 테스트 4개 추가 (총 23개)
 - 다음 단계:
-  - PR 6. Built-in plugin 구현 (첫 번째 플러그인)
+  - PR 7. SessionTimerPlugin built-in (첫 번째 core-aware 플러그인)
 
 ## 5. PR 분할
 
@@ -296,7 +297,7 @@ MenuBar 렌더링 제약:
 
 - tick 필요한 플러그인이 없으면 tick event 없음
 - visible surface 변경이 `needsTick` 판단에 반영
-- disable/safemode plugin은 tick 대상 제외
+- disable plugin은 tick 대상 제외 (safemode 제외는 메커니즘이 없으므로 PR 11에서 추가)
 - 다른 DevIsland 인스턴스 종료 대기 후 delayed start 경로에서도 tick이 1회만 시작
 
 검증:

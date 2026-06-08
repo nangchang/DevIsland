@@ -31,6 +31,11 @@ final class PluginHost: ObservableObject {
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private(set) var failures: [PluginFailure] = []
     private var expirationTimer: Timer?
+    private var tickTask: Task<Void, Never>?
+    private var visibleSurfaces: Set<PluginUISlot> = []
+    /// Incremented only after the start guard passes, so tests can assert the
+    /// tick loop starts at most once without observing the live timer.
+    private(set) var tickStartCount = 0
 
     nonisolated init(enablePlugins: Bool = true) {
         self.isEnabled = enablePlugins
@@ -106,6 +111,68 @@ final class PluginHost: ObservableObject {
         await withCheckedContinuation { continuation in
             idleWaiters.append(continuation)
         }
+    }
+
+    /// Reports which UI surfaces are currently visible so `needsTick` can decide
+    /// whether a plugin should keep updating. v1 has a single reporter (the notch),
+    /// so a full replace is correct; per-source merging waits until menubar reports too.
+    func setVisibleSurfaces(_ surfaces: Set<PluginUISlot>) {
+        visibleSurfaces = surfaces
+    }
+
+    /// Starts the central 1Hz tick loop. Idempotent so the delayed app-start path
+    /// (after other DevIsland instances terminate) cannot spin up a second loop.
+    func startTicking() {
+        guard isEnabled, tickTask == nil else { return }
+        tickStartCount += 1
+        tickTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    break
+                }
+                guard let self else { break }
+                await self.tickIfNeeded()
+            }
+        }
+    }
+
+    /// Cancels the tick loop on app termination or platform shutdown.
+    func stopTicking() {
+        tickTask?.cancel()
+        tickTask = nil
+    }
+
+    /// `[weak self]` already prevents the tick loop from retaining the host, so there
+    /// is no leak; this defensively stops a lingering sleep cycle if a host is dropped
+    /// without `stopTicking()` (e.g. short-lived test instances).
+    deinit {
+        tickTask?.cancel()
+    }
+
+    /// Emits `plugin.tick` only when at least one active runner reports it needs a tick.
+    /// safemode exclusion is added in PR 11; for now only host-level disable gates ticking.
+    func tickIfNeeded() async {
+        guard isEnabled else { return }
+        let state = PluginSurfaceState(visibleSurfaces: visibleSurfaces)
+        var anyNeedsTick = false
+        for runner in runners.values {
+            if await runner.needsTick(surfaceState: state) {
+                anyNeedsTick = true
+                break
+            }
+        }
+        guard anyNeedsTick else { return }
+        enqueue(PluginEvent(
+            id: UUID(),
+            kind: .pluginTick,
+            timestamp: Date(),
+            session: nil,
+            hook: nil,
+            action: nil,
+            approval: nil
+        ))
     }
 
     private func shouldDispatch(_ event: PluginEvent, to runner: PluginRunner) -> Bool {

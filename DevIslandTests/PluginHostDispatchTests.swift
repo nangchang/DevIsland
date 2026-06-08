@@ -378,6 +378,58 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(Set(contributions.compactMap(\.targetSessionID)), ["session-a", "session-b"])
     }
 
+    func testTickSkippedWhenNoVisibleSurface() async {
+        let plugin = VisibilityTickingPlugin(id: "com.devisland.test.tick-hidden")
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.setVisibleSurfaces([])
+        await host.tickIfNeeded()
+        await host.waitUntilIdle()
+
+        XCTAssertFalse(plugin.receivedKinds.contains(.pluginTick))
+    }
+
+    func testTickEmittedWhenSurfaceBecomesVisible() async {
+        let plugin = VisibilityTickingPlugin(id: "com.devisland.test.tick-visible")
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.setVisibleSurfaces([])
+        await host.tickIfNeeded()
+        await host.waitUntilIdle()
+        XCTAssertFalse(plugin.receivedKinds.contains(.pluginTick))
+
+        host.setVisibleSurfaces([.notchExpandedActivity])
+        await host.tickIfNeeded()
+        await host.waitUntilIdle()
+        XCTAssertEqual(plugin.receivedKinds, [.pluginTick])
+    }
+
+    func testStartTickingStartsOnlyOnce() {
+        let host = PluginHost()
+
+        host.startTicking()
+        host.startTicking()
+
+        XCTAssertEqual(host.tickStartCount, 1)
+        host.stopTicking()
+    }
+
+    func testDisabledHostDoesNotTick() async {
+        let plugin = VisibilityTickingPlugin(id: "com.devisland.test.tick-disabled")
+        let host = PluginHost(enablePlugins: false)
+        host.register([plugin])
+
+        host.startTicking()
+        XCTAssertEqual(host.tickStartCount, 0)
+
+        host.setVisibleSurfaces([.notchExpandedActivity])
+        await host.tickIfNeeded()
+        await host.waitUntilIdle()
+        XCTAssertFalse(plugin.receivedKinds.contains(.pluginTick))
+    }
+
     private func makeEvent(
         kind: PluginEventKind,
         sessionID: String? = nil,
@@ -499,6 +551,47 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
         false
+    }
+}
+
+private final class VisibilityTickingPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let tickSurface: PluginUISlot
+    private let lock = NSLock()
+    private var _receivedKinds: [PluginEventKind] = []
+    var receivedKinds: [PluginEventKind] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _receivedKinds
+    }
+
+    init(id: String, tickSurface: PluginUISlot = .notchExpandedActivity) {
+        self.tickSurface = tickSurface
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: [],
+            surfaces: [],
+            activationEvents: [PluginEventKind.pluginTick.rawValue]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        lock.lock()
+        _receivedKinds.append(event.kind)
+        lock.unlock()
+        return []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        nil
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        surfaceState.visibleSurfaces.contains(tickSurface)
     }
 }
 
