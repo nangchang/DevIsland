@@ -83,7 +83,7 @@ Response format:
 { "decision": "deny", "reason": "Blocked by DevIsland" }
 ```
 
-`decision` is `allow` or `deny`; returning `{}` or omitting a decision allows the action. Exit code `2` is a hard block and stderr is used as the rejection reason.
+`decision` is `allow` or `deny`; returning `{}` or omitting a decision allows the action (meaning the hook itself does not veto/deny the tool execution). Gemini CLI does not delegate approval to the hook itself; instead, returning `{}` or omitting the decision delegates the final approval path back to Gemini CLI's own execution configuration (which prompts the user in the terminal unless run with `--auto-approve` or `--yolo`). Exit code `2` is a hard block and stderr is used as the rejection reason.
 
 ## VS Code / Claude Desktop Integration
 

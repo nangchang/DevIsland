@@ -69,6 +69,9 @@ struct ProviderAdapter {
                     "suppressOutput": .bool(true)
                 ]
             }
+            // For Gemini, returning [:] (which formats as {} in bridge) means
+            // the hook does not veto (deny) the action. The Gemini CLI will then
+            // follow its own configured approval behavior (interactive prompt or --auto-approve).
             return [:]
         }
 
