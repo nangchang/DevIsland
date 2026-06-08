@@ -1611,6 +1611,60 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(try controller.openSessions(since: Date().addingTimeInterval(-60)).isEmpty)
     }
 
+    func testRestoredSessionPreservesPersistedStartTime() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateRestoreStartTimeTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let dbURL = tempDir.appendingPathComponent("approval-proxy.sqlite3")
+        let controller = try ApprovalProxyController(databaseURL: dbURL)
+        let state = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller,
+            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+        )
+        let expectation = XCTestExpectation(description: "Session start recorded")
+        let message = """
+        {
+            "hook_event_name": "SessionStart",
+            "cli_source": "codex",
+            "session_id": "restore-starttime",
+            "terminal_title": "Restore StartTime"
+        }
+        """
+        state.handleMessage(message) { _ in expectation.fulfill() }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.3))
+        wait(for: [expectation], timeout: 1.0)
+        state.flushApprovalPersistenceForTesting()
+
+        let record = try XCTUnwrap(
+            controller.openSessions(since: Date().addingTimeInterval(-60))
+                .first { $0.sessionId == "restore-starttime" }
+        )
+
+        // Rebuild AppState with the same controller to trigger restoreOpenSessions.
+        let restoredState = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            approvalProxy: controller,
+            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+        )
+        let restored = try XCTUnwrap(
+            restoredState.sessionStore.activeSessions.first { $0.id == "restore-starttime" }
+        )
+        // Before the fix the restored session's startTime was Date() at relaunch,
+        // diverging from the persisted start time by the persist→restore gap.
+        XCTAssertEqual(
+            restored.startTime,
+            record.startAt,
+            "restored session must keep the persisted start time, not the relaunch time"
+        )
+    }
+
     @MainActor
     func testFocusTerminalMarksSessionRead() {
         appState.sessionStore.updateActiveSession(

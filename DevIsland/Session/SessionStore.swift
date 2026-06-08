@@ -68,7 +68,8 @@ final class SessionStore: ObservableObject {
         isSubAgentSession: Bool = false,
         parentSessionId: String? = nil,
         status: SessionStatus? = nil,
-        workspaceRoot: String? = nil
+        workspaceRoot: String? = nil,
+        startTime: Date? = nil
     ) {
         if let index = activeSessions.firstIndex(where: { $0.id == sessionId }) {
             let shouldUpdateTitle = !Self.genericTitles.contains(terminalTitle)
@@ -112,7 +113,7 @@ final class SessionStore: ObservableObject {
                 lastToolName: toolName,
                 lastEventName: eventName,
                 lastMessage: message,
-                startTime: Date(),
+                startTime: startTime ?? Date(),
                 lastActiveAt: Date(),
                 isPending: isPending,
                 isLifecycleTracked: isLifecycleTracked,

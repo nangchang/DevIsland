@@ -2469,9 +2469,11 @@ class AppState: ObservableObject {
                 ),
                 isPending: false,
                 isLifecycleTracked: true,
-                workspaceRoot: json["cwd"] as? String
+                workspaceRoot: json["cwd"] as? String,
+                startTime: record.startAt
             )
-            // Preserve the original start time and last active time from SQLite
+            // startTime is seeded from SQLite via the call above; lastActiveAt is
+            // patched here because updateActiveSession always stamps Date() for new sessions.
             if let index = sessionStore.activeSessions.firstIndex(where: { $0.id == record.sessionId }) {
                 sessionStore.activeSessions[index].lastActiveAt = record.lastActiveAt
             }
