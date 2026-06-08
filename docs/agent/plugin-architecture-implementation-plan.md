@@ -48,11 +48,14 @@
   - PR 4. `PluginContributionRenderer`와 no-op UI 삽입 — 완료 (`feat: add PluginContributionRenderer and no-op UI insertion`)
   - PR 5. Event emission seam — 완료 (`feat: implement plugin event emission seam (PR 5)`)
   - PR 6. Tick lifecycle — 완료 (`feat: add plugin tick lifecycle (PR 6)`)
+  - PR 7. SessionTimerPlugin built-in — 완료 (`feat: add SessionTimerPlugin built-in (PR 7)`)
 - 마지막 검증:
-  - 전체 테스트 스위트 통과 (2026-06-08, PR 6 기준)
-  - PluginHostDispatchTests에 tick 테스트 4개 추가 (총 23개)
+  - 전체 테스트 스위트 통과 (2026-06-09, PR 7 기준)
+  - SessionTimerPluginTests 7개 추가 (elapsed metric, hour 포맷, 종료 시 evict, 최근 활동 세션 선택, needsTick 게이팅, 전역 슬롯 host evict, readSessionEvents 게이팅)
+  - 수동 smoke check(expanded notch 시각 확인)는 잔여 항목
+  - `AppState.init`에서 built-in plugin registry 연결 (`builtInPlugins()` → `pluginHost.register`)
 - 다음 단계:
-  - PR 7. SessionTimerPlugin built-in (첫 번째 core-aware 플러그인)
+  - PR 8. PomodoroPlugin built-in and menubar.menu
 
 ## 5. PR 분할
 
@@ -651,6 +654,7 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 - `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending이고 missed/unread가 아닌 세션에만 허용
 - `session.message` — 세션 메시지 창 header/toolbar accessory
 - `session.dismiss`를 열기 전에 최소 Host Command Catalog 골격을 먼저 두고, 임시 특수 경로를 만들지 않는다.
+- selected/current 세션 신호 — `notch.expanded.activity` 같은 전역 슬롯이 recency(`max(lastActiveAt)`)가 아니라 사용자가 보는 selected/current 세션 기준으로 렌더하도록, 선택 세션을 `PluginUIContext`에 plumb하거나 selection-change 이벤트를 발행한다. (v1 `SessionTimerPlugin`은 selection 신호가 없어 recency proxy를 쓰므로 다중 세션에서 사용자 선택과 drift 가능)
 
 검증:
 

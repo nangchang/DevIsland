@@ -230,6 +230,13 @@ class AppState: ObservableObject {
             restoreOpenSessions(from: proxy)
         }
 
+        // Register built-in plugins before the session callback is wired so they
+        // observe every subsequent session/hook event. `register` no-ops when
+        // plugins are disabled.
+        MainActor.assumeIsolated {
+            pluginHost.register(Self.builtInPlugins())
+        }
+
         // Register after restoreOpenSessions so restored sessions don't emit spurious events.
         sessionStore.onSessionChanged = { [weak self] change in
             guard let self else { return }
@@ -457,6 +464,12 @@ class AppState: ObservableObject {
                 self.currentMessage = session.lastMessage
             }
         }
+    }
+
+    /// Built-in plugins compiled into DevIsland, registered once at init. v1 ships
+    /// SessionTimer only; later built-ins (e.g. Pomodoro) are added to this list.
+    private static func builtInPlugins() -> [any DevIslandPlugin & Sendable] {
+        [SessionTimerPlugin()]
     }
 
     /// Starts the plugin platform once the app has finished launching: emits the
@@ -2460,12 +2473,10 @@ class AppState: ObservableObject {
                 ),
                 isPending: false,
                 isLifecycleTracked: true,
-                workspaceRoot: json["cwd"] as? String
+                workspaceRoot: json["cwd"] as? String,
+                startTime: record.startAt,
+                lastActiveAt: record.lastActiveAt
             )
-            // Preserve the original start time and last active time from SQLite
-            if let index = sessionStore.activeSessions.firstIndex(where: { $0.id == record.sessionId }) {
-                sessionStore.activeSessions[index].lastActiveAt = record.lastActiveAt
-            }
         }
     }
 
