@@ -52,7 +52,8 @@
   - PR 8. PomodoroPlugin built-in and menubar.menu — 완료 (`feat: add PomodoroPlugin built-in (PR 8)`)
 - 마지막 검증:
   - 전체 테스트 스위트 통과 (2026-06-09, PR 8 기준)
-  - PomodoroPluginTests 5개 추가 (toggle start/pause, running 중에만 tick 감소, 완료 시 notification·reset·count, 양 슬롯 렌더, action이 target plugin에만 라우팅)
+  - PomodoroPluginTests 5개 추가 (start/pause/resume 타임스탬프 보존, wall-clock 기반 tick·드리프트 catch-up, 종료시각 경과 시 완료·reset·count, 양 슬롯 렌더, action이 target plugin에만 라우팅)
+  - 타이머는 event timestamp 기반(`expectedEndTime`)으로 missed tick·App Nap·sleep 드리프트 방지
   - `builtInPlugins()`에 `PomodoroPlugin` 추가 (menubar.menu 슬롯은 PR 4에서 이미 배선됨)
   - 수동 menubar smoke check(메뉴에서 Pomodoro 행 표시)는 잔여 항목
 - 다음 단계:

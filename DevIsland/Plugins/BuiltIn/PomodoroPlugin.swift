@@ -34,6 +34,11 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
     private var mode: Mode = .idle
     private var remainingSeconds: Int
     private var completedCount = 0
+    /// Wall-clock target end while running; nil when idle/paused. The countdown is
+    /// derived from this against each event's timestamp so the timer stays accurate
+    /// across missed ticks, App Nap throttling, and system sleep — instead of losing
+    /// time whenever a 1Hz tick is delayed or skipped.
+    private var expectedEndTime: Date?
 
     /// `workSeconds` is injectable so tests can reach completion without 25 minutes
     /// of ticks; production always uses the 25-minute default.
@@ -52,27 +57,43 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
         switch event.kind {
         case .pluginTick:
-            guard mode == .running else { return [] }
-            remainingSeconds = max(0, remainingSeconds - 1)
+            guard mode == .running, let end = expectedEndTime else { return [] }
+            remainingSeconds = Self.secondsRemaining(until: end, now: event.timestamp)
             if remainingSeconds == 0 {
-                completedCount += 1
-                mode = .idle
-                remainingSeconds = workSeconds
-                return [PluginEffect(
-                    capability: "notification.show",
-                    payload: ["title": "Pomodoro", "body": "Focus session complete"]
-                )]
+                return complete()
             }
         case .pluginActionInvoked:
             guard event.action?.actionID == toggleActionID else { break }
             switch mode {
-            case .idle, .paused: mode = .running
-            case .running: mode = .paused
+            case .idle, .paused:
+                mode = .running
+                expectedEndTime = event.timestamp.addingTimeInterval(Double(remainingSeconds))
+            case .running:
+                if let end = expectedEndTime {
+                    remainingSeconds = Self.secondsRemaining(until: end, now: event.timestamp)
+                }
+                mode = .paused
+                expectedEndTime = nil
             }
         default:
             break
         }
         return []
+    }
+
+    private func complete() -> [PluginEffect] {
+        completedCount += 1
+        mode = .idle
+        remainingSeconds = workSeconds
+        expectedEndTime = nil
+        return [PluginEffect(
+            capability: "notification.show",
+            payload: ["title": "Pomodoro", "body": "Focus session complete"]
+        )]
+    }
+
+    private static func secondsRemaining(until end: Date, now: Date) -> Int {
+        max(0, Int(end.timeIntervalSince(now).rounded()))
     }
 
     func makeUIContribution(
