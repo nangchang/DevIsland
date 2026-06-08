@@ -49,13 +49,14 @@
   - PR 5. Event emission seam — 완료 (`feat: implement plugin event emission seam (PR 5)`)
   - PR 6. Tick lifecycle — 완료 (`feat: add plugin tick lifecycle (PR 6)`)
   - PR 7. SessionTimerPlugin built-in — 완료 (`feat: add SessionTimerPlugin built-in (PR 7)`)
+  - PR 8. PomodoroPlugin built-in and menubar.menu — 완료 (`feat: add PomodoroPlugin built-in (PR 8)`)
 - 마지막 검증:
-  - 전체 테스트 스위트 통과 (2026-06-09, PR 7 기준)
-  - SessionTimerPluginTests 7개 추가 (elapsed metric, hour 포맷, 종료 시 evict, 최근 활동 세션 선택, needsTick 게이팅, 전역 슬롯 host evict, readSessionEvents 게이팅)
-  - 수동 smoke check(expanded notch 시각 확인)는 잔여 항목
-  - `AppState.init`에서 built-in plugin registry 연결 (`builtInPlugins()` → `pluginHost.register`)
+  - 전체 테스트 스위트 통과 (2026-06-09, PR 8 기준)
+  - PomodoroPluginTests 5개 추가 (toggle start/pause, running 중에만 tick 감소, 완료 시 notification·reset·count, 양 슬롯 렌더, action이 target plugin에만 라우팅)
+  - `builtInPlugins()`에 `PomodoroPlugin` 추가 (menubar.menu 슬롯은 PR 4에서 이미 배선됨)
+  - 수동 menubar smoke check(메뉴에서 Pomodoro 행 표시)는 잔여 항목
 - 다음 단계:
-  - PR 8. PomodoroPlugin built-in and menubar.menu
+  - PR 9. PluginStorageProvider (plugin별 durable key-value storage)
 
 ## 5. PR 분할
 
