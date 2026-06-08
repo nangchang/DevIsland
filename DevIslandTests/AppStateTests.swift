@@ -2215,4 +2215,60 @@ final class AppStateTests: XCTestCase {
         let session = appState.sessionStore.activeSessions.first { $0.id == sessionId }
         XCTAssertTrue(session?.isUnread == true, "unread dot must be set regardless of expand setting")
     }
+
+    /// Locks the lifecycle emission order: a plugin must observe `plugin.started`
+    /// before `app.started` so it can restore state before app-level side effects.
+    @MainActor
+    func testStartPluginPlatformEmitsPluginStartedBeforeAppStarted() async {
+        let plugin = LifecycleRecordingPlugin(id: "com.devisland.test.lifecycle-order")
+        appState.pluginHost.register([plugin])
+
+        appState.startPluginPlatform()
+        await appState.pluginHost.waitUntilIdle()
+        appState.stopPluginPlatform()
+
+        XCTAssertEqual(plugin.receivedKinds, [.pluginStarted, .appStarted])
+    }
+}
+
+private final class LifecycleRecordingPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let lock = NSLock()
+    private var _receivedKinds: [PluginEventKind] = []
+    var receivedKinds: [PluginEventKind] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _receivedKinds
+    }
+
+    init(id: String) {
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: [],
+            surfaces: [],
+            activationEvents: [
+                PluginEventKind.pluginStarted.rawValue,
+                PluginEventKind.appStarted.rawValue
+            ]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        lock.lock()
+        _receivedKinds.append(event.kind)
+        lock.unlock()
+        return []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        nil
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
 }
