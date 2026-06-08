@@ -87,7 +87,7 @@ Response format:
 
 ## VS Code / Claude Desktop Integration
 
-VS Code and Claude Desktop sessions are opt-in (`processVSCodeEnabled`, `processClaudeDesktopEnabled` both default `false`). When disabled, hooks are auto-approved and not shown in the notch.
+VS Code and Claude Desktop sessions are opt-in (`processVSCodeEnabled`, `processClaudeDesktopEnabled` both default `false`). When disabled, hooks are passed through (`pass` response) and not shown in the notch.
 
 ### VS Code detection (bridge)
 

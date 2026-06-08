@@ -499,10 +499,10 @@ class AppState: ObservableObject {
         let processClaudeDesktop = ud.object(forKey: "processClaudeDesktopEnabled") as? Bool ?? false
         switch h.terminalApp {
         case "VSCode" where !processVSCode:
-            responseHandler("{\"response\": \"approved\"}")
+            responseHandler("{\"response\": \"pass\"}")
             return
         case "ClaudeDesktop" where !processClaudeDesktop:
-            responseHandler("{\"response\": \"approved\"}")
+            responseHandler("{\"response\": \"pass\"}")
             return
         default:
             break

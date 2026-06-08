@@ -945,7 +945,7 @@ final class AppStateTests: XCTestCase {
         """
         appState.handleMessage(message) { response in
             let json = self.parseResponse(response)
-            XCTAssertEqual(json?["response"] as? String, "approved")
+            XCTAssertEqual(json?["response"] as? String, "pass")
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
@@ -990,7 +990,7 @@ final class AppStateTests: XCTestCase {
         """
         appState.handleMessage(message) { response in
             let json = self.parseResponse(response)
-            XCTAssertEqual(json?["response"] as? String, "approved")
+            XCTAssertEqual(json?["response"] as? String, "pass")
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
