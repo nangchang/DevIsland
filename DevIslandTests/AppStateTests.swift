@@ -932,7 +932,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-pretool" }))
     }
 
-    func testVSCodeHookAutoApprovesWhenSettingIsDisabled() {
+    func testVSCodeHookPassesWhenSettingIsDisabled() {
         mockDefaults.set(false, forKey: "processVSCodeEnabled")
         let expectation = XCTestExpectation(description: "VS Code hook auto-approved")
         let message = """
@@ -977,7 +977,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.hasResponseHandler)
     }
 
-    func testClaudeDesktopHookAutoApprovesWhenSettingIsDisabled() {
+    func testClaudeDesktopHookPassesWhenSettingIsDisabled() {
         mockDefaults.set(false, forKey: "processClaudeDesktopEnabled")
         let expectation = XCTestExpectation(description: "Claude Desktop hook auto-approved")
         let message = """
