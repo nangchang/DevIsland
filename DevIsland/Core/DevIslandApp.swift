@@ -709,6 +709,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             _ = AppState.shared
             self.notchWindowController = NotchWindowController()
             self.notchWindowController?.showWindow(nil)
+            AppState.shared.startPluginPlatform()
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
@@ -716,5 +717,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 UpdateChecker.shared.schedulePeriodicCheck()
             }
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        AppState.shared.stopPluginPlatform()
     }
 }

@@ -35,6 +35,23 @@ struct PluginEventFactory: Sendable {
         )
     }
 
+    /// Builds a session-less lifecycle event (`app.started`, `plugin.started`).
+    func makeLifecycleEvent(
+        kind: PluginEventKind,
+        id: UUID = UUID(),
+        timestamp: Date = Date()
+    ) -> PluginEvent {
+        PluginEvent(
+            id: id,
+            kind: kind,
+            timestamp: timestamp,
+            session: nil,
+            hook: nil,
+            action: nil,
+            approval: nil
+        )
+    }
+
     func makeSessionEvent(
         kind: PluginEventKind,
         from session: ActiveSession,

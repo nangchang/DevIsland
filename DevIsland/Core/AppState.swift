@@ -459,6 +459,25 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Starts the plugin platform once the app has finished launching: emits the
+    /// `app.started`/`plugin.started` lifecycle events and starts the central tick loop.
+    /// Called from the main thread (AppDelegate launch block).
+    func startPluginPlatform() {
+        MainActor.assumeIsolated {
+            pluginHost.enqueue(pluginEventFactory.makeLifecycleEvent(kind: .appStarted))
+            pluginHost.enqueue(pluginEventFactory.makeLifecycleEvent(kind: .pluginStarted))
+            pluginHost.startTicking()
+        }
+    }
+
+    /// Stops the plugin platform tick loop on app termination.
+    /// Called from the main thread (AppDelegate termination).
+    func stopPluginPlatform() {
+        MainActor.assumeIsolated {
+            pluginHost.stopTicking()
+        }
+    }
+
     func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
         switch HookEventHandler.parse(message) {
         case .invalid:
