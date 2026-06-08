@@ -654,6 +654,7 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 - `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending이고 missed/unread가 아닌 세션에만 허용
 - `session.message` — 세션 메시지 창 header/toolbar accessory
 - `session.dismiss`를 열기 전에 최소 Host Command Catalog 골격을 먼저 두고, 임시 특수 경로를 만들지 않는다.
+- selected/current 세션 신호 — `notch.expanded.activity` 같은 전역 슬롯이 recency(`max(lastActiveAt)`)가 아니라 사용자가 보는 selected/current 세션 기준으로 렌더하도록, 선택 세션을 `PluginUIContext`에 plumb하거나 selection-change 이벤트를 발행한다. (v1 `SessionTimerPlugin`은 selection 신호가 없어 recency proxy를 쓰므로 다중 세션에서 사용자 선택과 drift 가능)
 
 검증:
 
