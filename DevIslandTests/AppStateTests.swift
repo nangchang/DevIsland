@@ -1663,6 +1663,11 @@ final class AppStateTests: XCTestCase {
             record.startAt,
             "restored session must keep the persisted start time, not the relaunch time"
         )
+        XCTAssertEqual(
+            restored.lastActiveAt,
+            record.lastActiveAt,
+            "restored session must keep the persisted last-active time"
+        )
     }
 
     @MainActor
