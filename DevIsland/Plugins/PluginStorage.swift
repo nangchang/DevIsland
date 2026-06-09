@@ -53,9 +53,17 @@ final class SQLitePluginStorage: PluginStorage {
         guard sqlite3_open_v2(databaseURL.path, &db, flags, nil) == SQLITE_OK else {
             throw StorageError.openFailed(lastError)
         }
-        try exec("PRAGMA journal_mode=WAL")
-        try exec("PRAGMA busy_timeout=5000")
-        try exec("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        // `deinit` does not run when `init` throws, so a PRAGMA/CREATE failure after a
+        // successful open would leak the handle — close it explicitly before rethrowing.
+        do {
+            try exec("PRAGMA journal_mode=WAL")
+            try exec("PRAGMA busy_timeout=5000")
+            try exec("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        } catch {
+            sqlite3_close(db)
+            db = nil
+            throw error
+        }
     }
 
     /// Idempotent; `sqlite3_close(nil)` is a no-op so `deinit` is safe after this.
