@@ -191,7 +191,16 @@ extension L10n {
     var tabIntegrations:     String { s("Integrations", "통합") }
     var tabExtras:           String { s("Extras",       "부가기능") }
     var tabAdvanced:         String { s("Advanced",     "고급") }
+    var tabPlugins:          String { s("Plugins",      "플러그인") }
     var tabCaffeine:         String { s("Caffeine",    "Caffeine") }
+
+    // Plugins (settings tab)
+    var pluginsEmpty:        String { s("No plugins registered.",        "등록된 플러그인이 없습니다.") }
+    var pluginsListHeader:   String { s("Built-in Plugins",              "내장 플러그인") }
+    var lblPluginSafemode:   String { s("Safe mode — disabled after repeated errors", "세이프모드 — 반복 오류로 비활성화됨") }
+    var btnPluginReset:      String { s("Reset",                         "초기화") }
+    var btnPluginResetStorage: String { s("Reset Storage",               "저장소 초기화") }
+    func pluginFailures(_ count: Int) -> String { s("Errors: \(count)", "오류: \(count)회") }
 
     // Caffeine (Extras section)
     var secCaffeineStatus:            String { s("Status",                                    "현재 상태") }

@@ -232,9 +232,13 @@ class AppState: ObservableObject {
 
         // Register built-in plugins before the session callback is wired so they
         // observe every subsequent session/hook event. `register` no-ops when
-        // plugins are disabled.
+        // plugins are disabled. The persisted disabled set is applied here so a
+        // disabled plugin never runs for one cycle before `plugin.started` fires.
         MainActor.assumeIsolated {
-            pluginHost.register(Self.builtInPlugins())
+            pluginHost.register(
+                Self.builtInPlugins(),
+                disabledPluginIDs: PluginSettingsStore.shared.disabledPluginIDs
+            )
         }
 
         // Register after restoreOpenSessions so restored sessions don't emit spurious events.

@@ -134,6 +134,9 @@ struct SettingsWindowView: View {
             IntegrationsSettingsPane(store: store)
                 .tabItem { Label(l10n.tabIntegrations, systemImage: "puzzlepiece.extension") }
 
+            PluginSettingsView(pluginHost: appState.pluginHost, settings: PluginSettingsStore.shared)
+                .tabItem { Label(l10n.tabPlugins, systemImage: "puzzlepiece") }
+
             ExtrasSettingsPane(appState: appState, store: store)
                 .tabItem { Label(l10n.tabExtras, systemImage: "square.stack.3d.up") }
 

@@ -29,7 +29,13 @@ final class PluginHost: ObservableObject {
     private var pendingEvents: [QueuedPluginEvent] = []
     private var isDraining = false
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
-    private(set) var failures: [PluginFailure] = []
+    @Published private(set) var failures: [PluginFailure] = []
+    /// Plugins the user disabled (persisted by `PluginSettingsStore`). A disabled
+    /// plugin stays registered but is excluded from dispatch and ticking.
+    @Published private(set) var disabledPluginIDs: Set<String> = []
+    /// Plugins forced inactive after repeated failures. PR 10 owns the state and the
+    /// user-facing reset; PR 11 wires the failure-threshold detector that enters it.
+    @Published private(set) var safemodePluginIDs: Set<String> = []
     private var expirationTimer: Timer?
     private var tickTask: Task<Void, Never>?
     private var visibleSurfaces: Set<PluginUISlot> = []
@@ -45,7 +51,13 @@ final class PluginHost: ObservableObject {
         self.storageProvider = PluginStorageProvider(baseDirectory: pluginDataDirectory)
     }
 
-    func register(_ plugins: [any DevIslandPlugin & Sendable]) {
+    /// Registers the built-in plugins. `disabledPluginIDs` must be supplied here so the
+    /// disabled set is applied *before* the first lifecycle emission — otherwise a
+    /// persisted-disabled plugin would run for one cycle on launch.
+    func register(
+        _ plugins: [any DevIslandPlugin & Sendable],
+        disabledPluginIDs: Set<String> = []
+    ) {
         guard isEnabled else { return }
         runners = Dictionary(
             uniqueKeysWithValues: plugins.map { plugin in
@@ -53,6 +65,67 @@ final class PluginHost: ObservableObject {
                 return (runner.manifest.id, runner)
             }
         )
+        self.disabledPluginIDs = disabledPluginIDs.filter { runners[$0] != nil }
+    }
+
+    /// Manifests of every registered plugin, sorted by display name for the settings list.
+    var registeredPlugins: [PluginManifest] {
+        runners.values.map(\.manifest).sorted { $0.name < $1.name }
+    }
+
+    func isPluginEnabled(_ pluginID: String) -> Bool {
+        !disabledPluginIDs.contains(pluginID)
+    }
+
+    func isInSafemode(_ pluginID: String) -> Bool {
+        safemodePluginIDs.contains(pluginID)
+    }
+
+    /// A plugin receives events and ticks only when it is neither user-disabled nor
+    /// in safemode. Both gates share this check so dispatch/tick stay consistent.
+    private func isActive(_ pluginID: String) -> Bool {
+        !disabledPluginIDs.contains(pluginID) && !safemodePluginIDs.contains(pluginID)
+    }
+
+    /// Enables or disables a registered plugin. Disabling clears its cached
+    /// contributions; enabling re-emits `plugin.started` to that plugin only so it can
+    /// rebuild without disturbing other plugins.
+    func setPluginEnabled(_ enabled: Bool, pluginID: String) {
+        guard isEnabled, runners[pluginID] != nil else { return }
+        if enabled {
+            guard disabledPluginIDs.contains(pluginID) else { return }
+            disabledPluginIDs.remove(pluginID)
+            enqueue(eventFactory.makeLifecycleEvent(kind: .pluginStarted), restrictedTo: pluginID)
+        } else {
+            disabledPluginIDs.insert(pluginID)
+            contributions = removeContributions(pluginID: pluginID, from: contributions)
+        }
+    }
+
+    /// Flags a plugin inactive and clears its contributions. Exposed as the seam PR 11's
+    /// failure-threshold detector calls; entering safemode without the dispatch exclusion
+    /// would let the next event re-run the plugin and undo the clear.
+    func enterSafemode(pluginID: String) {
+        guard runners[pluginID] != nil, !safemodePluginIDs.contains(pluginID) else { return }
+        safemodePluginIDs.insert(pluginID)
+        contributions = removeContributions(pluginID: pluginID, from: contributions)
+    }
+
+    /// User-initiated recovery: clears safemode and the plugin's recorded failures so the
+    /// settings UI resets its error state. The plugin reactivates and rebuilds on the next
+    /// natural event; the limited automatic retry is added in PR 11.
+    func resetPlugin(pluginID: String) {
+        guard runners[pluginID] != nil else { return }
+        safemodePluginIDs.remove(pluginID)
+        failures.removeAll { $0.pluginID == pluginID }
+    }
+
+    /// Clears a plugin's durable storage. Fire-and-forget so the settings UI never blocks
+    /// on storage I/O.
+    func resetStorage(forPluginID pluginID: String) {
+        Task { [storageProvider] in
+            await storageProvider.reset(pluginID: pluginID)
+        }
     }
 
     /// Routes a UI action from the plugin that owns `pluginID`.
@@ -100,8 +173,18 @@ final class PluginHost: ObservableObject {
 
     func enqueue(_ event: PluginEvent) {
         guard isEnabled else { return }
-        let eligible = runners.values.filter { shouldDispatch(event, to: $0) }
-        pendingEvents.append(QueuedPluginEvent(baseEvent: event, runners: eligible))
+        appendAndDrain(event, eligibleRunners: runners.values.filter { shouldDispatch(event, to: $0) })
+    }
+
+    /// Enqueues an event for a single plugin only (used when re-enabling a plugin so
+    /// `plugin.started` does not re-fire to every other plugin).
+    private func enqueue(_ event: PluginEvent, restrictedTo pluginID: String) {
+        guard isEnabled, let runner = runners[pluginID], shouldDispatch(event, to: runner) else { return }
+        appendAndDrain(event, eligibleRunners: [runner])
+    }
+
+    private func appendAndDrain(_ event: PluginEvent, eligibleRunners: some Sequence<PluginRunner>) {
+        pendingEvents.append(QueuedPluginEvent(baseEvent: event, runners: Array(eligibleRunners)))
         guard !isDraining else { return }
         isDraining = true
 
@@ -156,12 +239,13 @@ final class PluginHost: ObservableObject {
     }
 
     /// Emits `plugin.tick` only when at least one active runner reports it needs a tick.
-    /// safemode exclusion is added in PR 11; for now only host-level disable gates ticking.
+    /// "Active" excludes user-disabled and safemode plugins (see `isActive`); the
+    /// failure-threshold detector that *enters* safemode arrives in PR 11.
     func tickIfNeeded() async {
         guard isEnabled else { return }
         let state = PluginSurfaceState(visibleSurfaces: visibleSurfaces)
         var anyNeedsTick = false
-        for runner in runners.values {
+        for runner in runners.values where isActive(runner.manifest.id) {
             if await runner.needsTick(surfaceState: state) {
                 anyNeedsTick = true
                 break
@@ -180,6 +264,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func shouldDispatch(_ event: PluginEvent, to runner: PluginRunner) -> Bool {
+        guard isActive(runner.manifest.id) else { return false }
         if let targetPluginID = event.action?.pluginID,
            targetPluginID != runner.manifest.id {
             return false
@@ -293,6 +378,11 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    /// Clears all of a plugin's global contributions (disable, safemode, failure-clear).
+    /// Forwards `sessionID: nil`, so the session-scoped branch in the call below does not
+    /// remove session-keyed contributions. Unreachable in v1 — no built-in declares
+    /// `.showSessionSurface` — but revisit when the v1.1/M4 session slots open so that
+    /// disabling a plugin also evicts its per-session contributions.
     private func removeContributions(
         pluginID: String,
         from current: [PluginUISlot: [PluginUIContribution]]
