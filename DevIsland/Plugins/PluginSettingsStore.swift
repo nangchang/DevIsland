@@ -10,16 +10,20 @@ final class PluginSettingsStore: ObservableObject {
 
     private enum DefaultsKey {
         static let disabledPlugins = "pluginDisabledIDs"
+        static let safemodePlugins = "pluginSafemodeIDs"
     }
 
     private let userDefaults: UserDefaults
 
     @Published private(set) var disabledPluginIDs: Set<String>
+    @Published private(set) var safemodePluginIDs: Set<String>
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-        let stored = userDefaults.stringArray(forKey: DefaultsKey.disabledPlugins) ?? []
-        self.disabledPluginIDs = Set(stored)
+        let storedDisabled = userDefaults.stringArray(forKey: DefaultsKey.disabledPlugins) ?? []
+        self.disabledPluginIDs = Set(storedDisabled)
+        let storedSafemode = userDefaults.stringArray(forKey: DefaultsKey.safemodePlugins) ?? []
+        self.safemodePluginIDs = Set(storedSafemode)
     }
 
     func isEnabled(_ pluginID: String) -> Bool {
@@ -33,5 +37,14 @@ final class PluginSettingsStore: ObservableObject {
             disabledPluginIDs.insert(pluginID)
         }
         userDefaults.set(disabledPluginIDs.sorted(), forKey: DefaultsKey.disabledPlugins)
+    }
+
+    func setSafemode(_ inSafemode: Bool, pluginID: String) {
+        if inSafemode {
+            safemodePluginIDs.insert(pluginID)
+        } else {
+            safemodePluginIDs.remove(pluginID)
+        }
+        userDefaults.set(safemodePluginIDs.sorted(), forKey: DefaultsKey.safemodePlugins)
     }
 }

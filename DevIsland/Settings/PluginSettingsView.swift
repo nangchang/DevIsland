@@ -37,6 +37,7 @@ private struct PluginSettingsRow: View {
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var settings: PluginSettingsStore
     @ObservedObject private var l10n = L10n.shared
+    @State private var showingResetStorageConfirm = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -74,12 +75,22 @@ private struct PluginSettingsRow: View {
                         pluginHost.resetPlugin(pluginID: manifest.id)
                     }
                 }
-                // TODO: [PR 11+] storage 실사용 플러그인 도입 시 confirmationDialog 추가.
-                // 파괴적 액션이므로 실수 방지용 확인 대화상자 필요. (PR #261 Gemini review)
                 Button(role: .destructive) {
-                    pluginHost.resetStorage(forPluginID: manifest.id)
+                    showingResetStorageConfirm = true
                 } label: {
                     Text(l10n.btnPluginResetStorage)
+                }
+                .confirmationDialog(
+                    l10n.btnPluginResetStorage,
+                    isPresented: $showingResetStorageConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button(l10n.btnPluginResetStorage, role: .destructive) {
+                        pluginHost.resetStorage(forPluginID: manifest.id)
+                    }
+                    Button(l10n.btnCancel, role: .cancel) {}
+                } message: {
+                    Text(l10n.msgPluginResetStorageConfirm)
                 }
             }
             .font(.caption)

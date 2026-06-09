@@ -428,6 +428,181 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertFalse(plugin.receivedKinds.contains(.pluginTick))
     }
 
+    func testSafemodeTriggeredAfterThreeErrorsWithinSixtySeconds() async {
+        let plugin = RecordingPlugin(
+            id: "com.devisland.test.safemode.errors",
+            permissions: [.showNotchCard],
+            activationEvents: [.pluginStarted, .pluginTick],
+            contribution: makeContribution(pluginID: "com.devisland.test.safemode.errors"),
+            throwOnKinds: [.pluginTick]
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.safemode.errors")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.safemode.errors")
+        let settings = PluginSettingsStore(userDefaults: defaults)
+        
+        let host = PluginHost()
+        host.register([plugin], settingsStore: settings)
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+        XCTAssertEqual(host.contributions[.notchExpandedActivity]?.count, 1)
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.errors"))
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+        XCTAssertTrue(host.contributions[.notchExpandedActivity]?.isEmpty ?? true)
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.errors"))
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.errors"))
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+        XCTAssertTrue(host.isInSafemode("com.devisland.test.safemode.errors"))
+        XCTAssertTrue(settings.safemodePluginIDs.contains("com.devisland.test.safemode.errors"))
+    }
+
+    func testSafemodeTriggeredAfterThreeTimeoutsWithinSixtySeconds() async {
+        let plugin = RecordingPlugin(
+            id: "com.devisland.test.safemode.timeouts",
+            permissions: [.showNotchCard],
+            activationEvents: [.pluginStarted, .pluginTick],
+            contribution: makeContribution(pluginID: "com.devisland.test.safemode.timeouts"),
+            delay: 0.06
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.safemode.timeouts")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.safemode.timeouts")
+        let settings = PluginSettingsStore(userDefaults: defaults)
+
+        let host = PluginHost()
+        host.register([plugin], settingsStore: settings)
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+        XCTAssertEqual(host.contributions[.notchExpandedActivity]?.count, 1)
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.timeouts"))
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.timeouts"))
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+        XCTAssertTrue(host.isInSafemode("com.devisland.test.safemode.timeouts"))
+        XCTAssertTrue(host.contributions[.notchExpandedActivity]?.isEmpty ?? true)
+        XCTAssertTrue(settings.safemodePluginIDs.contains("com.devisland.test.safemode.timeouts"))
+    }
+
+    func testProbationEntersSafemodeOnFirstFailureAfterReset() async {
+        let plugin = RecordingPlugin(
+            id: "com.devisland.test.safemode.probation",
+            permissions: [.showNotchCard],
+            activationEvents: [.pluginStarted, .pluginTick],
+            contribution: makeContribution(pluginID: "com.devisland.test.safemode.probation"),
+            throwOnKinds: [.pluginTick]
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.safemode.probation")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.safemode.probation")
+        let settings = PluginSettingsStore(userDefaults: defaults)
+
+        let host = PluginHost()
+        host.register([plugin], settingsStore: settings)
+
+        host.enterSafemode(pluginID: "com.devisland.test.safemode.probation")
+        XCTAssertTrue(host.isInSafemode("com.devisland.test.safemode.probation"))
+        XCTAssertTrue(settings.safemodePluginIDs.contains("com.devisland.test.safemode.probation"))
+
+        host.resetPlugin(pluginID: "com.devisland.test.safemode.probation")
+        await host.waitUntilIdle()
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.probation"))
+        XCTAssertFalse(settings.safemodePluginIDs.contains("com.devisland.test.safemode.probation"))
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+        
+        XCTAssertTrue(host.isInSafemode("com.devisland.test.safemode.probation"))
+        XCTAssertTrue(settings.safemodePluginIDs.contains("com.devisland.test.safemode.probation"))
+    }
+
+    func testSuccessfulExecutionClearsProbation() async {
+        let plugin = ProbationTestPlugin(id: "com.devisland.test.safemode.probation.success")
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.safemode.probation.success")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.safemode.probation.success")
+        let settings = PluginSettingsStore(userDefaults: defaults)
+
+        let host = PluginHost()
+        host.register([plugin], settingsStore: settings)
+
+        host.resetPlugin(pluginID: "com.devisland.test.safemode.probation.success")
+        await host.waitUntilIdle()
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.probation.success"))
+
+        plugin.shouldThrow = true
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.probation.success"))
+    }
+
+    func testAppRestartRestoresSafemodeAndStartsProbation() async {
+        let plugin = RecordingPlugin(
+            id: "com.devisland.test.safemode.restart",
+            permissions: [.showNotchCard],
+            activationEvents: [.pluginStarted, .pluginTick],
+            contribution: makeContribution(pluginID: "com.devisland.test.safemode.restart"),
+            throwOnKinds: [.pluginTick]
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.safemode.restart")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.safemode.restart")
+        let settings = PluginSettingsStore(userDefaults: defaults)
+
+        settings.setSafemode(true, pluginID: "com.devisland.test.safemode.restart")
+
+        let host = PluginHost()
+        host.register([plugin], settingsStore: settings)
+
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.restart"))
+        XCTAssertFalse(settings.safemodePluginIDs.contains("com.devisland.test.safemode.restart"))
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(host.isInSafemode("com.devisland.test.safemode.restart"))
+        XCTAssertTrue(settings.safemodePluginIDs.contains("com.devisland.test.safemode.restart"))
+    }
+
+    func testSafemodeOrDisabledPluginActionIsBlocked() async {
+        let plugin = RecordingPlugin(
+            id: "com.devisland.test.action.blocked",
+            permissions: [.writePluginStorage],
+            activationEvents: [.pluginActionInvoked]
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.action.blocked")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.action.blocked")
+        let settings = PluginSettingsStore(userDefaults: defaults)
+        
+        let host = PluginHost(pluginDataDirectory: makeTempStorageDirectory())
+        host.register([plugin], settingsStore: settings)
+        
+        let action = PluginUIActionDTO(
+            id: "store",
+            capability: "storage.keyValue",
+            routing: .hostExecuted,
+            payload: ["key": "count", "value": "5"]
+        )
+        
+        host.enterSafemode(pluginID: "com.devisland.test.action.blocked")
+        
+        host.handleAction(action, from: "com.devisland.test.action.blocked", componentID: "store")
+        
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        let snapshot = await host.pluginStorageSnapshot(forPluginID: "com.devisland.test.action.blocked")
+        XCTAssertNil(snapshot["count"], "Action must be blocked when plugin is in safemode")
+    }
+
     private func makeTempStorageDirectory() -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("PluginStorageDispatchTests-\(UUID().uuidString)", isDirectory: true)
@@ -938,6 +1113,55 @@ private final class GlobalToggleSessionScopedContributionPlugin: DevIslandPlugin
                 )
             ]
         )
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+private final class ProbationTestPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let lock = NSLock()
+    private var _shouldThrow = false
+    var shouldThrow: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _shouldThrow
+        }
+        set {
+            lock.lock()
+            _shouldThrow = newValue
+            lock.unlock()
+        }
+    }
+
+    init(id: String) {
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: [.showNotchCard],
+            surfaces: [.notchExpandedActivity],
+            activationEvents: ["plugin.started", "plugin.tick"]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        if shouldThrow {
+            throw RecordingPlugin.TestError()
+        }
+        return []
+    }
+
+    func makeUIContribution(
+        for slot: PluginUISlot,
+        context: PluginUIContext
+    ) throws -> PluginUIContribution? {
+        nil
     }
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
