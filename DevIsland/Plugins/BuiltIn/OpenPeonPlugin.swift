@@ -17,13 +17,7 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
             return []
         }
 
-        let agentKind: BuddyKind
-        switch hook.provider {
-        case "claude": agentKind = .claudeCode
-        case "codex": agentKind = .codex
-        case "gemini": agentKind = .gemini
-        default: agentKind = .island
-        }
+        let agentKind = BuddyKind(from: hook.provider)
 
         let payloadDict = hook.payload?.mapValues { $0.rawValue }
 

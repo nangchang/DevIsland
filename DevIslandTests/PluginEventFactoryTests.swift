@@ -39,7 +39,7 @@ final class PluginEventFactoryTests: XCTestCase {
             parsedJSON: [
                 "raw_secret": "RAW_SECRET_SHOULD_NOT_LEAK",
                 "terminal_tty": "/dev/ttys999",
-                "tool_input": ["command": "cat /tmp/raw"]
+                "tool_input": ["command": "cat /tmp/raw", "token": "ghp_secret_token_123"]
             ],
             displayToolName: "Bash",
             displayMsg: "Run token=ghp_abcdefghijklmnopqrstuvwxyz123456 /Users/alice/project"
@@ -49,7 +49,18 @@ final class PluginEventFactoryTests: XCTestCase {
 
         XCTAssertEqual(event.hook?.provider, "codex")
         XCTAssertEqual(event.hook?.eventType, "pretooluse")
-        XCTAssertEqual(event.hook?.payload?["raw_secret"]?.rawValue as? String, "RAW_SECRET_SHOULD_NOT_LEAK")
+        
+        // 민감 정보가 [redacted]로 마스킹되었는지 검증
+        XCTAssertEqual(event.hook?.payload?["raw_secret"]?.rawValue as? String, "[redacted]")
+        
+        // 중첩 객체 내부의 토큰도 검열되었는지 검증
+        if let toolInput = event.hook?.payload?["tool_input"]?.rawValue as? [String: Any] {
+            XCTAssertEqual(toolInput["token"] as? String, "[redacted]")
+            XCTAssertEqual(toolInput["command"] as? String, "cat /tmp/raw")
+        } else {
+            XCTFail("tool_input should be parsed as dictionary")
+        }
+        
         XCTAssertEqual(event.hook?.payload?["terminal_tty"]?.rawValue as? String, "/dev/ttys999")
         XCTAssertTrue(event.hook?.commandSummary?.contains("token=[redacted]") == true)
         XCTAssertTrue(event.hook?.commandSummary?.contains("~/project") == true)
