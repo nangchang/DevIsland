@@ -42,6 +42,10 @@ final class PluginHost: ObservableObject {
     /// Incremented only after the start guard passes, so tests can assert the
     /// tick loop starts at most once without observing the live timer.
     private(set) var tickStartCount = 0
+    private var probationPluginIDs: Set<String> = []
+    private var failureTimestamps: [String: [Date]] = [:]
+    private var settingsStore: PluginSettingsStore?
+    private var lastResetTimestamps: [String: Date] = [:]
 
     nonisolated init(
         enablePlugins: Bool = true,
@@ -56,9 +60,12 @@ final class PluginHost: ObservableObject {
     /// persisted-disabled plugin would run for one cycle on launch.
     func register(
         _ plugins: [any DevIslandPlugin & Sendable],
-        disabledPluginIDs: Set<String> = []
+        disabledPluginIDs: Set<String> = [],
+        settingsStore: PluginSettingsStore? = nil
     ) {
         guard isEnabled else { return }
+        let store = settingsStore ?? PluginSettingsStore.shared
+        self.settingsStore = store
         runners = Dictionary(
             uniqueKeysWithValues: plugins.map { plugin in
                 let runner = PluginRunner(plugin: plugin)
@@ -66,6 +73,14 @@ final class PluginHost: ObservableObject {
             }
         )
         self.disabledPluginIDs = disabledPluginIDs.filter { runners[$0] != nil }
+
+        // Startup probation recovery:
+        let storedSafemode = store.safemodePluginIDs
+        for id in storedSafemode where runners[id] != nil {
+            self.probationPluginIDs.insert(id)
+            store.setSafemode(false, pluginID: id)
+        }
+        self.safemodePluginIDs = []
     }
 
     /// Manifests of every registered plugin, sorted by display name for the settings list.
@@ -108,6 +123,7 @@ final class PluginHost: ObservableObject {
     func enterSafemode(pluginID: String) {
         guard runners[pluginID] != nil, !safemodePluginIDs.contains(pluginID) else { return }
         safemodePluginIDs.insert(pluginID)
+        settingsStore?.setSafemode(true, pluginID: pluginID)
         contributions = removeContributions(pluginID: pluginID, from: contributions)
     }
 
@@ -120,7 +136,13 @@ final class PluginHost: ObservableObject {
     func resetPlugin(pluginID: String) {
         guard runners[pluginID] != nil else { return }
         safemodePluginIDs.remove(pluginID)
+        settingsStore?.setSafemode(false, pluginID: pluginID)
         failures.removeAll { $0.pluginID == pluginID }
+        failureTimestamps[pluginID] = []
+        probationPluginIDs.insert(pluginID)
+        lastResetTimestamps[pluginID] = Date()
+        
+        enqueue(eventFactory.makeLifecycleEvent(kind: .pluginStarted), restrictedTo: pluginID)
     }
 
     /// Clears a plugin's durable storage. Fire-and-forget so the settings UI never blocks
@@ -135,7 +157,7 @@ final class PluginHost: ObservableObject {
     /// `.pluginEvent` routing enqueues a pluginActionInvoked event back to that plugin.
     /// `.hostExecuted` routing sends the action through the same host effect executor.
     func handleAction(_ action: PluginUIActionDTO, from pluginID: String, componentID: String) {
-        guard let runner = runners[pluginID] else { return }
+        guard let runner = runners[pluginID], isActive(pluginID) else { return }
 
         switch action.routing {
         case .hostExecuted:
@@ -292,8 +314,10 @@ final class PluginHost: ObservableObject {
     // @MainActor 직렬화로 실질적 race는 없지만, 방어적 재체크로 견고성 확보. (PR #261 Codex review)
     private func drainEvents() async {
         while let queued = nextEvent() {
-            let snapshots = await eventProcessor.process(queued)
-            let effectBatches = applySnapshots(snapshots)
+            let activeRunners = queued.runners.filter { isActive($0.manifest.id) }
+            let activeQueued = QueuedPluginEvent(baseEvent: queued.baseEvent, runners: activeRunners)
+            let snapshots = await eventProcessor.process(activeQueued)
+            let effectBatches = applySnapshots(snapshots, eventKind: queued.baseEvent.kind)
             if queued.baseEvent.kind == .sessionEnded,
                let sessionID = queued.baseEvent.session?.id {
                 evictSessionContributions(sessionID: sessionID)
@@ -315,16 +339,34 @@ final class PluginHost: ObservableObject {
         return pendingEvents.removeFirst()
     }
 
-    private func applySnapshots(_ snapshots: [PluginContributionSnapshot]) -> [PendingEffectBatch] {
+    private func applySnapshots(
+        _ snapshots: [PluginContributionSnapshot],
+        eventKind: PluginEventKind
+    ) -> [PendingEffectBatch] {
         var updated = contributions
         var effectBatches: [PendingEffectBatch] = []
 
         for snapshot in snapshots {
+            // Discard snapshots for disabled/safemoded plugins or stale snapshots from before the last reset
+            guard isActive(snapshot.pluginID) else { continue }
+            if let lastReset = lastResetTimestamps[snapshot.pluginID],
+               snapshot.timestamp < lastReset {
+                continue
+            }
+
             if let failure = snapshot.failure {
                 recordFailure(failure)
+                if safemodePluginIDs.contains(snapshot.pluginID) {
+                    updated = removeContributions(pluginID: snapshot.pluginID, from: updated)
+                    continue
+                }
                 if failure.clearsContribution {
                     updated = removeContributions(pluginID: snapshot.pluginID, from: updated)
                     continue
+                }
+            } else {
+                if eventKind != .pluginStarted && eventKind != .appStarted {
+                    probationPluginIDs.remove(snapshot.pluginID)
                 }
             }
 
@@ -427,6 +469,23 @@ final class PluginHost: ObservableObject {
 
     private func recordFailure(_ failure: PluginFailure) {
         failures.append(failure)
+        let pluginID = failure.pluginID
+
+        if probationPluginIDs.contains(pluginID) {
+            probationPluginIDs.remove(pluginID)
+            enterSafemode(pluginID: pluginID)
+            return
+        }
+
+        let now = failure.occurredAt
+        var times = failureTimestamps[pluginID, default: []]
+        times.append(now)
+        times = times.filter { now.timeIntervalSince($0) <= 60 }
+        failureTimestamps[pluginID] = times
+
+        if times.count >= 3 {
+            enterSafemode(pluginID: pluginID)
+        }
     }
 
     private func scheduleExpirationPrune() {

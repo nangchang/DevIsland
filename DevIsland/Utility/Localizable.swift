@@ -200,6 +200,7 @@ extension L10n {
     var lblPluginSafemode:   String { s("Safe mode — disabled after repeated errors", "세이프모드 — 반복 오류로 비활성화됨") }
     var btnPluginReset:      String { s("Reset",                         "초기화") }
     var btnPluginResetStorage: String { s("Reset Storage",               "저장소 초기화") }
+    var msgPluginResetStorageConfirm: String { s("Are you sure you want to delete all stored data for this plugin? This cannot be undone.", "이 플러그인의 모든 저장 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.") }
     func pluginFailures(_ count: Int) -> String { s("Errors: \(count)", "오류: \(count)회") }
 
     // Caffeine (Extras section)
