@@ -1,5 +1,7 @@
 import Foundation
 
+/// @unchecked Sendable: mutable state is only ever touched inside the
+/// PluginRunner actor, which serializes every call (architecture doc §6.4).
 final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest = PluginManifest(
         id: "caffeine",
@@ -135,7 +137,7 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
                 iconName: nil,
                 action: PluginUIActionDTO(
                     id: "caffeine.toggle",
-                    capability: "caffeine.toggleEnabled",
+                    capability: "plugin.caffeine.toggle",
                     routing: .pluginEvent,
                     payload: [:]
                 )

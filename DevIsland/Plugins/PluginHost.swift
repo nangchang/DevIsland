@@ -122,6 +122,12 @@ final class PluginHost: ObservableObject {
         } else {
             disabledPluginIDs.insert(pluginID)
             contributions = removeContributions(pluginID: pluginID, from: contributions)
+            if pluginID == "caffeine" {
+                let handler = caffeineHandler
+                Task {
+                    await handler?(false, "off")
+                }
+            }
         }
     }
 
@@ -133,6 +139,12 @@ final class PluginHost: ObservableObject {
         safemodePluginIDs.insert(pluginID)
         settingsStore?.setSafemode(true, pluginID: pluginID)
         contributions = removeContributions(pluginID: pluginID, from: contributions)
+        if pluginID == "caffeine" {
+            let handler = caffeineHandler
+            Task {
+                await handler?(false, "off")
+            }
+        }
     }
 
     /// User-initiated recovery: clears safemode and the plugin's recorded failures so the
