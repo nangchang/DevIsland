@@ -181,9 +181,9 @@ final class PluginHostDispatchTests: XCTestCase {
     }
 
     func testEffectExecutorRejectsStorageEffectWithoutPermission() async {
-        let storage = PluginStorageProvider()
+        let storage = PluginStorageProvider(baseDirectory: makeTempStorageDirectory())
         let executor = PluginEffectExecutor(storageProvider: storage)
-        let effect = PluginEffect(capability: "storage.keyValue", payload: ["key": "count"])
+        let effect = PluginEffect(capability: "storage.keyValue", payload: ["key": "count", "value": "5"])
 
         await executor.enqueue(
             [effect],
@@ -191,12 +191,12 @@ final class PluginHostDispatchTests: XCTestCase {
             permissions: []
         )
 
-        let applied = await storage.appliedStorageEffects()
-        XCTAssertTrue(applied.isEmpty)
+        let snapshot = await storage.snapshot(forPluginID: "com.devisland.test.storage")
+        XCTAssertTrue(snapshot.isEmpty, "storage write must be rejected without writePluginStorage")
     }
 
     func testEffectExecutorRejectsUnsupportedHostEffect() async {
-        let storage = PluginStorageProvider()
+        let storage = PluginStorageProvider(baseDirectory: makeTempStorageDirectory())
         let executor = PluginEffectExecutor(storageProvider: storage)
         let effect = PluginEffect(capability: "power.preventIdleSleep", payload: [:])
 
@@ -206,8 +206,8 @@ final class PluginHostDispatchTests: XCTestCase {
             permissions: [.showNotification]
         )
 
-        let applied = await storage.appliedStorageEffects()
-        XCTAssertTrue(applied.isEmpty)
+        let snapshot = await storage.snapshot(forPluginID: "com.devisland.test.power")
+        XCTAssertTrue(snapshot.isEmpty, "an unsupported capability must not write storage")
     }
 
     func testEffectExecutorDeliversNotificationEffect() async {
@@ -257,9 +257,9 @@ final class PluginHostDispatchTests: XCTestCase {
     }
 
     func testEffectExecutorAllowsStorageEffectWithPermission() async {
-        let storage = PluginStorageProvider()
+        let storage = PluginStorageProvider(baseDirectory: makeTempStorageDirectory())
         let executor = PluginEffectExecutor(storageProvider: storage)
-        let effect = PluginEffect(capability: "storage.keyValue", payload: ["key": "count"])
+        let effect = PluginEffect(capability: "storage.keyValue", payload: ["key": "count", "value": "5"])
 
         await executor.enqueue(
             [effect],
@@ -267,8 +267,8 @@ final class PluginHostDispatchTests: XCTestCase {
             permissions: [.writePluginStorage]
         )
 
-        let applied = await storage.appliedStorageEffects()
-        XCTAssertEqual(applied.count, 1)
+        let snapshot = await storage.snapshot(forPluginID: "com.devisland.test.storage")
+        XCTAssertEqual(snapshot["count"], "5")
     }
 
     func testHostExecutedActionAppliesStorageEffect() async {
@@ -277,28 +277,26 @@ final class PluginHostDispatchTests: XCTestCase {
             permissions: [.writePluginStorage],
             activationEvents: [.pluginActionInvoked]
         )
-        let host = PluginHost()
+        let host = PluginHost(pluginDataDirectory: makeTempStorageDirectory())
         host.register([plugin])
 
         let action = PluginUIActionDTO(
             id: "store",
             capability: "storage.keyValue",
             routing: .hostExecuted,
-            payload: ["key": "count"]
+            payload: ["key": "count", "value": "5"]
         )
         host.handleAction(action, from: "com.devisland.test.host-action", componentID: "store")
 
         let deadline = Date().addingTimeInterval(1)
-        var applied: [(pluginID: String, effect: PluginEffect)] = []
+        var stored: String?
         repeat {
-            applied = await host.appliedStorageEffects()
-            if !applied.isEmpty { break }
+            stored = await host.pluginStorageSnapshot(forPluginID: "com.devisland.test.host-action")["count"]
+            if stored != nil { break }
             try? await Task.sleep(nanoseconds: 10_000_000)
-        } while applied.isEmpty && Date() < deadline
+        } while stored == nil && Date() < deadline
 
-        XCTAssertEqual(applied.count, 1)
-        XCTAssertEqual(applied.first?.pluginID, "com.devisland.test.host-action")
-        XCTAssertEqual(applied.first?.effect.capability, "storage.keyValue")
+        XCTAssertEqual(stored, "5", "host-executed storage effect must persist the value")
     }
 
     func testGlobalContributionsDeduplicateByPluginOnly() async {
@@ -428,6 +426,13 @@ final class PluginHostDispatchTests: XCTestCase {
         await host.tickIfNeeded()
         await host.waitUntilIdle()
         XCTAssertFalse(plugin.receivedKinds.contains(.pluginTick))
+    }
+
+    private func makeTempStorageDirectory() -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginStorageDispatchTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        return dir
     }
 
     private func makeEvent(

@@ -50,14 +50,16 @@
   - PR 6. Tick lifecycle — 완료 (`feat: add plugin tick lifecycle (PR 6)`)
   - PR 7. SessionTimerPlugin built-in — 완료 (`feat: add SessionTimerPlugin built-in (PR 7)`)
   - PR 8. PomodoroPlugin built-in and menubar.menu — 완료 (`feat: add PomodoroPlugin built-in (PR 8)`)
+  - PR 9. PluginStorageProvider (plugin별 durable SQLite storage) — 완료 (`feat: implement durable SQLite plugin storage`)
 - 마지막 검증:
-  - 전체 테스트 스위트 통과 (2026-06-09, PR 8 기준)
-  - PomodoroPluginTests 5개 추가 (start/pause/resume 타임스탬프 보존, wall-clock 기반 tick·드리프트 catch-up, 종료시각 경과 시 완료·reset·count, 양 슬롯 렌더, action이 target plugin에만 라우팅)
-  - 타이머는 event timestamp 기반(`expectedEndTime`)으로 missed tick·App Nap·sleep 드리프트 방지
-  - `builtInPlugins()`에 `PomodoroPlugin` 추가 (menubar.menu 슬롯은 PR 4에서 이미 배선됨)
-  - 수동 menubar smoke check(메뉴에서 Pomodoro 행 표시)는 잔여 항목
+  - 전체 테스트 스위트 통과 (2026-06-09, PR 9 기준)
+  - PluginStorageTests 10개 추가 (set/get/overwrite/delete, increment 누적, snapshot limit, oversized key/value 거부, quota 초과 거부·기존 key 덮어쓰기 허용, 재오픈 후 durable; provider 격리·keyValue set/delete·increment delta·reset)
+  - `PluginStorageProvider` stub을 plugin별 격리 SQLite로 교체 (WAL·busy_timeout·FULLMUTEX, `ON CONFLICT` upsert, key/value 길이·key 수 quota)
+  - `maxKeys`를 `snapshotLimit`(64)과 동일하게 맞춰 가시성 갭 제거 (snapshot에 안 보이는 key 방지)
+  - approval DB·`approvalPersistenceQueue` 비공유로 hook 응답 경로와 격리 (grep 확인)
+  - `writePluginStorage` 권한을 쓰는 등록 플러그인이 아직 없어 실제 plugin 영속화 연동(예: Pomodoro completedCount)은 후속 PR
 - 다음 단계:
-  - PR 9. PluginStorageProvider (plugin별 durable key-value storage)
+  - PR 10. PluginSettingsView (플러그인 목록·enable/disable·storage reset)
 
 ## 5. PR 분할
 
