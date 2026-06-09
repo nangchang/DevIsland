@@ -28,7 +28,12 @@ struct PluginEventFactory: Sendable {
                 eventType: HookEventNormalizer.normalizedName(hook.event),
                 commandSummary: commandSummary(from: hook),
                 cwd: hook.workspaceRoot,
-                terminalApp: emptyToNil(hook.terminalApp)
+                terminalApp: emptyToNil(hook.terminalApp),
+                rawEvent: hook.event,
+                toolName: emptyToNil(hook.toolName),
+                notificationType: emptyToNil(hook.notificationType),
+                message: emptyToNil(hook.displayMsg),
+                payload: AnyJSON.object(from: redactPayload(hook.parsedJSON))
             ),
             action: nil,
             approval: nil
@@ -102,7 +107,12 @@ struct PluginEventFactory: Sendable {
                     eventType: hook.eventType,
                     commandSummary: hook.commandSummary,
                     cwd: metadata?.cwd,
-                    terminalApp: metadata?.terminalApp
+                    terminalApp: metadata?.terminalApp,
+                    rawEvent: hook.rawEvent,
+                    toolName: hook.toolName,
+                    notificationType: hook.notificationType,
+                    message: hook.message,
+                    payload: hook.payload
                 )
             } : nil,
             action: event.action,
@@ -145,6 +155,30 @@ struct PluginEventFactory: Sendable {
         redacted = replace(Self.credentialRegex, in: redacted, with: "$1=[redacted]")
         redacted = replace(Self.tokenPrefixRegex, in: redacted, with: "[redacted-token]")
         return redacted
+    }
+
+    private func redactSensitiveValue(_ value: Any, forKey key: String) -> Any {
+        let lowerKey = key.lowercased()
+        if lowerKey.contains("secret") || lowerKey.contains("token") || lowerKey.contains("password") || lowerKey.contains("api_key") {
+            return "[redacted]"
+        }
+
+        if let stringValue = value as? String {
+            return redactSensitiveText(stringValue)
+        } else if let dictValue = value as? [String: Any] {
+            return redactPayload(dictValue)
+        } else if let arrayValue = value as? [Any] {
+            return arrayValue.map { redactSensitiveValue($0, forKey: "") }
+        }
+        return value
+    }
+
+    private func redactPayload(_ payload: [String: Any]) -> [String: Any] {
+        var redactedPayload: [String: Any] = [:]
+        for (key, value) in payload {
+            redactedPayload[key] = redactSensitiveValue(value, forKey: key)
+        }
+        return redactedPayload
     }
 
     private func redactHeredocBodies(_ text: String) -> String {

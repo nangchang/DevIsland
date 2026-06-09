@@ -49,7 +49,12 @@ final class PluginHostDispatchTests: XCTestCase {
                 eventType: "pretooluse",
                 commandSummary: "Edit",
                 cwd: "/Users/alice/project",
-                terminalApp: "iTerm"
+                terminalApp: "iTerm",
+                rawEvent: nil,
+                toolName: nil,
+                notificationType: nil,
+                message: nil,
+                payload: nil
             )
         ))
         await host.waitUntilIdle()

@@ -47,11 +47,9 @@ class AppState: ObservableObject {
         _ tmuxSocket: String?,
         _ tmuxClient: String?
     ) -> Bool
-    typealias OpenPeonSoundPlayer = (_ category: CESPCategory) -> Void
 
     private let userDefaults: UserDefaults
     private let frontmostCheck: FrontmostCheck
-    private let openPeonSoundPlayer: OpenPeonSoundPlayer
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
@@ -139,17 +137,11 @@ class AppState: ObservableObject {
         frontmostCheck: @escaping FrontmostCheck = TerminalFocuser.isSessionFrontmost,
         approvalProxy: ApprovalProxyController? = nil,
         codexRuleSyncAdapter: CodexRuleSyncAdapter = CodexJSONRuleSyncAdapter(),
-        enablePlugins: Bool = true,
-        openPeonSoundPlayer: @escaping OpenPeonSoundPlayer = { category in
-            Task { @MainActor in
-                CESPAudioPlayer.shared.play(category: category)
-            }
-        }
+        enablePlugins: Bool = true
     ) {
         self.userDefaults = userDefaults
         self.frontmostCheck = frontmostCheck
         self.approvalProxy = approvalProxy
-        self.openPeonSoundPlayer = openPeonSoundPlayer
         self.sessionStore = SessionStore()
         self.geminiState = GeminiSessionState(userDefaults: userDefaults)
         self.displayPrefs = NotchDisplayPreferences(userDefaults: userDefaults)
@@ -472,7 +464,7 @@ class AppState: ObservableObject {
 
     /// Built-in plugins compiled into DevIsland, registered once at init.
     private static func builtInPlugins() -> [any DevIslandPlugin & Sendable] {
-        [SessionTimerPlugin(), PomodoroPlugin()]
+        [SessionTimerPlugin(), PomodoroPlugin(), OpenPeonPlugin()]
     }
 
     /// Starts the plugin platform once the app has finished launching: emits the
@@ -597,19 +589,10 @@ class AppState: ObservableObject {
         let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
         let isCodexStatusOnlyLifecycleEvent = h.agentKind == .codex && (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse")
         let replayToolName = h.toolName.isEmpty ? displayToolName : h.toolName
-        let cespCategory = CESPEventMapper.category(
-            event: h.event,
-            normalizedEvent: normalizedEvent,
-            agentKind: h.agentKind,
-            toolName: h.toolName,
-            notificationType: h.notificationType,
-            message: h.displayMsg,
-            payload: h.parsedJSON
-        )
 
         // MARK: Phase 2c: Stop
         if isStop {
-            handleStopEvent(h, hookEventId: hookEventId, cespCategory: cespCategory, replayToolName: replayToolName, responseHandler: responseHandler)
+            handleStopEvent(h, hookEventId: hookEventId, replayToolName: replayToolName, responseHandler: responseHandler)
             return
         }
 
@@ -682,7 +665,6 @@ class AppState: ObservableObject {
                 isUserQuestionTool: isUserQuestionTool,
                 displayToolName: displayToolName,
                 replayToolName: replayToolName,
-                cespCategory: cespCategory,
                 responseHandler: responseHandler
             )
             return
@@ -804,8 +786,7 @@ class AppState: ObservableObject {
                     terminalTabIndex: h.terminalTabIndex,
                     terminalTmuxPane: h.terminalTmuxPane,
                     terminalTmuxSocket: h.terminalTmuxSocket,
-                    terminalTmuxClient: h.terminalTmuxClient,
-                    cespCategory: cespCategory
+                    terminalTmuxClient: h.terminalTmuxClient
                 )
             }
             return
@@ -1023,7 +1004,6 @@ class AppState: ObservableObject {
                 receivedAt: request.receivedAt
             )
             self.sessionStore.appendPending(request: request, item: newItem)
-            self.playOpenPeonSound(cespCategory)
 
             if !request.sessionId.isEmpty {
                 self.sessionStore.updateActiveSession(
@@ -1117,11 +1097,9 @@ class AppState: ObservableObject {
     private func handleStopEvent(
         _ h: ParsedHookEvent,
         hookEventId: Int64?,
-        cespCategory: CESPCategory?,
         replayToolName: String,
         responseHandler: @escaping (String) -> Void
     ) {
-        playOpenPeonSound(cespCategory)
         guard !h.sessionId.isEmpty else {
             respondWithReplay(
                 "{\"response\": \"approved\"}",
@@ -1202,7 +1180,6 @@ class AppState: ObservableObject {
         isUserQuestionTool: Bool,
         displayToolName: String,
         replayToolName: String,
-        cespCategory: CESPCategory?,
         responseHandler: @escaping (String) -> Void
     ) {
         let normalizedEvent = HookEventNormalizer.normalizedName(h.event)
@@ -1212,9 +1189,6 @@ class AppState: ObservableObject {
             : (response: "approved", action: RuleAction.allow, reason: "notification")
 
         print("[DevIsland] notification event: \(h.event) for \(h.toolName) → \(notification.response)")
-        if !isCodexStatusOnlyLifecycleEvent {
-            playOpenPeonSound(cespCategory)
-        }
         guard !h.sessionId.isEmpty else {
             respondWithReplay(
                 "{\"response\": \"\(notification.response)\"}",
@@ -1443,8 +1417,7 @@ class AppState: ObservableObject {
         terminalTabIndex: String,
         terminalTmuxPane: String,
         terminalTmuxSocket: String,
-        terminalTmuxClient: String,
-        cespCategory: CESPCategory?
+        terminalTmuxClient: String
     ) {
         let newItem = PendingItem(
             id: request.id,
@@ -1460,7 +1433,6 @@ class AppState: ObservableObject {
             receivedAt: request.receivedAt
         )
         sessionStore.appendPending(request: request, item: newItem)
-        playOpenPeonSound(cespCategory)
 
         if !request.sessionId.isEmpty {
             let isLifecycleTracked = sessionStore.activeSessions.first { $0.id == request.sessionId }?.isLifecycleTracked
@@ -1504,11 +1476,6 @@ class AppState: ObservableObject {
     private static func shouldSupersedeCodexSessionsOnStart(source: String) -> Bool {
         let normalized = HookEventNormalizer.normalizedName(source)
         return ["clear", "startup", "resume"].contains(normalized)
-    }
-
-    private func playOpenPeonSound(_ category: CESPCategory?) {
-        guard let category else { return }
-        openPeonSoundPlayer(category)
     }
 
 
