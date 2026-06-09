@@ -190,14 +190,6 @@ class NotchWindowController: NSWindowController {
             }
             .store(in: &cancellables)
 
-        AppState.shared.claudeQuestionState.$currentClaudeQuestion
-            .receive(on: RunLoop.main)
-            .sink { [weak self] question in
-                guard question != nil, AppState.shared.isNotchExpanded else { return }
-                self?.focusExpandedPanelForTextInput()
-            }
-            .store(in: &cancellables)
-
         SettingsStore.shared.$settings
             .map { settings in
                 NotchAppearanceSnapshot(
@@ -344,7 +336,6 @@ class NotchWindowController: NSWindowController {
             }
             
             expandedPanel.orderFrontRegardless()
-            focusExpandedPanelForTextInput()
 
             if usesTransparentPanel || expansionDuration == 0 {
                 window?.orderOut(nil)
@@ -405,11 +396,6 @@ class NotchWindowController: NSWindowController {
             && !isShowingModal
             && !isHiddenForFullScreen
         AppState.shared.pluginHost.setVisibleSurfaces(expandedVisible ? [.notchExpandedActivity] : [])
-    }
-
-    private func focusExpandedPanelForTextInput() {
-        guard AppState.shared.currentClaudeQuestion != nil else { return }
-        expandedPanel.makeKey()
     }
 
     func updateWindowFrame(animate: Bool = true, sizeOverride: NSSize? = nil, targetScreenOverride: NSScreen? = nil) {
