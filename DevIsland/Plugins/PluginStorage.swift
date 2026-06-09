@@ -38,6 +38,7 @@ final class SQLitePluginStorage: PluginStorage {
         case keyTooLong
         case valueTooLong
         case quotaExceeded
+        case overflow
     }
 
     private let databaseURL: URL
@@ -79,13 +80,19 @@ final class SQLitePluginStorage: PluginStorage {
     func snapshot(limit: Int) throws -> [String: String] {
         let stmt = try prepare("SELECT key, value FROM kv LIMIT ?")
         defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_int(stmt, 1, Int32(max(0, limit)))
+        sqlite3_bind_int(stmt, 1, Int32(clamping: max(0, limit)))
         var result: [String: String] = [:]
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            guard let k = sqlite3_column_text(stmt, 0), let v = sqlite3_column_text(stmt, 1) else { continue }
-            result[String(cString: k)] = String(cString: v)
+        while true {
+            switch sqlite3_step(stmt) {
+            case SQLITE_ROW:
+                guard let k = sqlite3_column_text(stmt, 0), let v = sqlite3_column_text(stmt, 1) else { continue }
+                result[String(cString: k)] = String(cString: v)
+            case SQLITE_DONE:
+                return result
+            default:
+                throw StorageError.stepFailed(lastError)
+            }
         }
-        return result
     }
 
     func get(_ key: String) throws -> String? {
@@ -129,7 +136,10 @@ final class SQLitePluginStorage: PluginStorage {
     @discardableResult
     func increment(_ key: String, by delta: Int) throws -> Int {
         let current = Int(try get(key) ?? "0") ?? 0
-        let next = current + delta
+        // A plugin-supplied delta must not trap the host on overflow; surface it as a
+        // throw so the executor logs and drops the effect instead of crashing core.
+        let (next, overflow) = current.addingReportingOverflow(delta)
+        guard !overflow else { throw StorageError.overflow }
         try set(key, value: String(next))
         return next
     }

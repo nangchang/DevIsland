@@ -40,6 +40,13 @@ final class PluginStorageTests: XCTestCase {
         XCTAssertEqual(try storage.get("c"), "3")
     }
 
+    func testIncrementOverflowThrowsAndLeavesValueUnchanged() throws {
+        let storage = try makeStorage()
+        try storage.set("n", value: String(Int.max))
+        XCTAssertThrowsError(try storage.increment("n", by: 1), "overflow must throw, not trap the host")
+        XCTAssertEqual(try storage.get("n"), String(Int.max), "value stays unchanged when increment overflows")
+    }
+
     func testSnapshotRespectsLimit() throws {
         let storage = try makeStorage()
         for i in 0..<10 { try storage.set("k\(i)", value: "\(i)") }
