@@ -52,16 +52,12 @@
   - PR 8. PomodoroPlugin built-in and menubar.menu — 완료 (`feat: add PomodoroPlugin built-in (PR 8)`)
   - PR 9. PluginStorageProvider (plugin별 durable SQLite storage) — 완료 (`feat: implement durable SQLite plugin storage`)
   - PR 10. PluginSettingsView (플러그인 목록·enable/disable·safemode 상태·storage reset) — 완료
+  - PR 11. Safemode hardening (실패 임계값 자동 진입 트리거 + timeout 처리 + reset 후 1회 재시도) — 완료
 - 마지막 검증:
-  - 전체 테스트 스위트 통과 (2026-06-09, PR 10 기준)
-  - PluginSettingsTests 8개 추가 (enable/disable persistence, disable 시 contribution 제거·tick 제외, 등록 시 disabled 플러그인 lifecycle 미수신, enable 시 대상 플러그인에만 plugin.started 재발행, safemode 진입 시 contribution 제거·dispatch 제외, reset 시 safemode·failures 초기화, host storage reset)
-  - `PluginSettingsStore` 신규: 플러그인 disable 상태를 core `SettingsStore`와 분리해 자체 UserDefaults 키(`pluginDisabledIDs`)에 persist (opt-out 모델)
-  - `PluginHost`에 `disabledPluginIDs`/`safemodePluginIDs` 상태와 `isActive` 단일 게이트 추가 — `shouldDispatch`/`tickIfNeeded`가 disable·safemode 플러그인을 함께 제외
-  - 시작 순서 보장: `AppState.init`의 `register(_:disabledPluginIDs:)`가 첫 `plugin.started` 발행 전에 disabled 집합을 주입 (disabled 플러그인이 launch 시 1회 실행되는 것 방지)
-  - enable 시 `restrictedTo:` 단일 플러그인 enqueue로 `plugin.started`를 재활성화 대상에만 재발행 (다른 플러그인 onEvent 재실행 방지)
-  - 설계 분담 메모: PR 10이 safemode **상태 모델**(`enterSafemode`/`resetPlugin`/`isInSafemode`)과 dispatch/tick 제외, user reset을 모두 구현. PR 11은 **자동 진입 트리거**(60초 내 3회 실패 임계값)와 timeout 미세 처리, reset 후 1회 제한 재시도만 추가하면 됨. (safemode 진입이 contribution을 비우는데 dispatch 제외가 없으면 다음 이벤트가 plugin을 재실행해 clear를 되돌리므로 둘은 같은 PR에 있어야 함)
+  - 전체 테스트 스위트 통과 (2026-06-09, PR 11 기준)
 - 다음 단계:
-  - PR 11. Safemode hardening (실패 임계값 자동 진입 트리거 + timeout 처리 + reset 후 1회 재시도)
+  - Migration Track. 기존 기능 Built-in Plugin 전환 (Migration PR M0)
+
 
 ## 5. PR 분할
 
