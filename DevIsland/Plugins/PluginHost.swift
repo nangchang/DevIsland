@@ -15,6 +15,8 @@ final class PluginHost: ObservableObject {
 
     private var runners: [String: PluginRunner] = [:]
     private let storageProvider: PluginStorageProvider
+    private let caffeineHandler: PluginEffectExecutor.CaffeineHandler?
+    private let caffeineToggleHandler: PluginEffectExecutor.CaffeineToggleHandler?
     private let eventFactory = PluginEventFactory()
     private lazy var eventProcessor = PluginEventProcessor(
         storageProvider: storageProvider,
@@ -24,7 +26,9 @@ final class PluginHost: ObservableObject {
         storageProvider: storageProvider,
         notificationHandler: { title, body in
             await AppState.presentSharedPluginNotification(title: title, body: body)
-        }
+        },
+        caffeineHandler: caffeineHandler,
+        caffeineToggleHandler: caffeineToggleHandler
     )
     private var pendingEvents: [QueuedPluginEvent] = []
     private var isDraining = false
@@ -49,10 +53,14 @@ final class PluginHost: ObservableObject {
 
     nonisolated init(
         enablePlugins: Bool = true,
-        pluginDataDirectory: URL = PluginStorageProvider.defaultDirectory
+        pluginDataDirectory: URL = PluginStorageProvider.defaultDirectory,
+        caffeineHandler: PluginEffectExecutor.CaffeineHandler? = nil,
+        caffeineToggleHandler: PluginEffectExecutor.CaffeineToggleHandler? = nil
     ) {
         self.isEnabled = enablePlugins
         self.storageProvider = PluginStorageProvider(baseDirectory: pluginDataDirectory)
+        self.caffeineHandler = caffeineHandler
+        self.caffeineToggleHandler = caffeineToggleHandler
     }
 
     /// Registers the built-in plugins. `disabledPluginIDs` must be supplied here so the
@@ -186,7 +194,8 @@ final class PluginHost: ObservableObject {
                     payload: action.payload,
                     value: nil
                 ),
-                approval: nil
+                approval: nil,
+                caffeineStatus: nil
             )
             enqueue(event)
         }
@@ -284,7 +293,8 @@ final class PluginHost: ObservableObject {
             session: nil,
             hook: nil,
             action: nil,
-            approval: nil
+            approval: nil,
+            caffeineStatus: nil
         ))
     }
 

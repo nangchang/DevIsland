@@ -12,6 +12,7 @@ enum PluginEventKind: String, Codable, CaseIterable {
     case pluginStarted = "plugin.started"
     case pluginTick = "plugin.tick"
     case pluginActionInvoked = "plugin.action.invoked"
+    case caffeineStatusChanged = "caffeine.status.changed"
 }
 
 struct PluginEvent: Codable, Equatable {
@@ -22,6 +23,27 @@ struct PluginEvent: Codable, Equatable {
     let hook: PluginHookSummary?
     let action: PluginActionEvent?
     let approval: PluginApprovalSummary?
+    let caffeineStatus: PluginCaffeineStatus?
+
+    init(
+        id: UUID,
+        kind: PluginEventKind,
+        timestamp: Date,
+        session: PluginSessionSnapshot? = nil,
+        hook: PluginHookSummary? = nil,
+        action: PluginActionEvent? = nil,
+        approval: PluginApprovalSummary? = nil,
+        caffeineStatus: PluginCaffeineStatus? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.timestamp = timestamp
+        self.session = session
+        self.hook = hook
+        self.action = action
+        self.approval = approval
+        self.caffeineStatus = caffeineStatus
+    }
 }
 
 struct PluginSessionSnapshot: Codable, Equatable {
@@ -61,4 +83,12 @@ struct PluginApprovalSummary: Codable, Equatable {
     let approved: Bool
     let toolName: String
     let scope: String
+}
+
+struct PluginCaffeineStatus: Codable, Equatable {
+    let caffeineEnabled: Bool
+    let excludedSSIDs: [String]
+    let isOnACPower: Bool
+    let batteryLevel: Double?
+    let currentSSID: String?
 }

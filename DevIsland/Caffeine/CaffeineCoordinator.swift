@@ -25,6 +25,8 @@ final class CaffeineCoordinator: ObservableObject {
     @Published var batteryLevel: Double? = nil
     @Published var currentSSID: String? = nil
 
+    var onStatusChanged: ((PluginCaffeineStatus) -> Void)?
+
     private let assertion: SleepAssertion
     private var cancellables = Set<AnyCancellable>()
     private var lastLowBattery: Bool = false
@@ -44,29 +46,52 @@ final class CaffeineCoordinator: ObservableObject {
     }
 
     func evaluate() {
-        let (nextLow, intended) = decide(prevLowBattery: lastLowBattery)
-        lastLowBattery = nextLow
+        let status = PluginCaffeineStatus(
+            caffeineEnabled: caffeineEnabled,
+            excludedSSIDs: excludedSSIDs,
+            isOnACPower: isOnACPower,
+            batteryLevel: batteryLevel,
+            currentSSID: currentSSID
+        )
+        onStatusChanged?(status)
+    }
 
-        let finalReason: CaffeineReason
-        let shouldHold: Bool
-        switch intended {
-        case .onAC:
+    func applyPreventIdleSleep(prevent: Bool, reasonString: String) {
+        let parsedReason: CaffeineReason
+        if prevent {
             switch assertion.acquire() {
             case .acquired, .alreadyHeld:
-                shouldHold = true
-                finalReason = .onAC
+                parsedReason = .onAC
             case .failed(let status):
-                shouldHold = false
-                finalReason = .failure(status)
+                parsedReason = .failure(status)
             }
-        default:
+        } else {
             assertion.release()
-            shouldHold = false
-            finalReason = intended
+            if reasonString == "off" {
+                parsedReason = .off
+            } else if reasonString == "lowBattery" {
+                parsedReason = .lowBattery(batteryLevel ?? 0.0)
+            } else if reasonString == "onBattery" {
+                parsedReason = .onBattery
+            } else if reasonString.hasPrefix("excludedSSID:") {
+                let ssid = reasonString.replacingOccurrences(of: "excludedSSID:", with: "")
+                parsedReason = .excludedSSID(ssid)
+            } else if reasonString.hasPrefix("failure:") {
+                let statusStr = reasonString.replacingOccurrences(of: "failure:", with: "")
+                let status = Int32(statusStr) ?? 0
+                parsedReason = .failure(status)
+            } else {
+                parsedReason = .off
+            }
         }
 
-        if isHoldingAssertion != shouldHold { isHoldingAssertion = shouldHold }
-        if reason != finalReason { reason = finalReason }
+        let shouldHold = prevent && assertion.isHeld
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if self.isHoldingAssertion != shouldHold { self.isHoldingAssertion = shouldHold }
+            if self.reason != parsedReason { self.reason = parsedReason }
+        }
     }
 
     func shutdown() {

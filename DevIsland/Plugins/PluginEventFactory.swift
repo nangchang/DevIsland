@@ -36,7 +36,8 @@ struct PluginEventFactory: Sendable {
                 payload: AnyJSON.object(from: redactPayload(hook.parsedJSON))
             ),
             action: nil,
-            approval: nil
+            approval: nil,
+            caffeineStatus: nil
         )
     }
 
@@ -53,7 +54,8 @@ struct PluginEventFactory: Sendable {
             session: nil,
             hook: nil,
             action: nil,
-            approval: nil
+            approval: nil,
+            caffeineStatus: nil
         )
     }
 
@@ -70,7 +72,25 @@ struct PluginEventFactory: Sendable {
             session: snapshot(from: session),
             hook: nil,
             action: nil,
-            approval: nil
+            approval: nil,
+            caffeineStatus: nil
+        )
+    }
+
+    func makeCaffeineStatusEvent(
+        status: PluginCaffeineStatus,
+        id: UUID = UUID(),
+        timestamp: Date = Date()
+    ) -> PluginEvent {
+        PluginEvent(
+            id: id,
+            kind: .caffeineStatusChanged,
+            timestamp: timestamp,
+            session: nil,
+            hook: nil,
+            action: nil,
+            approval: nil,
+            caffeineStatus: status
         )
     }
 
@@ -116,7 +136,8 @@ struct PluginEventFactory: Sendable {
                 )
             } : nil,
             action: event.action,
-            approval: canReadHookSummaries ? event.approval : nil
+            approval: canReadHookSummaries ? event.approval : nil,
+            caffeineStatus: permissions.contains(.readCaffeineStatus) ? event.caffeineStatus : nil
         )
     }
 
