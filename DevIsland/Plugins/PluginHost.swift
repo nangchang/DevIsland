@@ -45,6 +45,7 @@ final class PluginHost: ObservableObject {
     private var probationPluginIDs: Set<String> = []
     private var failureTimestamps: [String: [Date]] = [:]
     private var settingsStore: PluginSettingsStore?
+    private var lastResetTimestamps: [String: Date] = [:]
 
     nonisolated init(
         enablePlugins: Bool = true,
@@ -139,6 +140,7 @@ final class PluginHost: ObservableObject {
         failures.removeAll { $0.pluginID == pluginID }
         failureTimestamps[pluginID] = []
         probationPluginIDs.insert(pluginID)
+        lastResetTimestamps[pluginID] = Date()
         
         enqueue(eventFactory.makeLifecycleEvent(kind: .pluginStarted), restrictedTo: pluginID)
     }
@@ -345,6 +347,13 @@ final class PluginHost: ObservableObject {
         var effectBatches: [PendingEffectBatch] = []
 
         for snapshot in snapshots {
+            // Discard snapshots for disabled/safemoded plugins or stale snapshots from before the last reset
+            guard isActive(snapshot.pluginID) else { continue }
+            if let lastReset = lastResetTimestamps[snapshot.pluginID],
+               snapshot.timestamp < lastReset {
+                continue
+            }
+
             if let failure = snapshot.failure {
                 recordFailure(failure)
                 if safemodePluginIDs.contains(snapshot.pluginID) {

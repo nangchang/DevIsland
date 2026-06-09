@@ -603,6 +603,34 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertNil(snapshot["count"], "Action must be blocked when plugin is in safemode")
     }
 
+    func testStaleSnapshotDiscardedAfterReset() async {
+        let plugin = RecordingPlugin(
+            id: "com.devisland.test.safemode.stale",
+            permissions: [.showNotchCard],
+            activationEvents: [.pluginStarted, .pluginTick],
+            contribution: makeContribution(pluginID: "com.devisland.test.safemode.stale"),
+            throwOnKinds: [.pluginTick],
+            delay: 0.5,
+            delayOnKinds: [.pluginTick]
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.safemode.stale")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.safemode.stale")
+        let settings = PluginSettingsStore(userDefaults: defaults)
+
+        let host = PluginHost()
+        host.register([plugin], settingsStore: settings)
+
+        host.enqueue(makeEvent(kind: .pluginTick))
+        
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        
+        host.resetPlugin(pluginID: "com.devisland.test.safemode.stale")
+        
+        await host.waitUntilIdle()
+        
+        XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.stale"), "Stale failure must be discarded and not cause safemode")
+    }
+
     private func makeTempStorageDirectory() -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("PluginStorageDispatchTests-\(UUID().uuidString)", isDirectory: true)
@@ -672,6 +700,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
     let contribution: PluginUIContribution?
     let throwOnKinds: Set<PluginEventKind>
     let delay: TimeInterval
+    let delayOnKinds: Set<PluginEventKind>?
     private let lock = NSLock()
     private var _receivedEvents: [PluginEvent] = []
     var receivedEvents: [PluginEvent] {
@@ -692,7 +721,8 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
         contribution: PluginUIContribution? = nil,
         surfaces: Set<PluginUISlot> = [.notchExpandedActivity],
         throwOnKinds: Set<PluginEventKind> = [],
-        delay: TimeInterval = 0
+        delay: TimeInterval = 0,
+        delayOnKinds: Set<PluginEventKind>? = nil
     ) {
         self.manifest = PluginManifest(
             id: id,
@@ -707,10 +737,12 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
         self.contribution = contribution
         self.throwOnKinds = throwOnKinds
         self.delay = delay
+        self.delayOnKinds = delayOnKinds
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
-        if delay > 0 {
+        let shouldDelay = delayOnKinds?.contains(event.kind) ?? true
+        if shouldDelay && delay > 0 {
             Thread.sleep(forTimeInterval: delay)
         }
         if throwOnKinds.contains(event.kind) {
