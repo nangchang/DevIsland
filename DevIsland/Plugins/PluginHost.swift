@@ -114,6 +114,9 @@ final class PluginHost: ObservableObject {
     /// User-initiated recovery: clears safemode and the plugin's recorded failures so the
     /// settings UI resets its error state. The plugin reactivates and rebuilds on the next
     /// natural event; the limited automatic retry is added in PR 11.
+    // TODO: [PR 11] reset 후 제어된 plugin.started 재발행 (1회 제한 재시도) 추가.
+    // 즉시 재발행하면 동일 오류 반복 시 safemode↔reset 루프 위험이 있으므로,
+    // failure threshold와 함께 1회 재시도 + 재실패 시 safemode 재진입으로 구현. (PR #261 Gemini review)
     func resetPlugin(pluginID: String) {
         guard runners[pluginID] != nil else { return }
         safemodePluginIDs.remove(pluginID)
@@ -284,6 +287,9 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    // TODO: [PR 11] drain 루프에서 각 queued event의 runner를 처리하기 전에 isActive 재체크 추가.
+    // enqueue 시점에 캡처된 runner 리스트가 drain 중 disable/safemode 변경을 반영하지 못하는 갭 해소.
+    // @MainActor 직렬화로 실질적 race는 없지만, 방어적 재체크로 견고성 확보. (PR #261 Codex review)
     private func drainEvents() async {
         while let queued = nextEvent() {
             let snapshots = await eventProcessor.process(queued)

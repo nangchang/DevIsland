@@ -464,6 +464,9 @@ MenuBar 렌더링 제약:
 - timeout은 failure 기록하되 기존 contribution 유지 가능
 - safemode plugin은 event/tick/action 대상 제외
 - user reset 후 1회 제한 재시도
+- `drainEvents` drain 루프에서 queued event runner 처리 전 `isActive` 재체크 (PR #261 Codex review)
+- `resetPlugin` 시 제어된 `plugin.started` 재발행 — 1회 재시도 + 재실패 시 safemode 재진입 (PR #261 Gemini review)
+- `PluginSettingsView` Reset Storage 버튼에 `confirmationDialog` 추가 (PR #261 Gemini review, storage 실사용 플러그인 도입 시)
 
 테스트:
 

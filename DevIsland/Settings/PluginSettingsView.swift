@@ -74,6 +74,8 @@ private struct PluginSettingsRow: View {
                         pluginHost.resetPlugin(pluginID: manifest.id)
                     }
                 }
+                // TODO: [PR 11+] storage 실사용 플러그인 도입 시 confirmationDialog 추가.
+                // 파괴적 액션이므로 실수 방지용 확인 대화상자 필요. (PR #261 Gemini review)
                 Button(role: .destructive) {
                     pluginHost.resetStorage(forPluginID: manifest.id)
                 } label: {
