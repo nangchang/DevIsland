@@ -14,7 +14,7 @@ final class PluginHost: ObservableObject {
     private typealias PendingEffectBatch = (pluginID: String, effects: [PluginEffect])
 
     private var runners: [String: PluginRunner] = [:]
-    private let storageProvider = PluginStorageProvider()
+    private let storageProvider: PluginStorageProvider
     private let eventFactory = PluginEventFactory()
     private lazy var eventProcessor = PluginEventProcessor(
         storageProvider: storageProvider,
@@ -37,8 +37,12 @@ final class PluginHost: ObservableObject {
     /// tick loop starts at most once without observing the live timer.
     private(set) var tickStartCount = 0
 
-    nonisolated init(enablePlugins: Bool = true) {
+    nonisolated init(
+        enablePlugins: Bool = true,
+        pluginDataDirectory: URL = PluginStorageProvider.defaultDirectory
+    ) {
         self.isEnabled = enablePlugins
+        self.storageProvider = PluginStorageProvider(baseDirectory: pluginDataDirectory)
     }
 
     func register(_ plugins: [any DevIslandPlugin & Sendable]) {
@@ -264,8 +268,10 @@ final class PluginHost: ObservableObject {
         contributions = updated
     }
 
-    func appliedStorageEffects() async -> [(pluginID: String, effect: PluginEffect)] {
-        await storageProvider.appliedStorageEffects()
+    /// Read-only view of a plugin's durable storage (used by tests; later by the
+    /// settings UI). Reading never blocks the hook/approval path.
+    func pluginStorageSnapshot(forPluginID pluginID: String) async -> [String: String] {
+        await storageProvider.snapshot(forPluginID: pluginID)
     }
 
     private func evictSessionContributions(sessionID: String) {
