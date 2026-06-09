@@ -9,5 +9,6 @@ enum PluginPermission: String, Codable, CaseIterable, Hashable {
     case showSessionSurface
     case writePluginStorage
     case showNotification
+    case playSound
 }
 

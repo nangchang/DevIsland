@@ -33,6 +33,8 @@ actor PluginEffectExecutor {
             return permissions.contains(.writePluginStorage)
         case "notification.show":
             return permissions.contains(.showNotification)
+        case "sound.play":
+            return permissions.contains(.playSound)
         default:
             return false
         }
@@ -49,6 +51,16 @@ actor PluginEffectExecutor {
             let body = normalizedText(effect.payload["body"])
             guard let message = title ?? body else { return }
             await notificationHandler?(message, title == nil ? nil : body)
+            return
+        }
+
+        if effect.capability == "sound.play" {
+            if let categoryString = effect.payload["category"],
+               let category = CESPCategory(rawValue: categoryString) {
+                Task { @MainActor in
+                    CESPAudioPlayer.shared.play(category: category)
+                }
+            }
         }
     }
 

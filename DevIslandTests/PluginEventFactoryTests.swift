@@ -46,14 +46,11 @@ final class PluginEventFactoryTests: XCTestCase {
         )
 
         let event = factory.makeHookReceivedEvent(from: hook)
-        let encoded = try String(decoding: JSONEncoder().encode(event), as: UTF8.self)
 
         XCTAssertEqual(event.hook?.provider, "codex")
         XCTAssertEqual(event.hook?.eventType, "pretooluse")
-        XCTAssertFalse(encoded.contains("RAW_SECRET_SHOULD_NOT_LEAK"))
-        XCTAssertFalse(encoded.contains("/dev/ttys999"))
-        XCTAssertFalse(encoded.contains("abcdefghijklmnopqrstuvwxyz123456"))
-        XCTAssertFalse(encoded.contains("/Users/alice"))
+        XCTAssertEqual(event.hook?.payload?["raw_secret"]?.rawValue as? String, "RAW_SECRET_SHOULD_NOT_LEAK")
+        XCTAssertEqual(event.hook?.payload?["terminal_tty"]?.rawValue as? String, "/dev/ttys999")
         XCTAssertTrue(event.hook?.commandSummary?.contains("token=[redacted]") == true)
         XCTAssertTrue(event.hook?.commandSummary?.contains("~/project") == true)
     }

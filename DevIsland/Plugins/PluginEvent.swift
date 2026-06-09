@@ -40,6 +40,11 @@ struct PluginHookSummary: Codable, Equatable {
     let commandSummary: String?
     let cwd: String?
     let terminalApp: String?
+    let rawEvent: String?
+    let toolName: String?
+    let notificationType: String?
+    let message: String?
+    let payload: [String: AnyJSON]?
 }
 
 struct PluginActionEvent: Codable, Equatable {

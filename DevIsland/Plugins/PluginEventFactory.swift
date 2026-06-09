@@ -28,7 +28,12 @@ struct PluginEventFactory: Sendable {
                 eventType: HookEventNormalizer.normalizedName(hook.event),
                 commandSummary: commandSummary(from: hook),
                 cwd: hook.workspaceRoot,
-                terminalApp: emptyToNil(hook.terminalApp)
+                terminalApp: emptyToNil(hook.terminalApp),
+                rawEvent: hook.event,
+                toolName: emptyToNil(hook.toolName),
+                notificationType: emptyToNil(hook.notificationType),
+                message: emptyToNil(hook.displayMsg),
+                payload: AnyJSON.object(from: hook.parsedJSON)
             ),
             action: nil,
             approval: nil
@@ -102,7 +107,12 @@ struct PluginEventFactory: Sendable {
                     eventType: hook.eventType,
                     commandSummary: hook.commandSummary,
                     cwd: metadata?.cwd,
-                    terminalApp: metadata?.terminalApp
+                    terminalApp: metadata?.terminalApp,
+                    rawEvent: hook.rawEvent,
+                    toolName: hook.toolName,
+                    notificationType: hook.notificationType,
+                    message: hook.message,
+                    payload: hook.payload
                 )
             } : nil,
             action: event.action,

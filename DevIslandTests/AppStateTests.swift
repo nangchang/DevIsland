@@ -4,7 +4,7 @@ import XCTest
 final class AppStateTests: XCTestCase {
     var appState: AppState!
     var mockDefaults: UserDefaults!
-    private let silentOpenPeonSoundPlayer: AppState.OpenPeonSoundPlayer = { _ in }
+
     
     override func setUp() {
         super.setUp()
@@ -16,8 +16,7 @@ final class AppStateTests: XCTestCase {
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            frontmostCheck: { _, _, _, _, _, _, _ in false }
         )
     }
     
@@ -182,8 +181,7 @@ final class AppStateTests: XCTestCase {
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in true },
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            frontmostCheck: { _, _, _, _, _, _, _ in true }
         )
 
         let expectation = XCTestExpectation(description: "Focused terminal receives native Claude question")
@@ -227,8 +225,7 @@ final class AppStateTests: XCTestCase {
                 defer { lock.unlock() }
                 frontmostCheckCount += 1
                 return frontmostCheckCount >= 2
-            },
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            }
         )
 
         let expectation = XCTestExpectation(description: "Queued Claude question passes after terminal focus")
@@ -314,8 +311,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Codex policy auto-approval")
         let message = """
@@ -349,8 +345,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Codex manual session approval")
         let message = """
@@ -395,8 +390,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Claude manual session approval")
         let message = """
@@ -441,8 +435,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Claude manual persistent approval")
         let message = """
@@ -482,8 +475,7 @@ final class AppStateTests: XCTestCase {
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in true },
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            frontmostCheck: { _, _, _, _, _, _, _ in true }
         )
         let entry = ReplayLogEntry(
             id: 42,
@@ -761,8 +753,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
 
         XCTAssertFalse(state.globalAutoApproveTypes.contains("Bash"))
@@ -1577,8 +1568,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Session start recorded")
         let message = """
@@ -1623,8 +1613,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Session start recorded")
         let message = """
@@ -1650,8 +1639,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
         let restored = try XCTUnwrap(
             restoredState.sessionStore.activeSessions.first { $0.id == "restore-starttime" }
@@ -1724,8 +1712,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in true },
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            frontmostCheck: { _, _, _, _, _, _, _ in true }
         )
         let expectation = XCTestExpectation(description: "Frontmost approval passed")
         let message = """
@@ -2087,8 +2074,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
 
         let expectation = XCTestExpectation(description: "Approval event processed")
@@ -2126,8 +2112,7 @@ final class AppStateTests: XCTestCase {
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _, _, _, _, _, _, _ in false },
-            approvalProxy: controller,
-            openPeonSoundPlayer: silentOpenPeonSoundPlayer
+            approvalProxy: controller
         )
 
         let expectation = XCTestExpectation(description: "Approval processed")

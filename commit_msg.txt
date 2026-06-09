@@ -1,0 +1,13 @@
+feat: Migrate OpenPeon to plugin-based architecture
+
+기존 AppState에 하드코딩되어 동작하던 OpenPeon 오디오 재생 로직을 플러그인 아키텍처 기반으로 마이그레이션합니다.
+
+주요 변경 사항:
+- PluginPermission에 playSound 권한을 추가하여 플러그인이 오디오를 재생할 수 있게 확장
+- PluginEffectExecutor에 sound.play capability를 처리하는 로직을 추가하여 CESPAudioPlayer와 연동
+- PluginHookSummary 및 PluginEventFactory를 확장하여 플러그인이 훅 이벤트 컨텍스트(rawEvent, toolName, notificationType, message, payload)를 분석할 수 있도록 변경
+- OpenPeonPlugin을 신규 BuiltIn 플러그인으로 구현하여 hook.received 이벤트가 수신되면 CESPEventMapper를 통해 알맞은 소리 카테고리를 판별하고 sound.play 이펙트를 발생시키도록 구현
+- AppState 내에서 하드코딩되었던 OpenPeon 관련 연동 코드를 제거하고, openPeonSoundPlayer 속성 정리 및 builtInPlugins()에 OpenPeonPlugin을 추가하여 시스템 통합 완료
+- AppStateTests, IPCProtocolTests, PluginHostDispatchTests, PluginEventFactoryTests 등 기존 깨지던 유닛 테스트 코드를 새로운 플러그인 설계 구조 및 생성자 파라미터에 맞게 수정하여 전체 테스트 통과 완료
+
+Co-Authored-By: Gemini CLI <noreply@google.com>
