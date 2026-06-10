@@ -4,7 +4,8 @@ struct HookEventNormalizer {
     private static let approvalEventsByAgent: [BuddyKind: Set<String>] = [
         .claudeCode: ["permissionrequest", "elicitation"],
         .codex: ["permissionrequest"],
-        .gemini: ["beforetool"]
+        .gemini: ["beforetool"],
+        .antigravity: ["pretooluse"]
     ]
 
     private static let userQuestionTools: Set<String> = [
@@ -28,6 +29,7 @@ struct HookEventNormalizer {
             case "gemini": return .gemini
             case "codex": return .codex
             case "claude": return .claudeCode
+            case "antigravity": return .antigravity
             default: break
             }
         }

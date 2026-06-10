@@ -7,11 +7,12 @@ enum BuddyKind: String, CaseIterable, Identifiable {
     case codex
     case claudeCode
     case island
+    case antigravity
 
     var id: String { rawValue }
 
-    static let defaultRandomCases: [BuddyKind] = [.gemini, .codex, .claudeCode]
-    static let selectableCases: [BuddyKind] = [.gemini, .codex, .claudeCode, .island]
+    static let defaultRandomCases: [BuddyKind] = [.gemini, .codex, .claudeCode, .antigravity]
+    static let selectableCases: [BuddyKind] = [.gemini, .codex, .claudeCode, .antigravity, .island]
 
     init(from text: String) {
         let lower = text.lowercased()
@@ -21,6 +22,8 @@ enum BuddyKind: String, CaseIterable, Identifiable {
             self = .gemini
         } else if lower.contains("codex") || lower.contains("openai") || lower.contains("gpt") {
             self = .codex
+        } else if lower.contains("antigravity") {
+            self = .antigravity
         } else {
             self = .island
         }
@@ -28,19 +31,21 @@ enum BuddyKind: String, CaseIterable, Identifiable {
 
     var accentColor: Color {
         switch self {
-        case .gemini:     return Color(red: 0.34, green: 0.38, blue: 1.0)
-        case .codex:      return Color(red: 0.2, green: 0.6, blue: 0.9)
-        case .claudeCode: return Color(red: 0.82, green: 0.42, blue: 0.30)
-        case .island:     return Color(red: 0.20, green: 0.60, blue: 0.90)
+        case .gemini:      return Color(red: 0.34, green: 0.38, blue: 1.0)
+        case .codex:       return Color(red: 0.2, green: 0.6, blue: 0.9)
+        case .claudeCode:  return Color(red: 0.82, green: 0.42, blue: 0.30)
+        case .island:      return Color(red: 0.20, green: 0.60, blue: 0.90)
+        case .antigravity: return Color(red: 0.05, green: 0.70, blue: 0.60)
         }
     }
 
     var accessibilityName: String {
         switch self {
-        case .gemini:     return "Gemini"
-        case .codex:      return "Codex"
-        case .claudeCode: return "Claude Code"
-        case .island:     return "DevIsland"
+        case .gemini:      return "Gemini"
+        case .codex:       return "Codex"
+        case .claudeCode:  return "Claude Code"
+        case .island:      return "DevIsland"
+        case .antigravity: return "Antigravity"
         }
     }
 
@@ -123,6 +128,10 @@ struct CLIBuddyView: View {
             case .codex:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .codex))
                 pixelGrid(size: size, cells: codexBodyCells())
+                    .scaleEffect(x: isFlipped ? -1 : 1)
+            case .antigravity:
+                pixelGrid(size: size, cells: terminalBaseCells(kind: .antigravity))
+                pixelGrid(size: size, cells: geminiBodyCells())
                     .scaleEffect(x: isFlipped ? -1 : 1)
             case .island:
                 pixelGrid(size: size, cells: islandBodyCells())
@@ -431,13 +440,13 @@ PixelCell(64, 80, 8, 4, c0),
     }
 
     private func terminalBaseCells(kind: BuddyKind) -> [PixelCell] {
-        let shell = (kind == .gemini || kind == .codex)
+        let shell = (kind == .gemini || kind == .codex || kind == .antigravity)
             ? Color(red: 0.08, green: 0.09, blue: 0.12)
             : Color(red: 0.09, green: 0.08, blue: 0.07)
-        let rim = (kind == .gemini || kind == .codex)
+        let rim = (kind == .gemini || kind == .codex || kind == .antigravity)
             ? Color(red: 0.24, green: 0.27, blue: 0.34)
             : Color(red: 0.32, green: 0.24, blue: 0.20)
-        let text = (kind == .gemini || kind == .codex)
+        let text = (kind == .gemini || kind == .codex || kind == .antigravity)
             ? Color.white.opacity(0.45)
             : Color.white.opacity(0.42)
 

@@ -33,6 +33,10 @@ final class HookEventNormalizerTests: XCTestCase {
             ),
             .claudeCode
         )
+        XCTAssertEqual(
+            HookEventNormalizer.agentKind(from: ["cli_source": "antigravity"], terminalTitle: "Terminal"),
+            .antigravity
+        )
     }
 
     func testApprovalEventClassificationIsProviderSpecific() {
@@ -40,8 +44,10 @@ final class HookEventNormalizerTests: XCTestCase {
         XCTAssertTrue(HookEventNormalizer.isApprovalEvent("elicitation", for: .claudeCode))
         XCTAssertTrue(HookEventNormalizer.isApprovalEvent("permissionrequest", for: .codex))
         XCTAssertTrue(HookEventNormalizer.isApprovalEvent("beforetool", for: .gemini))
+        XCTAssertTrue(HookEventNormalizer.isApprovalEvent("pretooluse", for: .antigravity))
         XCTAssertFalse(HookEventNormalizer.isApprovalEvent("pretooluse", for: .claudeCode))
         XCTAssertFalse(HookEventNormalizer.isApprovalEvent("beforetool", for: .codex))
+        XCTAssertFalse(HookEventNormalizer.isApprovalEvent("pretooluse", for: .gemini))
     }
 
     func testUserQuestionToolNormalization() {

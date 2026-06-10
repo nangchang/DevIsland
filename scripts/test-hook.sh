@@ -47,6 +47,10 @@ usage() {
     echo "  $0 [옵션] gemini-notify     # Gemini Notification 이벤트"
     echo "  $0 [옵션] gemini-end        # Gemini SessionEnd 이벤트"
     echo "  $0 [옵션] gemini-smoke      # Gemini 주요 훅 세트 재생"
+    echo "  $0 [옵션] antigravity-tool [name]# Antigravity PreToolUse 시뮬레이션"
+    echo "  $0 [옵션] antigravity-posttool   # Antigravity PostToolUse 상태 이벤트"
+    echo "  $0 [옵션] antigravity-stop       # Antigravity Stop 완료 이벤트"
+    echo "  $0 [옵션] antigravity-smoke      # Antigravity 주요 훅 세트 재생"
     echo ""
     echo "옵션:"
     echo "  --cli claude|codex|gemini   # CLI 종류 선택 (기본: claude)"
@@ -77,6 +81,7 @@ print(json.dumps(d))
 send_event() {
     local payload="$1"
     local cli="${2:-$CLI}"
+    local event="${3:-}"
 
     if [ "$DELAY" -eq 1 ]; then
         printf "⏳ 5초 후 실행합니다... "
@@ -94,17 +99,23 @@ send_event() {
     fi
 
     local response
-    response=$(printf "%s" "$payload" | "$BRIDGE_SCRIPT" --source "$cli")
+    if [ -n "$event" ]; then
+        response=$(printf "%s" "$payload" | "$BRIDGE_SCRIPT" --source "$cli" --event "$event")
+    else
+        response=$(printf "%s" "$payload" | "$BRIDGE_SCRIPT" --source "$cli")
+    fi
 
     printf "==> Response: %s\n" "$response"
 
     # CLI별 응답 포맷 파싱
     case "$cli" in
-        gemini)
+        gemini|antigravity)
             if printf "%s" "$response" | grep -q '"decision":[[:space:]]*"allow"'; then
                 echo "✅ ALLOWED"
             elif printf "%s" "$response" | grep -q '"decision":[[:space:]]*"deny"'; then
                 echo "❌ DENIED"
+            elif printf "%s" "$response" | grep -q '"decision":[[:space:]]*"ask"'; then
+                echo "⏭️  ASK (Native Permission)"
             elif [ -z "$response" ] || printf "%s" "$response" | grep -qE '^\{\}?$|^\s*$'; then
                 echo "⏭️  PASS (To Terminal)"
             else
@@ -250,6 +261,45 @@ send_gemini_smoke() {
     send_event "$(make_gemini_event BeforeTool run_shell_command "$input")" gemini
     send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "Gemini notification" cwd "$(pwd)")" gemini
     send_event "$(make_gemini_event AfterAgent)" gemini
+}
+
+# ── Antigravity CLI 이벤트 빌더 ─────────────────────────────────────────
+
+make_antigravity_event() {
+    local event="${1:-PreToolUse}"
+    local tool="${2:-run_shell_command}"
+    local command="${3:-ls -la}"
+    python3 - "$SESSION_ID" "$(pwd)" "$event" "$tool" "$command" <<'PY'
+import json
+import sys
+
+session_id, cwd, event, tool, command = sys.argv[1:6]
+payload = {
+    "conversationId": session_id,
+    "workspacePaths": [cwd],
+}
+if event == "PreInvocation":
+    payload["initialNumSteps"] = 0
+if event in ("PreToolUse", "PostToolUse"):
+    payload["toolCall"] = {
+        "name": tool,
+        "args": {
+            "CommandLine": command,
+            "Cwd": cwd,
+        },
+    }
+if event == "PostToolUse":
+    payload["tool_response"] = "completed"
+print(json.dumps(payload))
+PY
+}
+
+send_antigravity_smoke() {
+    send_event "$(make_antigravity_event PreInvocation)" antigravity PreInvocation
+    send_event "$(make_antigravity_event PreToolUse run_shell_command "ls -la")" antigravity PreToolUse
+    send_event "$(make_antigravity_event PostToolUse run_shell_command "ls -la")" antigravity PostToolUse
+    send_event "$(make_antigravity_event PostInvocation)" antigravity PostInvocation
+    send_event "$(make_antigravity_event Stop)" antigravity Stop
 }
 
 # ── 대화형 모드 ─────────────────────────────────────────────────────────
@@ -532,6 +582,20 @@ case "$COMMAND" in
         send_event "$(make_gemini_event SessionEnd)" gemini ;;
     gemini-smoke)
         send_gemini_smoke ;;
+
+    # ── Antigravity CLI 이벤트 ──────────────────────────────────────────
+    antigravity-tool)
+        TOOL=${1:-"run_shell_command"}
+        CMD=${2:-"ls -la"}
+        send_event "$(make_antigravity_event PreToolUse "$TOOL" "$CMD")" antigravity PreToolUse ;;
+    antigravity-posttool)
+        TOOL=${1:-"run_shell_command"}
+        CMD=${2:-"ls -la"}
+        send_event "$(make_antigravity_event PostToolUse "$TOOL" "$CMD")" antigravity PostToolUse ;;
+    antigravity-stop)
+        send_event "$(make_antigravity_event Stop)" antigravity Stop ;;
+    antigravity-smoke)
+        send_antigravity_smoke ;;
 
     *) usage ;;
 esac

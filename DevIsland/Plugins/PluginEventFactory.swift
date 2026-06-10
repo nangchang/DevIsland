@@ -256,6 +256,8 @@ struct PluginEventFactory: Sendable {
             return "codex"
         case .gemini:
             return "gemini"
+        case .antigravity:
+            return "antigravity"
         case .island:
             return "unknown"
         }

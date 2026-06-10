@@ -141,6 +141,9 @@ struct MenuBarMenu: View {
             Button(l.menuInstallGemini) {
                 BridgeInstaller.installGemini()
             }
+            Button(l.menuInstallAntigravity) {
+                BridgeInstaller.installAntigravity()
+            }
             Divider()
             Button(l.menuRemoveAll) {
                 BridgeInstaller.uninstallAll()
@@ -153,6 +156,9 @@ struct MenuBarMenu: View {
             }
             Button(l.menuRemoveGemini) {
                 BridgeInstaller.uninstallGemini()
+            }
+            Button(l.menuRemoveAntigravity) {
+                BridgeInstaller.uninstallAntigravity()
             }
         }
 
@@ -221,12 +227,13 @@ enum BridgeInstaller {
 
     // MARK: Public entry points
 
-    /// Claude Code, Codex CLI, Gemini CLI 모두 설치
+    /// Claude Code, Codex CLI, Gemini CLI, Antigravity CLI 모두 설치
     static func installAll() {
         do {
             try installClaudeHooks()
             try installCodexHooks()
             try installGeminiHooks()
+            try installAntigravityHooks()
             let l = L10n.shared
             showAlert(title: l.alertAllInstalled, message: l.alertAllInstalledMsg, isError: false)
         } catch {
@@ -267,6 +274,17 @@ enum BridgeInstaller {
         }
     }
 
+    /// Antigravity CLI (~/.gemini/config/hooks.json)
+    static func installAntigravity() {
+        do {
+            try installAntigravityHooks()
+            let l = L10n.shared
+            showAlert(title: l.alertAntigravityInstalled, message: l.alertAntigravityRestartMsg, isError: false)
+        } catch {
+            showAlert(title: L10n.shared.alertAntigravityInstallFailed, message: error.localizedDescription, isError: true)
+        }
+    }
+
     private static func installClaudeHooks() throws {
         let bridgeURL = try bridgeScriptURL()
         let helperURL = try bridgeHelperURL()
@@ -300,6 +318,21 @@ enum BridgeInstaller {
 
         try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
         try patchGeminiSettings(at: geminiSettingsURL, bridgePath: paths.destURL.path)
+    }
+
+    private static func installAntigravityHooks() throws {
+        let bridgeURL = try bridgeScriptURL()
+        let helperURL = try bridgeHelperURL()
+        let manifestURL = try bridgeManifestURL()
+        let paths = installPaths()
+        let antigravityHooksURL = paths.home.appendingPathComponent(".gemini/config/hooks.json")
+        let legacyAntigravityHooksURL = paths.home.appendingPathComponent(".gemini/antigravity-cli/hooks.json")
+
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        try patchAntigravityHooks(at: antigravityHooksURL, bridgePath: paths.destURL.path)
+        if !sameHookFile(antigravityHooksURL, legacyAntigravityHooksURL) {
+            try removeLegacyAntigravityHooks(at: legacyAntigravityHooksURL)
+        }
     }
 
     // MARK: Shared helpers
@@ -609,6 +642,12 @@ enum BridgeInstaller {
                 errors.append("\(name): \(error.localizedDescription)")
             }
         }
+        do {
+            try removeAntigravityHooks(at: home.appendingPathComponent(".gemini/config/hooks.json"))
+            try removeLegacyAntigravityHooks(at: home.appendingPathComponent(".gemini/antigravity-cli/hooks.json"))
+        } catch {
+            errors.append("Antigravity CLI: \(error.localizedDescription)")
+        }
         if errors.isEmpty {
             let l = L10n.shared
             showAlert(title: l.alertAllRemoved, message: l.alertAllRemovedMsg, isError: false)
@@ -650,6 +689,20 @@ enum BridgeInstaller {
         }
     }
 
+    static func uninstallAntigravity() {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let url = home.appendingPathComponent(".gemini/config/hooks.json")
+        let legacyURL = home.appendingPathComponent(".gemini/antigravity-cli/hooks.json")
+        do {
+            try removeAntigravityHooks(at: url)
+            try removeLegacyAntigravityHooks(at: legacyURL)
+            let l = L10n.shared
+            showAlert(title: l.alertAntigravityRemoved, message: l.alertAntigravityHooksRemoved, isError: false)
+        } catch {
+            showAlert(title: L10n.shared.alertAntigravityRemoveFailed, message: error.localizedDescription, isError: true)
+        }
+    }
+
     // MARK: Uninstall helpers
 
     private static func removeHooks(at url: URL, fileName: String) throws {
@@ -679,6 +732,109 @@ enum BridgeInstaller {
             updated["hooks"] = subHooks
             return updated
         }
+    }
+
+    private static func patchAntigravityHooks(at url: URL, bridgePath: String) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        var data: [String: Any] = [:]
+        if fm.fileExists(atPath: url.path),
+           let raw = try? Data(contentsOf: url),
+           let parsed = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] {
+            data = parsed
+        }
+
+        var devisland = (data["devisland"] as? [String: Any]) ?? [:]
+        devisland["enabled"] = true
+
+        // 1. Matcher-based events
+        for event in ["PreToolUse", "PostToolUse"] {
+            let bridgeCommand = "\"\(bridgePath)\" --source antigravity --event \(event)"
+            var eventConfigs = (devisland[event] as? [[String: Any]]) ?? []
+            var found = false
+            for i in 0..<eventConfigs.count {
+                var config = eventConfigs[i]
+                if (config["matcher"] as? String) == "*" {
+                    var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
+                    subHooks.removeAll { isBridgeCommand($0["command"] as? String ?? "") }
+                    var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
+                    if event == "PreToolUse" {
+                        hookEntry["timeout"] = 86400
+                    }
+                    subHooks.append(hookEntry)
+                    config["hooks"] = subHooks
+                    eventConfigs[i] = config
+                    found = true
+                    break
+                }
+            }
+            if !found {
+                var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
+                if event == "PreToolUse" {
+                    hookEntry["timeout"] = 86400
+                }
+                eventConfigs.append([
+                    "matcher": "*",
+                    "hooks": [hookEntry]
+                ])
+            }
+            devisland[event] = eventConfigs
+        }
+
+        // 2. Direct list events
+        for event in ["PreInvocation", "PostInvocation", "Stop"] {
+            let bridgeCommand = "\"\(bridgePath)\" --source antigravity --event \(event)"
+            var eventConfigs = (devisland[event] as? [[String: Any]]) ?? []
+            eventConfigs.removeAll { isBridgeCommand($0["command"] as? String ?? "") }
+            eventConfigs.append(["type": "command", "command": bridgeCommand])
+            devisland[event] = eventConfigs
+        }
+
+        data["devisland"] = devisland
+
+        let out = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
+        try out.write(to: url, options: .atomic)
+    }
+
+    private static func removeAntigravityHooks(at url: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        let raw = try Data(contentsOf: url)
+        guard var json = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else {
+            throw NSError(domain: "BridgeInstaller", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBadFile("hooks.json")])
+        }
+        json.removeValue(forKey: "devisland")
+        let out = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try out.write(to: url, options: .atomic)
+    }
+
+    private static func removeLegacyAntigravityHooks(at url: URL) throws {
+        do {
+            try removeAntigravityHooks(at: url)
+        } catch {
+            print("[DevIsland] Failed to remove legacy Antigravity hooks: \(error)")
+        }
+        let fm = FileManager.default
+        let antigravityDir = url.deletingLastPathComponent()
+        let spaceFreeBridgeURL = antigravityDir.appendingPathComponent("devisland-bridge-antigravity.sh")
+        let spaceFreeHelperURL = antigravityDir.appendingPathComponent(bridgeHelperFileName)
+        let spaceFreeManifestURL = antigravityDir.appendingPathComponent(bridgeManifestFileName)
+
+        if fm.fileExists(atPath: spaceFreeBridgeURL.path) { try fm.removeItem(at: spaceFreeBridgeURL) }
+        if fm.fileExists(atPath: spaceFreeHelperURL.path) { try fm.removeItem(at: spaceFreeHelperURL) }
+        if fm.fileExists(atPath: spaceFreeManifestURL.path) { try fm.removeItem(at: spaceFreeManifestURL) }
+    }
+
+    private static func isBridgeCommand(_ command: String) -> Bool {
+        command.contains(bridgeFileName) || command.contains("devisland-bridge-antigravity.sh")
+    }
+
+    private static func sameHookFile(_ lhs: URL, _ rhs: URL) -> Bool {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: lhs.path), fm.fileExists(atPath: rhs.path) else { return false }
+        return lhs.resolvingSymlinksInPath().path == rhs.resolvingSymlinksInPath().path
     }
 
     // MARK: Alert helper

@@ -35,6 +35,8 @@ _FALLBACK_PASSIVE_EVENTS: frozenset[str] = frozenset({
     "Elicitation",
     "BeforeTool",
     "AfterAgent",
+    "PreInvocation",
+    "PostInvocation",
 })
 
 
@@ -97,21 +99,75 @@ def dump(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
-def enrich_payload(payload: dict[str, Any], cli_source_arg: str) -> dict[str, Any]:
-    payload["terminal_title"] = os.environ.get("TERM_TITLE", "Terminal")
-    payload["terminal_app"] = os.environ.get("TERM_APP", "")
-    payload["terminal_tty"] = os.environ.get("TERM_TTY", "")
-    payload["terminal_window_id"] = os.environ.get("TERM_WINDOW_ID", "")
-    payload["terminal_tab_index"] = os.environ.get("TERM_TAB_INDEX", "")
-    payload["terminal_tmux_pane"] = os.environ.get("TERM_TMUX_PANE", "")
-    payload["terminal_tmux_socket"] = os.environ.get("TERM_TMUX_SOCKET", "")
-    payload["terminal_tmux_client"] = os.environ.get("TERM_TMUX_CLIENT", "")
+def enrich_payload(payload: dict[str, Any], cli_source_arg: str, event_arg: str = "") -> dict[str, Any]:
+    def set_if_present(key: str, env_name: str, default: str = ""):
+        val = os.environ.get(env_name, "")
+        if val:
+            payload[key] = val
+        elif key not in payload:
+            payload[key] = default
+
+    set_if_present("terminal_title", "TERM_TITLE", "Terminal")
+    set_if_present("terminal_app", "TERM_APP", "")
+    set_if_present("terminal_tty", "TERM_TTY", "")
+    set_if_present("terminal_window_id", "TERM_WINDOW_ID", "")
+    set_if_present("terminal_tab_index", "TERM_TAB_INDEX", "")
+    set_if_present("terminal_tmux_pane", "TERM_TMUX_PANE", "")
+    set_if_present("terminal_tmux_socket", "TERM_TMUX_SOCKET", "")
+    set_if_present("terminal_tmux_client", "TERM_TMUX_CLIENT", "")
     payload["cli_source"] = cli_source_arg
+    if cli_source_arg == "antigravity":
+        normalize_antigravity_payload(payload, event_arg)
     return payload
 
 
+def normalize_antigravity_payload(payload: dict[str, Any], event_arg: str = "") -> None:
+    if "hook_event_name" not in payload and event_arg:
+        payload["hook_event_name"] = event_arg
+    elif "hook_event_name" not in payload:
+        payload["hook_event_name"] = event_name(payload)
+
+    if "session_id" not in payload:
+        conversation_id = payload.get("conversationId")
+        if conversation_id:
+            payload["session_id"] = str(conversation_id)
+
+    tool_call = payload.get("toolCall")
+    if isinstance(tool_call, dict):
+        if "tool_name" not in payload and tool_call.get("name"):
+            payload["tool_name"] = str(tool_call["name"])
+        if "tool_input" not in payload:
+            args = tool_call.get("args")
+            payload["tool_input"] = args if isinstance(args, dict) else {}
+
+    if "cwd" not in payload:
+        tool_input = payload.get("tool_input")
+        if isinstance(tool_input, dict):
+            cwd = tool_input.get("Cwd") or tool_input.get("cwd")
+            if cwd:
+                payload["cwd"] = str(cwd)
+        if "cwd" not in payload:
+            workspace_paths = payload.get("workspacePaths")
+            if isinstance(workspace_paths, list) and workspace_paths:
+                payload["cwd"] = str(workspace_paths[0])
+
+
 def event_name(payload: dict[str, Any]) -> str:
-    return str(payload.get("hook_event_name", payload.get("event", "PermissionRequest")))
+    if "hook_event_name" in payload:
+        return str(payload["hook_event_name"])
+    if "event" in payload:
+        return str(payload["event"])
+
+    cli_source = payload.get("cli_source", "")
+    if cli_source == "antigravity":
+        if "toolCall" in payload:
+            return "PreToolUse"
+        elif "tool_response" in payload or "error" in payload:
+            return "PostToolUse"
+        elif "initialNumSteps" in payload:
+            return "PreInvocation"
+
+    return "PermissionRequest"
 
 
 # ---------------------------------------------------------------------------
@@ -282,11 +338,21 @@ def final_output(*, event: str, decision: str, provider_output: dict[str, Any] |
     if decision == "pass":
         if cli_source == "claude" and event != "permissionrequest":
             return {"continue": True, "suppressOutput": True}
+        if cli_source == "antigravity" and event == "pretooluse":
+            return {"decision": "ask"}
         return {}
 
     allow = decision == "approved"
     if cli_source == "gemini":
         if event == "beforetool":
+            output: dict[str, Any] = {"decision": "allow" if allow else "deny"}
+            if not allow:
+                output["reason"] = message
+            return output
+        return {}
+
+    if cli_source == "antigravity":
+        if event == "pretooluse":
             output: dict[str, Any] = {"decision": "allow" if allow else "deny"}
             if not allow:
                 output["reason"] = message
@@ -343,15 +409,17 @@ def final_output(*, event: str, decision: str, provider_output: dict[str, Any] |
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True)
+    parser.add_argument("--event", default="")
     args = parser.parse_args()
 
     cli_source = args.source
-    payload = enrich_payload(load_payload(), cli_source)
+    payload = enrich_payload(load_payload(), cli_source, args.event)
     event = event_name(payload)
+    norm_event = _normalize_event(event)
 
     log(f"Raw Payload: {dump(payload)}")
     log(f"Event Detected: {event} (Source: {cli_source})")
-    event = _normalize_event(event)
+    event = norm_event
 
     if event not in _PASSIVE_EVENTS_NORMALIZED:
         log(f"Passive event suppressed before app: {event}")

@@ -66,14 +66,16 @@ extension L10n {
     var menuPTYTranscript:      String { s("PTY Transcript…",            "PTY 트랜스크립트…") }
     var menuSessionHistory:     String { s("Session History…",           "세션 기록…") }
     var menuInstallHooks:       String { s("Install / Repair Hooks",     "훅 설치 / 수리") }
-    var menuInstallAll:         String { s("Install All (Claude · Codex · Gemini)",    "전부 설치 (Claude · Codex · Gemini)") }
+    var menuInstallAll:         String { s("Install All (Claude · Codex · Gemini · Antigravity)",    "전부 설치 (Claude · Codex · Gemini · Antigravity)") }
     var menuInstallClaude:      String { s("Install Claude Code only…",  "Claude Code만 설치…") }
     var menuInstallCodex:       String { s("Install Codex CLI only…",    "Codex CLI만 설치…") }
     var menuInstallGemini:      String { s("Install Gemini CLI only…",   "Gemini CLI만 설치…") }
-    var menuRemoveAll:          String { s("Remove All (Claude · Codex · Gemini)",     "전부 제거 (Claude · Codex · Gemini)") }
+    var menuInstallAntigravity: String { s("Install Antigravity CLI only…", "Antigravity CLI만 설치…") }
+    var menuRemoveAll:          String { s("Remove All (Claude · Codex · Gemini · Antigravity)",     "전부 제거 (Claude · Codex · Gemini · Antigravity)") }
     var menuRemoveClaude:       String { s("Remove Claude Code only…",   "Claude Code만 제거…") }
     var menuRemoveCodex:        String { s("Remove Codex CLI only…",     "Codex CLI만 제거…") }
     var menuRemoveGemini:       String { s("Remove Gemini CLI only…",    "Gemini CLI만 제거…") }
+    var menuRemoveAntigravity:  String { s("Remove Antigravity CLI only…", "Antigravity CLI만 제거…") }
     var menuAccessibility:      String { s("Request Accessibility Permission…", "접근성 권한 요청…") }
     var menuCheckForUpdates:    String { s("Check for Updates…",         "업데이트 확인…") }
     func menuUpdateAvailable(_ v: String) -> String { s("Update Available (\(v))…", "업데이트 있음 (\(v))…") }
@@ -87,6 +89,8 @@ extension L10n {
     var alertCodexInstallFailed:   String { s("Codex CLI Installation Failed",  "Codex CLI 설치 실패") }
     var alertGeminiInstalled:      String { s("Gemini CLI Installed",           "Gemini CLI 설치 완료") }
     var alertGeminiInstallFailed:  String { s("Gemini CLI Installation Failed", "Gemini CLI 설치 실패") }
+    var alertAntigravityInstalled: String { s("Antigravity CLI Installed",       "Antigravity CLI 설치 완료") }
+    var alertAntigravityInstallFailed: String { s("Antigravity CLI Installation Failed", "Antigravity CLI 설치 실패") }
     var alertInstallFailed:        String { s("Installation Failed",            "설치 실패") }
     var alertAllInstalledMsg:      String { s("All bridge hooks installed.\nRestart each CLI session.",
                                               "모든 브리지 훅이 설치되었습니다.\n각 CLI 세션을 재시작해주세요.") }
@@ -98,6 +102,8 @@ extension L10n {
                                               "브리지가 설치되었습니다.\nCodex CLI 세션을 재시작해주세요.") }
     var alertGeminiRestartMsg:     String { s("Bridge installed.\nRestart your Gemini CLI session.",
                                               "브리지가 설치되었습니다.\nGemini CLI 세션을 재시작해주세요.") }
+    var alertAntigravityRestartMsg: String { s("Bridge installed.\nRestart your Antigravity CLI session.",
+                                              "브리지가 설치되었습니다.\nAntigravity CLI 세션을 재시작해주세요.") }
     var alertBundleNoScript:       String { s("Bridge script not found in app bundle.",
                                               "앱 번들에서 브리지 스크립트를 찾을 수 없습니다.") }
     var alertBundleNoHelper:       String { s("Bridge helper not found in app bundle.",
@@ -119,6 +125,8 @@ extension L10n {
     var alertCodexRemoveFailed:   String { s("Codex CLI Removal Failed",   "Codex CLI 제거 실패") }
     var alertGeminiRemoved:       String { s("Gemini CLI Removed",         "Gemini CLI 제거 완료") }
     var alertGeminiRemoveFailed:  String { s("Gemini CLI Removal Failed",  "Gemini CLI 제거 실패") }
+    var alertAntigravityRemoved:  String { s("Antigravity CLI Removed",     "Antigravity CLI 제거 완료") }
+    var alertAntigravityRemoveFailed: String { s("Antigravity CLI Removal Failed", "Antigravity CLI 제거 실패") }
     var alertHooksRemoved:        String { s("Hooks removed.\nRestart your session.",
                                              "훅이 제거되었습니다.\n세션을 재시작해주세요.") }
     var alertClaudeHooksRemoved:  String { s("Hooks removed.\nRestart your Claude Code session.",
@@ -127,6 +135,8 @@ extension L10n {
                                              "훅이 제거되었습니다.\nCodex CLI 세션을 재시작해주세요.") }
     var alertGeminiHooksRemoved:  String { s("Hooks removed.\nRestart your Gemini CLI session.",
                                              "훅이 제거되었습니다.\nGemini CLI 세션을 재시작해주세요.") }
+    var alertAntigravityHooksRemoved: String { s("Hooks removed.\nRestart your Antigravity CLI session.",
+                                             "훅이 제거되었습니다.\nAntigravity CLI 세션을 재시작해주세요.") }
     var alertOK:                  String { s("OK", "확인") }
 
     // MARK: Alerts — AppRelocator
@@ -319,7 +329,7 @@ extension L10n {
     // Approval tab
     var secAutoApprovals:    String { s("Automatic approvals",           "자동 승인") }
     var lblAutoSafe:         String { s("Auto-approve safe/read-only tools", "안전/읽기 전용 도구 자동 승인") }
-    var lblGeminiEmulate:    String { s("Show approval for risky tools",  "위험 도구 승인 창 표시") }
+    var lblGeminiEmulate:    String { s("Show approval for risky tools (Gemini / Antigravity)",  "위험 도구 승인 창 표시 (Gemini / Antigravity)") }
     var secPermissionTimeout: String { s("Permission timeout",             "권한 요청 타임아웃") }
     func lblPermissionTimeout(_ n: Int) -> String { s("Auto-pass after \(n) seconds", "\(n)초 후 자동 패스") }
     var secReplayRetention:  String { s("Replay log retention",          "리플레이 로그 보관") }

@@ -9,6 +9,7 @@ DevIsland supports Claude Code, Codex CLI, and Gemini CLI through the same bridg
 | Claude Code | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `Stop` |
 | Codex CLI | `~/.codex/hooks.json` + `config.toml` | `PermissionRequest` | `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` |
 | Gemini CLI | `~/.gemini/settings.json` | `BeforeTool` | `SessionStart`, `SessionEnd`, `AfterAgent`, `Notification` |
+| Antigravity CLI | `~/.gemini/config/hooks.json` | `PreToolUse` | `PreInvocation`, `PostInvocation`, `PostToolUse`, `Stop` |
 
 The bridge supports an explicit source flag:
 
@@ -16,6 +17,7 @@ The bridge supports an explicit source flag:
 devisland-bridge.sh --source claude
 devisland-bridge.sh --source codex
 devisland-bridge.sh --source gemini
+devisland-bridge.sh --source antigravity
 ```
 
 If omitted, source is inferred from `hook_event_name`, payload shape, and terminal metadata.
@@ -128,3 +130,17 @@ CLI Agent hook event
 - Interactive tools such as `ask_user`, `exit_plan_mode`, `run_shell_command`, and Gemini plan-temp file actions may be auto-approved while DevIsland shows a “check terminal” notification to avoid double prompting.
 - Gemini Interactive Emulation lets DevIsland act as the approval surface when Gemini is run with `--auto-approve` or `--yolo`.
 - Safe-tool auto approval can allow read-only tools such as `read_file`, `grep_search`, and `list_dir`.
+
+## Antigravity CLI
+
+Config file: `~/.gemini/config/hooks.json` for global customization, or workspace-local `.agents/hooks.json`.
+
+Antigravity uses `PreToolUse` as the primary approval event, but its stdin payload uses camelCase fields such as `conversationId`, `workspacePaths`, and `toolCall.name`. The bridge normalizes these into DevIsland's internal `session_id`, `cwd`, `tool_name`, and `tool_input` fields before forwarding IPC.
+
+Antigravity `PreToolUse` output supports `allow`, `deny`, `ask`, and `force_ask`. DevIsland returns `allow` or `deny` only for explicit app decisions. When DevIsland is bypassing or unavailable, it returns `ask` so Antigravity's native permission flow remains in control.
+
+```json
+{ "decision": "deny", "reason": "Blocked by DevIsland" }
+```
+
+`PostToolUse` returns `{}`. `PreInvocation`, `PostInvocation`, and `Stop` are lifecycle events and are forwarded for status/replay tracking only. Interactive emulation and safe-tool auto-approval behaviors are shared with Gemini CLI.

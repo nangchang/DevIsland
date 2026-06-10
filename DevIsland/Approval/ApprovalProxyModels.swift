@@ -5,6 +5,7 @@ enum ProviderKind: String, Codable, CaseIterable, Identifiable {
     case claude
     case codex
     case gemini
+    case antigravity
 
     var id: String { rawValue }
 
@@ -16,6 +17,8 @@ enum ProviderKind: String, Codable, CaseIterable, Identifiable {
             self = .codex
         case "gemini":
             self = .gemini
+        case "antigravity":
+            self = .antigravity
         default:
             self = .any
         }
