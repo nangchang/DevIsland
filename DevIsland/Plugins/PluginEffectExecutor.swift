@@ -2,24 +2,24 @@ import Foundation
 
 actor PluginEffectExecutor {
     typealias NotificationHandler = @Sendable (_ title: String, _ body: String?) async -> Void
-    typealias CaffeineHandler = @Sendable (_ preventSleep: Bool, _ reason: String) async -> Void
-    typealias CaffeineToggleHandler = @Sendable () async -> Void
+    typealias PowerSleepHandler = @Sendable (_ preventSleep: Bool, _ reason: String) async -> Void
+    typealias PowerToggleHandler = @Sendable () async -> Void
 
     private let storageProvider: PluginStorageProvider
     private let notificationHandler: NotificationHandler?
-    private let caffeineHandler: CaffeineHandler?
-    private let caffeineToggleHandler: CaffeineToggleHandler?
+    private let powerSleepHandler: PowerSleepHandler?
+    private let powerToggleHandler: PowerToggleHandler?
 
     init(
         storageProvider: PluginStorageProvider,
         notificationHandler: NotificationHandler? = nil,
-        caffeineHandler: CaffeineHandler? = nil,
-        caffeineToggleHandler: CaffeineToggleHandler? = nil
+        powerSleepHandler: PowerSleepHandler? = nil,
+        powerToggleHandler: PowerToggleHandler? = nil
     ) {
         self.storageProvider = storageProvider
         self.notificationHandler = notificationHandler
-        self.caffeineHandler = caffeineHandler
-        self.caffeineToggleHandler = caffeineToggleHandler
+        self.powerSleepHandler = powerSleepHandler
+        self.powerToggleHandler = powerToggleHandler
     }
 
     func enqueue(
@@ -43,8 +43,8 @@ actor PluginEffectExecutor {
             return permissions.contains(.showNotification)
         case "sound.play":
             return permissions.contains(.playSound)
-        case "power.preventIdleSleep", "caffeine.toggleEnabled":
-            return permissions.contains(.readCaffeineStatus)
+        case "power.preventIdleSleep", "power.toggle":
+            return permissions.contains(.controlPowerSleep)
         default:
             return false
         }
@@ -78,13 +78,13 @@ actor PluginEffectExecutor {
             guard pluginID == "caffeine" else { return }
             let prevent = effect.payload["preventSleep"] == "true"
             let reason = effect.payload["reason"] ?? "off"
-            await caffeineHandler?(prevent, reason)
+            await powerSleepHandler?(prevent, reason)
             return
         }
 
-        if effect.capability == "caffeine.toggleEnabled" {
+        if effect.capability == "power.toggle" {
             guard pluginID == "caffeine" else { return }
-            await caffeineToggleHandler?()
+            await powerToggleHandler?()
             return
         }
     }

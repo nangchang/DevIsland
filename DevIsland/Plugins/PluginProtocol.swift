@@ -1,7 +1,7 @@
 import Foundation
 
 enum PluginKind: String, Codable {
-    case coreAware
+    case system
     case utility
 }
 

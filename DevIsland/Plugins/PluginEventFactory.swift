@@ -37,7 +37,7 @@ struct PluginEventFactory: Sendable {
             ),
             action: nil,
             approval: nil,
-            caffeineStatus: nil
+            powerStatus: nil
         )
     }
 
@@ -55,7 +55,7 @@ struct PluginEventFactory: Sendable {
             hook: nil,
             action: nil,
             approval: nil,
-            caffeineStatus: nil
+            powerStatus: nil
         )
     }
 
@@ -73,24 +73,24 @@ struct PluginEventFactory: Sendable {
             hook: nil,
             action: nil,
             approval: nil,
-            caffeineStatus: nil
+            powerStatus: nil
         )
     }
 
-    func makeCaffeineStatusEvent(
-        status: PluginCaffeineStatus,
+    func makePowerStatusEvent(
+        status: PluginPowerStatus,
         id: UUID = UUID(),
         timestamp: Date = Date()
     ) -> PluginEvent {
         PluginEvent(
             id: id,
-            kind: .caffeineStatusChanged,
+            kind: .powerStatusChanged,
             timestamp: timestamp,
             session: nil,
             hook: nil,
             action: nil,
             approval: nil,
-            caffeineStatus: status
+            powerStatus: status
         )
     }
 
@@ -137,7 +137,7 @@ struct PluginEventFactory: Sendable {
             } : nil,
             action: event.action,
             approval: canReadHookSummaries ? event.approval : nil,
-            caffeineStatus: permissions.contains(.readCaffeineStatus) ? event.caffeineStatus : nil
+            powerStatus: permissions.contains(.controlPowerSleep) ? event.powerStatus : nil
         )
     }
 

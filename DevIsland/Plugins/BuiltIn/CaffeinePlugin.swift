@@ -9,10 +9,10 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         version: "1.0.0",
         apiVersion: 1,
         kind: .utility,
-        permissions: [.readCaffeineStatus, .showMenubarMenu],
+        permissions: [.controlPowerSleep, .showMenubarMenu],
         surfaces: [.menubarMenu],
         activationEvents: [
-            "caffeine.status.changed",
+            "power.status.changed",
             "plugin.started",
             "plugin.tick",
             "plugin.action.invoked"
@@ -32,13 +32,13 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
             // Request host to toggle caffeine settings
             return [
                 PluginEffect(
-                    capability: "caffeine.toggleEnabled",
+                    capability: "power.toggle",
                     payload: [:]
                 )
             ]
         }
 
-        guard let status = event.caffeineStatus else {
+        guard let status = event.powerStatus else {
             return []
         }
 
@@ -169,7 +169,7 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
     }
 
     private func decide(
-        status: PluginCaffeineStatus,
+        status: PluginPowerStatus,
         prevLowBattery: Bool
     ) -> (nextLowBattery: Bool, reason: DecidedReason) {
         let nextLow: Bool

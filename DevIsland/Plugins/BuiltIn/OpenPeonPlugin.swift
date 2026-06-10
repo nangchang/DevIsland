@@ -6,7 +6,7 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
         name: "OpenPeon",
         version: "1.0.0",
         apiVersion: 1,
-        kind: .coreAware,
+        kind: .system,
         permissions: [.playSound, .readHookSummaries],
         surfaces: [],
         activationEvents: ["hook.received"]

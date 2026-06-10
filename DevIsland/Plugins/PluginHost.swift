@@ -15,8 +15,8 @@ final class PluginHost: ObservableObject {
 
     private var runners: [String: PluginRunner] = [:]
     private let storageProvider: PluginStorageProvider
-    private let caffeineHandler: PluginEffectExecutor.CaffeineHandler?
-    private let caffeineToggleHandler: PluginEffectExecutor.CaffeineToggleHandler?
+    private let powerSleepHandler: PluginEffectExecutor.PowerSleepHandler?
+    private let powerToggleHandler: PluginEffectExecutor.PowerToggleHandler?
     private let eventFactory = PluginEventFactory()
     private lazy var eventProcessor = PluginEventProcessor(
         storageProvider: storageProvider,
@@ -27,8 +27,8 @@ final class PluginHost: ObservableObject {
         notificationHandler: { title, body in
             await AppState.presentSharedPluginNotification(title: title, body: body)
         },
-        caffeineHandler: caffeineHandler,
-        caffeineToggleHandler: caffeineToggleHandler
+        powerSleepHandler: powerSleepHandler,
+        powerToggleHandler: powerToggleHandler
     )
     private var pendingEvents: [QueuedPluginEvent] = []
     private var isDraining = false
@@ -54,13 +54,13 @@ final class PluginHost: ObservableObject {
     nonisolated init(
         enablePlugins: Bool = true,
         pluginDataDirectory: URL = PluginStorageProvider.defaultDirectory,
-        caffeineHandler: PluginEffectExecutor.CaffeineHandler? = nil,
-        caffeineToggleHandler: PluginEffectExecutor.CaffeineToggleHandler? = nil
+        powerSleepHandler: PluginEffectExecutor.PowerSleepHandler? = nil,
+        powerToggleHandler: PluginEffectExecutor.PowerToggleHandler? = nil
     ) {
         self.isEnabled = enablePlugins
         self.storageProvider = PluginStorageProvider(baseDirectory: pluginDataDirectory)
-        self.caffeineHandler = caffeineHandler
-        self.caffeineToggleHandler = caffeineToggleHandler
+        self.powerSleepHandler = powerSleepHandler
+        self.powerToggleHandler = powerToggleHandler
     }
 
     /// Registers the built-in plugins. `disabledPluginIDs` must be supplied here so the
@@ -123,7 +123,7 @@ final class PluginHost: ObservableObject {
             disabledPluginIDs.insert(pluginID)
             contributions = removeContributions(pluginID: pluginID, from: contributions)
             if pluginID == "caffeine" {
-                let handler = caffeineHandler
+                let handler = powerSleepHandler
                 Task {
                     await handler?(false, "off")
                 }
@@ -140,7 +140,7 @@ final class PluginHost: ObservableObject {
         settingsStore?.setSafemode(true, pluginID: pluginID)
         contributions = removeContributions(pluginID: pluginID, from: contributions)
         if pluginID == "caffeine" {
-            let handler = caffeineHandler
+            let handler = powerSleepHandler
             Task {
                 await handler?(false, "off")
             }
@@ -207,7 +207,7 @@ final class PluginHost: ObservableObject {
                     value: nil
                 ),
                 approval: nil,
-                caffeineStatus: nil
+                powerStatus: nil
             )
             enqueue(event)
         }
@@ -306,7 +306,7 @@ final class PluginHost: ObservableObject {
             hook: nil,
             action: nil,
             approval: nil,
-            caffeineStatus: nil
+            powerStatus: nil
         ))
     }
 
@@ -326,6 +326,8 @@ final class PluginHost: ObservableObject {
             return permissions.contains(.readSessionEvents)
         case .hookReceived, .approvalDecided:
             return permissions.contains(.readHookSummaries)
+        case .powerStatusChanged:
+            return permissions.contains(.controlPowerSleep)
         default:
             return true
         }
