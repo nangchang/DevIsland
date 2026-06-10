@@ -636,6 +636,84 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.stale"), "Stale failure must be discarded and not cause safemode")
     }
 
+    func testDisableDuringDrainDiscardsInFlightContribution() async {
+        let id = "com.devisland.test.disable.during.drain"
+        let entered = DispatchSemaphore(value: 0)
+        let resume = DispatchSemaphore(value: 0)
+        let plugin = GatedPlugin(
+            id: id,
+            contribution: makeContribution(pluginID: id),
+            gateOn: [.pluginStarted],
+            entered: entered,
+            resume: resume
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.disable.during.drain")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.disable.during.drain")
+        let host = PluginHost()
+        host.register([plugin], settingsStore: PluginSettingsStore(userDefaults: defaults))
+
+        // The plugin parks inside onEvent, so the host is deterministically stuck on
+        // `await eventProcessor.process` when we disable it — the exact window where the
+        // in-flight snapshot must be discarded rather than re-added after the user turned
+        // it off.
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await awaitSignal(entered)
+        host.setPluginEnabled(false, pluginID: id)
+        resume.signal()
+
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(host.contributions[.notchExpandedActivity]?.isEmpty ?? true,
+                      "a plugin disabled mid-drain must not have its in-flight contribution re-added")
+    }
+
+    func testSafemodeExcludesEventAlreadyQueued() async {
+        let id = "com.devisland.test.safemode.queued"
+        let entered = DispatchSemaphore(value: 0)
+        let resume = DispatchSemaphore(value: 0)
+        // The first event parks the drain, leaving the second event pending in the queue.
+        // That pending event's eligible-runner list was captured at enqueue time, before
+        // safemode — the gap the drain-time `isActive` re-filter closes.
+        let plugin = GatedPlugin(
+            id: id,
+            contribution: makeContribution(pluginID: id),
+            gateOn: [.pluginStarted],
+            entered: entered,
+            resume: resume,
+            activationEvents: [.pluginStarted, .pluginTick]
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.safemode.queued")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.safemode.queued")
+        let host = PluginHost()
+        host.register([plugin], settingsStore: PluginSettingsStore(userDefaults: defaults))
+
+        host.enqueue(makeEvent(kind: .pluginStarted)) // parks the drain inside onEvent
+        host.enqueue(makeEvent(kind: .pluginTick))     // queued behind it, not yet processed
+        await awaitSignal(entered)
+        host.enterSafemode(pluginID: id)
+        resume.signal()
+
+        await host.waitUntilIdle()
+
+        XCTAssertFalse(plugin.receivedKinds.contains(.pluginTick),
+                       "an event still queued when the plugin entered safemode must not run")
+        XCTAssertTrue(host.isInSafemode(id))
+    }
+
+    /// Awaits a `DispatchSemaphore` without blocking the Swift cooperative pool: the plugin
+    /// signals it from a synchronous `onEvent`, so the test bridges through a Dispatch global
+    /// queue and a continuation. Waiting on the MainActor thread directly would deadlock the
+    /// @MainActor-isolated drain loop; blocking a cooperative thread is unavailable in async
+    /// code (an error under Swift 6).
+    private func awaitSignal(_ semaphore: DispatchSemaphore) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global().async {
+                semaphore.wait()
+                continuation.resume()
+            }
+        }
+    }
+
     private func makeTempStorageDirectory() -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("PluginStorageDispatchTests-\(UUID().uuidString)", isDirectory: true)
@@ -763,6 +841,68 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
         for slot: PluginUISlot,
         context: PluginUIContext
     ) throws -> PluginUIContribution? {
+        contribution
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+/// Deterministically parks inside `onEvent` for the gated event kinds: it signals
+/// `entered` once the host is stuck on `await eventProcessor.process`, then blocks on
+/// `resume` until the test releases it. This removes the timing dependence of a sleep —
+/// the test controls exactly when state changes relative to the in-flight runner.
+private final class GatedPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let contribution: PluginUIContribution
+    private let gateOn: Set<PluginEventKind>
+    private let entered: DispatchSemaphore
+    private let resume: DispatchSemaphore
+    private let lock = NSLock()
+    private var _receivedKinds: [PluginEventKind] = []
+    var receivedKinds: [PluginEventKind] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _receivedKinds
+    }
+
+    init(
+        id: String,
+        contribution: PluginUIContribution,
+        gateOn: Set<PluginEventKind>,
+        entered: DispatchSemaphore,
+        resume: DispatchSemaphore,
+        activationEvents: Set<PluginEventKind> = [.pluginStarted]
+    ) {
+        self.contribution = contribution
+        self.gateOn = gateOn
+        self.entered = entered
+        self.resume = resume
+        self.manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: [.showNotchCard],
+            surfaces: [.notchExpandedActivity],
+            activationEvents: Set(activationEvents.map(\.rawValue))
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        lock.lock()
+        _receivedKinds.append(event.kind)
+        lock.unlock()
+        if gateOn.contains(event.kind) {
+            entered.signal()
+            resume.wait()
+        }
+        return []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
         contribution
     }
 
