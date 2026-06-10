@@ -10,6 +10,6 @@ enum PluginPermission: String, Codable, CaseIterable, Hashable {
     case writePluginStorage
     case showNotification
     case playSound
-    case readCaffeineStatus
+    case controlPowerSleep
 }
 

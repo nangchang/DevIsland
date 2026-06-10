@@ -12,7 +12,7 @@ enum PluginEventKind: String, Codable, CaseIterable {
     case pluginStarted = "plugin.started"
     case pluginTick = "plugin.tick"
     case pluginActionInvoked = "plugin.action.invoked"
-    case caffeineStatusChanged = "caffeine.status.changed"
+    case powerStatusChanged = "power.status.changed"
 }
 
 struct PluginEvent: Codable, Equatable {
@@ -23,7 +23,7 @@ struct PluginEvent: Codable, Equatable {
     let hook: PluginHookSummary?
     let action: PluginActionEvent?
     let approval: PluginApprovalSummary?
-    let caffeineStatus: PluginCaffeineStatus?
+    let powerStatus: PluginPowerStatus?
 
     init(
         id: UUID,
@@ -33,7 +33,7 @@ struct PluginEvent: Codable, Equatable {
         hook: PluginHookSummary? = nil,
         action: PluginActionEvent? = nil,
         approval: PluginApprovalSummary? = nil,
-        caffeineStatus: PluginCaffeineStatus? = nil
+        powerStatus: PluginPowerStatus? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -42,7 +42,7 @@ struct PluginEvent: Codable, Equatable {
         self.hook = hook
         self.action = action
         self.approval = approval
-        self.caffeineStatus = caffeineStatus
+        self.powerStatus = powerStatus
     }
 }
 
@@ -85,7 +85,7 @@ struct PluginApprovalSummary: Codable, Equatable {
     let scope: String
 }
 
-struct PluginCaffeineStatus: Codable, Equatable {
+struct PluginPowerStatus: Codable, Equatable {
     let caffeineEnabled: Bool
     let excludedSSIDs: [String]
     let isOnACPower: Bool

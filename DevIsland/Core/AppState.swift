@@ -156,10 +156,10 @@ class AppState: ObservableObject {
         self.caffeineCoordinator = coordinator
         self.pluginHost = PluginHost(
             enablePlugins: enablePlugins,
-            caffeineHandler: { prevent, reason in
+            powerSleepHandler: { prevent, reason in
                 coordinator.applyPreventIdleSleep(prevent: prevent, reasonString: reason)
             },
-            caffeineToggleHandler: {
+            powerToggleHandler: {
                 Task { @MainActor in
                     let store = SettingsStore.shared
                     store.settings.caffeineEnabled.toggle()
@@ -2546,7 +2546,7 @@ class AppState: ObservableObject {
         caffeineCoordinator.onStatusChanged = { [weak self] status in
             guard let self = self else { return }
             MainActor.assumeIsolated {
-                let event = self.pluginEventFactory.makeCaffeineStatusEvent(status: status)
+                let event = self.pluginEventFactory.makePowerStatusEvent(status: status)
                 self.pluginHost.enqueue(event)
             }
         }

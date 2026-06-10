@@ -25,7 +25,7 @@ final class CaffeineCoordinator: ObservableObject {
     @Published var batteryLevel: Double? = nil
     @Published var currentSSID: String? = nil
 
-    var onStatusChanged: ((PluginCaffeineStatus) -> Void)?
+    var onStatusChanged: ((PluginPowerStatus) -> Void)?
 
     private let assertion: SleepAssertion
     private var cancellables = Set<AnyCancellable>()
@@ -46,7 +46,7 @@ final class CaffeineCoordinator: ObservableObject {
     }
 
     func evaluate() {
-        let status = PluginCaffeineStatus(
+        let status = PluginPowerStatus(
             caffeineEnabled: caffeineEnabled,
             excludedSSIDs: excludedSSIDs,
             isOnACPower: isOnACPower,
