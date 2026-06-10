@@ -2,16 +2,24 @@ import Foundation
 
 actor PluginEffectExecutor {
     typealias NotificationHandler = @Sendable (_ title: String, _ body: String?) async -> Void
+    typealias CaffeineHandler = @Sendable (_ preventSleep: Bool, _ reason: String) async -> Void
+    typealias CaffeineToggleHandler = @Sendable () async -> Void
 
     private let storageProvider: PluginStorageProvider
     private let notificationHandler: NotificationHandler?
+    private let caffeineHandler: CaffeineHandler?
+    private let caffeineToggleHandler: CaffeineToggleHandler?
 
     init(
         storageProvider: PluginStorageProvider,
-        notificationHandler: NotificationHandler? = nil
+        notificationHandler: NotificationHandler? = nil,
+        caffeineHandler: CaffeineHandler? = nil,
+        caffeineToggleHandler: CaffeineToggleHandler? = nil
     ) {
         self.storageProvider = storageProvider
         self.notificationHandler = notificationHandler
+        self.caffeineHandler = caffeineHandler
+        self.caffeineToggleHandler = caffeineToggleHandler
     }
 
     func enqueue(
@@ -35,6 +43,8 @@ actor PluginEffectExecutor {
             return permissions.contains(.showNotification)
         case "sound.play":
             return permissions.contains(.playSound)
+        case "power.preventIdleSleep", "caffeine.toggleEnabled":
+            return permissions.contains(.readCaffeineStatus)
         default:
             return false
         }
@@ -61,6 +71,21 @@ actor PluginEffectExecutor {
                     CESPAudioPlayer.shared.play(category: category)
                 }
             }
+            return
+        }
+
+        if effect.capability == "power.preventIdleSleep" {
+            guard pluginID == "caffeine" else { return }
+            let prevent = effect.payload["preventSleep"] == "true"
+            let reason = effect.payload["reason"] ?? "off"
+            await caffeineHandler?(prevent, reason)
+            return
+        }
+
+        if effect.capability == "caffeine.toggleEnabled" {
+            guard pluginID == "caffeine" else { return }
+            await caffeineToggleHandler?()
+            return
         }
     }
 

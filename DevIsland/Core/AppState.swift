@@ -152,8 +152,20 @@ class AppState: ObservableObject {
         self.claudeQuestionState = ClaudeQuestionState()
         self.powerSourceMonitor = PowerSourceMonitor()
         self.wifiMonitor = WifiSSIDMonitor()
-        self.caffeineCoordinator = CaffeineCoordinator()
-        self.pluginHost = PluginHost(enablePlugins: enablePlugins)
+        let coordinator = CaffeineCoordinator()
+        self.caffeineCoordinator = coordinator
+        self.pluginHost = PluginHost(
+            enablePlugins: enablePlugins,
+            caffeineHandler: { prevent, reason in
+                coordinator.applyPreventIdleSleep(prevent: prevent, reasonString: reason)
+            },
+            caffeineToggleHandler: {
+                Task { @MainActor in
+                    let store = SettingsStore.shared
+                    store.settings.caffeineEnabled.toggle()
+                }
+            }
+        )
         self.ptyCoordinator = PTYCoordinator(
             ptyBuffer: PTYSessionBuffer(),
             approvalProxy: approvalProxy,
@@ -464,7 +476,7 @@ class AppState: ObservableObject {
 
     /// Built-in plugins compiled into DevIsland, registered once at init.
     private static func builtInPlugins() -> [any DevIslandPlugin & Sendable] {
-        [SessionTimerPlugin(), PomodoroPlugin(), OpenPeonPlugin()]
+        [SessionTimerPlugin(), PomodoroPlugin(), OpenPeonPlugin(), CaffeinePlugin()]
     }
 
     /// Starts the plugin platform once the app has finished launching: emits the
@@ -2531,6 +2543,14 @@ class AppState: ObservableObject {
     // MARK: - Caffeine
 
     private func setupCaffeine() {
+        caffeineCoordinator.onStatusChanged = { [weak self] status in
+            guard let self = self else { return }
+            MainActor.assumeIsolated {
+                let event = self.pluginEventFactory.makeCaffeineStatusEvent(status: status)
+                self.pluginHost.enqueue(event)
+            }
+        }
+
         powerSourceMonitor.start()
         wifiMonitor.start()
 
