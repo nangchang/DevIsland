@@ -636,6 +636,64 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertFalse(host.isInSafemode("com.devisland.test.safemode.stale"), "Stale failure must be discarded and not cause safemode")
     }
 
+    func testDisableDuringDrainDiscardsInFlightContribution() async {
+        let id = "com.devisland.test.disable.during.drain"
+        let plugin = RecordingPlugin(
+            id: id,
+            permissions: [.showNotchCard],
+            activationEvents: [.pluginStarted],
+            contribution: makeContribution(pluginID: id),
+            delay: 0.3,
+            delayOnKinds: [.pluginStarted]
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.disable.during.drain")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.disable.during.drain")
+        let host = PluginHost()
+        host.register([plugin], settingsStore: PluginSettingsStore(userDefaults: defaults))
+
+        // The runner sleeps inside onEvent, so the host parks on `await eventProcessor.process`
+        // — the exact window where disabling must discard the in-flight snapshot rather than
+        // re-add the plugin's contribution after the user turned it off.
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        host.setPluginEnabled(false, pluginID: id)
+
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(host.contributions[.notchExpandedActivity]?.isEmpty ?? true,
+                      "a plugin disabled mid-drain must not have its in-flight contribution re-added")
+    }
+
+    func testSafemodeExcludesEventAlreadyQueued() async {
+        let id = "com.devisland.test.safemode.queued"
+        // The first event is slow so the drain parks on it, leaving the second event pending
+        // in the queue. The pending event is the one whose eligible-runner list was captured
+        // at enqueue time, before safemode — the gap the drain-time `isActive` re-filter closes.
+        let plugin = RecordingPlugin(
+            id: id,
+            permissions: [.showNotchCard],
+            activationEvents: [.pluginStarted, .pluginTick],
+            contribution: makeContribution(pluginID: id),
+            delay: 0.3,
+            delayOnKinds: [.pluginStarted]
+        )
+        let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.safemode.queued")!
+        defaults.removePersistentDomain(forName: "PluginHostDispatchTests.safemode.queued")
+        let host = PluginHost()
+        host.register([plugin], settingsStore: PluginSettingsStore(userDefaults: defaults))
+
+        host.enqueue(makeEvent(kind: .pluginStarted)) // slow: parks the drain
+        host.enqueue(makeEvent(kind: .pluginTick))     // queued behind it, not yet processed
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        host.enterSafemode(pluginID: id)
+
+        await host.waitUntilIdle()
+
+        XCTAssertFalse(plugin.receivedKinds.contains(.pluginTick),
+                       "an event still queued when the plugin entered safemode must not run")
+        XCTAssertTrue(host.isInSafemode(id))
+    }
+
     private func makeTempStorageDirectory() -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("PluginStorageDispatchTests-\(UUID().uuidString)", isDirectory: true)
