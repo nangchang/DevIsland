@@ -16,7 +16,7 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
         name: "Session Timer",
         version: "1.0.0",
         apiVersion: 1,
-        kind: .coreAware,
+        kind: .system,
         permissions: [.readSessionEvents, .showNotchCard],
         surfaces: [.notchExpandedActivity],
         activationEvents: [

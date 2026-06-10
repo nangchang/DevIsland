@@ -184,7 +184,7 @@ private final class GatingStubPlugin: DevIslandPlugin, @unchecked Sendable {
             name: "gating",
             version: "1.0.0",
             apiVersion: 1,
-            kind: .coreAware,
+            kind: .system,
             permissions: permissions,
             surfaces: [],
             activationEvents: [PluginEventKind.sessionStarted.rawValue]
