@@ -21,7 +21,7 @@ DevIsland 플러그인 시스템은 Swift 앱의 핵심 안정성을 유지하�
 
 ```swift
 enum PluginKind: String, Codable {
-    case coreAware    // DevIsland session·hook 상태를 관찰
+    case system       // DevIsland session·hook 상태를 관찰
     case utility      // DevIsland와 무관한 독립 기능 (v1 built-in only)
     case integration  // 외부 서비스·파일 시스템 연동 (v2 이후)
     case runtime      // 외부 코드 실행 (v2 이후 검토)
@@ -30,12 +30,12 @@ enum PluginKind: String, Codable {
 
 | Kind | 목적 | 예시 | v1 지원 |
 | :--- | :--- | :--- | :--- |
-| `coreAware` | session·hook·provider 상태를 관찰하고 UI를 보탠다. | SessionTimer, ProviderStats | ✓ |
+| `system` | session·hook·provider 상태를 관찰하고 UI를 보탠다. | SessionTimer, ProviderStats | ✓ |
 | `utility` | DevIsland와 무관한 작은 독립 기능을 notch/menubar에 올린다. | Pomodoro, Counter | ✓ (built-in only) |
 | `integration` | 외부 서비스나 파일 시스템을 활용한다. | GitHub Issue, Calendar | v2 이후 |
 | `runtime` | 외부 코드 실행으로 자유도를 높인다. | JS worker, native bundle | v2 이후 검토 |
 
-`coreAware` 플러그인은 `readSessionEvents` 또는 `readHookSummaries` 권한을 선언해 sanitized session/hook 이벤트를 관찰하고, DevIsland core 상태를 직접 수정하지 않는다.
+`system` 플러그인은 `readSessionEvents` 또는 `readHookSummaries` 권한을 선언해 sanitized session/hook 이벤트를 관찰하고, DevIsland core 상태를 직접 수정하지 않는다.
 `utility` 플러그인은 session/hook 이벤트 권한 없이 `plugin.started`, `plugin.tick`, `plugin.action.invoked` 같은 host lifecycle 이벤트와 제한된 host-owned capability만 사용한다.
 두 kind 모두 v1에서는 앱에 컴파일된 built-in Swift 구현으로만 제공되며, lifecycle runner와 contribution cache 처리는 동일하다.
 
@@ -125,6 +125,8 @@ enum PluginPermission: String, Codable, Hashable {
     case showMenubarMenu
     case showNotification
     case writePluginStorage
+    case playSound
+    case controlPowerSleep
 }
 ```
 
@@ -138,6 +140,8 @@ enum PluginPermission: String, Codable, Hashable {
 | `showMenubarMenu` | menubar 메뉴(`menubar.menu`)에 선언형 menu item을 제공한다. |
 | `showNotification` | DevIsland가 렌더링하는 제한된 알림을 요청한다. |
 | `writePluginStorage` | 플러그인 전용 격리 저장소에만 읽기·쓰기를 수행한다. |
+| `playSound` | CESP 카테고리 기반 오디오 재생을 요청한다. |
+| `controlPowerSleep` | 전원 상태 이벤트를 수신하고 idle sleep 제어 이펙트를 발행한다. |
 
 surface permission 매핑:
 
@@ -179,7 +183,7 @@ v1 manifest는 built-in plugin 검증을 위한 최소 필드만 가진다.
 VS Code식 `contribution point`와 세분화된 `capabilities` 필드는 v2 external runtime 또는 declarative preset에서 추가한다.
 v1에서는 `surfaces`가 정적 contribution point 역할을 하고, `permissions`가 사용할 수 있는 capability의 상한을 표현한다.
 
-manifest 예시 (`coreAware`):
+manifest 예시 (`system`):
 
 ```json
 {
@@ -187,7 +191,7 @@ manifest 예시 (`coreAware`):
   "name": "Session Timer",
   "version": "1.0.0",
   "apiVersion": 1,
-  "kind": "coreAware",
+  "kind": "system",
   "permissions": ["readSessionEvents", "showNotchCard", "writePluginStorage"],
   "surfaces": ["notch.expanded.activity"],
   "activationEvents": ["session.started", "session.updated", "session.ended", "plugin.tick"]
@@ -224,6 +228,7 @@ enum PluginEventKind: String, Codable {
     case pluginStarted         = "plugin.started"
     case pluginTick            = "plugin.tick"
     case pluginActionInvoked   = "plugin.action.invoked"
+    case powerStatusChanged    = "power.status.changed"  // controlPowerSleep 권한 필요
 }
 ```
 
@@ -233,7 +238,7 @@ enum PluginEventKind: String, Codable {
 
 `plugin.action.invoked`는 플러그인이 반환한 declarative UI의 button·toggle 등에서 사용자 액션이 발생하고, 해당 action의 `routing == .pluginEvent`일 때만 DevIsland가 permission과 capability를 검증한 뒤 대상 플러그인 하나에 되돌려 보낸다. `routing == .hostExecuted`인 action은 DevIsland가 즉시 처리한다.
 
-`approval.decided`는 사용자가 승인/거부를 확정한 뒤 발행되는 **관찰 전용** 이벤트다. `AppState`가 provider response를 이미 보낸 후 sanitized `PluginApprovalSummary`만 전달하며, 플러그인은 결과를 집계·기록할 수 있을 뿐 결정을 바꾸거나 되돌릴 수 없다(Isolation 원칙). 승인 메트릭·통계 같은 `coreAware` 플러그인을 위한 것이며, `readHookSummaries` 권한이 있어야 수신한다. v1 첫 구현에서는 필수가 아니며, session/UI 확장이 안정화된 뒤 추가한다.
+`approval.decided`는 사용자가 승인/거부를 확정한 뒤 발행되는 **관찰 전용** 이벤트다. `AppState`가 provider response를 이미 보낸 후 sanitized `PluginApprovalSummary`만 전달하며, 플러그인은 결과를 집계·기록할 수 있을 뿐 결정을 바꾸거나 되돌릴 수 없다(Isolation 원칙). 승인 메트릭·통계 같은 `system` kind 플러그인을 위한 것이며, `readHookSummaries` 권한이 있어야 수신한다. v1 첫 구현에서는 필수가 아니며, session/UI 확장이 안정화된 뒤 추가한다.
 
 ### 6.3. PluginEvent
 
@@ -734,6 +739,8 @@ final class PluginHost: ObservableObject {
             return permissions.contains(.readSessionEvents)
         case .hookReceived, .approvalDecided:
             return permissions.contains(.readHookSummaries)
+        case .powerStatusChanged:
+            return permissions.contains(.controlPowerSleep)
         default:
             return true
         }
