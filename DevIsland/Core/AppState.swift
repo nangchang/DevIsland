@@ -1462,10 +1462,6 @@ class AppState: ObservableObject {
         }
     }
 
-    private static func isApprovalEvent(_ normalizedEvent: String, for agentKind: BuddyKind) -> Bool {
-        HookEventNormalizer.isApprovalEvent(normalizedEvent, for: agentKind)
-    }
-
     private static func shouldSupersedeCodexSessionsOnStart(source: String) -> Bool {
         let normalized = HookEventNormalizer.normalizedName(source)
         return ["clear", "startup", "resume"].contains(normalized)
@@ -1679,28 +1675,17 @@ class AppState: ObservableObject {
 
     private func nextPendingRequestToDisplay() -> PendingRequest? {
         // 팝아웃 창이 열린 세션의 요청을 우선 처리하여 창에서 즉시 승인/거부 가능하게 함
-        let withWindow = sessionStore.pendingQueue.first { request in
-            guard Self.isApprovalPriorityRequest(request) else { return false }
-            let sid = request.sessionId
-            return MainActor.assumeIsolated { SessionMessageWindowManager.shared.hasWindow(for: sid) }
+        ApprovalQueuePolicy.nextToDisplay(in: sessionStore.pendingQueue) { sid in
+            MainActor.assumeIsolated { SessionMessageWindowManager.shared.hasWindow(for: sid) }
         }
-        if let withWindow { return withWindow }
-
-        return sessionStore.pendingQueue.first(where: Self.isApprovalPriorityRequest)
-            ?? sessionStore.pendingQueue.first
-    }
-
-    private static func isApprovalPriorityRequest(_ request: PendingRequest) -> Bool {
-        request.claudeQuestion == nil
     }
 
     private func isShowingLowerPriorityPendingRequest(than request: PendingRequest) -> Bool {
-        guard Self.isApprovalPriorityRequest(request),
-              let showingRequestId,
-              let showingRequest = sessionStore.pendingQueue.first(where: { $0.id == showingRequestId }) else {
-            return false
-        }
-        return !Self.isApprovalPriorityRequest(showingRequest)
+        ApprovalQueuePolicy.showingIsLowerPriority(
+            than: request,
+            showingRequestId: showingRequestId,
+            queue: sessionStore.pendingQueue
+        )
     }
 
     private func preemptCurrentPendingDisplay() {
@@ -1758,21 +1743,11 @@ class AppState: ObservableObject {
     }
 
     private func discardInvalidPendingRequests() {
-        while let next = sessionStore.pendingQueue.first(where: { $0.claudeQuestion == nil && !isValidApprovalRequest($0) }) {
+        while let next = sessionStore.pendingQueue.first(where: { $0.claudeQuestion == nil && !ApprovalQueuePolicy.isValidApprovalRequest($0) }) {
             if let removed = sessionStore.removePending(id: next.id) {
                 removed.responseHandler("{\"response\": \"approved\"}")
             }
         }
-    }
-
-    private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
-        if request.claudeQuestion != nil {
-            return request.agentKind == .claudeCode &&
-                HookEventNormalizer.normalizedName(request.eventName) == "pretooluse" &&
-                HookEventNormalizer.isUserQuestionTool(request.rawToolName)
-        }
-        return Self.isApprovalEvent(HookEventNormalizer.normalizedName(request.eventName), for: request.agentKind)
-            && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 
     private func recordReplayHookEvent(
