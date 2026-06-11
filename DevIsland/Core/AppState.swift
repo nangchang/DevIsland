@@ -533,9 +533,8 @@ class AppState: ObservableObject {
         }
 
         // MARK: Phase 1: Sub-Agent
-        var displayToolName = h.displayToolName
         if h.isSubAgentSession {
-            handleSubAgentEvent(h, displayToolName: displayToolName, responseHandler: responseHandler)
+            handleSubAgentEvent(h, displayToolName: h.displayToolName, responseHandler: responseHandler)
             return
         }
 
@@ -551,7 +550,6 @@ class AppState: ObservableObject {
         }
 
         // MARK: Phase 2b: Event Classification
-        let normalizedEvent = HookEventNormalizer.normalizedName(h.event)
         let hookEventId = recordReplayHookEvent(
             requestId: h.requestId,
             provider: providerKind(for: h.agentKind),
@@ -569,38 +567,21 @@ class AppState: ObservableObject {
                 self.pluginHost.enqueue(self.pluginEventFactory.makeHookReceivedEvent(from: h, session: session))
             }
         }
-        if displayToolName.isEmpty {
-            if normalizedEvent == "elicitation" {
-                if let serverName = h.parsedJSON["mcp_server_name"] as? String, !serverName.isEmpty {
-                    displayToolName = "Elicitation (\(serverName))"
-                } else {
-                    displayToolName = "Elicitation"
-                }
-            } else if normalizedEvent == "userpromptsubmit" {
-                displayToolName = "User Prompt"
-            } else {
-                displayToolName = h.toolName
-            }
-        }
-        let stopEvents = ["exit", "shutdown", "sessionend"]
-        let notificationEvents = [
-            "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
-            "startup", "init", "afteragent"
-        ]
-        let isUserQuestionTool = HookEventNormalizer.isUserQuestionTool(h.toolName)
-        let claudeQuestion = (h.agentKind == .claudeCode && normalizedEvent == "pretooluse" && isUserQuestionTool)
-            ? ClaudeQuestionRequest.parse(toolInput: h.toolInput)
-            : nil
-        let isClaudeQuestionRequest = claudeQuestion != nil
         // approval:
         // - Claude/Codex: PermissionRequest only
         // - Gemini: BeforeTool only
         // - Claude AskUserQuestion is handled as a structured reply request from PreToolUse.
-        let isStop = stopEvents.contains(normalizedEvent)
-        let isApproval = isClaudeQuestionRequest || (Self.isApprovalEvent(normalizedEvent, for: h.agentKind) && !isUserQuestionTool)
-        let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
-        let isCodexStatusOnlyLifecycleEvent = h.agentKind == .codex && (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse")
-        let replayToolName = h.toolName.isEmpty ? displayToolName : h.toolName
+        let classification = HookEventClassifier.classify(h)
+        let displayToolName = classification.displayToolName
+        let normalizedEvent = classification.normalizedEvent
+        let isUserQuestionTool = classification.isUserQuestionTool
+        let claudeQuestion = classification.claudeQuestion
+        let isClaudeQuestionRequest = classification.isClaudeQuestionRequest
+        let isStop = classification.isStop
+        let isApproval = classification.isApproval
+        let isNotification = classification.isNotification
+        let isCodexStatusOnlyLifecycleEvent = classification.isCodexStatusOnlyLifecycleEvent
+        let replayToolName = classification.replayToolName
 
         // MARK: Phase 2c: Stop
         if isStop {
