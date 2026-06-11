@@ -131,7 +131,7 @@ struct CLIBuddyView: View {
                     .scaleEffect(x: isFlipped ? -1 : 1)
             case .antigravity:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .antigravity))
-                pixelGrid(size: size, cells: geminiBodyCells())
+                pixelGrid(size: size, cells: antigravityBodyCells())
                     .scaleEffect(x: isFlipped ? -1 : 1)
             case .island:
                 pixelGrid(size: size, cells: islandBodyCells())
@@ -232,6 +232,67 @@ struct CLIBuddyView: View {
         ]
 
         return mirroredHorizontally(cells)
+    }
+
+    private func antigravityBodyCells() -> [PixelCell] {
+        let red = Color(red: 0.95, green: 0.28, blue: 0.20)
+        let orange = Color(red: 0.96, green: 0.48, blue: 0.16)
+        let yellow = Color(red: 0.96, green: 0.78, blue: 0.18)
+        let green = Color(red: 0.30, green: 0.72, blue: 0.35)
+        let cyan = Color(red: 0.25, green: 0.74, blue: 0.86)
+        let blue = Color(red: 0.20, green: 0.48, blue: 0.94)
+        let purple = Color(red: 0.42, green: 0.36, blue: 0.95)
+        let pink = Color(red: 0.98, green: 0.62, blue: 0.72)
+        let fur = Color(red: 0.92, green: 0.96, blue: 0.92)
+        let shade = Color(red: 0.64, green: 0.78, blue: 0.78)
+        let ink = Color(red: 0.11, green: 0.10, blue: 0.14)
+
+        var cells: [PixelCell] = []
+
+        // Readable cat silhouette first; the Antigravity mark is a forehead accent.
+        cells += [
+            PixelCell(24, 8, 8, 32, fur),
+            PixelCell(32, 16, 8, 24, fur),
+            PixelCell(40, 24, 8, 16, fur),
+            PixelCell(32, 24, 8, 8, pink),
+
+            PixelCell(96, 8, 8, 32, fur),
+            PixelCell(88, 16, 8, 24, fur),
+            PixelCell(80, 24, 8, 16, fur),
+            PixelCell(88, 24, 8, 8, pink),
+
+            PixelCell(24, 32, 80, 8, fur),
+            PixelCell(16, 40, 96, 16, fur),
+            PixelCell(16, 56, 96, 24, fur),
+            PixelCell(24, 80, 80, 8, fur),
+            PixelCell(32, 88, 64, 8, shade),
+        ]
+
+        cells += [
+            PixelCell(56, 0, 16, 8, red),
+            PixelCell(48, 8, 8, 8, yellow),
+            PixelCell(56, 8, 16, 8, orange),
+            PixelCell(72, 8, 8, 8, purple),
+            PixelCell(40, 16, 8, 8, green),
+            PixelCell(80, 16, 8, 8, blue),
+        ]
+
+        cells += [
+            PixelCell(44, 48, 8, 16, ink),
+            PixelCell(76, 48, 8, 16, ink),
+            PixelCell(60, 64, 8, 8, red),
+            PixelCell(52, 72, 8, 8, ink),
+            PixelCell(68, 72, 8, 8, ink),
+
+            PixelCell(0, 56, 32, 4, cyan),
+            PixelCell(0, 68, 32, 4, blue),
+            PixelCell(96, 56, 32, 4, purple),
+            PixelCell(96, 68, 32, 4, blue),
+            PixelCell(96, 84, 16, 8, purple),
+            PixelCell(104, 76, 8, 8, blue),
+        ]
+
+        return cells
     }
 
     private func claudeBodyCells() -> [PixelCell] {
