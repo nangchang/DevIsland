@@ -533,9 +533,8 @@ class AppState: ObservableObject {
         }
 
         // MARK: Phase 1: Sub-Agent
-        var displayToolName = h.displayToolName
         if h.isSubAgentSession {
-            handleSubAgentEvent(h, displayToolName: displayToolName, responseHandler: responseHandler)
+            handleSubAgentEvent(h, displayToolName: h.displayToolName, responseHandler: responseHandler)
             return
         }
 
@@ -551,7 +550,6 @@ class AppState: ObservableObject {
         }
 
         // MARK: Phase 2b: Event Classification
-        let normalizedEvent = HookEventNormalizer.normalizedName(h.event)
         let hookEventId = recordReplayHookEvent(
             requestId: h.requestId,
             provider: providerKind(for: h.agentKind),
@@ -569,38 +567,21 @@ class AppState: ObservableObject {
                 self.pluginHost.enqueue(self.pluginEventFactory.makeHookReceivedEvent(from: h, session: session))
             }
         }
-        if displayToolName.isEmpty {
-            if normalizedEvent == "elicitation" {
-                if let serverName = h.parsedJSON["mcp_server_name"] as? String, !serverName.isEmpty {
-                    displayToolName = "Elicitation (\(serverName))"
-                } else {
-                    displayToolName = "Elicitation"
-                }
-            } else if normalizedEvent == "userpromptsubmit" {
-                displayToolName = "User Prompt"
-            } else {
-                displayToolName = h.toolName
-            }
-        }
-        let stopEvents = ["exit", "shutdown", "sessionend"]
-        let notificationEvents = [
-            "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
-            "startup", "init", "afteragent"
-        ]
-        let isUserQuestionTool = HookEventNormalizer.isUserQuestionTool(h.toolName)
-        let claudeQuestion = (h.agentKind == .claudeCode && normalizedEvent == "pretooluse" && isUserQuestionTool)
-            ? ClaudeQuestionRequest.parse(toolInput: h.toolInput)
-            : nil
-        let isClaudeQuestionRequest = claudeQuestion != nil
         // approval:
         // - Claude/Codex: PermissionRequest only
         // - Gemini: BeforeTool only
         // - Claude AskUserQuestion is handled as a structured reply request from PreToolUse.
-        let isStop = stopEvents.contains(normalizedEvent)
-        let isApproval = isClaudeQuestionRequest || (Self.isApprovalEvent(normalizedEvent, for: h.agentKind) && !isUserQuestionTool)
-        let isNotification = (!isStop && !isApproval) || notificationEvents.contains(normalizedEvent)
-        let isCodexStatusOnlyLifecycleEvent = h.agentKind == .codex && (normalizedEvent == "pretooluse" || normalizedEvent == "posttooluse")
-        let replayToolName = h.toolName.isEmpty ? displayToolName : h.toolName
+        let classification = HookEventClassifier.classify(h)
+        let displayToolName = classification.displayToolName
+        let normalizedEvent = classification.normalizedEvent
+        let isUserQuestionTool = classification.isUserQuestionTool
+        let claudeQuestion = classification.claudeQuestion
+        let isClaudeQuestionRequest = classification.isClaudeQuestionRequest
+        let isStop = classification.isStop
+        let isApproval = classification.isApproval
+        let isNotification = classification.isNotification
+        let isCodexStatusOnlyLifecycleEvent = classification.isCodexStatusOnlyLifecycleEvent
+        let replayToolName = classification.replayToolName
 
         // MARK: Phase 2c: Stop
         if isStop {
@@ -1481,10 +1462,6 @@ class AppState: ObservableObject {
         }
     }
 
-    private static func isApprovalEvent(_ normalizedEvent: String, for agentKind: BuddyKind) -> Bool {
-        HookEventNormalizer.isApprovalEvent(normalizedEvent, for: agentKind)
-    }
-
     private static func shouldSupersedeCodexSessionsOnStart(source: String) -> Bool {
         let normalized = HookEventNormalizer.normalizedName(source)
         return ["clear", "startup", "resume"].contains(normalized)
@@ -1698,28 +1675,17 @@ class AppState: ObservableObject {
 
     private func nextPendingRequestToDisplay() -> PendingRequest? {
         // 팝아웃 창이 열린 세션의 요청을 우선 처리하여 창에서 즉시 승인/거부 가능하게 함
-        let withWindow = sessionStore.pendingQueue.first { request in
-            guard Self.isApprovalPriorityRequest(request) else { return false }
-            let sid = request.sessionId
-            return MainActor.assumeIsolated { SessionMessageWindowManager.shared.hasWindow(for: sid) }
+        ApprovalQueuePolicy.nextToDisplay(in: sessionStore.pendingQueue) { sid in
+            MainActor.assumeIsolated { SessionMessageWindowManager.shared.hasWindow(for: sid) }
         }
-        if let withWindow { return withWindow }
-
-        return sessionStore.pendingQueue.first(where: Self.isApprovalPriorityRequest)
-            ?? sessionStore.pendingQueue.first
-    }
-
-    private static func isApprovalPriorityRequest(_ request: PendingRequest) -> Bool {
-        request.claudeQuestion == nil
     }
 
     private func isShowingLowerPriorityPendingRequest(than request: PendingRequest) -> Bool {
-        guard Self.isApprovalPriorityRequest(request),
-              let showingRequestId,
-              let showingRequest = sessionStore.pendingQueue.first(where: { $0.id == showingRequestId }) else {
-            return false
-        }
-        return !Self.isApprovalPriorityRequest(showingRequest)
+        ApprovalQueuePolicy.showingIsLowerPriority(
+            than: request,
+            showingRequestId: showingRequestId,
+            queue: sessionStore.pendingQueue
+        )
     }
 
     private func preemptCurrentPendingDisplay() {
@@ -1777,21 +1743,11 @@ class AppState: ObservableObject {
     }
 
     private func discardInvalidPendingRequests() {
-        while let next = sessionStore.pendingQueue.first(where: { $0.claudeQuestion == nil && !isValidApprovalRequest($0) }) {
+        while let next = sessionStore.pendingQueue.first(where: { $0.claudeQuestion == nil && !ApprovalQueuePolicy.isValidApprovalRequest($0) }) {
             if let removed = sessionStore.removePending(id: next.id) {
                 removed.responseHandler("{\"response\": \"approved\"}")
             }
         }
-    }
-
-    private func isValidApprovalRequest(_ request: PendingRequest) -> Bool {
-        if request.claudeQuestion != nil {
-            return request.agentKind == .claudeCode &&
-                HookEventNormalizer.normalizedName(request.eventName) == "pretooluse" &&
-                HookEventNormalizer.isUserQuestionTool(request.rawToolName)
-        }
-        return Self.isApprovalEvent(HookEventNormalizer.normalizedName(request.eventName), for: request.agentKind)
-            && (!request.toolName.isEmpty || !request.message.isEmpty)
     }
 
     private func recordReplayHookEvent(
