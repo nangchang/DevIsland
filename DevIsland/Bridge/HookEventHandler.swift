@@ -83,7 +83,9 @@ enum HookEventHandler {
         let isReplayPayload    = parsedJSON["replay_origin_event_id"] != nil
 
         // osascript가 기본값을 반환하면 cwd 마지막 경로로 대체
-        if SessionStore.genericTitles.contains(terminalTitle), let cwd = parsedJSON["cwd"] as? String {
+        // 빈 cwd를 URL(fileURLWithPath:)에 넘기면 프로세스의 현재 디렉토리로 해석돼
+        // 엉뚱한 이름이 잡히므로 비어 있지 않을 때만 경로 컴포넌트를 사용한다.
+        if SessionStore.genericTitles.contains(terminalTitle), let cwd = parsedJSON["cwd"] as? String, !cwd.isEmpty {
             let label = URL(fileURLWithPath: cwd).lastPathComponent
             if !label.isEmpty && label != "/" { terminalTitle = label }
         }
