@@ -44,6 +44,13 @@ final class SessionStoreRestoredTitleTests: XCTestCase {
         )
     }
 
+    func testEmptyCwdReturnsSession() {
+        XCTAssertEqual(
+            SessionStore.restoredTitle(fromPayload: ["terminal_title": "Terminal", "cwd": ""]),
+            "Session"
+        )
+    }
+
     func testEmptyPayloadReturnsSession() {
         XCTAssertEqual(SessionStore.restoredTitle(fromPayload: [:]), "Session")
     }
