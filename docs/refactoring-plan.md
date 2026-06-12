@@ -191,7 +191,9 @@ R2로 타입이 작아진 뒤에 수행해야 변경 면적이 작다.
 | 테스트 분할 | `AppStateTests.swift`(2,318줄)를 R2 추출 단위에 맞춰 RouterTests/ApprovalFlowTests/DisplayStateTests로 분할 — R2 각 PR에 동반 |
 | 정적 분석 | SwiftLint 도입(우선 `file_length`, `type_body_length`, `function_parameter_count` 룰) — 이 계획의 회귀(파일 재비대화)를 CI가 막게 한다 |
 
----## 4. PR 시퀀스 요약
+---
+
+## 4. PR 시퀀스 요약
 
 | 순서 | PR | 트랙 | 크기 | 선행 조건 |
 |---|---|---|---|---|
