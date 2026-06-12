@@ -476,7 +476,7 @@ class AppState: ObservableObject {
 
     /// Built-in plugins compiled into DevIsland, registered once at init.
     private static func builtInPlugins() -> [any DevIslandPlugin & Sendable] {
-        [SessionTimerPlugin(), PomodoroPlugin(), OpenPeonPlugin(), CaffeinePlugin()]
+        [SessionTimerPlugin(), PomodoroPlugin(), OpenPeonPlugin(), CaffeinePlugin(), SessionStatsPlugin()]
     }
 
     /// Starts the plugin platform once the app has finished launching: emits the
