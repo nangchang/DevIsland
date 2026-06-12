@@ -2370,15 +2370,7 @@ class AppState: ObservableObject {
         for record in records {
             guard let data = record.lastPayloadJSON.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-            let terminalTitle: String
-            if let title = json["terminal_title"] as? String, !SessionStore.genericTitles.contains(title) {
-                terminalTitle = title
-            } else if let cwd = json["cwd"] as? String {
-                let label = URL(fileURLWithPath: cwd).lastPathComponent
-                terminalTitle = (!label.isEmpty && label != "/") ? label : "Session"
-            } else {
-                terminalTitle = "Session"
-            }
+            let terminalTitle = SessionStore.restoredTitle(fromPayload: json)
             let agentKind = Self.agentKind(from: json, terminalTitle: terminalTitle)
             sessionStore.updateActiveSession(
                 sessionId: record.sessionId,

@@ -41,6 +41,20 @@ final class SessionStore: ObservableObject {
 
     static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
 
+    /// Derives a display title for a restored session from its stored hook payload:
+    /// an explicit non-generic terminal title, else the cwd's last path component,
+    /// else "Session".
+    static func restoredTitle(fromPayload json: [String: Any]) -> String {
+        if let title = json["terminal_title"] as? String, !genericTitles.contains(title) {
+            return title
+        }
+        if let cwd = json["cwd"] as? String {
+            let label = URL(fileURLWithPath: cwd).lastPathComponent
+            return (!label.isEmpty && label != "/") ? label : "Session"
+        }
+        return "Session"
+    }
+
     init(timeoutDuration: Double = 120, lifecycleSessionTimeout: Double = 24 * 60 * 60) {
         self.timeoutDuration = timeoutDuration
         self.lifecycleSessionTimeout = lifecycleSessionTimeout
