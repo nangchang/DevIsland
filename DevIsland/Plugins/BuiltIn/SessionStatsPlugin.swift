@@ -110,7 +110,7 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
                         PluginUIComponentDTO(
                             id: "provider.\(provider)",
                             type: .metric,
-                            label: provider.capitalized,
+                            label: provider.prefix(1).uppercased() + provider.dropFirst(),
                             value: "\(hookCountsByProvider[provider] ?? 0)",
                             tone: nil,
                             iconName: nil,
