@@ -53,10 +53,15 @@
   - PR 9. PluginStorageProvider (plugin별 durable SQLite storage) — 완료 (`feat: implement durable SQLite plugin storage`)
   - PR 10. PluginSettingsView (플러그인 목록·enable/disable·safemode 상태·storage reset) — 완료
   - PR 11. Safemode hardening (실패 임계값 자동 진입 트리거 + timeout 처리 + reset 후 1회 재시도) — 완료
+  - Migration M1. OpenPeonSoundPlugin — 완료 (`feat: Migrate OpenPeon to plugin-based architecture`)
+  - Migration M2. CaffeinePlugin — 완료 (`feat: migrate Caffeine to plugin-based architecture`)
+  - Migration M3. SessionStatsPlugin — 완료 (단일 `system` 플러그인이 session/hook 관찰 통계를 모두 담당. 별도 ProviderStatsPlugin은 두지 않음)
 - 마지막 검증:
-  - 전체 테스트 스위트 통과 (2026-06-09, PR 11 기준)
+  - 플러그인 관련 테스트 스위트 통과 (2026-06-13, M3 기준)
 - 다음 단계:
-  - Migration Track. 기존 기능 Built-in Plugin 전환 (Migration PR M0)
+  - Migration PR M4 (Session accessory plugins)는 v1.1 session surface(`notch.session.row`, `session.context-menu`, `session.message`) 선행 필요
+  - Migration PR M5 (Update status contribution)는 낮은 우선순위 — v2 network/runtime 설계 후로 보류 가능
+  - 따라서 platform 확장(v1.1 Session Surfaces)이 다음 자연스러운 단계
 
 
 ## 5. PR 분할
@@ -579,16 +584,23 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - Location permission denied, Wi-Fi scan 실패, assertion acquire 실패가 provider response와 approval 동작에 영향 주지 않음
 - 앱 종료 또는 coordinator shutdown 시 assertion release 유지
 
-#### Migration PR M3. SessionStatsPlugin / ProviderStatsPlugin
+#### Migration PR M3. SessionStatsPlugin (완료)
 
 목표:
 
 - 기존 session/hook 관찰 데이터에서 통계성 UI를 built-in plugin으로 제공한다.
 
+구현 결정:
+
+- SessionStats와 ProviderStats를 분리하지 않고 단일 `system` 플러그인 `SessionStatsPlugin`(`com.devisland.stats`)으로 통합했다. 두 권한(`readSessionEvents`, `readHookSummaries`)을 한 플러그인이 선언해 중복 구현을 피한다.
+- 통계는 앱 실행 동안 in-memory로만 유지하고 storage는 쓰지 않는다(durable 통계는 v1.1 이후 검토).
+- tick은 불필요하다(이벤트 기반 갱신).
+
 주요 작업:
 
 - `readSessionEvents`, `readHookSummaries` 기반 metric contribution 추가
-- `notch.expanded.activity`, `menubar.menu`에 짧은 통계 표시
+- `notch.expanded.activity`: 활성 세션 수(세션 0개면 미기여)
+- `menubar.menu`: 활성 세션 수 + hook 총계 + provider별 누계(provider 이름 정렬)
 - v1.1 `approval.decided`가 추가되기 전에는 approval 통계 제외
 - replay DB 직접 조회 금지
 
