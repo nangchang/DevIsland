@@ -26,13 +26,13 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 
 ### S1. TCP 리스너가 모든 인터페이스에 바인딩됨
 
-[HookSocketServer.swift:43](DevIsland/Bridge/HookSocketServer.swift#L43)의 `startTCP`는 `NWParameters.tcp`로 `NWListener`를 만들 뿐 로컬 엔드포인트를 제한하지 않는다. NWListener의 기본 동작은 **모든 인터페이스(0.0.0.0) 바인딩**이므로, 같은 네트워크의 다른 기기가 9090 포트에 접속할 수 있다. 설정 enum 이름(`tcpLoopback`)과 문서(`approval-proxy.md`의 "TCP `127.0.0.1:9090`")는 루프백을 전제하지만 실제 바인딩은 그렇지 않다.
+[HookSocketServer.swift:43](../DevIsland/Bridge/HookSocketServer.swift#L43)의 `startTCP`는 `NWParameters.tcp`로 `NWListener`를 만들 뿐 로컬 엔드포인트를 제한하지 않는다. NWListener의 기본 동작은 **모든 인터페이스(0.0.0.0) 바인딩**이므로, 같은 네트워크의 다른 기기가 9090 포트에 접속할 수 있다. 설정 enum 이름(`tcpLoopback`)과 문서(`approval-proxy.md`의 "TCP `127.0.0.1:9090`")는 루프백을 전제하지만 실제 바인딩은 그렇지 않다.
 
 **권고**: `NWParameters`에 `requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: …)`를 지정하거나 `requiredInterfaceType = .loopback`을 설정. 단위 테스트로 외부 인터페이스 접속 거부를 검증.
 
 ### S2. 레거시 raw JSON 경로가 토큰 검증을 우회함
 
-[HookEventHandler.swift:43-57](DevIsland/Bridge/HookEventHandler.swift#L43)에서 토큰 검증은 IPC envelope으로 디코딩된 경우에만 수행된다. 첫 바이트가 `{`인 raw JSON은 **토큰 없이 그대로 처리**된다. S1과 결합하면 LAN의 공격자가 다음을 할 수 있다:
+[HookEventHandler.swift:43-57](../DevIsland/Bridge/HookEventHandler.swift#L43)에서 토큰 검증은 IPC envelope으로 디코딩된 경우에만 수행된다. 첫 바이트가 `{`인 raw JSON은 **토큰 없이 그대로 처리**된다. S1과 결합하면 LAN의 공격자가 다음을 할 수 있다:
 
 - 가짜 승인 요청을 노치에 띄워 사용자 피로/혼동 유발 (승인 스푸핑)
 - 가짜 세션·알림 이벤트로 UI 및 SQLite 감사 로그 오염
@@ -42,28 +42,28 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 
 ### S3. 토큰 grace mode의 영구화 위험
 
-[BridgeTokenManager.swift:59-70](DevIsland/Bridge/BridgeTokenManager.swift#L59) — 토큰 파일이 없으면 모든 요청을 수락한다. 전환기 편의용 설계인 것은 이해되나, `generateIfNeeded()`가 실패하면(디렉토리 생성 실패 등) 조용히 grace mode로 영구 잔류한다. 또한 비교가 상수 시간이 아니다(로컬 위협 모델에서는 경미).
+[BridgeTokenManager.swift:59-70](../DevIsland/Bridge/BridgeTokenManager.swift#L59) — 토큰 파일이 없으면 모든 요청을 수락한다. 전환기 편의용 설계인 것은 이해되나, `generateIfNeeded()`가 실패하면(디렉토리 생성 실패 등) 조용히 grace mode로 영구 잔류한다. 또한 비교가 상수 시간이 아니다(로컬 위협 모델에서는 경미).
 
 **권고**: grace mode 동작 시 설정 화면/메뉴에 경고 상태 표시. 일정 버전 이후 grace mode 제거.
 
 ### S4. 민감 정보가 world-readable 로그에 평문 기록됨
 
-- [devisland_bridge.py:352](scripts/devisland_bridge.py#L352) `log(f"Raw Payload: {dump(payload)}")` — 훅 페이로드 전문(명령어, 파일 경로, 프롬프트 본문, 명령 인자 속 시크릿 가능)이 `/tmp/DevIsland.bridge.log`(기본 0644, 모든 로컬 사용자 읽기 가능)에 기록된다.
-- [HookSocketServer.swift:326,394](DevIsland/Bridge/HookSocketServer.swift#L394) `print("Received raw JSON/framed message: …")` — 앱도 페이로드 전문을 stdout에 출력하며, LaunchAgent 모드에서는 `/tmp/DevIsland.log`로 흘러간다.
+- [devisland_bridge.py:352](../scripts/devisland_bridge.py#L352) `log(f"Raw Payload: {dump(payload)}")` — 훅 페이로드 전문(명령어, 파일 경로, 프롬프트 본문, 명령 인자 속 시크릿 가능)이 `/tmp/DevIsland.bridge.log`(기본 0644, 모든 로컬 사용자 읽기 가능)에 기록된다.
+- [HookSocketServer.swift:326,394](../DevIsland/Bridge/HookSocketServer.swift#L394) `print("Received raw JSON/framed message: …")` — 앱도 페이로드 전문을 stdout에 출력하며, LaunchAgent 모드에서는 `/tmp/DevIsland.log`로 흘러간다.
 - 두 로그 모두 **로테이션이 없어** 장기 실행 시 무한히 커진다.
 
 **권고**: (1) 페이로드 전문 로깅을 디버그 플래그 뒤로 이동하고 기본은 이벤트명/세션ID 요약만 기록, (2) 로그 파일 위치를 `~/Library/Logs/DevIsland/`로 이동하고 0600 생성, (3) 크기 기반 로테이션 추가.
 
 ### S5. 자동 업데이트에 코드서명 검증이 없음
 
-[UpdateChecker.swift](DevIsland/Utility/UpdateChecker.swift)는 GitHub 릴리스 DMG를 내려받아 마운트 후 앱을 교체하지만, 다운로드 산출물의 **codesign/공증 검증 단계가 없다**. 릴리스 빌드 자체도 unsigned로 패키징된다(`build-and-test.md`: "xcodebuild archive unsigned"). HTTPS + GitHub가 1차 방어이긴 하나, 승인 게이트 역할을 하는 앱으로서는 공급망 방어가 더 필요하다.
+[UpdateChecker.swift](../DevIsland/Utility/UpdateChecker.swift)는 GitHub 릴리스 DMG를 내려받아 마운트 후 앱을 교체하지만, 다운로드 산출물의 **codesign/공증 검증 단계가 없다**. 릴리스 빌드 자체도 unsigned로 패키징된다(`build-and-test.md`: "xcodebuild archive unsigned"). HTTPS + GitHub가 1차 방어이긴 하나, 승인 게이트 역할을 하는 앱으로서는 공급망 방어가 더 필요하다.
 
 **권고**: Developer ID 서명·공증 도입(릴리스 워크플로우에 시크릿 주입) 후, 업데이트 설치 전 `codesign --verify` + Team ID 고정 검증. 장기적으로 Sparkle(EdDSA 서명) 검토.
 
 ### S6. 기타 (낮음)
 
-- **regex allow 규칙의 비anchored 매칭**: [ApprovalPolicyEngine.swift:81](DevIsland/Approval/ApprovalPolicyEngine.swift#L81)이 `firstMatch`(부분 일치)를 사용하므로 `Read`라는 regex allow 규칙이 `ReadDangerousTool`에도 매치된다. allow 규칙은 전체 일치(`^…$` 암묵 적용)로 좁히는 편이 안전하다.
-- **bash 브리지의 AppleScript 변수 보간**: [devisland-bridge.sh:91,161](scripts/devisland-bridge.sh#L161) 등에서 `$CURRENT_TTY`, `$CMUX_WORKSPACE_ID`를 heredoc AppleScript 문자열에 직접 보간한다. Swift 측(`appleScriptLiteral`)과 달리 이스케이프가 없다. 환경변수 출처상 위험도는 낮지만 방어 일관성이 깨져 있다.
+- **regex allow 규칙의 비anchored 매칭**: [ApprovalPolicyEngine.swift:81](../DevIsland/Approval/ApprovalPolicyEngine.swift#L81)이 `firstMatch`(부분 일치)를 사용하므로 `Read`라는 regex allow 규칙이 `ReadDangerousTool`에도 매치된다. allow 규칙은 전체 일치(`^…$` 암묵 적용)로 좁히는 편이 안전하다.
+- **bash 브리지의 AppleScript 변수 보간**: [devisland-bridge.sh:91,161](../scripts/devisland-bridge.sh#L161) 등에서 `$CURRENT_TTY`, `$CMUX_WORKSPACE_ID`를 heredoc AppleScript 문자열에 직접 보간한다. Swift 측(`appleScriptLiteral`)과 달리 이스케이프가 없다. 환경변수 출처상 위험도는 낮지만 방어 일관성이 깨져 있다.
 - **PTY transcript 평문 저장**: 명령 출력 전체가 `approval-proxy.sqlite3`에 저장된다. 보존기간 프루닝은 있으나, 설정 화면에 데이터 민감성 안내와 즉시 삭제 버튼이 있으면 좋다.
 
 ---
@@ -72,7 +72,7 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 
 ### A1. 정책 평가 SQLite 읽기가 메인 스레드에서 동기 실행
 
-[AppState.swift:1893](DevIsland/Core/AppState.swift#L1893)의 `approvalProxy.evaluate(request)`는 `isTerminalFrontmostAsync` 완료 콜백(메인 큐) 안에서 동기 실행된다. `persistentCandidates`/`sessionDecision`은 SQLite 읽기이며 `busy_timeout=5000`이므로, 쓰기 경합 시 **메인 스레드가 최대 5초 블록**될 수 있다. 시작 시 `restoreOpenSessions`도 메인에서 동기 쿼리다. 이는 자체 문서 `stability-standards.md`("SQLite writes: use the serial approvalPersistenceQueue")의 정신과 어긋난다 — 쓰기는 큐를 타지만 읽기는 안 탄다.
+[AppState.swift:1893](../DevIsland/Core/AppState.swift#L1893)의 `approvalProxy.evaluate(request)`는 `isTerminalFrontmostAsync` 완료 콜백(메인 큐) 안에서 동기 실행된다. `persistentCandidates`/`sessionDecision`은 SQLite 읽기이며 `busy_timeout=5000`이므로, 쓰기 경합 시 **메인 스레드가 최대 5초 블록**될 수 있다. 시작 시 `restoreOpenSessions`도 메인에서 동기 쿼리다. 이는 자체 문서 `stability-standards.md`("SQLite writes: use the serial approvalPersistenceQueue")의 정신과 어긋난다 — 쓰기는 큐를 타지만 읽기는 안 탄다.
 
 **권고**: 정책 평가를 `approvalPersistenceQueue`(또는 별도 읽기 큐)로 옮기고 콜백으로 복귀. WAL이므로 읽기 동시성은 충분하다.
 
@@ -93,11 +93,11 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 
 ### A4. PTY 래퍼의 터미널 처리 한계
 
-[devisland_pty.py](scripts/devisland_pty.py)는 raw mode 설정(`tty.setraw`)과 창 크기 전파(`SIGWINCH`/`TIOCSWINSZ`)가 없어 풀스크린/인터랙티브 CLI에서 입력 echo·레이아웃이 깨질 수 있다. 또한 `select` 타임아웃 0.05초 폴링은 유휴 시에도 CPU를 소모한다(경미).
+[devisland_pty.py](../scripts/devisland_pty.py)는 raw mode 설정(`tty.setraw`)과 창 크기 전파(`SIGWINCH`/`TIOCSWINSZ`)가 없어 풀스크린/인터랙티브 CLI에서 입력 echo·레이아웃이 깨질 수 있다. 또한 `select` 타임아웃 0.05초 폴링은 유휴 시에도 CPU를 소모한다(경미).
 
 ### A5. 큐 정리 시 자동 승인 응답
 
-[AppState.swift:1779-1785](DevIsland/Core/AppState.swift#L1779) `discardInvalidPendingRequests`는 유효하지 않다고 판단한 pending 요청에 `"approved"`를 응답한다. 분류 버그로 승인 이벤트가 잘못 "invalid" 판정되면 **조용히 승인**되는 경로다. `"pass"`(CLI 자체 프롬프트로 위임)가 더 안전한 기본값이다.
+[AppState.swift:1779-1785](../DevIsland/Core/AppState.swift#L1779) `discardInvalidPendingRequests`는 유효하지 않다고 판단한 pending 요청에 `"approved"`를 응답한다. 분류 버그로 승인 이벤트가 잘못 "invalid" 판정되면 **조용히 승인**되는 경로다. `"pass"`(CLI 자체 프롬프트로 위임)가 더 안전한 기본값이다.
 
 ### Q1. 로깅 인프라 부재
 
@@ -105,7 +105,7 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 
 ### Q2. 수제 로컬라이제이션
 
-[Localizable.swift](DevIsland/Utility/Localizable.swift) (560줄)는 en/ko 문자열을 하드코딩한 싱글톤이다. Xcode String Catalog(`.xcstrings`)로 이전하면 언어 추가·번역 검수·미번역 검출이 표준 도구로 해결된다.
+[Localizable.swift](../DevIsland/Utility/Localizable.swift) (560줄)는 en/ko 문자열을 하드코딩한 싱글톤이다. Xcode String Catalog(`.xcstrings`)로 이전하면 언어 추가·번역 검수·미번역 검출이 표준 도구로 해결된다.
 
 ### Q3. 잡동사니
 
