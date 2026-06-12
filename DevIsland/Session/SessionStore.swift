@@ -41,6 +41,22 @@ final class SessionStore: ObservableObject {
 
     static let genericTitles: Set<String> = ["Terminal", "iTerm", "Ghostty", "Warp", ""]
 
+    /// Derives a display title for a restored session from its stored hook payload:
+    /// an explicit non-generic terminal title, else the cwd's last path component,
+    /// else "Session".
+    static func restoredTitle(fromPayload json: [String: Any]) -> String {
+        if let title = json["terminal_title"] as? String, !genericTitles.contains(title) {
+            return title
+        }
+        // 빈 cwd를 URL(fileURLWithPath:)에 넘기면 프로세스의 현재 디렉토리로 해석돼
+        // 엉뚱한 이름이 잡히므로 비어 있지 않을 때만 경로 컴포넌트를 사용한다.
+        if let cwd = json["cwd"] as? String, !cwd.isEmpty {
+            let label = URL(fileURLWithPath: cwd).lastPathComponent
+            return (!label.isEmpty && label != "/") ? label : "Session"
+        }
+        return "Session"
+    }
+
     init(timeoutDuration: Double = 120, lifecycleSessionTimeout: Double = 24 * 60 * 60) {
         self.timeoutDuration = timeoutDuration
         self.lifecycleSessionTimeout = lifecycleSessionTimeout
