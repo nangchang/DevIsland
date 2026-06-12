@@ -735,52 +735,21 @@ class AppState: ObservableObject {
                 guard let self else { return }
                 if !h.isReplayPayload && isFrontmost {
                     print("[DevIsland] [PASS] Terminal is frontmost, passing Claude question for session \(h.sessionId.prefix(8))")
-                    self.respondWithReplay(
-                        "{\"response\": \"pass\"}",
-                        responseHandler: request.responseHandler,
+                    self.passRequestToFocusedTerminal(
+                        h,
+                        request: request,
                         hookEventId: hookEventId,
-                        agentKind: h.agentKind,
-                        sessionId: h.sessionId,
-                        toolName: replayToolName,
-                        workspaceRoot: h.workspaceRoot,
-                        action: .prompt,
-                        source: .automatic,
-                        reason: "terminal focused"
+                        replayToolName: replayToolName,
+                        displayToolName: displayToolName
                     )
-                    if !h.sessionId.isEmpty {
-                        self.sessionStore.updateActiveSession(
-                            sessionId: h.sessionId,
-                            terminalTitle: h.terminalTitle,
-                            agentKind: h.agentKind,
-                            terminalApp: h.terminalApp,
-                            terminalTTY: h.terminalTTY,
-                            terminalWindowId: h.terminalWindowId,
-                            terminalTabIndex: h.terminalTabIndex,
-                            terminalTmuxPane: h.terminalTmuxPane,
-                            terminalTmuxSocket: h.terminalTmuxSocket,
-                            terminalTmuxClient: h.terminalTmuxClient,
-                            toolName: displayToolName,
-                            eventName: h.event,
-                            message: h.displayMsg,
-                            isPending: false,
-                            status: SessionStatus.timeoutBypassed(Date()),
-                            workspaceRoot: h.workspaceRoot
-                        )
-                    }
                     return
                 }
 
-                self.enqueueManualRequest(
-                    request,
-                    terminalTitle: h.terminalTitle,
-                    terminalApp: h.terminalApp,
-                    terminalTTY: h.terminalTTY,
-                    terminalWindowId: h.terminalWindowId,
-                    terminalTabIndex: h.terminalTabIndex,
-                    terminalTmuxPane: h.terminalTmuxPane,
-                    terminalTmuxSocket: h.terminalTmuxSocket,
-                    terminalTmuxClient: h.terminalTmuxClient
-                )
+                // 기존 세션의 lifecycle 추적 여부 보존 — 질문 요청이 추적 상태를 바꾸지 않도록
+                let isLifecycleTracked = self.sessionStore.activeSessions
+                    .first { $0.id == request.sessionId }?.isLifecycleTracked
+                    ?? (request.agentKind != .claudeCode)
+                self.enqueueManualRequest(request, from: h, isLifecycleTracked: isLifecycleTracked)
             }
             return
         }
@@ -825,8 +794,7 @@ class AppState: ObservableObject {
         }
 
         // MARK: Phase 4: Evaluation Hierarchy
-        // 1. Terminal Focus Check: If the user is already in the terminal, we 'pass' to let
-        //    the CLI handle the prompt, avoiding double approval.
+        // 우선순위: 터미널 포커스 pass → 영속 정책 → 휘발성 자동 승인 → 수동 승인 큐잉.
         isTerminalFrontmostAsync(
             appName: h.terminalApp,
             tty: h.terminalTTY,
@@ -841,137 +809,41 @@ class AppState: ObservableObject {
             // 1. 터미널 포커스 최우선 — 사용자가 이미 터미널에 있으면 CLI가 자체 처리하도록 pass
             if !h.isReplayPayload && isFrontmost {
                 print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(h.sessionId.prefix(8))")
-                self.respondWithReplay(
-                    "{\"response\": \"pass\"}",
-                    responseHandler: request.responseHandler,
+                self.passRequestToFocusedTerminal(
+                    h,
+                    request: request,
                     hookEventId: hookEventId,
-                    agentKind: h.agentKind,
-                    sessionId: h.sessionId,
-                    toolName: replayToolName,
-                    workspaceRoot: h.workspaceRoot,
-                    action: .prompt,
-                    source: .automatic,
-                    reason: "terminal focused"
+                    replayToolName: replayToolName,
+                    displayToolName: displayToolName
                 )
-                if !h.sessionId.isEmpty {
-                    self.sessionStore.updateActiveSession(
-                        sessionId: h.sessionId,
-                        terminalTitle: h.terminalTitle,
-                        agentKind: h.agentKind,
-                        terminalApp: h.terminalApp,
-                        terminalTTY: h.terminalTTY,
-                        terminalWindowId: h.terminalWindowId,
-                        terminalTabIndex: h.terminalTabIndex,
-                        terminalTmuxPane: h.terminalTmuxPane,
-                        terminalTmuxSocket: h.terminalTmuxSocket,
-                        terminalTmuxClient: h.terminalTmuxClient,
-                        toolName: displayToolName,
-                        eventName: h.event,
-                        message: h.displayMsg,
-                        isPending: false,
-                        status: SessionStatus.timeoutBypassed(Date()),
-                        workspaceRoot: h.workspaceRoot
-                    )
-                }
                 return
             }
 
             // 2. Persistent Policy Check: Check SQLite for durable rules (Exact, Glob, Regex).
-            let provider = self.providerKind(for: h.agentKind)
             if let policyDecision = self.policyDecision(
-                provider: provider,
+                provider: self.providerKind(for: h.agentKind),
                 hookEventId: hookEventId,
                 sessionId: h.sessionId,
                 toolName: h.toolName,
                 workspaceRoot: h.workspaceRoot,
                 toolInput: h.toolInput
             ) {
-                print("[DevIsland] [POLICY] \(provider.rawValue) \(h.toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
-                request.responseHandler(self.responsePayload(approved: policyDecision.action == .allow))
-                self.sessionStore.updateActiveSession(
-                    sessionId: h.sessionId,
-                    terminalTitle: h.terminalTitle,
-                    agentKind: h.agentKind,
-                    terminalApp: h.terminalApp,
-                    terminalTTY: h.terminalTTY,
-                    terminalWindowId: h.terminalWindowId,
-                    terminalTabIndex: h.terminalTabIndex,
-                    terminalTmuxPane: h.terminalTmuxPane,
-                    terminalTmuxSocket: h.terminalTmuxSocket,
-                    terminalTmuxClient: h.terminalTmuxClient,
-                    toolName: displayToolName,
-                    eventName: h.event,
-                    message: "Policy \(policyDecision.action.rawValue): \(displayToolName)",
-                    isPending: false,
-                    preserveMessage: true,
-                    isLifecycleTracked: true,
-                    status: policyDecision.action == .allow ? .policyApproved(Date()) : .policyDenied(Date()),
-                    workspaceRoot: h.workspaceRoot
-                )
+                self.applyPolicyDecision(policyDecision, to: request, h: h, displayToolName: displayToolName)
                 return
             }
 
             // 3. Volatile/Cache Approval: Check in-memory fast-path and mode-based auto-approvals.
             if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
-                print("[DevIsland] [AUTO-APPROVE] Tool \(h.toolName) is auto-approved for session \(h.sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
-                self.respondWithReplay(
-                    "{\"response\": \"approved\"}",
-                    responseHandler: request.responseHandler,
+                self.autoApproveRequest(
+                    h,
+                    request: request,
                     hookEventId: hookEventId,
-                    agentKind: h.agentKind,
-                    sessionId: h.sessionId,
-                    toolName: replayToolName,
-                    workspaceRoot: h.workspaceRoot,
-                    action: .allow,
-                    source: .automatic,
-                    reason: "auto-approved"
+                    replayToolName: replayToolName,
+                    displayToolName: displayToolName,
+                    isInteractive: isInteractive,
+                    isAutoEditActive: isAutoEditActive,
+                    isSafeAutoApprove: isSafeAutoApprove
                 )
-
-                // Interactive 툴: 이미 포커스 체크 후 여기 도달했으므로 터미널이 비포커스 상태 → 알림 표시
-                let interactiveExpandEnabled = MainActor.assumeIsolated {
-                    SettingsStore.shared.settings.notchAutoExpandEnabled
-                        && SettingsStore.shared.settings.expandOnInteractiveTool
-                }
-                if isInteractive && !h.isReplayPayload && interactiveExpandEnabled {
-                    self.isNotchExpanded = true
-                    self.isExpandingFromRequest = true
-                    self.currentSessionId = h.sessionId
-                    self.currentMessage = L10n.shared.terminalCheckMsg(displayToolName)
-                }
-
-                if h.toolName == "exit_plan_mode",
-                   let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
-                    self.sessionStore.activeSessions[index].isAutoEditActive = true
-                    print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Auto-Edit mode")
-                }
-                if h.toolName == "enter_plan_mode",
-                   let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
-                    self.sessionStore.activeSessions[index].isAutoEditActive = false
-                    print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Plan mode")
-                }
-
-                if !h.sessionId.isEmpty {
-                    self.sessionStore.updateActiveSession(
-                        sessionId: h.sessionId,
-                        terminalTitle: h.terminalTitle,
-                        agentKind: h.agentKind,
-                        terminalApp: h.terminalApp,
-                        terminalTTY: h.terminalTTY,
-                        terminalWindowId: h.terminalWindowId,
-                        terminalTabIndex: h.terminalTabIndex,
-                        terminalTmuxPane: h.terminalTmuxPane,
-                        terminalTmuxSocket: h.terminalTmuxSocket,
-                        terminalTmuxClient: h.terminalTmuxClient,
-                        toolName: displayToolName,
-                        eventName: h.event,
-                        message: isInteractive ? L10n.shared.terminalWaiting : "Auto-approved: \(displayToolName)",
-                        isPending: false,
-                        preserveMessage: true,
-                        isLifecycleTracked: true,
-                        status: .autoApproved(Date()),
-                        workspaceRoot: h.workspaceRoot
-                    )
-                }
                 return
             }
 
@@ -982,53 +854,8 @@ class AppState: ObservableObject {
                 print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Plan mode")
             }
 
-            // 4. Manual Approval Fallback: No rules matched, enqueue for user decision in the Notch.
-            let newItem = PendingItem(
-                id: request.id,
-                toolName: request.toolName,
-                message: request.message,
-                sessionId: request.sessionId,
-                terminalTitle: h.terminalTitle,
-                terminalWindowId: h.terminalWindowId,
-                terminalTabIndex: h.terminalTabIndex,
-                terminalTmuxPane: h.terminalTmuxPane,
-                terminalTmuxSocket: h.terminalTmuxSocket,
-                terminalTmuxClient: h.terminalTmuxClient,
-                receivedAt: request.receivedAt
-            )
-            self.sessionStore.appendPending(request: request, item: newItem)
-
-            if !request.sessionId.isEmpty {
-                self.sessionStore.updateActiveSession(
-                    sessionId: request.sessionId,
-                    terminalTitle: h.terminalTitle,
-                    agentKind: h.agentKind,
-                    terminalApp: h.terminalApp,
-                    terminalTTY: h.terminalTTY,
-                    terminalWindowId: h.terminalWindowId,
-                    terminalTabIndex: h.terminalTabIndex,
-                    terminalTmuxPane: h.terminalTmuxPane,
-                    terminalTmuxSocket: h.terminalTmuxSocket,
-                    terminalTmuxClient: h.terminalTmuxClient,
-                    toolName: request.toolName,
-                    eventName: request.eventName,
-                    message: request.message,
-                    isPending: true,
-                    isLifecycleTracked: h.agentKind != .claudeCode,
-                    workspaceRoot: h.workspaceRoot
-                )
-
-                self.sessionStore.selectedSessionId = request.sessionId
-            }
-
-            if self.currentResponseHandler == nil {
-                self.showNextRequest()
-            } else if self.isShowingLowerPriorityPendingRequest(than: request) {
-                self.preemptCurrentPendingDisplay()
-                self.showNextRequest()
-            } else {
-                self.syncDisplayToSelectedSession()
-            }
+            // 5. Manual Approval Fallback: No rules matched, enqueue for user decision in the Notch.
+            self.enqueueManualRequest(request, from: h, isLifecycleTracked: h.agentKind != .claudeCode)
         }
     }
 
@@ -1059,25 +886,15 @@ class AppState: ObservableObject {
                 }
             } else {
                 DispatchQueue.main.async {
-                    self.sessionStore.updateActiveSession(
-                        sessionId: fullSessionId,
-                        terminalTitle: h.terminalTitle,
-                        agentKind: h.agentKind,
-                        terminalApp: h.terminalApp,
-                        terminalTTY: h.terminalTTY,
-                        terminalWindowId: h.terminalWindowId,
-                        terminalTabIndex: h.terminalTabIndex,
-                        terminalTmuxPane: h.terminalTmuxPane,
-                        terminalTmuxSocket: h.terminalTmuxSocket,
-                        terminalTmuxClient: h.terminalTmuxClient,
+                    self.updateActiveSession(
+                        from: h,
                         toolName: displayToolName,
                         eventName: h.event,
                         message: h.displayMsg,
                         isPending: false,
                         isLifecycleTracked: true,
                         isSubAgentSession: true,
-                        parentSessionId: pid,
-                        workspaceRoot: h.workspaceRoot
+                        parentSessionId: pid
                     )
                 }
             }
@@ -1273,25 +1090,15 @@ class AppState: ObservableObject {
             }
 
             let hasPendingForSession = self.sessionStore.pendingQueue.contains { $0.sessionId == fullSessionId }
-            self.sessionStore.updateActiveSession(
-                sessionId: fullSessionId,
-                terminalTitle: h.terminalTitle,
-                agentKind: h.agentKind,
-                terminalApp: h.terminalApp,
-                terminalTTY: h.terminalTTY,
-                terminalWindowId: h.terminalWindowId,
-                terminalTabIndex: h.terminalTabIndex,
-                terminalTmuxPane: h.terminalTmuxPane,
-                terminalTmuxSocket: h.terminalTmuxSocket,
-                terminalTmuxClient: h.terminalTmuxClient,
+            self.updateActiveSession(
+                from: h,
                 toolName: displayToolName,
                 eventName: h.event,
                 message: sessionMessage,
                 isPending: hasPendingForSession,
                 preserveMessage: normalizedEvent == "posttooluse" || sessionMessage.isEmpty,
                 isLifecycleTracked: isStartEvent || h.agentKind != .claudeCode, // Codex/Gemini는 기본적으로 추적 유지
-                isSubAgentSession: h.isSubAgentSession,
-                workspaceRoot: h.workspaceRoot
+                isSubAgentSession: h.isSubAgentSession
             )
 
             if isStartEvent || (self.sessionStore.selectedSessionId == nil) {
@@ -1383,52 +1190,193 @@ class AppState: ObservableObject {
         )
     }
 
+    // MARK: - Phase 4 handlers: Evaluation Hierarchy
+
+    /// ParsedHookEvent의 세션/터미널 메타데이터를 그대로 전달하는 updateActiveSession 축약.
+    private func updateActiveSession(
+        from h: ParsedHookEvent,
+        toolName: String,
+        eventName: String,
+        message: String,
+        isPending: Bool,
+        preserveMessage: Bool = false,
+        isLifecycleTracked: Bool = false,
+        isSubAgentSession: Bool = false,
+        parentSessionId: String? = nil,
+        status: SessionStatus? = nil
+    ) {
+        sessionStore.updateActiveSession(
+            sessionId: h.sessionId,
+            terminalTitle: h.terminalTitle,
+            agentKind: h.agentKind,
+            terminalApp: h.terminalApp,
+            terminalTTY: h.terminalTTY,
+            terminalWindowId: h.terminalWindowId,
+            terminalTabIndex: h.terminalTabIndex,
+            terminalTmuxPane: h.terminalTmuxPane,
+            terminalTmuxSocket: h.terminalTmuxSocket,
+            terminalTmuxClient: h.terminalTmuxClient,
+            toolName: toolName,
+            eventName: eventName,
+            message: message,
+            isPending: isPending,
+            preserveMessage: preserveMessage,
+            isLifecycleTracked: isLifecycleTracked,
+            isSubAgentSession: isSubAgentSession,
+            parentSessionId: parentSessionId,
+            status: status,
+            workspaceRoot: h.workspaceRoot
+        )
+    }
+
+    /// 4-1. 터미널이 포커스된 상태 — CLI 자체 프롬프트에 위임(pass)하고 세션을
+    /// timeout-bypassed로 표시한다. Claude 질문 경로와 승인 경로가 공유한다.
+    private func passRequestToFocusedTerminal(
+        _ h: ParsedHookEvent,
+        request: PendingRequest,
+        hookEventId: Int64?,
+        replayToolName: String,
+        displayToolName: String
+    ) {
+        respondWithReplay(
+            "{\"response\": \"pass\"}",
+            responseHandler: request.responseHandler,
+            hookEventId: hookEventId,
+            agentKind: h.agentKind,
+            sessionId: h.sessionId,
+            toolName: replayToolName,
+            workspaceRoot: h.workspaceRoot,
+            action: .prompt,
+            source: .automatic,
+            reason: "terminal focused"
+        )
+        guard !h.sessionId.isEmpty else { return }
+        updateActiveSession(
+            from: h,
+            toolName: displayToolName,
+            eventName: h.event,
+            message: h.displayMsg,
+            isPending: false,
+            status: SessionStatus.timeoutBypassed(Date())
+        )
+    }
+
+    /// 4-2. 영속 정책(SQLite 규칙) 매칭 — 정책 결과로 즉시 응답하고 세션 상태를 갱신한다.
+    /// 결정 기록은 policyDecision()이 이미 수행하므로 여기서는 응답만 보낸다.
+    private func applyPolicyDecision(
+        _ policyDecision: ApprovalPolicyDecision,
+        to request: PendingRequest,
+        h: ParsedHookEvent,
+        displayToolName: String
+    ) {
+        let provider = providerKind(for: h.agentKind)
+        print("[DevIsland] [POLICY] \(provider.rawValue) \(h.toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
+        request.responseHandler(responsePayload(approved: policyDecision.action == .allow))
+        updateActiveSession(
+            from: h,
+            toolName: displayToolName,
+            eventName: h.event,
+            message: "Policy \(policyDecision.action.rawValue): \(displayToolName)",
+            isPending: false,
+            preserveMessage: true,
+            isLifecycleTracked: true,
+            status: policyDecision.action == .allow ? .policyApproved(Date()) : .policyDenied(Date())
+        )
+    }
+
+    /// 4-3. 휘발성 자동 승인 — 즉시 승인 응답 후, interactive 툴이면 터미널 복귀 알림을
+    /// 띄우고 plan 모드 전환 툴이면 세션의 Auto-Edit 상태를 갱신한다.
+    private func autoApproveRequest(
+        _ h: ParsedHookEvent,
+        request: PendingRequest,
+        hookEventId: Int64?,
+        replayToolName: String,
+        displayToolName: String,
+        isInteractive: Bool,
+        isAutoEditActive: Bool,
+        isSafeAutoApprove: Bool
+    ) {
+        print("[DevIsland] [AUTO-APPROVE] Tool \(h.toolName) is auto-approved for session \(h.sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
+        respondWithReplay(
+            "{\"response\": \"approved\"}",
+            responseHandler: request.responseHandler,
+            hookEventId: hookEventId,
+            agentKind: h.agentKind,
+            sessionId: h.sessionId,
+            toolName: replayToolName,
+            workspaceRoot: h.workspaceRoot,
+            action: .allow,
+            source: .automatic,
+            reason: "auto-approved"
+        )
+
+        // Interactive 툴: 이미 포커스 체크 후 여기 도달했으므로 터미널이 비포커스 상태 → 알림 표시
+        let interactiveExpandEnabled = MainActor.assumeIsolated {
+            SettingsStore.shared.settings.notchAutoExpandEnabled
+                && SettingsStore.shared.settings.expandOnInteractiveTool
+        }
+        if isInteractive && !h.isReplayPayload && interactiveExpandEnabled {
+            isNotchExpanded = true
+            isExpandingFromRequest = true
+            currentSessionId = h.sessionId
+            currentMessage = L10n.shared.terminalCheckMsg(displayToolName)
+        }
+
+        if h.toolName == "exit_plan_mode",
+           let index = sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
+            sessionStore.activeSessions[index].isAutoEditActive = true
+            print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Auto-Edit mode")
+        }
+        if h.toolName == "enter_plan_mode",
+           let index = sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
+            sessionStore.activeSessions[index].isAutoEditActive = false
+            print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Plan mode")
+        }
+
+        guard !h.sessionId.isEmpty else { return }
+        updateActiveSession(
+            from: h,
+            toolName: displayToolName,
+            eventName: h.event,
+            message: isInteractive ? L10n.shared.terminalWaiting : "Auto-approved: \(displayToolName)",
+            isPending: false,
+            preserveMessage: true,
+            isLifecycleTracked: true,
+            status: .autoApproved(Date())
+        )
+    }
+
+    /// 4-4. 수동 승인 큐잉 — 매칭된 규칙이 없어 사용자 결정을 기다린다.
+    /// isLifecycleTracked는 경로별 의미가 다르므로(승인: 비-Claude는 추적 승격,
+    /// 질문: 기존 추적 상태 보존) 호출부에서 결정해 넘긴다.
     private func enqueueManualRequest(
         _ request: PendingRequest,
-        terminalTitle: String,
-        terminalApp: String,
-        terminalTTY: String,
-        terminalWindowId: String,
-        terminalTabIndex: String,
-        terminalTmuxPane: String,
-        terminalTmuxSocket: String,
-        terminalTmuxClient: String
+        from h: ParsedHookEvent,
+        isLifecycleTracked: Bool
     ) {
         let newItem = PendingItem(
             id: request.id,
             toolName: request.toolName,
             message: request.message,
             sessionId: request.sessionId,
-            terminalTitle: terminalTitle,
-            terminalWindowId: terminalWindowId,
-            terminalTabIndex: terminalTabIndex,
-            terminalTmuxPane: terminalTmuxPane,
-            terminalTmuxSocket: terminalTmuxSocket,
-            terminalTmuxClient: terminalTmuxClient,
+            terminalTitle: h.terminalTitle,
+            terminalWindowId: h.terminalWindowId,
+            terminalTabIndex: h.terminalTabIndex,
+            terminalTmuxPane: h.terminalTmuxPane,
+            terminalTmuxSocket: h.terminalTmuxSocket,
+            terminalTmuxClient: h.terminalTmuxClient,
             receivedAt: request.receivedAt
         )
         sessionStore.appendPending(request: request, item: newItem)
 
         if !request.sessionId.isEmpty {
-            let isLifecycleTracked = sessionStore.activeSessions.first { $0.id == request.sessionId }?.isLifecycleTracked
-                ?? (request.agentKind != .claudeCode)
-            sessionStore.updateActiveSession(
-                sessionId: request.sessionId,
-                terminalTitle: terminalTitle,
-                agentKind: request.agentKind,
-                terminalApp: terminalApp,
-                terminalTTY: terminalTTY,
-                terminalWindowId: terminalWindowId,
-                terminalTabIndex: terminalTabIndex,
-                terminalTmuxPane: terminalTmuxPane,
-                terminalTmuxSocket: terminalTmuxSocket,
-                terminalTmuxClient: terminalTmuxClient,
+            updateActiveSession(
+                from: h,
                 toolName: request.toolName,
                 eventName: request.eventName,
                 message: request.message,
                 isPending: true,
-                isLifecycleTracked: isLifecycleTracked,
-                workspaceRoot: request.workspaceRoot
+                isLifecycleTracked: isLifecycleTracked
             )
 
             sessionStore.selectedSessionId = request.sessionId
