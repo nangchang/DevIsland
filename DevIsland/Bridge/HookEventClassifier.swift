@@ -27,8 +27,8 @@ struct HookEventClassification {
 }
 
 enum HookEventClassifier {
-    private static let stopEvents = ["exit", "shutdown", "sessionend"]
-    private static let notificationEvents = [
+    private static let stopEvents: Set<String> = ["exit", "shutdown", "sessionend"]
+    private static let notificationEvents: Set<String> = [
         "sessionstart", "notification", "posttooluse", "precompact", "subagentstop",
         "startup", "init", "afteragent"
     ]
