@@ -110,8 +110,8 @@ class AppState: ObservableObject {
         }
         set { _previousSessionId = newValue }
     }
-    private var timeoutTimer: Timer?
-    private var notificationTimer: Timer?
+    private let timeoutCountdown = CountdownTimer()
+    private let notificationCountdown = CountdownTimer()
     private var sessionPruningTimer: Timer?
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
     private let ptyCoordinator: PTYCoordinator
@@ -1460,7 +1460,7 @@ class AppState: ObservableObject {
             currentResponseHandler = nil
             isShowingRequest = false
             showingRequestId = nil
-            timeoutTimer?.invalidate()
+            timeoutCountdown.cancel()
             timeoutProgress = 1.0
             currentEventName = ""
             currentToolName = ""
@@ -1537,7 +1537,7 @@ class AppState: ObservableObject {
                     self.claudeQuestionState.reset()
                     self.isShowingRequest = false
                     self.showingRequestId = nil
-                    self.timeoutTimer?.invalidate()
+                    self.timeoutCountdown.cancel()
                     self.timeoutProgress = 1.0
                     self.showNextRequest()
                     return
@@ -1617,7 +1617,7 @@ class AppState: ObservableObject {
         currentResponseHandler = nil
         isShowingRequest = false
         showingRequestId = nil
-        timeoutTimer?.invalidate()
+        timeoutCountdown.cancel()
         timeoutProgress = 1.0
         currentSessionId = ""
         currentToolName = ""
@@ -1635,7 +1635,7 @@ class AppState: ObservableObject {
         claudeQuestionState.reset()
         isShowingRequest = false
         showingRequestId = nil
-        timeoutTimer?.invalidate()
+        timeoutCountdown.cancel()
         timeoutProgress = 1.0
     }
 
@@ -1892,24 +1892,17 @@ class AppState: ObservableObject {
     }
 
     private func startTimeout() {
-        timeoutTimer?.invalidate()
         timeoutProgress = 1.0
-
-        let interval: Double = 0.1
-        var elapsed: Double = 0
-
-        timeoutTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] timer in
-            guard let self = self else { timer.invalidate(); return }
-            elapsed += interval
-            self.timeoutProgress = max(0, 1.0 - (elapsed / self.timeoutDuration))
-
-            if elapsed >= self.timeoutDuration {
-                timer.invalidate()
-                if self.currentResponseHandler != nil {
-                    self.sendDecision(approved: false, reason: "Timeout", status: .timeoutBypassed(Date()), passToTerminal: true)
-                }
+        timeoutCountdown.start(
+            duration: timeoutDuration,
+            onProgress: { [weak self] progress in
+                self?.timeoutProgress = progress
+            },
+            onExpire: { [weak self] in
+                guard let self, self.currentResponseHandler != nil else { return }
+                self.sendDecision(approved: false, reason: "Timeout", status: .timeoutBypassed(Date()), passToTerminal: true)
             }
-        }
+        )
     }
 
     private func startNotificationAutoCollapseTimer(delay: TimeInterval) {
@@ -1917,29 +1910,25 @@ class AppState: ObservableObject {
         notificationAutoCollapseProgress = 1.0
         isNotificationAutoCollapseActive = true
 
-        let interval: Double = 0.1
-        var elapsed: Double = 0
-
-        notificationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] timer in
-            guard let self else { timer.invalidate(); return }
-            elapsed += interval
-            self.notificationAutoCollapseProgress = max(0, 1.0 - (elapsed / delay))
-
-            guard elapsed >= delay else { return }
-            timer.invalidate()
-            self.notificationTimer = nil
-            self.isNotificationAutoCollapseActive = false
-            self.notificationAutoCollapseProgress = 1.0
-            if self.currentResponseHandler == nil && self.isNotchExpanded {
-                self.isNotchExpanded = false
-                self.isExpandingFromRequest = false
+        notificationCountdown.start(
+            duration: delay,
+            onProgress: { [weak self] progress in
+                self?.notificationAutoCollapseProgress = progress
+            },
+            onExpire: { [weak self] in
+                guard let self else { return }
+                self.isNotificationAutoCollapseActive = false
+                self.notificationAutoCollapseProgress = 1.0
+                if self.currentResponseHandler == nil && self.isNotchExpanded {
+                    self.isNotchExpanded = false
+                    self.isExpandingFromRequest = false
+                }
             }
-        }
+        )
     }
 
     private func stopNotificationAutoCollapseTimer() {
-        notificationTimer?.invalidate()
-        notificationTimer = nil
+        notificationCountdown.cancel()
         isNotificationAutoCollapseActive = false
         notificationAutoCollapseProgress = 1.0
     }
@@ -2008,7 +1997,7 @@ class AppState: ObservableObject {
         claudeQuestionState.reset()
         isShowingRequest = false
         showingRequestId = nil
-        timeoutTimer?.invalidate()
+        timeoutCountdown.cancel()
 
         DispatchQueue.main.async {
             self.timeoutProgress = 1.0
@@ -2392,8 +2381,7 @@ class AppState: ObservableObject {
 
     func pauseAutoTimersForUserViewing() {
         if currentResponseHandler != nil {
-            timeoutTimer?.invalidate()
-            timeoutTimer = nil
+            timeoutCountdown.cancel()
             timeoutProgress = 1.0
         }
 
