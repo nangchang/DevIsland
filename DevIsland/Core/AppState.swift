@@ -1131,16 +1131,7 @@ class AppState: ObservableObject {
             MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: fullSessionId) }
 
             if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
-                self.currentResponseHandler = nil
-                self.isShowingRequest = false
-                self.showingRequestId = nil
-                self.timeoutTimer?.invalidate()
-                self.timeoutProgress = 1.0
-                self.currentSessionId = ""
-                self.currentToolName = ""
-                self.currentEventName = ""
-                self.currentMessage = ""
-                self.claudeQuestionState.reset()
+                self.clearCurrentRequestDisplay()
             }
 
             if self.sessionStore.pendingQueue.isEmpty {
@@ -1276,16 +1267,7 @@ class AppState: ObservableObject {
                 }
 
                 if removedSessionIds.contains(self.currentSessionId) || removedCurrentRequest {
-                    self.currentResponseHandler = nil
-                    self.isShowingRequest = false
-                    self.showingRequestId = nil
-                    self.timeoutTimer?.invalidate()
-                    self.timeoutProgress = 1.0
-                    self.currentSessionId = ""
-                    self.currentToolName = ""
-                    self.currentEventName = ""
-                    self.currentMessage = ""
-                    self.claudeQuestionState.reset()
+                    self.clearCurrentRequestDisplay()
                     self.showNextRequest()
                 }
             }
@@ -1508,16 +1490,7 @@ class AppState: ObservableObject {
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
                 self.currentResponseHandler?("{\"response\": \"pass\"}")
-                self.currentResponseHandler = nil
-                self.isShowingRequest = false
-                self.showingRequestId = nil
-                self.timeoutTimer?.invalidate()
-                self.timeoutProgress = 1.0
-                self.currentSessionId = ""
-                self.currentToolName = ""
-                self.currentEventName = ""
-                self.currentMessage = ""
-                self.claudeQuestionState.reset()
+                self.clearCurrentRequestDisplay()
             }
 
             if self.sessionStore.pendingQueue.isEmpty {
@@ -1686,6 +1659,23 @@ class AppState: ObservableObject {
             showingRequestId: showingRequestId,
             queue: sessionStore.pendingQueue
         )
+    }
+
+    /// Clears the notch's currently-displayed approval/question. Called when the
+    /// session owning the on-screen request is torn down (stopped, dismissed, or
+    /// superseded) so no stale request is left showing. Callers handle their own
+    /// pre-clear response (e.g. pass-to-terminal) and post-clear `showNextRequest`.
+    private func clearCurrentRequestDisplay() {
+        currentResponseHandler = nil
+        isShowingRequest = false
+        showingRequestId = nil
+        timeoutTimer?.invalidate()
+        timeoutProgress = 1.0
+        currentSessionId = ""
+        currentToolName = ""
+        currentEventName = ""
+        currentMessage = ""
+        claudeQuestionState.reset()
     }
 
     private func preemptCurrentPendingDisplay() {
