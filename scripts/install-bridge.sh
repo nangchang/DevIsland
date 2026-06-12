@@ -417,11 +417,8 @@ def is_bridge_command(command):
 
 data = {}
 if os.path.exists(path):
-    try:
-        with open(path) as f:
-            data = json.load(f)
-    except Exception:
-        pass
+    with open(path) as f:
+        data = json.load(f)
 
 devisland_config = data.setdefault('devisland', {})
 devisland_config['enabled'] = True

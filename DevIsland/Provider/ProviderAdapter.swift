@@ -76,7 +76,12 @@ struct ProviderAdapter {
         }
 
         let allow = decision == "approved"
-        if provider == .gemini || provider == .antigravity {
+        if provider == .antigravity {
+            guard normalizedEvent == "pretooluse" else { return [:] }
+            return GeminiPromptPolicy.beforeToolOutput(allow: allow, denialMessage: denialMessage)
+        }
+
+        if provider == .gemini {
             return GeminiPromptPolicy.beforeToolOutput(allow: allow, denialMessage: denialMessage)
         }
 

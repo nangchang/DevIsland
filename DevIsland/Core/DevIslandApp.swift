@@ -739,9 +739,12 @@ enum BridgeInstaller {
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         var data: [String: Any] = [:]
-        if fm.fileExists(atPath: url.path),
-           let raw = try? Data(contentsOf: url),
-           let parsed = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] {
+        if fm.fileExists(atPath: url.path) {
+            let raw = try Data(contentsOf: url)
+            guard let parsed = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else {
+                throw NSError(domain: "BridgeInstaller", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBadFile("hooks.json")])
+            }
             data = parsed
         }
 

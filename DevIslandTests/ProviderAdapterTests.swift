@@ -412,4 +412,14 @@ final class ProviderAdapterTests: XCTestCase {
 
         XCTAssertEqual(output, [:])
     }
+
+    func testAntigravityLifecycleApprovalOutputIsEmpty() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "approved",
+            event: "PostToolUse",
+            source: "antigravity"
+        )
+
+        XCTAssertEqual(output, [:])
+    }
 }

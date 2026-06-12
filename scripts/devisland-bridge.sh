@@ -234,13 +234,13 @@ fi
 
 # 만약 터미널 앱 감지에 실패했고 페이로드에 이미 터미널 정보가 있다면 추출하여 사용
 if [ -z "$TERM_APP" ]; then
-  _payload_term_app=$(echo "$PAYLOAD" | grep -o '"terminal_app"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "")
+  _payload_term_app=$(echo "$PAYLOAD" | grep -o '"terminal_app"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
   if [ -n "$_payload_term_app" ]; then
     TERM_APP="$_payload_term_app"
-    TERM_TITLE=$(echo "$PAYLOAD" | grep -o '"terminal_title"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "")
-    CURRENT_TTY=$(echo "$PAYLOAD" | grep -o '"terminal_tty"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "")
-    TERM_WINDOW_ID=$(echo "$PAYLOAD" | grep -o '"terminal_window_id"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "")
-    TERM_TAB_INDEX=$(echo "$PAYLOAD" | grep -o '"terminal_tab_index"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "")
+    TERM_TITLE=$(echo "$PAYLOAD" | grep -o '"terminal_title"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
+    CURRENT_TTY=$(echo "$PAYLOAD" | grep -o '"terminal_tty"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
+    TERM_WINDOW_ID=$(echo "$PAYLOAD" | grep -o '"terminal_window_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
+    TERM_TAB_INDEX=$(echo "$PAYLOAD" | grep -o '"terminal_tab_index"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
   fi
 fi
 
