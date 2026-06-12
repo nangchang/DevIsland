@@ -10,6 +10,8 @@ from devisland_bridge import (
     _normalize_event,
     _PASSIVE_EVENTS_NORMALIZED,
     PASSIVE_EVENTS,
+    enrich_payload,
+    event_name,
     final_output,
 )
 
@@ -98,6 +100,19 @@ class TestFinalOutputNormalized(unittest.TestCase):
         self.assertEqual(out["decision"], "deny")
         self.assertIn("reason", out)
 
+    def test_pretooluse_pass_antigravity_asks_native_permission(self):
+        out = final_output(event="pretooluse", decision="pass", provider_output=None, cli_source="antigravity")
+        self.assertEqual(out, {"decision": "ask"})
+
+    def test_pretooluse_approved_antigravity_allows(self):
+        out = final_output(event="pretooluse", decision="approved", provider_output=None, cli_source="antigravity")
+        self.assertEqual(out, {"decision": "allow"})
+
+    def test_pretooluse_denied_antigravity_denies(self):
+        out = final_output(event="pretooluse", decision="denied", provider_output=None, cli_source="antigravity")
+        self.assertEqual(out["decision"], "deny")
+        self.assertIn("reason", out)
+
     def test_pretooluse_denied_codex(self):
         out = final_output(event="pretooluse", decision="denied", provider_output=None, cli_source="codex")
         self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
@@ -109,6 +124,43 @@ class TestFinalOutputNormalized(unittest.TestCase):
     def test_elicitation_denied_claude(self):
         out = final_output(event="elicitation", decision="denied", provider_output=None, cli_source="claude")
         self.assertEqual(out["hookSpecificOutput"]["action"], "decline")
+
+
+class TestAntigravityPayloadNormalization(unittest.TestCase):
+    def test_pretooluse_payload_is_normalized_for_dev_island(self):
+        payload = {
+            "conversationId": "ec33ebf9-0cba-4100-8142-c61503f6c587",
+            "workspacePaths": ["/workspace/project"],
+            "toolCall": {
+                "name": "run_command",
+                "args": {
+                    "CommandLine": "npm test",
+                    "Cwd": "/workspace/project",
+                },
+            },
+        }
+
+        enriched = enrich_payload(payload, "antigravity", "PreToolUse")
+
+        self.assertEqual(enriched["hook_event_name"], "PreToolUse")
+        self.assertEqual(enriched["session_id"], "ec33ebf9-0cba-4100-8142-c61503f6c587")
+        self.assertEqual(enriched["tool_name"], "run_command")
+        self.assertEqual(enriched["tool_input"]["CommandLine"], "npm test")
+        self.assertEqual(enriched["cwd"], "/workspace/project")
+        self.assertEqual(event_name(enriched), "PreToolUse")
+
+    def test_lifecycle_event_arg_sets_hook_event_name(self):
+        payload = {
+            "conversationId": "ec33ebf9-0cba-4100-8142-c61503f6c587",
+            "initialNumSteps": 10,
+            "workspacePaths": ["/workspace/project"],
+        }
+
+        enriched = enrich_payload(payload, "antigravity", "PreInvocation")
+
+        self.assertEqual(enriched["hook_event_name"], "PreInvocation")
+        self.assertEqual(enriched["session_id"], "ec33ebf9-0cba-4100-8142-c61503f6c587")
+        self.assertEqual(enriched["cwd"], "/workspace/project")
 
 
 class TestHookEventsManifest(unittest.TestCase):
@@ -176,6 +228,8 @@ class TestHookEventsManifest(unittest.TestCase):
             "Elicitation",
             "BeforeTool",
             "AfterAgent",
+            "PreInvocation",
+            "PostInvocation",
         })
         self.assertEqual(PASSIVE_EVENTS, expected)
 

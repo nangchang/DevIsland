@@ -391,4 +391,35 @@ final class ProviderAdapterTests: XCTestCase {
         XCTAssertEqual(hookOutput?["hookEventName"] as? String, "PreToolUse")
         XCTAssertEqual(hookOutput?["permissionDecision"] as? String, "deny")
     }
+
+    func testAntigravityDenyOutput() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "denied",
+            event: "PreToolUse",
+            source: "antigravity"
+        )
+
+        XCTAssertEqual(output?["decision"]?.rawValue as? String, "deny")
+        XCTAssertEqual(output?["reason"]?.rawValue as? String, ProviderAdapter.denialMessage)
+    }
+
+    func testAntigravityPassOutput() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "pass",
+            event: "PreToolUse",
+            source: "antigravity"
+        )
+
+        XCTAssertEqual(output, [:])
+    }
+
+    func testAntigravityLifecycleApprovalOutputIsEmpty() {
+        let output = ProviderAdapter.providerOutput(
+            decision: "approved",
+            event: "PostToolUse",
+            source: "antigravity"
+        )
+
+        XCTAssertEqual(output, [:])
+    }
 }

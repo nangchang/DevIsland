@@ -7,11 +7,12 @@ enum BuddyKind: String, CaseIterable, Identifiable {
     case codex
     case claudeCode
     case island
+    case antigravity
 
     var id: String { rawValue }
 
-    static let defaultRandomCases: [BuddyKind] = [.gemini, .codex, .claudeCode]
-    static let selectableCases: [BuddyKind] = [.gemini, .codex, .claudeCode, .island]
+    static let defaultRandomCases: [BuddyKind] = [.gemini, .codex, .claudeCode, .antigravity]
+    static let selectableCases: [BuddyKind] = [.gemini, .codex, .claudeCode, .antigravity, .island]
 
     init(from text: String) {
         let lower = text.lowercased()
@@ -21,6 +22,8 @@ enum BuddyKind: String, CaseIterable, Identifiable {
             self = .gemini
         } else if lower.contains("codex") || lower.contains("openai") || lower.contains("gpt") {
             self = .codex
+        } else if lower.contains("antigravity") {
+            self = .antigravity
         } else {
             self = .island
         }
@@ -28,19 +31,21 @@ enum BuddyKind: String, CaseIterable, Identifiable {
 
     var accentColor: Color {
         switch self {
-        case .gemini:     return Color(red: 0.34, green: 0.38, blue: 1.0)
-        case .codex:      return Color(red: 0.2, green: 0.6, blue: 0.9)
-        case .claudeCode: return Color(red: 0.82, green: 0.42, blue: 0.30)
-        case .island:     return Color(red: 0.20, green: 0.60, blue: 0.90)
+        case .gemini:      return Color(red: 0.34, green: 0.38, blue: 1.0)
+        case .codex:       return Color(red: 0.2, green: 0.6, blue: 0.9)
+        case .claudeCode:  return Color(red: 0.82, green: 0.42, blue: 0.30)
+        case .island:      return Color(red: 0.20, green: 0.60, blue: 0.90)
+        case .antigravity: return Color(red: 0.05, green: 0.70, blue: 0.60)
         }
     }
 
     var accessibilityName: String {
         switch self {
-        case .gemini:     return "Gemini"
-        case .codex:      return "Codex"
-        case .claudeCode: return "Claude Code"
-        case .island:     return "DevIsland"
+        case .gemini:      return "Gemini"
+        case .codex:       return "Codex"
+        case .claudeCode:  return "Claude Code"
+        case .island:      return "DevIsland"
+        case .antigravity: return "Antigravity"
         }
     }
 
@@ -123,6 +128,10 @@ struct CLIBuddyView: View {
             case .codex:
                 pixelGrid(size: size, cells: terminalBaseCells(kind: .codex))
                 pixelGrid(size: size, cells: codexBodyCells())
+                    .scaleEffect(x: isFlipped ? -1 : 1)
+            case .antigravity:
+                pixelGrid(size: size, cells: terminalBaseCells(kind: .antigravity))
+                pixelGrid(size: size, cells: antigravityBodyCells())
                     .scaleEffect(x: isFlipped ? -1 : 1)
             case .island:
                 pixelGrid(size: size, cells: islandBodyCells())
@@ -223,6 +232,67 @@ struct CLIBuddyView: View {
         ]
 
         return mirroredHorizontally(cells)
+    }
+
+    private func antigravityBodyCells() -> [PixelCell] {
+        let red = Color(red: 0.95, green: 0.28, blue: 0.20)
+        let orange = Color(red: 0.96, green: 0.48, blue: 0.16)
+        let yellow = Color(red: 0.96, green: 0.78, blue: 0.18)
+        let green = Color(red: 0.30, green: 0.72, blue: 0.35)
+        let cyan = Color(red: 0.25, green: 0.74, blue: 0.86)
+        let blue = Color(red: 0.20, green: 0.48, blue: 0.94)
+        let purple = Color(red: 0.42, green: 0.36, blue: 0.95)
+        let pink = Color(red: 0.98, green: 0.62, blue: 0.72)
+        let fur = Color(red: 0.92, green: 0.96, blue: 0.92)
+        let shade = Color(red: 0.64, green: 0.78, blue: 0.78)
+        let ink = Color(red: 0.11, green: 0.10, blue: 0.14)
+
+        var cells: [PixelCell] = []
+
+        // Readable cat silhouette first; the Antigravity mark is a forehead accent.
+        cells += [
+            PixelCell(24, 8, 8, 32, fur),
+            PixelCell(32, 16, 8, 24, fur),
+            PixelCell(40, 24, 8, 16, fur),
+            PixelCell(32, 24, 8, 8, pink),
+
+            PixelCell(96, 8, 8, 32, fur),
+            PixelCell(88, 16, 8, 24, fur),
+            PixelCell(80, 24, 8, 16, fur),
+            PixelCell(88, 24, 8, 8, pink),
+
+            PixelCell(24, 32, 80, 8, fur),
+            PixelCell(16, 40, 96, 16, fur),
+            PixelCell(16, 56, 96, 24, fur),
+            PixelCell(24, 80, 80, 8, fur),
+            PixelCell(32, 88, 64, 8, shade),
+        ]
+
+        cells += [
+            PixelCell(56, 0, 16, 8, red),
+            PixelCell(48, 8, 8, 8, yellow),
+            PixelCell(56, 8, 16, 8, orange),
+            PixelCell(72, 8, 8, 8, purple),
+            PixelCell(40, 16, 8, 8, green),
+            PixelCell(80, 16, 8, 8, blue),
+        ]
+
+        cells += [
+            PixelCell(44, 48, 8, 16, ink),
+            PixelCell(76, 48, 8, 16, ink),
+            PixelCell(60, 64, 8, 8, red),
+            PixelCell(52, 72, 8, 8, ink),
+            PixelCell(68, 72, 8, 8, ink),
+
+            PixelCell(0, 56, 32, 4, cyan),
+            PixelCell(0, 68, 32, 4, blue),
+            PixelCell(96, 56, 32, 4, purple),
+            PixelCell(96, 68, 32, 4, blue),
+            PixelCell(96, 84, 16, 8, purple),
+            PixelCell(104, 76, 8, 8, blue),
+        ]
+
+        return cells
     }
 
     private func claudeBodyCells() -> [PixelCell] {
@@ -431,13 +501,13 @@ PixelCell(64, 80, 8, 4, c0),
     }
 
     private func terminalBaseCells(kind: BuddyKind) -> [PixelCell] {
-        let shell = (kind == .gemini || kind == .codex)
+        let shell = (kind == .gemini || kind == .codex || kind == .antigravity)
             ? Color(red: 0.08, green: 0.09, blue: 0.12)
             : Color(red: 0.09, green: 0.08, blue: 0.07)
-        let rim = (kind == .gemini || kind == .codex)
+        let rim = (kind == .gemini || kind == .codex || kind == .antigravity)
             ? Color(red: 0.24, green: 0.27, blue: 0.34)
             : Color(red: 0.32, green: 0.24, blue: 0.20)
-        let text = (kind == .gemini || kind == .codex)
+        let text = (kind == .gemini || kind == .codex || kind == .antigravity)
             ? Color.white.opacity(0.45)
             : Color.white.opacity(0.42)
 

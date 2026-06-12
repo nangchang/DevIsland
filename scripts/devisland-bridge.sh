@@ -5,9 +5,12 @@
 # 인자 파싱 (CLI 소스 명시적 지정 지원)
 # -------------------------------------------------------------------
 CLI_SOURCE_ARG=""
+HOOK_EVENT_ARG=""
+
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --source) CLI_SOURCE_ARG="$2"; shift ;;
+        --event) HOOK_EVENT_ARG="$2"; shift ;;
         *) ;;
     esac
     shift
@@ -229,8 +232,31 @@ if [ -z "$TERM_APP" ]; then
   fi
 fi
 
+# 만약 터미널 앱 감지에 실패했고 페이로드에 이미 터미널 정보가 있다면 추출하여 사용
+if [ -z "$TERM_APP" ]; then
+  _payload_term_app=$(echo "$PAYLOAD" | grep -o '"terminal_app"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
+  if [ -n "$_payload_term_app" ]; then
+    TERM_APP="$_payload_term_app"
+    TERM_TITLE=$(echo "$PAYLOAD" | grep -o '"terminal_title"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
+    CURRENT_TTY=$(echo "$PAYLOAD" | grep -o '"terminal_tty"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
+    TERM_WINDOW_ID=$(echo "$PAYLOAD" | grep -o '"terminal_window_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
+    TERM_TAB_INDEX=$(echo "$PAYLOAD" | grep -o '"terminal_tab_index"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
+  fi
+fi
+
 if [ -z "$TERM_APP" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ignoring non-terminal hook source: TERM_PROGRAM=${TERM_PROGRAM:-} TERM_TTY=${CURRENT_TTY:-}" >> /tmp/DevIsland.bridge.log
+  if [ "$CLI_SOURCE_ARG" = "antigravity" ] && [ "$HOOK_EVENT_ARG" = "PreToolUse" ]; then
+    echo '{"decision": "ask"}'
+  elif [ "$CLI_SOURCE_ARG" = "gemini" ]; then
+    echo '{}'
+  elif [ "$CLI_SOURCE_ARG" = "claude" ]; then
+    echo '{"continue": true, "suppressOutput": true}'
+  elif [ "$CLI_SOURCE_ARG" = "codex" ]; then
+    echo '{"continue": true}'
+  else
+    echo '{}'
+  fi
   exit 0
 fi
 
@@ -262,6 +288,6 @@ printf "%s" "$PAYLOAD" \
     TERM_TMUX_PANE="$TERM_TMUX_PANE" \
     TERM_TMUX_SOCKET="$TERM_TMUX_SOCKET" \
     TERM_TMUX_CLIENT="$TERM_TMUX_CLIENT" \
-    python3 "$PY_BRIDGE" --source "$CLI_SOURCE_ARG"
+    python3 "$PY_BRIDGE" --source "$CLI_SOURCE_ARG" --event "$HOOK_EVENT_ARG"
 
 exit 0

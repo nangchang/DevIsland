@@ -48,6 +48,7 @@ final class SessionHistoryViewModel: ObservableObject {
         case .claude: return "\(cd)claude --resume \(record.sessionId)"
         case .codex:  return "\(cd)codex --resume \(record.sessionId)"
         case .gemini: return "\(cd)gemini"
+        case .antigravity: return "\(cd)agy"
         case .any:    return cd.isEmpty ? "" : String(cd.dropLast(4))
         }
     }
@@ -260,6 +261,7 @@ struct SessionHistoryWindowView: View {
         case .claude: return "c.circle.fill"
         case .codex:  return "o.circle.fill"
         case .gemini: return "g.circle.fill"
+        case .antigravity: return "a.circle.fill"
         case .any:    return "circle.fill"
         }
     }
@@ -269,6 +271,7 @@ struct SessionHistoryWindowView: View {
         case .claude: return Color(red: 0.8, green: 0.5, blue: 0.2)
         case .codex:  return Color(red: 0.2, green: 0.7, blue: 0.4)
         case .gemini: return Color(red: 0.2, green: 0.5, blue: 0.9)
+        case .antigravity: return Color(red: 0.05, green: 0.70, blue: 0.60)
         case .any:    return .secondary
         }
     }

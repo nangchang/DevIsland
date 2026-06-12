@@ -38,21 +38,24 @@ fi
 INSTALL_CLAUDE=false
 INSTALL_CODEX=false
 INSTALL_GEMINI=false
+INSTALL_ANTIGRAVITY=false
 
 for arg in "$@"; do
     case "$arg" in
-        --claude) INSTALL_CLAUDE=true ;;
-        --codex)  INSTALL_CODEX=true  ;;
-        --gemini) INSTALL_GEMINI=true ;;
-        --all)    INSTALL_CLAUDE=true; INSTALL_CODEX=true; INSTALL_GEMINI=true ;;
+        --claude)      INSTALL_CLAUDE=true ;;
+        --codex)       INSTALL_CODEX=true  ;;
+        --gemini)      INSTALL_GEMINI=true ;;
+        --antigravity) INSTALL_ANTIGRAVITY=true ;;
+        --all)         INSTALL_CLAUDE=true; INSTALL_CODEX=true; INSTALL_GEMINI=true; INSTALL_ANTIGRAVITY=true ;;
     esac
 done
 
 # 아무 플래그도 없으면 전부 설치
-if ! $INSTALL_CLAUDE && ! $INSTALL_CODEX && ! $INSTALL_GEMINI; then
+if ! $INSTALL_CLAUDE && ! $INSTALL_CODEX && ! $INSTALL_GEMINI && ! $INSTALL_ANTIGRAVITY; then
     INSTALL_CLAUDE=true
     INSTALL_CODEX=true
     INSTALL_GEMINI=true
+    INSTALL_ANTIGRAVITY=true
 fi
 
 echo "DevIsland 브리지 스크립트 설치 중..."
@@ -386,10 +389,107 @@ EOF
     echo "✓ Gemini CLI 훅 등록 완료: $GEMINI_SETTINGS"
 fi
 
+# -------------------------------------------------------------------
+# Antigravity CLI 설치  (~/.gemini/config/hooks.json)
+# -------------------------------------------------------------------
+if $INSTALL_ANTIGRAVITY; then
+    ANTIGRAVITY_DIR="$HOME/.gemini/config"
+    ANTIGRAVITY_HOOKS="$ANTIGRAVITY_DIR/hooks.json"
+    LEGACY_ANTIGRAVITY_DIR="$HOME/.gemini/antigravity-cli"
+    LEGACY_ANTIGRAVITY_HOOKS="$LEGACY_ANTIGRAVITY_DIR/hooks.json"
+    mkdir -p "$ANTIGRAVITY_DIR"
+
+    python3 - "$ANTIGRAVITY_HOOKS" "$BRIDGE_DEST" "$LEGACY_ANTIGRAVITY_HOOKS" "$LEGACY_ANTIGRAVITY_DIR" << 'EOF'
+import json, sys, os
+
+path, bridge_path, legacy_path, legacy_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+same_hooks_file = (
+    os.path.exists(path)
+    and os.path.exists(legacy_path)
+    and os.path.samefile(path, legacy_path)
+)
+
+def bridge_command(event):
+    return f'"{bridge_path}" --source antigravity --event {event}'
+
+def is_bridge_command(command):
+    return "devisland-bridge.sh" in command or "devisland-bridge-antigravity.sh" in command
+
+data = {}
+if os.path.exists(path):
+    with open(path) as f:
+        data = json.load(f)
+
+devisland_config = data.setdefault('devisland', {})
+devisland_config['enabled'] = True
+
+events_matcher_based = ["PreToolUse", "PostToolUse"]
+events_direct = ["PreInvocation", "PostInvocation", "Stop"]
+
+for event in events_matcher_based:
+    event_configs = devisland_config.get(event, [])
+    if not isinstance(event_configs, list):
+        event_configs = []
+
+    h_cmd = {"type": "command", "command": bridge_command(event)}
+    if event == "PreToolUse":
+        h_cmd["timeout"] = 86400
+
+    found = False
+    for config in event_configs:
+        if config.get("matcher") == "*":
+            sub_hooks = config.get("hooks", [])
+            sub_hooks = [h for h in sub_hooks if not is_bridge_command(h.get("command", ""))]
+            sub_hooks.append(h_cmd)
+            config["hooks"] = sub_hooks
+            found = True
+            break
+
+    if not found:
+        event_configs.append({
+            "matcher": "*",
+            "hooks": [h_cmd]
+        })
+    devisland_config[event] = event_configs
+
+for event in events_direct:
+    event_configs = devisland_config.get(event, [])
+    if not isinstance(event_configs, list):
+        event_configs = []
+
+    event_configs = [h for h in event_configs if not is_bridge_command(h.get("command", ""))]
+    h_cmd = {"type": "command", "command": bridge_command(event)}
+    event_configs.append(h_cmd)
+    devisland_config[event] = event_configs
+
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+
+if os.path.exists(legacy_path) and not same_hooks_file:
+    try:
+        with open(legacy_path) as f:
+            legacy_data = json.load(f)
+        legacy_data.pop("devisland", None)
+        with open(legacy_path, "w") as f:
+            json.dump(legacy_data, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+for name in ["devisland-bridge-antigravity.sh", "devisland_bridge.py", "hook_events.json"]:
+    try:
+        os.remove(os.path.join(legacy_dir, name))
+    except FileNotFoundError:
+        pass
+EOF
+
+    echo "✓ Antigravity CLI 훅 등록 완료: $ANTIGRAVITY_HOOKS"
+fi
+
 echo ""
 echo "설치 완료!"
 if $INSTALL_CLAUDE; then echo "  • Claude Code: ~/.claude/settings.json"; fi
 if $INSTALL_CODEX;  then echo "  • Codex CLI:   ~/.codex/hooks.json 및 config.toml"; fi
 if $INSTALL_GEMINI; then echo "  • Gemini CLI:  ~/.gemini/settings.json"; fi
+if $INSTALL_ANTIGRAVITY; then echo "  • Antigravity CLI: ~/.gemini/config/hooks.json"; fi
 echo ""
 echo "각 CLI 세션을 재시작해주세요."

@@ -17,6 +17,8 @@ enum CESPEventMapper {
             return geminiCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
         case .codex:
             return codexCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
+        case .antigravity:
+            return antigravityCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
         default:
             return commonCategory(normalizedEvent: normalizedEvent, message: message, payload: payload)
         }
@@ -90,6 +92,27 @@ enum CESPEventMapper {
                 return .resourceLimit
             }
             return isFailurePayload(payload, message: message) ? .taskError : nil
+        default:
+            return isFailurePayload(payload, message: message) ? .taskError : nil
+        }
+    }
+
+    private static func antigravityCategory(
+        normalizedEvent: String,
+        message: String,
+        payload: [String: Any]?
+    ) -> CESPCategory? {
+        switch normalizedEvent {
+        case "preinvocation":
+            return nil
+        case "postinvocation":
+            return nil
+        case "pretooluse":
+            return .taskAcknowledge
+        case "posttooluse":
+            return nil
+        case "stop":
+            return .taskComplete
         default:
             return isFailurePayload(payload, message: message) ? .taskError : nil
         }

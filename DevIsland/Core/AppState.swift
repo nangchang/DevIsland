@@ -812,15 +812,15 @@ class AppState: ObservableObject {
         // 사용자가 메뉴에서 설정한 "Safe 등급 툴 자동 승인" 옵션 적용
         let isSafeAutoApprove = autoApproveSafeTools && (ToolKnowledge.risk(for: h.toolName) == .safe)
 
-        // [핵심] 제미나이 일반 모드 에뮬레이션 로직
-        // 제미나이 CLI가 --auto-approve나 --yolo로 실행되어 터미널 프롬프트가 뜨지 않는 상황일 때,
+        // [핵심] Gemini 호환 일반 모드 에뮬레이션 로직
+        // Gemini/Antigravity가 --auto-approve나 --yolo로 실행되어 터미널 프롬프트가 뜨지 않는 상황일 때,
         // DevIsland가 'Interactive 모드'처럼 위험한 툴을 선별해서 승인 창을 띄웁니다.
-        if geminiState.emulateInteractiveMode && h.agentKind == .gemini {
+        if geminiState.emulateInteractiveMode && (h.agentKind == .gemini || h.agentKind == .antigravity) {
             let isExplicitlyApproved = globalAutoApproveTypes.contains(h.toolName) || isAutoApprovedSession
             if GeminiPromptPolicy.emulationShouldForceApproval(toolName: h.toolName, isExplicitlyApproved: isExplicitlyApproved) {
                 isAutoApprovedGlobal = false
                 isAutoEditActive = false
-                print("[DevIsland] [EMULATION] Gemini interactive emulation forced for tool: \(h.toolName)")
+                print("[DevIsland] [EMULATION] \(h.agentKind.accessibilityName) interactive emulation forced for tool: \(h.toolName)")
             }
         }
 
@@ -1814,6 +1814,8 @@ class AppState: ObservableObject {
             return .codex
         case .gemini:
             return .gemini
+        case .antigravity:
+            return .antigravity
         case .island:
             return .any
         }

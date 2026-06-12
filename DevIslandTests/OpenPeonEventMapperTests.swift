@@ -13,12 +13,14 @@ final class OpenPeonEventMapperTests: XCTestCase {
         XCTAssertEqual(map("PreToolUse", for: .codex), .taskAcknowledge)
         XCTAssertEqual(map("PreToolUse", for: .claudeCode), .taskAcknowledge)
         XCTAssertEqual(map("BeforeTool", for: .gemini), .taskAcknowledge)
+        XCTAssertEqual(map("PreToolUse", for: .antigravity), .taskAcknowledge)
     }
 
     func testCompletionEventsMapToTaskComplete() {
         XCTAssertEqual(map("Stop", for: .gemini), .taskComplete)
         XCTAssertEqual(map("Stop", for: .claudeCode), .taskComplete)
         XCTAssertEqual(map("Stop", for: .codex), .taskComplete)
+        XCTAssertEqual(map("Stop", for: .antigravity), .taskComplete)
         XCTAssertNil(map("PostToolUse", for: .codex))
         XCTAssertNil(map("PostToolUse", for: .claudeCode))
     }

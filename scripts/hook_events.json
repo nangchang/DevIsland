@@ -19,5 +19,9 @@
     "lifecycle": ["SessionStart", "PreToolUse", "PostToolUse", "Stop"],
     "retired": ["SessionEnd"]
   },
+  "antigravity": {
+    "active": ["PreToolUse"],
+    "lifecycle": ["PreInvocation", "PostInvocation", "PostToolUse", "Stop"]
+  },
   "_bridge_extras": ["BeforeTool", "AfterAgent"]
 }

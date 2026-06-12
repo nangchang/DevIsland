@@ -69,13 +69,18 @@ struct ProviderAdapter {
                     "suppressOutput": .bool(true)
                 ]
             }
-            // For Gemini, returning [:] (which formats as {} in bridge) means
+            // For Gemini-compatible providers, returning [:] (which formats as {} in bridge) means
             // the hook does not veto (deny) the action. The Gemini CLI will then
             // follow its own configured approval behavior (interactive prompt or --auto-approve).
             return [:]
         }
 
         let allow = decision == "approved"
+        if provider == .antigravity {
+            guard normalizedEvent == "pretooluse" else { return [:] }
+            return GeminiPromptPolicy.beforeToolOutput(allow: allow, denialMessage: denialMessage)
+        }
+
         if provider == .gemini {
             return GeminiPromptPolicy.beforeToolOutput(allow: allow, denialMessage: denialMessage)
         }

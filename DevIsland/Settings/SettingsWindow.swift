@@ -669,7 +669,7 @@ private struct ProviderSettingsPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Gemini") {
+            Section("Gemini / Antigravity") {
                 Toggle(isOn: $geminiState.emulateInteractiveMode) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(l10n.lblGeminiEmulate)
