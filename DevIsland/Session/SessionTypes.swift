@@ -88,8 +88,11 @@ extension ActiveSession {
     }
 
     private static func shellCdPrefix(_ path: String) -> String {
-        let escaped = path.replacingOccurrences(of: "\\", with: "\\\\")
-                          .replacingOccurrences(of: "\"", with: "\\\"")
-        return "cd \"\(escaped)\" && "
+        // POSIX single-quote escaping: wrap in single quotes and rewrite any embedded single
+        // quote as '\''. Inside single quotes every character is literal, so command
+        // substitution (`$(...)`, backticks) and variable expansion can't execute when the
+        // copied command is pasted into a shell. Double quotes would still evaluate $/`/$().
+        let escaped = path.replacingOccurrences(of: "'", with: "'\\''")
+        return "cd '\(escaped)' && "
     }
 }

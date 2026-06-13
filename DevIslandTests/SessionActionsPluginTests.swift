@@ -280,7 +280,7 @@ final class SessionActionsPluginTests: XCTestCase {
 
     func testResumeCommandClaudeCodeWithWorkspace() {
         let session = makeActiveSession(id: "abc123", agentKind: .claudeCode, workspaceRoot: "/Users/me/proj")
-        XCTAssertEqual(session.resumeCommand, "cd \"/Users/me/proj\" && claude --resume abc123")
+        XCTAssertEqual(session.resumeCommand, "cd '/Users/me/proj' && claude --resume abc123")
     }
 
     func testResumeCommandCodexWithoutWorkspace() {
@@ -290,17 +290,24 @@ final class SessionActionsPluginTests: XCTestCase {
 
     func testResumeCommandGeminiIgnoresSessionID() {
         let session = makeActiveSession(id: "abc123", agentKind: .gemini, workspaceRoot: "/tmp/x")
-        XCTAssertEqual(session.resumeCommand, "cd \"/tmp/x\" && gemini")
+        XCTAssertEqual(session.resumeCommand, "cd '/tmp/x' && gemini")
     }
 
     func testResumeCommandIslandIsCdOnlyOrEmpty() {
-        XCTAssertEqual(makeActiveSession(agentKind: .island, workspaceRoot: "/tmp/x").resumeCommand, "cd \"/tmp/x\"")
+        XCTAssertEqual(makeActiveSession(agentKind: .island, workspaceRoot: "/tmp/x").resumeCommand, "cd '/tmp/x'")
         XCTAssertEqual(makeActiveSession(agentKind: .island, workspaceRoot: nil).resumeCommand, "")
     }
 
-    func testResumeCommandEscapesQuotesAndBackslashesInPath() {
-        let session = makeActiveSession(agentKind: .codex, workspaceRoot: "/tmp/a\"b\\c")
-        XCTAssertEqual(session.resumeCommand, "cd \"/tmp/a\\\"b\\\\c\" && codex --resume s1")
+    func testResumeCommandEscapesSingleQuotesInPath() {
+        let session = makeActiveSession(agentKind: .codex, workspaceRoot: "/tmp/a'b")
+        XCTAssertEqual(session.resumeCommand, "cd '/tmp/a'\\''b' && codex --resume s1")
+    }
+
+    /// Command-injection guard: shell metacharacters in the path must survive as literals
+    /// inside the single quotes, never as command substitution or variable expansion.
+    func testResumeCommandPreservesShellMetacharactersLiterally() {
+        let session = makeActiveSession(agentKind: .codex, workspaceRoot: "/tmp/$(whoami)`id`$HOME")
+        XCTAssertEqual(session.resumeCommand, "cd '/tmp/$(whoami)`id`$HOME' && codex --resume s1")
     }
 }
 
