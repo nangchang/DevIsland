@@ -1977,6 +1977,7 @@ class AppState: ObservableObject {
         }
         let data = try? JSONSerialization.data(withJSONObject: responsePayload)
         let payload = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"response\":\"\(response)\"}"
+        let hadResponseHandler = currentResponseHandler != nil
         print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
         currentResponseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
@@ -1990,6 +1991,20 @@ class AppState: ObservableObject {
             source: reason == nil ? .user : .automatic,
             reason: reason
         )
+        // Observation-only `approval.decided`, emitted after the response is already sent
+        // so plugin work cannot change or delay it. Pass-through outcomes (timeout, dismiss,
+        // terminal-focus) are deferrals, not approve/deny decisions, so they are excluded.
+        if hadResponseHandler, !passToTerminal, !currentSessionId.isEmpty {
+            let approvalEvent = pluginEventFactory.makeApprovalDecidedEvent(
+                sessionID: currentSessionId,
+                approved: approved,
+                toolName: currentRawToolName.isEmpty ? currentToolName : currentRawToolName,
+                scope: approvalScope?.rawValue ?? RuleScope.once.rawValue
+            )
+            MainActor.assumeIsolated {
+                pluginHost.enqueue(approvalEvent)
+            }
+        }
         persistApprovalScope(approved: approved, approvalScope: approvalScope)
         let completedRequestId = showingRequestId
         currentResponseHandler = nil

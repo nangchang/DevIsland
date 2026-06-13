@@ -56,12 +56,13 @@
   - Migration M1. OpenPeonSoundPlugin — 완료 (`feat: Migrate OpenPeon to plugin-based architecture`)
   - Migration M2. CaffeinePlugin — 완료 (`feat: migrate Caffeine to plugin-based architecture`)
   - Migration M3. SessionStatsPlugin — 완료 (단일 `system` 플러그인이 session/hook 관찰 통계를 모두 담당. 별도 ProviderStatsPlugin은 두지 않음)
+  - v1.1 a. `approval.decided` 관찰 이벤트 — 완료. `AppState.sendDecision`이 provider response 전송 직후(`recordReplayDecision` 이후) sanitized `PluginApprovalSummary`만 best-effort 발행(`pass-through`/timeout/dismiss/terminal-focus 제외). `SessionStatsPlugin`이 `readHookSummaries` 권한으로 수신해 manual approve/deny 누계를 `menubar.menu`에 추가. 정책/자동승인 결정은 v1에서 집계 대상 아님(문서 §6 emission 표가 `sendDecision`만 지정).
 - 마지막 검증:
-  - 플러그인 관련 테스트 스위트 통과 (2026-06-13, M3 기준)
+  - 플러그인 관련 테스트 스위트 통과 (2026-06-13, v1.1 approval.decided 기준 — `SessionStatsPluginTests`/`PluginEventFactoryTests` 28 테스트 0 실패, 워크트리 빌드 성공)
 - 다음 단계:
-  - Migration PR M4 (Session accessory plugins)는 v1.1 session surface(`notch.session.row`, `session.context-menu`, `session.message`) 선행 필요
+  - v1.1 Session Surfaces 잔여 작업: selected/current 세션 신호를 `PluginUIContext`에 plumb(또는 selection-change 이벤트), Host Command Catalog 골격(`session.dismiss` 선행), 그 뒤 `notch.session.row`·`session.context-menu`·`session.message` slot 개방
+  - Migration PR M4 (Session accessory plugins)는 위 session surface 선행 필요
   - Migration PR M5 (Update status contribution)는 낮은 우선순위 — v2 network/runtime 설계 후로 보류 가능
-  - 따라서 platform 확장(v1.1 Session Surfaces)이 다음 자연스러운 단계
 
 
 ## 5. PR 분할
@@ -666,7 +667,7 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 
 ### v1.1 Session Surfaces
 
-- `approval.decided` 관찰 이벤트 — provider response 전송 이후 통계용으로만 발행
+- ✅ `approval.decided` 관찰 이벤트 — provider response 전송 이후 통계용으로만 발행 (완료, 위 "현재 진행 현황" 참고)
 - `notch.session.row` — 세션 행 badge, 짧은 metric, status accessory
 - `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending이고 missed/unread가 아닌 세션에만 허용
 - `session.message` — 세션 메시지 창 header/toolbar accessory
