@@ -306,7 +306,7 @@ struct SessionMessageView: View {
             Spacer()
 
             if !messageContributions.isEmpty {
-                PluginSlotView(contributions: messageContributions)
+                PluginSlotView(contributions: messageContributions, axis: .horizontal)
             }
 
             Button {

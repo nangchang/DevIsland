@@ -495,7 +495,7 @@ struct SessionRowView: View {
             .buttonStyle(.plain)
 
             if !rowContributions.isEmpty {
-                PluginSlotView(contributions: rowContributions)
+                PluginSlotView(contributions: rowContributions, axis: .horizontal)
             }
 
             Button(action: { AppState.shared.focusTerminal(for: session.id) }) {
