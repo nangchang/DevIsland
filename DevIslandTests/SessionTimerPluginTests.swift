@@ -272,6 +272,24 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(contribution?.components.first?.value, "none")
     }
 
+    /// The selected session id is session data, so a plugin without `readSessionEvents`
+    /// must not receive it — even on a non-session event it is allowed to handle.
+    func testSelectedSessionGatedByReadSessionEventsPermission() async {
+        let host = PluginHost()
+        let echo = SelectionEchoPlugin(permissions: [.showNotchCard])  // no readSessionEvents
+        host.register([echo])
+        host.selectedSessionProvider = { "selected-id" }
+
+        host.enqueue(PluginEvent(id: UUID(), kind: .appStarted, timestamp: Date()))
+        await host.waitUntilIdle()
+
+        let contribution = host.contributions[.notchExpandedActivity]?.first
+        XCTAssertEqual(
+            contribution?.components.first?.value, "none",
+            "a plugin without readSessionEvents must not learn the selected session id"
+        )
+    }
+
     // MARK: - Permission gating relied on by SessionTimer
 
     func testSessionEventRequiresReadSessionEventsPermission() async {
@@ -372,16 +390,25 @@ private final class GatingStubPlugin: DevIslandPlugin, @unchecked Sendable {
 /// Echoes the `selectedSessionID` it receives in `PluginUIContext` into a global-slot
 /// contribution, so a host test can assert the selection signal reached the runner.
 private final class SelectionEchoPlugin: DevIslandPlugin, @unchecked Sendable {
-    let manifest = PluginManifest(
-        id: "com.devisland.test.selection-echo",
-        name: "selection echo",
-        version: "1.0.0",
-        apiVersion: 1,
-        kind: .system,
-        permissions: [.readSessionEvents, .showNotchCard],
-        surfaces: [.notchExpandedActivity],
-        activationEvents: [PluginEventKind.sessionStarted.rawValue]
-    )
+    let manifest: PluginManifest
+
+    init(permissions: Set<PluginPermission> = [.readSessionEvents, .showNotchCard]) {
+        manifest = PluginManifest(
+            id: "com.devisland.test.selection-echo",
+            name: "selection echo",
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .system,
+            permissions: permissions,
+            surfaces: [.notchExpandedActivity],
+            // app.started is a non-session event a plugin receives without readSessionEvents,
+            // so it exercises the selected-session permission gate.
+            activationEvents: [
+                PluginEventKind.sessionStarted.rawValue,
+                PluginEventKind.appStarted.rawValue
+            ]
+        )
+    }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] { [] }
     func needsTick(surfaceState: PluginSurfaceState) -> Bool { false }
