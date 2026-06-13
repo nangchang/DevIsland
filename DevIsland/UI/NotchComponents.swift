@@ -554,13 +554,9 @@ struct SessionRowView: View {
 
             openInTerminalMenu
 
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(resumeCommand, forType: .string)
-            } label: {
-                Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
-            }
-
+            // "Copy Resume Command" is contributed by SessionActionsPlugin via the
+            // session.copyResumeCommand host command (rendered below), so the core item was
+            // removed to avoid a duplicate entry. Disabling the plugin removes this action.
             PluginSessionMenuItemsView(contributions: contextMenuContributions)
         }
     }
