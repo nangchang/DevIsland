@@ -17,8 +17,23 @@ struct PluginUIContext: Equatable {
     let session: PluginSessionSnapshot?
     /// The session the user is currently viewing (selected/current), if any. Lets global
     /// slots render for the user's selection instead of a recency proxy. `nil` when no
-    /// session is selected or the host provides no selection signal (e.g. in tests).
-    var selectedSessionID: String? = nil
+    /// session is selected, the host provides no selection signal (e.g. in tests), or the
+    /// plugin lacks `readSessionEvents` (gated in `PluginEventProcessor`).
+    let selectedSessionID: String?
+
+    /// Explicit init keeps `selectedSessionID` immutable (`let`) while defaulting it, so a
+    /// `let` with an inline default doesn't drop it from the memberwise initializer.
+    init(
+        slot: PluginUISlot,
+        timestamp: Date,
+        session: PluginSessionSnapshot?,
+        selectedSessionID: String? = nil
+    ) {
+        self.slot = slot
+        self.timestamp = timestamp
+        self.session = session
+        self.selectedSessionID = selectedSessionID
+    }
 }
 
 struct PluginSurfaceState: Codable, Equatable {
