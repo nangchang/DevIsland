@@ -1,12 +1,13 @@
 import Foundation
 
 /// First core-aware built-in plugin: shows the elapsed time of the currently
-/// active session in the expanded notch activity slot.
+/// active session in the expanded notch activity slot, plus a per-session elapsed
+/// badge on each session row (`notch.session.row`, opened in v1.1).
 ///
 /// Observation-only — it never mutates core state and returns no effects. It
-/// tracks active sessions from `session.*` events and refreshes the elapsed
-/// display on `plugin.tick`. The "current" session is the most recently active
-/// one, since plugin events carry no explicit selection signal.
+/// tracks active sessions from `session.*` events and refreshes the global elapsed
+/// display on `plugin.tick`. The "current" session for the global card is the most
+/// recently active one, since plugin events carry no explicit selection signal.
 ///
 /// `@unchecked Sendable`: mutable state (`sessions`) is only ever touched inside
 /// the `PluginRunner` actor, which serializes every call (architecture doc §6.4).
@@ -17,8 +18,8 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
         version: "1.0.0",
         apiVersion: 1,
         kind: .system,
-        permissions: [.readSessionEvents, .showNotchCard],
-        surfaces: [.notchExpandedActivity],
+        permissions: [.readSessionEvents, .showNotchCard, .showSessionSurface],
+        surfaces: [.notchExpandedActivity, .notchSessionRow],
         activationEvents: [
             PluginEventKind.sessionStarted.rawValue,
             PluginEventKind.sessionUpdated.rawValue,
@@ -59,26 +60,60 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
         for slot: PluginUISlot,
         context: PluginUIContext
     ) throws -> PluginUIContribution? {
-        guard slot == .notchExpandedActivity, let current = currentSession else { return nil }
+        switch slot {
+        case .notchExpandedActivity:
+            guard let current = currentSession else { return nil }
+            return elapsedContribution(
+                slot: slot,
+                session: current,
+                targetSessionID: nil,
+                timestamp: context.timestamp,
+                label: "Elapsed"
+            )
+        case .notchSessionRow:
+            // Per-session elapsed badge keyed to the triggering session. Session-scoped
+            // slots are not re-evaluated on the global tick (a tick carries no session),
+            // so this refreshes on the session's own start/update events rather than each
+            // second; the global activity card keeps the per-second readout. Only
+            // still-tracked sessions contribute, so an ended session yields nil.
+            guard let target = context.session, let tracked = sessions[target.id] else { return nil }
+            return elapsedContribution(
+                slot: slot,
+                session: tracked,
+                targetSessionID: tracked.id,
+                timestamp: context.timestamp,
+                label: nil
+            )
+        default:
+            return nil
+        }
+    }
 
-        let elapsed = Int(context.timestamp.timeIntervalSince(current.startTime))
-        let component = PluginUIComponentDTO(
-            id: "elapsed",
-            type: .metric,
-            label: "Elapsed",
-            value: Self.formattedElapsed(elapsed),
-            tone: nil,
-            iconName: "clock",
-            action: nil
-        )
-
+    private func elapsedContribution(
+        slot: PluginUISlot,
+        session: PluginSessionSnapshot,
+        targetSessionID: String?,
+        timestamp: Date,
+        label: String?
+    ) -> PluginUIContribution {
+        let elapsed = Int(timestamp.timeIntervalSince(session.startTime))
         return PluginUIContribution(
             pluginID: manifest.id,
             slot: slot,
-            targetSessionID: nil,
+            targetSessionID: targetSessionID,
             priority: 10,
             expiresAt: nil,
-            components: [component]
+            components: [
+                PluginUIComponentDTO(
+                    id: "elapsed",
+                    type: .metric,
+                    label: label,
+                    value: Self.formattedElapsed(elapsed),
+                    tone: nil,
+                    iconName: "clock",
+                    action: nil
+                )
+            ]
         )
     }
 
