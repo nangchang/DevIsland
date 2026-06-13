@@ -58,13 +58,30 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
             )
         )
 
+        // Side-effect-free host command: the host builds the sanitized resume command and
+        // copies it to the pasteboard, so the plugin never sees workspace paths or shell strings.
+        let copyResume = PluginUIComponentDTO(
+            id: "copy-resume",
+            type: .button,
+            label: "Copy Resume Command",
+            value: nil,
+            tone: nil,
+            iconName: "arrow.counterclockwise",
+            action: PluginUIActionDTO(
+                id: "session.copyResumeCommand",
+                capability: "session.copyResumeCommand",
+                routing: .hostExecuted,
+                payload: ["sessionID": session.id]
+            )
+        )
+
         return PluginUIContribution(
             pluginID: manifest.id,
             slot: slot,
             targetSessionID: session.id,
             priority: 50,
             expiresAt: nil,
-            components: [dismiss]
+            components: [dismiss, copyResume]
         )
     }
 }

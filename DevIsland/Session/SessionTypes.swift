@@ -70,3 +70,26 @@ struct ActiveSession: Identifiable, Equatable {
     var parentSessionId: String?
     var workspaceRoot: String?
 }
+
+extension ActiveSession {
+    /// Host-generated, shell-escaped command to resume this session. Shared by the notch UI
+    /// and the plugin `session.copyResumeCommand` host command so the plugin never builds
+    /// shell strings itself (the host owns sanitization). Empty string means "nothing to copy"
+    /// (e.g. an `island` session with no workspace root).
+    var resumeCommand: String {
+        let cd = workspaceRoot.map { Self.shellCdPrefix($0) } ?? ""
+        switch agentKind {
+        case .claudeCode:  return "\(cd)claude --resume \(id)"
+        case .codex:       return "\(cd)codex --resume \(id)"
+        case .gemini:      return "\(cd)gemini"
+        case .antigravity: return "\(cd)agy"
+        case .island:      return cd.isEmpty ? "" : String(cd.dropLast(4)) // cd only
+        }
+    }
+
+    private static func shellCdPrefix(_ path: String) -> String {
+        let escaped = path.replacingOccurrences(of: "\\", with: "\\\\")
+                          .replacingOccurrences(of: "\"", with: "\\\"")
+        return "cd \"\(escaped)\" && "
+    }
+}

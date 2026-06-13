@@ -25,6 +25,20 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(action.payload["sessionID"], "s1", "host needs the target session id in the payload")
     }
 
+    func testContributesHostExecutedCopyResumeActionForSession() throws {
+        let plugin = SessionActionsPlugin()
+        let contribution = try XCTUnwrap(try plugin.makeUIContribution(
+            for: .sessionContextMenu,
+            context: uiContext(session: makeSnapshot(id: "s1"))
+        ))
+        let copyResume = try XCTUnwrap(contribution.components.first { $0.id == "copy-resume" })
+        XCTAssertEqual(copyResume.type, .button)
+        let action = try XCTUnwrap(copyResume.action)
+        XCTAssertEqual(action.capability, "session.copyResumeCommand")
+        XCTAssertEqual(action.routing, .hostExecuted)
+        XCTAssertEqual(action.payload["sessionID"], "s1")
+    }
+
     func testNoContributionForOtherSlots() throws {
         let plugin = SessionActionsPlugin()
         XCTAssertNil(try plugin.makeUIContribution(
@@ -57,6 +71,39 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(host.contributions, [:])
     }
 
+    // MARK: - Session Command Catalog
+
+    func testCatalogRecognizesSessionDismiss() {
+        XCTAssertTrue(SessionCommandCatalog.isSessionCommand("session.dismiss"))
+        XCTAssertNotNil(SessionCommandCatalog.descriptor(for: "session.dismiss"))
+    }
+
+    func testCatalogRejectsUnknownCapability() {
+        XCTAssertFalse(SessionCommandCatalog.isSessionCommand("session.bogus"))
+        XCTAssertNil(SessionCommandCatalog.descriptor(for: "session.bogus"))
+        XCTAssertFalse(SessionCommandCatalog.isAllowed("session.bogus", permissions: [.showSessionSurface]))
+    }
+
+    func testCatalogAllowsDismissOnlyWithShowSessionSurface() {
+        XCTAssertTrue(SessionCommandCatalog.isAllowed("session.dismiss", permissions: [.showSessionSurface]))
+        XCTAssertFalse(SessionCommandCatalog.isAllowed("session.dismiss", permissions: []))
+        XCTAssertFalse(SessionCommandCatalog.isAllowed("session.dismiss", permissions: [.readSessionEvents]))
+    }
+
+    func testDismissDescriptorIsDestructive() {
+        XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.dismiss")?.isDestructive, true)
+    }
+
+    func testCatalogRecognizesCopyResumeCommand() {
+        XCTAssertTrue(SessionCommandCatalog.isSessionCommand("session.copyResumeCommand"))
+        XCTAssertTrue(SessionCommandCatalog.isAllowed("session.copyResumeCommand", permissions: [.showSessionSurface]))
+        XCTAssertFalse(SessionCommandCatalog.isAllowed("session.copyResumeCommand", permissions: []))
+    }
+
+    func testCopyResumeCommandDescriptorIsNonDestructive() {
+        XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.copyResumeCommand")?.isDestructive, false)
+    }
+
     // MARK: - Host Command Catalog routing
 
     func testHostRoutesSessionDismissToCommandHandler() {
@@ -69,6 +116,29 @@ final class SessionActionsPluginTests: XCTestCase {
 
         XCTAssertEqual(received?.capability, "session.dismiss")
         XCTAssertEqual(received?.sessionID, "s1")
+    }
+
+    func testHostRoutesCopyResumeCommandToCommandHandler() {
+        let host = PluginHost()
+        host.register([SessionActionsPlugin()])
+        var received: (capability: String, sessionID: String)?
+        host.sessionCommandHandler = { received = ($0, $1) }
+
+        host.handleAction(copyResumeAction(sessionID: "s1"), from: "com.devisland.session-actions", componentID: "copy-resume")
+
+        XCTAssertEqual(received?.capability, "session.copyResumeCommand")
+        XCTAssertEqual(received?.sessionID, "s1")
+    }
+
+    func testHostRejectsCopyResumeCommandWithoutShowSessionSurface() {
+        let host = PluginHost()
+        host.register([DismissStubPlugin(permissions: [])])
+        var called = false
+        host.sessionCommandHandler = { _, _ in called = true }
+
+        host.handleAction(copyResumeAction(sessionID: "s1"), from: "com.devisland.test.dismiss-stub", componentID: "copy-resume")
+
+        XCTAssertFalse(called, "session.copyResumeCommand requires showSessionSurface")
     }
 
     func testHostRejectsSessionDismissWithoutShowSessionSurface() {
@@ -165,8 +235,14 @@ final class SessionActionsPluginTests: XCTestCase {
         PluginUIActionDTO(id: "session.dismiss", capability: "session.dismiss", routing: .hostExecuted, payload: ["sessionID": sessionID])
     }
 
+    private func copyResumeAction(sessionID: String) -> PluginUIActionDTO {
+        PluginUIActionDTO(id: "session.copyResumeCommand", capability: "session.copyResumeCommand", routing: .hostExecuted, payload: ["sessionID": sessionID])
+    }
+
     private func makeActiveSession(
         id: String = "s1",
+        agentKind: BuddyKind = .codex,
+        workspaceRoot: String? = nil,
         isPending: Bool = false,
         isUnread: Bool = false,
         hasMissedApproval: Bool = false,
@@ -175,7 +251,7 @@ final class SessionActionsPluginTests: XCTestCase {
         ActiveSession(
             id: id,
             terminalTitle: "Terminal",
-            agentKind: .codex,
+            agentKind: agentKind,
             terminalApp: "",
             terminalTTY: "",
             terminalWindowId: "",
@@ -196,8 +272,35 @@ final class SessionActionsPluginTests: XCTestCase {
             hasMissedApproval: hasMissedApproval,
             status: status,
             parentSessionId: nil,
-            workspaceRoot: nil
+            workspaceRoot: workspaceRoot
         )
+    }
+
+    // MARK: - ActiveSession.resumeCommand (host-generated, shell-escaped)
+
+    func testResumeCommandClaudeCodeWithWorkspace() {
+        let session = makeActiveSession(id: "abc123", agentKind: .claudeCode, workspaceRoot: "/Users/me/proj")
+        XCTAssertEqual(session.resumeCommand, "cd \"/Users/me/proj\" && claude --resume abc123")
+    }
+
+    func testResumeCommandCodexWithoutWorkspace() {
+        let session = makeActiveSession(id: "abc123", agentKind: .codex, workspaceRoot: nil)
+        XCTAssertEqual(session.resumeCommand, "codex --resume abc123")
+    }
+
+    func testResumeCommandGeminiIgnoresSessionID() {
+        let session = makeActiveSession(id: "abc123", agentKind: .gemini, workspaceRoot: "/tmp/x")
+        XCTAssertEqual(session.resumeCommand, "cd \"/tmp/x\" && gemini")
+    }
+
+    func testResumeCommandIslandIsCdOnlyOrEmpty() {
+        XCTAssertEqual(makeActiveSession(agentKind: .island, workspaceRoot: "/tmp/x").resumeCommand, "cd \"/tmp/x\"")
+        XCTAssertEqual(makeActiveSession(agentKind: .island, workspaceRoot: nil).resumeCommand, "")
+    }
+
+    func testResumeCommandEscapesQuotesAndBackslashesInPath() {
+        let session = makeActiveSession(agentKind: .codex, workspaceRoot: "/tmp/a\"b\\c")
+        XCTAssertEqual(session.resumeCommand, "cd \"/tmp/a\\\"b\\\\c\" && codex --resume s1")
     }
 }
 

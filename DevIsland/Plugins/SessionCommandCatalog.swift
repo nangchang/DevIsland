@@ -23,6 +23,11 @@ enum SessionCommandCatalog {
             capability: "session.dismiss",
             requiredPermission: .showSessionSurface,
             isDestructive: true
+        ),
+        "session.copyResumeCommand": SessionCommandDescriptor(
+            capability: "session.copyResumeCommand",
+            requiredPermission: .showSessionSurface,
+            isDestructive: false
         )
     ]
 
