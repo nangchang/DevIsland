@@ -493,6 +493,13 @@ class AppState: ObservableObject {
         MainActor.assumeIsolated {
             pluginHost.enqueue(pluginEventFactory.makeLifecycleEvent(kind: .pluginStarted))
             pluginHost.enqueue(pluginEventFactory.makeLifecycleEvent(kind: .appStarted))
+            // Sessions restored before the event seam was wired emitted no session.started,
+            // so session-scoped plugins never observed them. Replay a controlled started
+            // batch here (once, at platform start) so per-session surfaces — row badges and
+            // context actions — cover restored sessions too. (PR #276 Gemini review)
+            for session in sessionStore.activeSessions {
+                pluginHost.enqueue(pluginEventFactory.makeSessionEvent(kind: .sessionStarted, from: session))
+            }
             pluginHost.startTicking()
         }
     }

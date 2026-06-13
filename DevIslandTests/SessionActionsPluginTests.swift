@@ -6,14 +6,13 @@ final class SessionActionsPluginTests: XCTestCase {
 
     // MARK: - Plugin contribution
 
-    func testContributesHostExecutedDismissActionForTrackedSession() throws {
+    func testContributesHostExecutedDismissActionForSession() throws {
         let plugin = SessionActionsPlugin()
-        let snapshot = makeSnapshot(id: "s1")
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
-
+        // No tracking: the plugin contributes whenever the host evaluates it against a
+        // session (the host decides which sessions are evaluated and evicts on ended).
         let contribution = try XCTUnwrap(try plugin.makeUIContribution(
             for: .sessionContextMenu,
-            context: uiContext(session: snapshot)
+            context: uiContext(session: makeSnapshot(id: "s1"))
         ))
         XCTAssertEqual(contribution.slot, .sessionContextMenu)
         XCTAssertEqual(contribution.targetSessionID, "s1", "context action must be keyed to its session")
@@ -26,23 +25,11 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(action.payload["sessionID"], "s1", "host needs the target session id in the payload")
     }
 
-    func testNoContributionForUntrackedSession() throws {
+    func testNoContributionForOtherSlots() throws {
         let plugin = SessionActionsPlugin()
         XCTAssertNil(try plugin.makeUIContribution(
-            for: .sessionContextMenu,
-            context: uiContext(session: makeSnapshot(id: "s1"))
-        ))
-    }
-
-    func testEndedSessionDropsContribution() throws {
-        let plugin = SessionActionsPlugin()
-        let snapshot = makeSnapshot(id: "s1")
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionEnded, session: snapshot), context: context())
-
-        XCTAssertNil(try plugin.makeUIContribution(
-            for: .sessionContextMenu,
-            context: uiContext(session: snapshot)
+            for: .notchSessionRow,
+            context: PluginUIContext(slot: .notchSessionRow, timestamp: Date(), session: makeSnapshot(id: "s1"))
         ))
     }
 
@@ -51,6 +38,23 @@ final class SessionActionsPluginTests: XCTestCase {
         let effects = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1")), context: context())
         XCTAssertTrue(effects.isEmpty, "session actions plugin is observation-only")
         XCTAssertFalse(plugin.needsTick(surfaceState: PluginSurfaceState(visibleSurfaces: [.sessionContextMenu])))
+    }
+
+    // MARK: - Host eviction lifecycle
+
+    /// The host owns the session lifecycle: it generates the context action on a session
+    /// event and evicts it by `targetSessionID` on `session.ended`.
+    func testHostShowsAndEvictsContextActionAcrossLifecycle() async {
+        let host = PluginHost()
+        host.register([SessionActionsPlugin()])
+
+        host.enqueue(sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1")))
+        await host.waitUntilIdle()
+        XCTAssertEqual(host.contributions[.sessionContextMenu]?.count, 1)
+
+        host.enqueue(sessionEvent(kind: .sessionEnded, session: makeSnapshot(id: "s1")))
+        await host.waitUntilIdle()
+        XCTAssertEqual(host.contributions, [:])
     }
 
     // MARK: - Host Command Catalog routing

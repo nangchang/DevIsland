@@ -6,13 +6,15 @@ import Foundation
 /// It only *proposes* the action — `AppState` re-validates the target session and removes
 /// only idle, non-pending sessions with no missed approval or unread state. The plugin
 /// cannot see that state (it is deliberately absent from `PluginSessionSnapshot`), so it
-/// offers the action for every tracked session and the host is the gatekeeper; the label
-/// signals the idle-only restriction. Observation-only otherwise — no effects, no core
-/// mutation, no replay DB access.
+/// offers the action for every session the host evaluates it against and the host is the
+/// gatekeeper; the label signals the idle-only restriction. Observation-only otherwise —
+/// no effects, no core mutation, no replay DB access.
 ///
-/// `@unchecked Sendable`: mutable state (`activeSessionIDs`) is only ever touched inside
-/// the `PluginRunner` actor, which serializes every call (architecture doc §6.4).
-final class SessionActionsPlugin: DevIslandPlugin, @unchecked Sendable {
+/// The host evaluates `.sessionContextMenu` per session event and evicts the contribution
+/// on `session.ended` (`targetSessionID`), so the plugin keeps no session state of its own.
+///
+/// `Sendable`: no mutable state; the `PluginRunner` actor serializes calls anyway.
+final class SessionActionsPlugin: DevIslandPlugin, Sendable {
     let manifest = PluginManifest(
         id: "com.devisland.session-actions",
         name: "Session Actions",
@@ -28,22 +30,8 @@ final class SessionActionsPlugin: DevIslandPlugin, @unchecked Sendable {
         ]
     )
 
-    private var activeSessionIDs: Set<String> = []
-
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
-        switch event.kind {
-        case .sessionStarted, .sessionUpdated:
-            if let id = event.session?.id {
-                activeSessionIDs.insert(id)
-            }
-        case .sessionEnded:
-            if let id = event.session?.id {
-                activeSessionIDs.remove(id)
-            }
-        default:
-            break
-        }
-        return []
+        []
     }
 
     /// Context actions are event-driven, never on a clock.
@@ -53,9 +41,7 @@ final class SessionActionsPlugin: DevIslandPlugin, @unchecked Sendable {
         for slot: PluginUISlot,
         context: PluginUIContext
     ) throws -> PluginUIContribution? {
-        guard slot == .sessionContextMenu,
-              let session = context.session,
-              activeSessionIDs.contains(session.id) else { return nil }
+        guard slot == .sessionContextMenu, let session = context.session else { return nil }
 
         let dismiss = PluginUIComponentDTO(
             id: "dismiss",
