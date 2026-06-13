@@ -1458,9 +1458,35 @@ class AppState: ObservableObject {
             dismissSessionFromPlugin(sessionID)
         case "session.copyResumeCommand":
             copyResumeCommandFromPlugin(sessionID)
+        case "session.focusTerminal":
+            focusTerminalFromPlugin(sessionID)
         default:
             break
         }
+    }
+
+    /// Brings a plugin-requested session's terminal to the front. Deliberately does NOT reuse
+    /// `focusTerminal(for:)`: that path clears unread/missed flags and schedules
+    /// `passIfTerminalFocused()`, which passes a pending approval to the terminal — a plugin
+    /// action must never touch the approval queue or session state. This calls `TerminalFocuser`
+    /// directly with the session's own terminal metadata, so it only moves window focus.
+    /// (architecture doc §8, v1.2)
+    private func focusTerminalFromPlugin(_ sessionID: String) {
+        guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }) else {
+            print("[DevIsland] [plugin-cmd] focusTerminal: no session \(sessionID.prefix(8))")
+            return
+        }
+        TerminalFocuser.focusTerminal(
+            appName: session.terminalApp,
+            title: session.terminalTitle,
+            tty: session.terminalTTY,
+            windowId: session.terminalWindowId,
+            tabIndex: session.terminalTabIndex,
+            tmuxPane: session.terminalTmuxPane,
+            tmuxSocket: session.terminalTmuxSocket,
+            tmuxClient: session.terminalTmuxClient,
+            workspaceRoot: session.workspaceRoot
+        )
     }
 
     /// Copies the host-generated resume command for a plugin-requested session to the pasteboard.

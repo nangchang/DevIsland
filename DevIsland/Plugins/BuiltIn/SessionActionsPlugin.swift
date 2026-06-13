@@ -75,13 +75,30 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
             )
         )
 
+        // Host-executed focus: only moves window focus to the session's terminal. The host
+        // path deliberately omits the approval-passing side effects of the core focus button.
+        let focusTerminal = PluginUIComponentDTO(
+            id: "focus-terminal",
+            type: .button,
+            label: "Focus Terminal",
+            value: nil,
+            tone: nil,
+            iconName: "terminal",
+            action: PluginUIActionDTO(
+                id: "session.focusTerminal",
+                capability: "session.focusTerminal",
+                routing: .hostExecuted,
+                payload: ["sessionID": session.id]
+            )
+        )
+
         return PluginUIContribution(
             pluginID: manifest.id,
             slot: slot,
             targetSessionID: session.id,
             priority: 50,
             expiresAt: nil,
-            components: [dismiss, copyResume]
+            components: [dismiss, copyResume, focusTerminal]
         )
     }
 }

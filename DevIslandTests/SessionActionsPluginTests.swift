@@ -39,6 +39,20 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(action.payload["sessionID"], "s1")
     }
 
+    func testContributesHostExecutedFocusTerminalActionForSession() throws {
+        let plugin = SessionActionsPlugin()
+        let contribution = try XCTUnwrap(try plugin.makeUIContribution(
+            for: .sessionContextMenu,
+            context: uiContext(session: makeSnapshot(id: "s1"))
+        ))
+        let focus = try XCTUnwrap(contribution.components.first { $0.id == "focus-terminal" })
+        XCTAssertEqual(focus.type, .button)
+        let action = try XCTUnwrap(focus.action)
+        XCTAssertEqual(action.capability, "session.focusTerminal")
+        XCTAssertEqual(action.routing, .hostExecuted)
+        XCTAssertEqual(action.payload["sessionID"], "s1")
+    }
+
     func testNoContributionForOtherSlots() throws {
         let plugin = SessionActionsPlugin()
         XCTAssertNil(try plugin.makeUIContribution(
@@ -104,6 +118,16 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.copyResumeCommand")?.isDestructive, false)
     }
 
+    func testCatalogRecognizesFocusTerminal() {
+        XCTAssertTrue(SessionCommandCatalog.isSessionCommand("session.focusTerminal"))
+        XCTAssertTrue(SessionCommandCatalog.isAllowed("session.focusTerminal", permissions: [.showSessionSurface]))
+        XCTAssertFalse(SessionCommandCatalog.isAllowed("session.focusTerminal", permissions: []))
+    }
+
+    func testFocusTerminalDescriptorIsNonDestructive() {
+        XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.focusTerminal")?.isDestructive, false)
+    }
+
     // MARK: - Host Command Catalog routing
 
     func testHostRoutesSessionDismissToCommandHandler() {
@@ -139,6 +163,29 @@ final class SessionActionsPluginTests: XCTestCase {
         host.handleAction(copyResumeAction(sessionID: "s1"), from: "com.devisland.test.dismiss-stub", componentID: "copy-resume")
 
         XCTAssertFalse(called, "session.copyResumeCommand requires showSessionSurface")
+    }
+
+    func testHostRoutesFocusTerminalToCommandHandler() {
+        let host = PluginHost()
+        host.register([SessionActionsPlugin()])
+        var received: (capability: String, sessionID: String)?
+        host.sessionCommandHandler = { received = ($0, $1) }
+
+        host.handleAction(focusTerminalAction(sessionID: "s1"), from: "com.devisland.session-actions", componentID: "focus-terminal")
+
+        XCTAssertEqual(received?.capability, "session.focusTerminal")
+        XCTAssertEqual(received?.sessionID, "s1")
+    }
+
+    func testHostRejectsFocusTerminalWithoutShowSessionSurface() {
+        let host = PluginHost()
+        host.register([DismissStubPlugin(permissions: [])])
+        var called = false
+        host.sessionCommandHandler = { _, _ in called = true }
+
+        host.handleAction(focusTerminalAction(sessionID: "s1"), from: "com.devisland.test.dismiss-stub", componentID: "focus-terminal")
+
+        XCTAssertFalse(called, "session.focusTerminal requires showSessionSurface")
     }
 
     func testHostRejectsSessionDismissWithoutShowSessionSurface() {
@@ -237,6 +284,10 @@ final class SessionActionsPluginTests: XCTestCase {
 
     private func copyResumeAction(sessionID: String) -> PluginUIActionDTO {
         PluginUIActionDTO(id: "session.copyResumeCommand", capability: "session.copyResumeCommand", routing: .hostExecuted, payload: ["sessionID": sessionID])
+    }
+
+    private func focusTerminalAction(sessionID: String) -> PluginUIActionDTO {
+        PluginUIActionDTO(id: "session.focusTerminal", capability: "session.focusTerminal", routing: .hostExecuted, payload: ["sessionID": sessionID])
     }
 
     private func makeActiveSession(
