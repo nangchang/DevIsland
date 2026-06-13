@@ -1459,12 +1459,22 @@ class AppState: ObservableObject {
         guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }),
               Self.isPluginDismissable(session)
         else { return }
-        dismissSession(sessionID)
+        dismissSession(sessionID, requirePluginDismissable: true)
     }
 
-    func dismissSession(_ sessionId: String) {
+    /// `requirePluginDismissable` re-checks the dismissal policy inside the delayed removal
+    /// completion. `dismissSession` records the dismissal on a background queue and only
+    /// removes the session (draining pending requests with a `pass`) once that returns, so a
+    /// new approval can arrive in between. The plugin path re-validates here to guarantee a
+    /// plugin action never passes a freshly-arrived provider request. (PR #276 Codex review)
+    func dismissSession(_ sessionId: String, requirePluginDismissable: Bool = false) {
         let agentKind = sessionStore.activeSessions.first(where: { $0.id == sessionId })?.agentKind ?? .claudeCode
         recordDismissedSession(sessionId: sessionId, agentKind: agentKind) {
+            if requirePluginDismissable {
+                guard let current = self.sessionStore.activeSessions.first(where: { $0.id == sessionId }),
+                      Self.isPluginDismissable(current)
+                else { return }
+            }
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
             removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
