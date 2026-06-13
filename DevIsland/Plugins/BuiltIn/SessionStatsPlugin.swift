@@ -3,10 +3,11 @@ import Foundation
 /// `system` built-in plugin that surfaces lightweight, observation-only stats
 /// derived from the sanitized session and hook streams (Migration PR M3).
 ///
-/// It counts the currently active sessions (from `session.*` events) and tallies
-/// hook events per provider (from `hook.received`). Both are read-only summaries —
-/// it never mutates core state and returns no effects. Approval stats are out of
-/// scope until `approval.decided` lands in v1.1, and it never touches the replay DB.
+/// It counts the currently active sessions (from `session.*` events), tallies hook
+/// events per provider (from `hook.received`), and tallies manual approve/deny
+/// decisions (from the observation-only `approval.decided` event added in v1.1). All
+/// are read-only summaries — it never mutates core state and returns no effects, and
+/// it never touches the replay DB.
 ///
 /// Counts are in-memory for the app run; there is no durable storage in v1.
 ///
@@ -25,15 +26,22 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginEventKind.sessionStarted.rawValue,
             PluginEventKind.sessionUpdated.rawValue,
             PluginEventKind.sessionEnded.rawValue,
-            PluginEventKind.hookReceived.rawValue
+            PluginEventKind.hookReceived.rawValue,
+            PluginEventKind.approvalDecided.rawValue
         ]
     )
 
     private var activeSessionIDs: Set<String> = []
     private var hookCountsByProvider: [String: Int] = [:]
+    private var approvalsApproved = 0
+    private var approvalsDenied = 0
 
     private var totalHooks: Int {
         hookCountsByProvider.values.reduce(0, +)
+    }
+
+    private var totalApprovals: Int {
+        approvalsApproved + approvalsDenied
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
@@ -49,6 +57,14 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
         case .hookReceived:
             if let provider = event.hook?.provider {
                 hookCountsByProvider[provider, default: 0] += 1
+            }
+        case .approvalDecided:
+            if let approved = event.approval?.approved {
+                if approved {
+                    approvalsApproved += 1
+                } else {
+                    approvalsDenied += 1
+                }
             }
         default:
             break
@@ -80,7 +96,7 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
             ])
         case .menubarMenu:
             // Nothing observed yet means nothing worth a menu row.
-            guard !activeSessionIDs.isEmpty || totalHooks > 0 else { return nil }
+            guard !activeSessionIDs.isEmpty || totalHooks > 0 || totalApprovals > 0 else { return nil }
             var components: [PluginUIComponentDTO] = [
                 PluginUIComponentDTO(
                     id: "sessions",
@@ -118,6 +134,30 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
                         )
                     )
                 }
+            }
+            if totalApprovals > 0 {
+                components.append(
+                    PluginUIComponentDTO(
+                        id: "approved",
+                        type: .metric,
+                        label: "Approved",
+                        value: "\(approvalsApproved)",
+                        tone: nil,
+                        iconName: "checkmark.circle",
+                        action: nil
+                    )
+                )
+                components.append(
+                    PluginUIComponentDTO(
+                        id: "denied",
+                        type: .metric,
+                        label: "Denied",
+                        value: "\(approvalsDenied)",
+                        tone: nil,
+                        iconName: "xmark.circle",
+                        action: nil
+                    )
+                )
             }
             return contribution(slot: slot, timestamp: context.timestamp, components: components)
         default:

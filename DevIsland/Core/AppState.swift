@@ -1977,6 +1977,7 @@ class AppState: ObservableObject {
         }
         let data = try? JSONSerialization.data(withJSONObject: responsePayload)
         let payload = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"response\":\"\(response)\"}"
+        let hadResponseHandler = currentResponseHandler != nil
         print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
         currentResponseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
@@ -1990,6 +1991,27 @@ class AppState: ObservableObject {
             source: reason == nil ? .user : .automatic,
             reason: reason
         )
+        // Observation-only `approval.decided`, emitted after the response is already sent
+        // so plugin work cannot change or delay it. Pass-through outcomes (timeout, dismiss,
+        // terminal-focus) are deferrals, not approve/deny decisions, so they are excluded.
+        // A non-nil `toolInput` is an AskUserQuestion structured reply (submitClaudeQuestion):
+        // a question answer, not a tool approval, so it must not count as an approve decision.
+        if hadResponseHandler, !passToTerminal, toolInput == nil, !currentSessionId.isEmpty {
+            let decidedSessionID = currentSessionId
+            let decidedToolName = currentRawToolName.isEmpty ? currentToolName : currentRawToolName
+            let decidedScope = approvalScope?.rawValue ?? RuleScope.once.rawValue
+            // Dispatch to the main actor instead of asserting isolation: sendDecision is not
+            // statically main-actor-isolated, so a future off-main caller would crash on
+            // assumeIsolated. The event is best-effort, so a deferred main-actor hop is fine.
+            Task { @MainActor [pluginHost, pluginEventFactory] in
+                pluginHost.enqueue(pluginEventFactory.makeApprovalDecidedEvent(
+                    sessionID: decidedSessionID,
+                    approved: approved,
+                    toolName: decidedToolName,
+                    scope: decidedScope
+                ))
+            }
+        }
         persistApprovalScope(approved: approved, approvalScope: approvalScope)
         let completedRequestId = showingRequestId
         currentResponseHandler = nil

@@ -56,7 +56,7 @@
   - Migration M1. OpenPeonSoundPlugin — 완료 (`feat: Migrate OpenPeon to plugin-based architecture`)
   - Migration M2. CaffeinePlugin — 완료 (`feat: migrate Caffeine to plugin-based architecture`)
   - Migration M3. SessionStatsPlugin — 완료 (단일 `system` 플러그인이 session/hook 관찰 통계를 모두 담당. 별도 ProviderStatsPlugin은 두지 않음)
-  - v1.1 a. `approval.decided` 관찰 이벤트 — 완료 (별도 PR `feat: add observation-only approval.decided plugin event`). 관찰 전용, provider response 이후 best-effort 발행.
+  - v1.1 a. `approval.decided` 관찰 이벤트 — 완료. `AppState.sendDecision`이 provider response 전송 직후(`recordReplayDecision` 이후) sanitized `PluginApprovalSummary`만 best-effort 발행(`pass-through`/timeout/dismiss/terminal-focus 제외, AskUserQuestion 구조화 응답(`toolInput`)도 제외). 발행은 main actor로 비동기 디스패치(관찰 전용이라 결과 경로 비차단). `SessionStatsPlugin`이 `readHookSummaries` 권한으로 수신해 manual approve/deny 누계를 `menubar.menu`에 추가. 정책/자동승인 결정은 v1에서 집계 대상 아님(문서 §6 emission 표가 `sendDecision`만 지정).
   - v1.1 b. `notch.session.row` 읽기 전용 세션 surface (M4 foundation) — 완료. `SessionTimerPlugin`이 `showSessionSurface` 권한으로 per-session elapsed badge를 `targetSessionID` 기준으로 기여하고, `SessionRowView`가 캐시를 필터링해 렌더(렌더 경로에서 플러그인 코드 호출 없음). session-scoped slot은 tick(session=nil) 시 재평가되지 않으므로 세션 이벤트 기반 갱신. `PluginHost`의 full-clear `removeContributions(pluginID:from:)`가 session-scoped 기여까지 제거하도록 수정(disable/safemode evict 갭 해소).
 - 마지막 검증:
   - 플러그인 관련 테스트 스위트 통과 (2026-06-13, v1.1 b 기준 — 워크트리 빌드 성공, 전체 457 테스트 0 실패)
@@ -670,7 +670,7 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 
 ### v1.1 Session Surfaces
 
-- ✅ `approval.decided` 관찰 이벤트 — provider response 전송 이후 통계용으로만 발행 (완료, 별도 PR)
+- ✅ `approval.decided` 관찰 이벤트 — provider response 전송 이후 통계용으로만 발행 (완료, 위 "현재 진행 현황" 참고)
 - ✅ `notch.session.row` — 세션 행 badge, 짧은 metric, status accessory (읽기 전용 foundation 완료: `SessionTimerPlugin` per-session elapsed badge)
 - `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending이고 missed/unread가 아닌 세션에만 허용
 - `session.message` — 세션 메시지 창 header/toolbar accessory
