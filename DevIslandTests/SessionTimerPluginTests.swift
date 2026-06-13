@@ -87,6 +87,39 @@ final class SessionTimerPluginTests: XCTestCase {
         ))
     }
 
+    // MARK: - Message-window header badge (session.message)
+
+    func testSessionMessageProducesPerSessionElapsedBadge() throws {
+        let plugin = SessionTimerPlugin()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
+
+        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
+
+        let contribution = try XCTUnwrap(try plugin.makeUIContribution(
+            for: .sessionMessage,
+            context: PluginUIContext(slot: .sessionMessage, timestamp: start.addingTimeInterval(65), session: snapshot)
+        ))
+        XCTAssertEqual(contribution.slot, .sessionMessage)
+        XCTAssertEqual(contribution.targetSessionID, "s1", "header badge must be keyed to its session")
+        XCTAssertEqual(contribution.components.first?.value, "01:05")
+    }
+
+    /// The message-window surface is session-scoped, so the host evaluates it on session
+    /// events and evicts by `targetSessionID` on `session.ended`.
+    func testHostShowsAndEvictsSessionMessageBadgeAcrossLifecycle() async {
+        let host = PluginHost()
+        host.register([SessionTimerPlugin()])
+
+        host.enqueue(sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1")))
+        await host.waitUntilIdle()
+        XCTAssertEqual(host.contributions[.sessionMessage]?.count, 1)
+
+        host.enqueue(sessionEvent(kind: .sessionEnded, session: makeSnapshot(id: "s1")))
+        await host.waitUntilIdle()
+        XCTAssertNil(host.contributions[.sessionMessage])
+    }
+
     func testCurrentSessionIsMostRecentlyActive() throws {
         let plugin = SessionTimerPlugin()
         let base = Date(timeIntervalSince1970: 1_000)

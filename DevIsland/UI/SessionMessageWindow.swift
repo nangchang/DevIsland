@@ -188,6 +188,7 @@ struct SessionMessageView: View {
 
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var appState = AppState.shared
+    @ObservedObject private var pluginHost = AppState.shared.pluginHost
     @ObservedObject private var l10n = L10n.shared
     @StateObject private var history: SessionMessageHistoryViewModel
 
@@ -202,6 +203,12 @@ struct SessionMessageView: View {
 
     private var isCurrentSession: Bool {
         appState.currentSessionId == sessionId
+    }
+
+    /// Read-only plugin accessories for this session's message window header.
+    /// Reads only the pre-computed cache; never calls plugin code during render.
+    private var messageContributions: [PluginUIContribution] {
+        pluginHost.contributions[.sessionMessage]?.filter { $0.targetSessionID == sessionId } ?? []
     }
 
     /// 히스토리 뷰일 때는 해당 항목의 툴/이벤트, 라이브 뷰일 때는 현재 상태
@@ -297,6 +304,10 @@ struct SessionMessageView: View {
             }
 
             Spacer()
+
+            if !messageContributions.isEmpty {
+                PluginSlotView(contributions: messageContributions)
+            }
 
             Button {
                 appState.focusTerminal(for: sessionId)
