@@ -58,12 +58,12 @@
   - Migration M3. SessionStatsPlugin — 완료 (단일 `system` 플러그인이 session/hook 관찰 통계를 모두 담당. 별도 ProviderStatsPlugin은 두지 않음)
   - v1.1 a. `approval.decided` 관찰 이벤트 — 완료. `AppState.sendDecision`이 provider response 전송 직후(`recordReplayDecision` 이후) sanitized `PluginApprovalSummary`만 best-effort 발행(`pass-through`/timeout/dismiss/terminal-focus 제외, AskUserQuestion 구조화 응답(`toolInput`)도 제외). 발행은 main actor로 비동기 디스패치(관찰 전용이라 결과 경로 비차단). `SessionStatsPlugin`이 `readHookSummaries` 권한으로 수신해 manual approve/deny 누계를 `menubar.menu`에 추가. 정책/자동승인 결정은 v1에서 집계 대상 아님(문서 §6 emission 표가 `sendDecision`만 지정).
   - v1.1 b. `notch.session.row` 읽기 전용 세션 surface (M4 foundation) — 완료. `SessionTimerPlugin`이 `showSessionSurface` 권한으로 per-session elapsed badge를 `targetSessionID` 기준으로 기여하고, `SessionRowView`가 캐시를 필터링해 렌더(렌더 경로에서 플러그인 코드 호출 없음). session-scoped slot은 tick(session=nil) 시 재평가되지 않으므로 세션 이벤트 기반 갱신. `PluginHost`의 full-clear `removeContributions(pluginID:from:)`가 session-scoped 기여까지 제거하도록 수정(disable/safemode evict 갭 해소).
-  - v1.1 c. Host Command Catalog 골격 + `session.dismiss` + `session.context-menu` (M4 본체 1차) — 완료. `PluginHost.handleAction`의 `hostExecuted` 분기가 `session.*` capability를 effect executor 대신 MainActor `sessionCommandHandler`(AppState 주입)로 라우팅(catalog 골격). `session.dismiss`는 `showSessionSurface` permission gate(host) + `AppState.isPluginDismissable` 세션 상태 재검증(host): idle·non-pending·!missedApproval·!unread만 허용, pending/current/missed/unread는 거부해 plugin이 provider response pass·approval queue drain 경로에 닿지 못하게 함. `SessionActionsPlugin`(`com.devisland.session-actions`)이 `session.context-menu`에 host-executed "Dismiss if idle" 액션을 기여하고, `SessionRowView` context menu가 `PluginSessionMenuItemsView`로 캐시를 세션별 렌더. 기존 core dismiss 버튼은 불변.
+  - v1.1 c. Host Command Catalog 골격 + `session.dismiss` + `session.context-menu` (M4 본체 1차) — 완료. `PluginHost.handleAction`의 `hostExecuted` 분기가 `session.*` capability를 effect executor 대신 MainActor `sessionCommandHandler`(AppState 주입)로 라우팅(catalog 골격). `session.dismiss`는 `showSessionSurface` permission gate(host) + `AppState.isPluginDismissable` 세션 상태 재검증(host): idle·non-pending·!missedApproval·!unread만 허용, pending/current/missed/unread는 거부해 plugin이 provider response pass·approval queue drain 경로에 닿지 못하게 함. `dismissSession`의 지연 제거 완료 시점에 `requirePluginDismissable`로 한 번 더 재검증(TOCTOU 차단). `SessionActionsPlugin`(`com.devisland.session-actions`)이 `session.context-menu`에 host-executed "Dismiss if idle" 액션을 기여(추적 상태 없이 `context.session`만 사용)하고, `SessionRowView` context menu가 `PluginSessionMenuItemsView`로 캐시를 세션별 렌더. 기존 core dismiss 버튼은 불변. restore된 세션도 surface에 보이도록 `startPluginPlatform`에서 `session.started` 1회 재생.
+  - v1.1 d. `session.message` 세션 메시지 창 header accessory — 완료. `SessionTimerPlugin`이 `.sessionMessage` surface에도 per-session elapsed badge를 기여(`.notchSessionRow`와 동일 경로)하고, `SessionMessageView` 헤더가 `PluginSlotView`로 캐시를 세션별 렌더(렌더 경로에서 플러그인 코드 호출 없음). `SessionMessageWindow`/`SessionHistoryWindow`의 message/replay data loading은 core 유지.
 - 마지막 검증:
-  - 플러그인 관련 테스트 스위트 통과 (2026-06-13, v1.1 c 기준 — 워크트리 빌드 성공, 전체 475 테스트 0 실패)
-- 다음 단계 (v1.1 Session Surfaces 잔여 → M4 본체 마무리):
-  - `session.message` surface(세션 메시지 창 header/toolbar accessory) 개방 — `SessionMessageWindow`/`SessionHistoryWindow` data loading은 core 유지
-  - selected/current 세션 신호를 `PluginUIContext`에 plumb(또는 selection-change 이벤트)
+  - 플러그인 관련 테스트 스위트 통과 (2026-06-13, v1.1 d 기준 — 워크트리 빌드 성공, 전체 477 테스트 0 실패)
+- 다음 단계 (v1.1 Session Surfaces 마무리 → v1.2):
+  - selected/current 세션 신호를 `PluginUIContext`에 plumb(또는 selection-change 이벤트) — 전역 슬롯(`notch.expanded.activity`)이 recency proxy 대신 사용자 선택 세션 기준으로 렌더
   - v1.2 Host Command Catalog 확장(`session.focusTerminal`/`copyResumeCommand`/`openWorkspace`를 같은 validation 경로로) — `session.dismiss`가 이미 공통 capability validation 경로를 타므로 logging/audit/추가 command 정리 중심
   - Migration PR M5 (Update status contribution)는 낮은 우선순위 — v2 network/runtime 설계 후로 보류 가능
 
@@ -673,7 +673,7 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 - ✅ `approval.decided` 관찰 이벤트 — provider response 전송 이후 통계용으로만 발행 (완료, 위 "현재 진행 현황" 참고)
 - ✅ `notch.session.row` — 세션 행 badge, 짧은 metric, status accessory (읽기 전용 foundation 완료: `SessionTimerPlugin` per-session elapsed badge)
 - ✅ `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending이고 missed/unread가 아닌 세션에만 허용 (완료: `SessionActionsPlugin` + `AppState.isPluginDismissable`)
-- `session.message` — 세션 메시지 창 header/toolbar accessory
+- ✅ `session.message` — 세션 메시지 창 header/toolbar accessory (완료: `SessionTimerPlugin` per-session elapsed badge + `SessionMessageView` 헤더)
 - ✅ `session.dismiss`를 열기 전에 최소 Host Command Catalog 골격을 먼저 두고, 임시 특수 경로를 만들지 않는다. (완료: `PluginHost` session command 라우팅 + `sessionCommandHandler`)
 - selected/current 세션 신호 — `notch.expanded.activity` 같은 전역 슬롯이 recency(`max(lastActiveAt)`)가 아니라 사용자가 보는 selected/current 세션 기준으로 렌더하도록, 선택 세션을 `PluginUIContext`에 plumb하거나 selection-change 이벤트를 발행한다. (v1 `SessionTimerPlugin`은 selection 신호가 없어 recency proxy를 쓰므로 다중 세션에서 사용자 선택과 drift 가능)
 

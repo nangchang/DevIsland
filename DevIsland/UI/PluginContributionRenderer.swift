@@ -21,23 +21,36 @@ let pluginMenuMaxLength = 40
 
 // MARK: - Notch Plugin Slot View
 
-/// Renders PluginUIContributions for a given slot in the expanded notch panel.
+/// Renders PluginUIContributions for a given slot.
 /// Reads only from the pre-computed cache; never calls plugin code during render.
+///
+/// `axis` controls how contributions from multiple plugins are laid out: `.vertical`
+/// for the expanded notch card (the default), `.horizontal` for space-constrained
+/// row / header surfaces where stacking would distort the bar.
 struct PluginSlotView: View {
     let contributions: [PluginUIContribution]
+    var axis: Axis = .vertical
 
     @ViewBuilder
     var body: some View {
         let valid = activePluginContributions(contributions)
         if !valid.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(valid, id: \.pluginID) { contribution in
-                    PluginContributionRow(
-                        pluginID: contribution.pluginID,
-                        components: contribution.components
-                    )
-                }
+            switch axis {
+            case .vertical:
+                VStack(alignment: .leading, spacing: 6) { rows(valid) }
+            case .horizontal:
+                HStack(spacing: 6) { rows(valid) }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func rows(_ valid: [PluginUIContribution]) -> some View {
+        ForEach(valid, id: \.pluginID) { contribution in
+            PluginContributionRow(
+                pluginID: contribution.pluginID,
+                components: contribution.components
+            )
         }
     }
 }

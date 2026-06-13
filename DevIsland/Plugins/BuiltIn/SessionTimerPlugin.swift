@@ -19,7 +19,7 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
         apiVersion: 1,
         kind: .system,
         permissions: [.readSessionEvents, .showNotchCard, .showSessionSurface],
-        surfaces: [.notchExpandedActivity, .notchSessionRow],
+        surfaces: [.notchExpandedActivity, .notchSessionRow, .sessionMessage],
         activationEvents: [
             PluginEventKind.sessionStarted.rawValue,
             PluginEventKind.sessionUpdated.rawValue,
@@ -70,12 +70,13 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
                 timestamp: context.timestamp,
                 label: "Elapsed"
             )
-        case .notchSessionRow:
-            // Per-session elapsed badge keyed to the triggering session. Session-scoped
-            // slots are not re-evaluated on the global tick (a tick carries no session),
-            // so this refreshes on the session's own start/update events rather than each
-            // second; the global activity card keeps the per-second readout. Only
-            // still-tracked sessions contribute, so an ended session yields nil.
+        case .notchSessionRow, .sessionMessage:
+            // Per-session elapsed badge keyed to the triggering session, on the row and in
+            // the message-window header. Session-scoped slots are not re-evaluated on the
+            // global tick (a tick carries no session), so this refreshes on the session's
+            // own start/update events rather than each second; the global activity card
+            // keeps the per-second readout. Only still-tracked sessions contribute, so an
+            // ended session yields nil.
             guard let target = context.session, let tracked = sessions[target.id] else { return nil }
             return elapsedContribution(
                 slot: slot,
