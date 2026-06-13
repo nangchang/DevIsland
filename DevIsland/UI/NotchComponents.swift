@@ -242,6 +242,7 @@ struct SessionRowView: View {
 
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var appState = AppState.shared
+    @ObservedObject private var pluginHost = AppState.shared.pluginHost
     @State private var timeAgo: String = ""
     @State private var isRenaming: Bool = false
     @State private var renameText: String = ""
@@ -252,6 +253,12 @@ struct SessionRowView: View {
     }
     private var hasCustomLabel: Bool {
         appState.sessionLabels[session.id] != nil
+    }
+
+    /// Read-only plugin accessories for this row, filtered to this session.
+    /// Reads only the pre-computed cache; never calls plugin code during render.
+    private var rowContributions: [PluginUIContribution] {
+        pluginHost.contributions[.notchSessionRow]?.filter { $0.targetSessionID == session.id } ?? []
     }
 
     private struct AppBadge { let label: String; let color: Color }
@@ -480,6 +487,10 @@ struct SessionRowView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            if !rowContributions.isEmpty {
+                PluginSlotView(contributions: rowContributions)
+            }
 
             Button(action: { AppState.shared.focusTerminal(for: session.id) }) {
                 Image(systemName: "arrow.up.forward.app.fill")

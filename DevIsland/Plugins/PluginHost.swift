@@ -450,21 +450,23 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    /// Clears all of a plugin's global contributions (disable, safemode, failure-clear).
-    /// Forwards `sessionID: nil`, so the session-scoped branch in the call below does not
-    /// remove session-keyed contributions. Unreachable in v1 — no built-in declares
-    /// `.showSessionSurface` — but revisit when the v1.1/M4 session slots open so that
-    /// disabling a plugin also evicts its per-session contributions.
+    /// Clears every contribution from a plugin — global and session-scoped (all
+    /// `targetSessionID`s) — for disable, safemode, and failure-clear. v1.1 opens the
+    /// session slots (`notch.session.row`), so this must drop per-session contributions
+    /// too; otherwise a disabled plugin's session-row badges would linger. The
+    /// per-event eviction path keeps using the `sessionID`-scoped variant below.
     private func removeContributions(
         pluginID: String,
         from current: [PluginUISlot: [PluginUIContribution]]
     ) -> [PluginUISlot: [PluginUIContribution]] {
-        removeContributions(
-            pluginID: pluginID,
-            slots: Set(current.keys),
-            sessionID: nil,
-            from: current
-        )
+        var updated = current
+        for slot in Array(current.keys) {
+            updated[slot]?.removeAll { $0.pluginID == pluginID }
+            if updated[slot]?.isEmpty == true {
+                updated.removeValue(forKey: slot)
+            }
+        }
+        return updated
     }
 
     private func removeContributions(

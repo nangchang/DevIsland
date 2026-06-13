@@ -56,12 +56,16 @@
   - Migration M1. OpenPeonSoundPlugin — 완료 (`feat: Migrate OpenPeon to plugin-based architecture`)
   - Migration M2. CaffeinePlugin — 완료 (`feat: migrate Caffeine to plugin-based architecture`)
   - Migration M3. SessionStatsPlugin — 완료 (단일 `system` 플러그인이 session/hook 관찰 통계를 모두 담당. 별도 ProviderStatsPlugin은 두지 않음)
+  - v1.1 a. `approval.decided` 관찰 이벤트 — 완료 (별도 PR `feat: add observation-only approval.decided plugin event`). 관찰 전용, provider response 이후 best-effort 발행.
+  - v1.1 b. `notch.session.row` 읽기 전용 세션 surface (M4 foundation) — 완료. `SessionTimerPlugin`이 `showSessionSurface` 권한으로 per-session elapsed badge를 `targetSessionID` 기준으로 기여하고, `SessionRowView`가 캐시를 필터링해 렌더(렌더 경로에서 플러그인 코드 호출 없음). session-scoped slot은 tick(session=nil) 시 재평가되지 않으므로 세션 이벤트 기반 갱신. `PluginHost`의 full-clear `removeContributions(pluginID:from:)`가 session-scoped 기여까지 제거하도록 수정(disable/safemode evict 갭 해소).
 - 마지막 검증:
-  - 플러그인 관련 테스트 스위트 통과 (2026-06-13, M3 기준)
-- 다음 단계:
-  - Migration PR M4 (Session accessory plugins)는 v1.1 session surface(`notch.session.row`, `session.context-menu`, `session.message`) 선행 필요
+  - 플러그인 관련 테스트 스위트 통과 (2026-06-13, v1.1 b 기준 — 워크트리 빌드 성공, 전체 457 테스트 0 실패)
+- 다음 단계 (v1.1 Session Surfaces 잔여 → M4 본체):
+  - destructive `session.dismiss`를 열기 전 Host Command Catalog 골격 선행 (host-validated capability 경로)
+  - `session.context-menu`(host-validated `session.dismiss`)·`session.message` surface 개방
+  - selected/current 세션 신호를 `PluginUIContext`에 plumb(또는 selection-change 이벤트)
+  - 위 surface가 열리면 Migration PR M4(Session accessory plugins) 본체 진행
   - Migration PR M5 (Update status contribution)는 낮은 우선순위 — v2 network/runtime 설계 후로 보류 가능
-  - 따라서 platform 확장(v1.1 Session Surfaces)이 다음 자연스러운 단계
 
 
 ## 5. PR 분할
@@ -666,8 +670,8 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 
 ### v1.1 Session Surfaces
 
-- `approval.decided` 관찰 이벤트 — provider response 전송 이후 통계용으로만 발행
-- `notch.session.row` — 세션 행 badge, 짧은 metric, status accessory
+- ✅ `approval.decided` 관찰 이벤트 — provider response 전송 이후 통계용으로만 발행 (완료, 별도 PR)
+- ✅ `notch.session.row` — 세션 행 badge, 짧은 metric, status accessory (읽기 전용 foundation 완료: `SessionTimerPlugin` per-session elapsed badge)
 - `session.context-menu` — host-validated session action. `session.dismiss`는 idle/non-pending이고 missed/unread가 아닌 세션에만 허용
 - `session.message` — 세션 메시지 창 header/toolbar accessory
 - `session.dismiss`를 열기 전에 최소 Host Command Catalog 골격을 먼저 두고, 임시 특수 경로를 만들지 않는다.
