@@ -64,10 +64,10 @@
   - v1.2 a. Host Command Catalog 골격화 — 완료. `PluginHost`의 하드코딩 `isSessionCommand`/`isSessionCommandAllowed` 분기를 데이터 기반 `SessionCommandCatalog`(capability → 필요 permission + `isDestructive` audit 메타데이터)로 대체. `handleAction`의 `.hostExecuted` 분기가 카탈로그 조회로 permission gate 후 routing 직전 audit log(`[plugin-cmd] <pluginID> → <capability> session=… destructive=…`)를 발행. `session.dismiss` 동작 불변(카탈로그 단일 엔트리라 분기 결과 동일).
   - v1.2 b. `session.copyResumeCommand` — 완료. side-effect-free host command: `AppState.copyResumeCommandFromPlugin`이 sessionID로 세션을 찾아 host가 생성한 `ActiveSession.resumeCommand`(shell-escaped, `NotchComponents`에서 추출해 공유)를 pasteboard에 복사. approval queue/pending/provider response/session lifecycle을 전혀 건드리지 않음. `SessionActionsPlugin`이 `session.context-menu`에 "Copy Resume Command" 버튼을 `showSessionSurface` permission gate로 기여하고, 중복을 피하려 `SessionRowView` 컨텍스트 메뉴의 core "Copy Resume Command" 항목을 제거해 plugin 기여로 대체(plugin disable 시 해당 항목 사라짐; `SessionHistoryWindow`의 core 항목은 plugin surface가 아니라 유지). `resumeCommand` 셸 이스케이프는 POSIX 작은따옴표 방식(`'...'`, 내부 `'`→`'\''`)으로 command substitution/변수 확장을 차단(PR #279 gemini review). 플러그인은 workspace path·shell 문자열을 직접 보지 않음(host-owned sanitization).
   - v1.2 c. `session.focusTerminal` — 완료. host command: `AppState.focusTerminalFromPlugin`이 sessionID로 세션을 찾아 그 세션의 terminal metadata로 `TerminalFocuser.focusTerminal`을 직접 호출(core `focusTerminal(for:)`의 unread/missed 해제·`passIfTerminalFocused` completion을 재사용하지 않음). 단 터미널을 frontmost로 만들면 `NotchWindowController`의 앱 활성화/클릭 observer가 `passIfTerminalFocused`를 호출해 표시 중인 approval을 pass시킬 수 있으므로, request/notification 표시 중이면 focus를 거부한다(`canPluginFocusTerminal` = `passIfTerminalFocused` 가드와 동일 조건, PR #280 codex review). 그 외에는 윈도우 포커스만 이동하고 approval queue/session 상태를 건드리지 않는다. `SessionActionsPlugin`이 `session.context-menu`에 "Focus Terminal" 버튼을 `showSessionSurface` permission gate로 기여(`isDestructive: false`). plugin 세션 명령 핸들러(`handlePluginSessionCommand`/`dismissSessionFromPlugin`/`copyResumeCommandFromPlugin`/`focusTerminalFromPlugin`)는 `@MainActor`로 명시(PR #280 gemini review).
+  - v1.2 d. `session.openWorkspace` — 완료. side-effect-free host command: `AppState.openWorkspaceFromPlugin`이 sessionID로 세션을 찾아 `workspaceRoot`가 있으면 `NSWorkspace.shared.open`으로 Finder에 연다. Finder만 활성화하므로(터미널 frontmost가 아니라) observer의 `passIfTerminalFocused`가 발동해도 approval을 pass하지 않아 별도 가드가 불필요. `SessionActionsPlugin`이 `workspaceRoot`가 있는 세션에만 "Open in Finder" 버튼을 `showSessionSurface` permission gate로 기여하고, 중복을 피하려 `SessionRowView` 컨텍스트 메뉴의 core "Open in Finder" 항목을 제거해 plugin 기여로 대체(plugin disable 시 사라짐; "Copy Path"·`SessionHistoryWindow`의 항목은 유지).
 - 마지막 검증:
-  - 플러그인 관련 테스트 스위트 통과 (2026-06-14, v1.2 c 기준 — 워크트리 빌드 성공, 전체 테스트 0 실패. focusTerminal 카탈로그/라우팅/기여 테스트 5건 추가)
+  - 플러그인 관련 테스트 스위트 통과 (2026-06-14, v1.2 d 기준 — 워크트리 빌드 성공, 전체 테스트 0 실패. openWorkspace 카탈로그/라우팅/기여(workspaceRoot 유무) 테스트 6건 추가)
 - 다음 단계 (v1.2 진행 중):
-  - `session.openWorkspace` — workspace root가 있는 세션만 허용
   - `sound.playCESP`/`power.preventIdleSleep`/`notification.show` effect를 같은 command/effect validation 경로로 통합 정리
   - Migration PR M5 (Update status contribution)는 낮은 우선순위 — v2 network/runtime 설계 후로 보류 가능
 
@@ -696,7 +696,7 @@ v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 �
 - ✅ `session.dismiss`: idle/non-pending only, excluding missed/unread sessions (v1.1 완료, v1.2에서 카탈로그 엔트리로 이전)
 - ✅ `session.copyResumeCommand`: host가 sanitized command 생성 후 pasteboard 복사. side-effect-free (approval/queue/lifecycle 무영향) (완료, v1.2 b — `ActiveSession.resumeCommand` + `SessionActionsPlugin`)
 - ✅ `session.focusTerminal`: `TerminalFocuser.focusTerminal`을 직접 호출하는 plugin 전용 경로(`AppState.focusTerminalFromPlugin`). core `focusTerminal(for:)`의 completion(`passIfTerminalFocused`)·unread/missed 해제를 재사용하지 않고, 터미널 frontmost가 observer 경유로 approval을 pass시키는 것을 막기 위해 request/notification 표시 중이면 focus를 거부(`canPluginFocusTerminal`) (완료, v1.2 c)
-- `session.openWorkspace`: workspace root가 있는 세션만 허용
+- ✅ `session.openWorkspace`: `workspaceRoot`가 있는 세션만, host가 `NSWorkspace.shared.open`으로 Finder에 연다(`AppState.openWorkspaceFromPlugin`). Finder만 활성화해 approval-neutral. core "Open in Finder" 컨텍스트 항목을 plugin 기여로 대체 (완료, v1.2 d)
 - `sound.playCESP`, `power.preventIdleSleep`, `notification.show`를 같은 command/effect validation 경로로 정리
 
 검증:
