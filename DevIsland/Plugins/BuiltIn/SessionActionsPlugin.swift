@@ -92,13 +92,35 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
             )
         )
 
+        var components = [dismiss, copyResume, focusTerminal]
+
+        // Open the workspace root in Finder — only offered when the session has one. Replaces the
+        // core "Open in Finder" context item (removed to avoid a duplicate); the host opens Finder
+        // so the plugin never handles the path beyond passing the session id.
+        if session.workspaceRoot != nil {
+            components.append(PluginUIComponentDTO(
+                id: "open-workspace",
+                type: .button,
+                label: "Open in Finder",
+                value: nil,
+                tone: nil,
+                iconName: "folder",
+                action: PluginUIActionDTO(
+                    id: "session.openWorkspace",
+                    capability: "session.openWorkspace",
+                    routing: .hostExecuted,
+                    payload: ["sessionID": session.id]
+                )
+            ))
+        }
+
         return PluginUIContribution(
             pluginID: manifest.id,
             slot: slot,
             targetSessionID: session.id,
             priority: 50,
             expiresAt: nil,
-            components: [dismiss, copyResume, focusTerminal]
+            components: components
         )
     }
 }
