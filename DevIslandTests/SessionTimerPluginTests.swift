@@ -137,6 +137,47 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(contribution?.components.first?.value, "01:00")
     }
 
+    // MARK: - Selected-session signal (global slot)
+
+    func testGlobalSlotFollowsSelectedSessionOverRecency() throws {
+        let plugin = SessionTimerPlugin()
+        let base = Date(timeIntervalSince1970: 1_000)
+        let older = makeSnapshot(id: "old", startTime: base, lastActiveAt: base.addingTimeInterval(10))
+        let newer = makeSnapshot(id: "new", startTime: base.addingTimeInterval(30), lastActiveAt: base.addingTimeInterval(40))
+
+        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: older), context: context())
+        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: newer), context: context())
+
+        // The user selected the older session; the global elapsed must follow the selection,
+        // not the most-recently-active (newer) one. older startTime = base → base+90 = 90s.
+        let ctx = PluginUIContext(
+            slot: .notchExpandedActivity,
+            timestamp: base.addingTimeInterval(90),
+            session: nil,
+            selectedSessionID: "old"
+        )
+        let contribution = try plugin.makeUIContribution(for: .notchExpandedActivity, context: ctx)
+        XCTAssertEqual(contribution?.components.first?.value, "01:30")
+    }
+
+    func testGlobalSlotFallsBackToRecencyWhenSelectionUntracked() throws {
+        let plugin = SessionTimerPlugin()
+        let base = Date(timeIntervalSince1970: 1_000)
+        let newer = makeSnapshot(id: "new", startTime: base.addingTimeInterval(30), lastActiveAt: base.addingTimeInterval(40))
+
+        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: newer), context: context())
+
+        // Selection points at a session this plugin never tracked → recency fallback (newer).
+        let ctx = PluginUIContext(
+            slot: .notchExpandedActivity,
+            timestamp: base.addingTimeInterval(90),
+            session: nil,
+            selectedSessionID: "ghost"
+        )
+        let contribution = try plugin.makeUIContribution(for: .notchExpandedActivity, context: ctx)
+        XCTAssertEqual(contribution?.components.first?.value, "01:00")
+    }
+
     func testNeedsTickOnlyWhenSessionActiveAndNotchVisible() throws {
         let plugin = SessionTimerPlugin()
         let visible = PluginSurfaceState(visibleSurfaces: [.notchExpandedActivity])
@@ -201,6 +242,51 @@ final class SessionTimerPluginTests: XCTestCase {
             host.contributions,
             [:],
             "disabling a plugin must evict its per-session contributions"
+        )
+    }
+
+    /// The host pulls the selection from `selectedSessionProvider` at drain time and threads
+    /// it into each plugin's `PluginUIContext`.
+    func testHostSuppliesSelectedSessionToContext() async {
+        let host = PluginHost()
+        let echo = SelectionEchoPlugin()
+        host.register([echo])
+        host.selectedSessionProvider = { "selected-id" }
+
+        host.enqueue(sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1")))
+        await host.waitUntilIdle()
+
+        let contribution = host.contributions[.notchExpandedActivity]?.first
+        XCTAssertEqual(contribution?.components.first?.value, "selected-id")
+    }
+
+    func testHostSuppliesNilSelectionWhenNoProvider() async {
+        let host = PluginHost()
+        let echo = SelectionEchoPlugin()
+        host.register([echo])
+
+        host.enqueue(sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1")))
+        await host.waitUntilIdle()
+
+        let contribution = host.contributions[.notchExpandedActivity]?.first
+        XCTAssertEqual(contribution?.components.first?.value, "none")
+    }
+
+    /// The selected session id is session data, so a plugin without `readSessionEvents`
+    /// must not receive it — even on a non-session event it is allowed to handle.
+    func testSelectedSessionGatedByReadSessionEventsPermission() async {
+        let host = PluginHost()
+        let echo = SelectionEchoPlugin(permissions: [.showNotchCard])  // no readSessionEvents
+        host.register([echo])
+        host.selectedSessionProvider = { "selected-id" }
+
+        host.enqueue(PluginEvent(id: UUID(), kind: .appStarted, timestamp: Date()))
+        await host.waitUntilIdle()
+
+        let contribution = host.contributions[.notchExpandedActivity]?.first
+        XCTAssertEqual(
+            contribution?.components.first?.value, "none",
+            "a plugin without readSessionEvents must not learn the selected session id"
         )
     }
 
@@ -299,4 +385,53 @@ private final class GatingStubPlugin: DevIslandPlugin, @unchecked Sendable {
     }
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool { false }
+}
+
+/// Echoes the `selectedSessionID` it receives in `PluginUIContext` into a global-slot
+/// contribution, so a host test can assert the selection signal reached the runner.
+private final class SelectionEchoPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+
+    init(permissions: Set<PluginPermission> = [.readSessionEvents, .showNotchCard]) {
+        manifest = PluginManifest(
+            id: "com.devisland.test.selection-echo",
+            name: "selection echo",
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .system,
+            permissions: permissions,
+            surfaces: [.notchExpandedActivity],
+            // app.started is a non-session event a plugin receives without readSessionEvents,
+            // so it exercises the selected-session permission gate.
+            activationEvents: [
+                PluginEventKind.sessionStarted.rawValue,
+                PluginEventKind.appStarted.rawValue
+            ]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] { [] }
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool { false }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        guard slot == .notchExpandedActivity else { return nil }
+        return PluginUIContribution(
+            pluginID: manifest.id,
+            slot: slot,
+            targetSessionID: nil,
+            priority: 1,
+            expiresAt: nil,
+            components: [
+                PluginUIComponentDTO(
+                    id: "sel",
+                    type: .text,
+                    label: context.selectedSessionID ?? "none",
+                    value: context.selectedSessionID ?? "none",
+                    tone: nil,
+                    iconName: nil,
+                    action: nil
+                )
+            ]
+        )
+    }
 }

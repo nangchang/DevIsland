@@ -248,6 +248,11 @@ class AppState: ObservableObject {
             pluginHost.sessionCommandHandler = { [weak self] capability, sessionID in
                 self?.handlePluginSessionCommand(capability, sessionID: sessionID)
             }
+            // Selection signal: the session the user is currently viewing, so global-slot
+            // contributions render for it instead of the most-recently-active session.
+            pluginHost.selectedSessionProvider = { [weak self] in
+                self?.displayedSessionID
+            }
         }
 
         // Register after restoreOpenSessions so restored sessions don't emit spurious events.
@@ -1436,6 +1441,13 @@ class AppState: ObservableObject {
             }
             DispatchQueue.main.async(execute: completion)
         }
+    }
+
+    /// The session the user is currently viewing: the displayed request's session if one is
+    /// shown, otherwise the user's selected session (`nil` when none). Mirrors the notch's
+    /// displayed-session logic so plugin global slots track the same session the user sees.
+    var displayedSessionID: String? {
+        currentSessionId.isEmpty ? sessionStore.selectedSessionId : currentSessionId
     }
 
     /// Host Command Catalog entry for a plugin-requested `session.dismiss`. The plugin

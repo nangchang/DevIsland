@@ -56,6 +56,11 @@ final class PluginHost: ObservableObject {
     /// The handler re-validates the target session's state before acting (architecture §7).
     var sessionCommandHandler: (@MainActor (_ capability: String, _ sessionID: String) -> Void)?
 
+    /// Supplies the session the user is currently viewing (selected/current), pulled at
+    /// drain time so contributions can render for the user's selection instead of a recency
+    /// proxy. Injected by `AppState`; `nil` (e.g. in tests) means no selection signal.
+    var selectedSessionProvider: (@MainActor () -> String?)?
+
     nonisolated init(
         enablePlugins: Bool = true,
         pluginDataDirectory: URL = PluginStorageProvider.defaultDirectory,
@@ -375,7 +380,10 @@ final class PluginHost: ObservableObject {
         while let queued = nextEvent() {
             let activeRunners = queued.runners.filter { isActive($0.manifest.id) }
             let activeQueued = QueuedPluginEvent(baseEvent: queued.baseEvent, runners: activeRunners)
-            let snapshots = await eventProcessor.process(activeQueued)
+            // Pull the user's current selection on the MainActor before the async hop, so
+            // contributions render for the selected session rather than a recency proxy.
+            let selectedSessionID = selectedSessionProvider?()
+            let snapshots = await eventProcessor.process(activeQueued, selectedSessionID: selectedSessionID)
             let effectBatches = applySnapshots(snapshots, eventKind: queued.baseEvent.kind)
             if queued.baseEvent.kind == .sessionEnded,
                let sessionID = queued.baseEvent.session?.id {

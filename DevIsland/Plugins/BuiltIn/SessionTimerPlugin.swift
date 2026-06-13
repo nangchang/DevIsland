@@ -62,10 +62,15 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
     ) throws -> PluginUIContribution? {
         switch slot {
         case .notchExpandedActivity:
-            guard let current = currentSession else { return nil }
+            // Prefer the session the user is viewing; fall back to the most recently active
+            // one only when there is no selection signal (host provides none, or it points
+            // at an untracked session). This keeps the global elapsed from drifting away
+            // from the user's selection across multiple sessions.
+            let selected = context.selectedSessionID.flatMap { sessions[$0] }
+            guard let target = selected ?? currentSession else { return nil }
             return elapsedContribution(
                 slot: slot,
-                session: current,
+                session: target,
                 targetSessionID: nil,
                 timestamp: context.timestamp,
                 label: "Elapsed"

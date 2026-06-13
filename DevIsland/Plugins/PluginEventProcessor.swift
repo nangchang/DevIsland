@@ -14,7 +14,10 @@ actor PluginEventProcessor {
         self.eventFactory = eventFactory
     }
 
-    func process(_ queued: QueuedPluginEvent) async -> [PluginContributionSnapshot] {
+    func process(
+        _ queued: QueuedPluginEvent,
+        selectedSessionID: String? = nil
+    ) async -> [PluginContributionSnapshot] {
         let storageProvider = self.storageProvider
         let eventFactory = self.eventFactory
 
@@ -28,7 +31,18 @@ actor PluginEventProcessor {
                     let storageSnapshot = runner.manifest.permissions.contains(.writePluginStorage)
                         ? await storageProvider.snapshot(forPluginID: runner.manifest.id)
                         : [:]
-                    return await runner.handle(event, storageSnapshot: storageSnapshot)
+                    // The selected session id is session data, so gate it on the same
+                    // permission as session snapshots (architecture §6.3). Otherwise a
+                    // plugin without `readSessionEvents` could learn the user's current
+                    // session via the context on a non-session event (tick, app.started).
+                    let allowedSelectedSessionID = runner.manifest.permissions.contains(.readSessionEvents)
+                        ? selectedSessionID
+                        : nil
+                    return await runner.handle(
+                        event,
+                        storageSnapshot: storageSnapshot,
+                        selectedSessionID: allowedSelectedSessionID
+                    )
                 }
             }
 
