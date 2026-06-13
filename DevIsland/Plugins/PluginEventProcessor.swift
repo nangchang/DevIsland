@@ -14,7 +14,10 @@ actor PluginEventProcessor {
         self.eventFactory = eventFactory
     }
 
-    func process(_ queued: QueuedPluginEvent) async -> [PluginContributionSnapshot] {
+    func process(
+        _ queued: QueuedPluginEvent,
+        selectedSessionID: String? = nil
+    ) async -> [PluginContributionSnapshot] {
         let storageProvider = self.storageProvider
         let eventFactory = self.eventFactory
 
@@ -28,7 +31,11 @@ actor PluginEventProcessor {
                     let storageSnapshot = runner.manifest.permissions.contains(.writePluginStorage)
                         ? await storageProvider.snapshot(forPluginID: runner.manifest.id)
                         : [:]
-                    return await runner.handle(event, storageSnapshot: storageSnapshot)
+                    return await runner.handle(
+                        event,
+                        storageSnapshot: storageSnapshot,
+                        selectedSessionID: selectedSessionID
+                    )
                 }
             }
 

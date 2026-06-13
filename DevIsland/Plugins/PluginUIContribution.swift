@@ -15,6 +15,10 @@ struct PluginUIContext: Equatable {
     let slot: PluginUISlot
     let timestamp: Date
     let session: PluginSessionSnapshot?
+    /// The session the user is currently viewing (selected/current), if any. Lets global
+    /// slots render for the user's selection instead of a recency proxy. `nil` when no
+    /// session is selected or the host provides no selection signal (e.g. in tests).
+    var selectedSessionID: String? = nil
 }
 
 struct PluginSurfaceState: Codable, Equatable {

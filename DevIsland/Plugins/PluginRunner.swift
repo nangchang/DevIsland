@@ -15,7 +15,8 @@ actor PluginRunner {
 
     func handle(
         _ event: PluginEvent,
-        storageSnapshot: [String: String]
+        storageSnapshot: [String: String],
+        selectedSessionID: String? = nil
     ) async -> PluginContributionSnapshot {
         let startedAt = ContinuousClock.now
         let evaluatedSlots = manifest.surfaces.filter {
@@ -36,7 +37,8 @@ actor PluginRunner {
                 let context = PluginUIContext(
                     slot: slot,
                     timestamp: event.timestamp,
-                    session: event.session
+                    session: event.session,
+                    selectedSessionID: selectedSessionID
                 )
                 if let contribution = try plugin.makeUIContribution(for: slot, context: context) {
                     contributions[slot] = contribution
