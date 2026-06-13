@@ -148,7 +148,9 @@ final class SessionTimerPluginTests: XCTestCase {
 
         host.enqueue(sessionEvent(kind: .sessionEnded, session: makeSnapshot(id: "s1")))
         await host.waitUntilIdle()
-        XCTAssertTrue(host.contributions[.notchSessionRow]?.isEmpty ?? true)
+        // The ended session clears both the row badge and the global activity card,
+        // so the whole cache is empty.
+        XCTAssertEqual(host.contributions, [:])
     }
 
     /// Disabling a plugin must drop its session-scoped contributions too, not just
@@ -162,8 +164,9 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(host.contributions[.notchSessionRow]?.count, 1)
 
         host.setPluginEnabled(false, pluginID: "com.devisland.timer")
-        XCTAssertTrue(
-            host.contributions[.notchSessionRow]?.isEmpty ?? true,
+        XCTAssertEqual(
+            host.contributions,
+            [:],
             "disabling a plugin must evict its per-session contributions"
         )
     }
