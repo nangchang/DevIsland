@@ -1995,14 +1995,19 @@ class AppState: ObservableObject {
         // so plugin work cannot change or delay it. Pass-through outcomes (timeout, dismiss,
         // terminal-focus) are deferrals, not approve/deny decisions, so they are excluded.
         if hadResponseHandler, !passToTerminal, !currentSessionId.isEmpty {
-            let approvalEvent = pluginEventFactory.makeApprovalDecidedEvent(
-                sessionID: currentSessionId,
-                approved: approved,
-                toolName: currentRawToolName.isEmpty ? currentToolName : currentRawToolName,
-                scope: approvalScope?.rawValue ?? RuleScope.once.rawValue
-            )
-            MainActor.assumeIsolated {
-                pluginHost.enqueue(approvalEvent)
+            let decidedSessionID = currentSessionId
+            let decidedToolName = currentRawToolName.isEmpty ? currentToolName : currentRawToolName
+            let decidedScope = approvalScope?.rawValue ?? RuleScope.once.rawValue
+            // Dispatch to the main actor instead of asserting isolation: sendDecision is not
+            // statically main-actor-isolated, so a future off-main caller would crash on
+            // assumeIsolated. The event is best-effort, so a deferred main-actor hop is fine.
+            Task { @MainActor [pluginHost, pluginEventFactory] in
+                pluginHost.enqueue(pluginEventFactory.makeApprovalDecidedEvent(
+                    sessionID: decidedSessionID,
+                    approved: approved,
+                    toolName: decidedToolName,
+                    scope: decidedScope
+                ))
             }
         }
         persistApprovalScope(approved: approved, approvalScope: approvalScope)
