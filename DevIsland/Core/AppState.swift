@@ -243,6 +243,11 @@ class AppState: ObservableObject {
                 Self.builtInPlugins(),
                 disabledPluginIDs: PluginSettingsStore.shared.disabledPluginIDs
             )
+            // Host Command Catalog: route validated session commands (e.g. session.dismiss)
+            // to AppState, which alone knows the session state needed to authorize them.
+            pluginHost.sessionCommandHandler = { [weak self] capability, sessionID in
+                self?.handlePluginSessionCommand(capability, sessionID: sessionID)
+            }
         }
 
         // Register after restoreOpenSessions so restored sessions don't emit spurious events.
@@ -476,7 +481,7 @@ class AppState: ObservableObject {
 
     /// Built-in plugins compiled into DevIsland, registered once at init.
     private static func builtInPlugins() -> [any DevIslandPlugin & Sendable] {
-        [SessionTimerPlugin(), PomodoroPlugin(), OpenPeonPlugin(), CaffeinePlugin(), SessionStatsPlugin()]
+        [SessionTimerPlugin(), PomodoroPlugin(), OpenPeonPlugin(), CaffeinePlugin(), SessionStatsPlugin(), SessionActionsPlugin()]
     }
 
     /// Starts the plugin platform once the app has finished launching: emits the
@@ -1424,6 +1429,37 @@ class AppState: ObservableObject {
             }
             DispatchQueue.main.async(execute: completion)
         }
+    }
+
+    /// Host Command Catalog entry for a plugin-requested `session.dismiss`. The plugin
+    /// only proposes; the host authorizes here. Routed from `PluginHost.handleAction`.
+    private func handlePluginSessionCommand(_ capability: String, sessionID: String) {
+        switch capability {
+        case "session.dismiss":
+            dismissSessionFromPlugin(sessionID)
+        default:
+            break
+        }
+    }
+
+    /// A plugin may dismiss only sessions that need no user attention. Extracted as a pure
+    /// predicate so the policy is unit-testable without a full AppState. Pending /
+    /// current-approval / missed / unread sessions are excluded so a plugin action can
+    /// never pass a provider response or drain the approval queue (which `dismissSession`
+    /// does for a pending session). (architecture doc §7/§8, §8 capability↔permission table)
+    static func isPluginDismissable(_ session: ActiveSession) -> Bool {
+        session.status == .idle
+            && !session.isPending
+            && !session.hasMissedApproval
+            && !session.isUnread
+    }
+
+    /// Host-validated dismissal of a plugin-requested `session.dismiss`.
+    private func dismissSessionFromPlugin(_ sessionID: String) {
+        guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }),
+              Self.isPluginDismissable(session)
+        else { return }
+        dismissSession(sessionID)
     }
 
     func dismissSession(_ sessionId: String) {

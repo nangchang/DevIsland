@@ -261,6 +261,12 @@ struct SessionRowView: View {
         pluginHost.contributions[.notchSessionRow]?.filter { $0.targetSessionID == session.id } ?? []
     }
 
+    /// Plugin-contributed context-menu actions for this session (e.g. host-validated
+    /// session.dismiss). Filtered to this session; reads only the cache.
+    private var contextMenuContributions: [PluginUIContribution] {
+        pluginHost.contributions[.sessionContextMenu]?.filter { $0.targetSessionID == session.id } ?? []
+    }
+
     private struct AppBadge { let label: String; let color: Color }
     private func terminalAppBadge(_ app: String) -> AppBadge? {
         switch app {
@@ -569,6 +575,8 @@ struct SessionRowView: View {
             } label: {
                 Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
             }
+
+            PluginSessionMenuItemsView(contributions: contextMenuContributions)
         }
     }
 
