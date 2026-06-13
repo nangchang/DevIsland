@@ -28,6 +28,11 @@ enum SessionCommandCatalog {
             capability: "session.copyResumeCommand",
             requiredPermission: .showSessionSurface,
             isDestructive: false
+        ),
+        "session.focusTerminal": SessionCommandDescriptor(
+            capability: "session.focusTerminal",
+            requiredPermission: .showSessionSurface,
+            isDestructive: false
         )
     ]
 

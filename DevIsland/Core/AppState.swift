@@ -1452,21 +1452,65 @@ class AppState: ObservableObject {
 
     /// Host Command Catalog entry for a plugin-requested `session.dismiss`. The plugin
     /// only proposes; the host authorizes here. Routed from `PluginHost.handleAction`.
+    @MainActor
     private func handlePluginSessionCommand(_ capability: String, sessionID: String) {
         switch capability {
         case "session.dismiss":
             dismissSessionFromPlugin(sessionID)
         case "session.copyResumeCommand":
             copyResumeCommandFromPlugin(sessionID)
+        case "session.focusTerminal":
+            focusTerminalFromPlugin(sessionID)
         default:
             break
         }
+    }
+
+    /// Whether a plugin may focus a session terminal right now without disturbing an approval.
+    /// Bringing a terminal to the front fires NotchWindowController's activation/click observers,
+    /// which call `passIfTerminalFocused()` — and that passes a shown request to the terminal. So
+    /// a plugin-initiated focus must be refused in exactly the state that guard fires in, keeping
+    /// the command approval-neutral. (PR #280 codex review, architecture doc §8)
+    var canPluginFocusTerminal: Bool {
+        currentResponseHandler == nil && !(isNotchExpanded && isExpandingFromRequest)
+    }
+
+    /// Brings a plugin-requested session's terminal to the front. Deliberately does NOT reuse
+    /// `focusTerminal(for:)`: that path clears unread/missed flags and schedules
+    /// `passIfTerminalFocused()`, which passes a pending approval to the terminal — a plugin
+    /// action must never touch the approval queue or session state. This calls `TerminalFocuser`
+    /// directly with the session's own terminal metadata, so it only moves window focus.
+    /// (architecture doc §8, v1.2)
+    @MainActor
+    private func focusTerminalFromPlugin(_ sessionID: String) {
+        // Even without the focusTerminal(for:) completion callback, making the terminal frontmost
+        // would let the window observers auto-pass a shown approval. Refuse while one is on screen.
+        guard canPluginFocusTerminal else {
+            print("[DevIsland] [plugin-cmd] focusTerminal: refused while a request is shown")
+            return
+        }
+        guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }) else {
+            print("[DevIsland] [plugin-cmd] focusTerminal: no session \(sessionID.prefix(8))")
+            return
+        }
+        TerminalFocuser.focusTerminal(
+            appName: session.terminalApp,
+            title: session.terminalTitle,
+            tty: session.terminalTTY,
+            windowId: session.terminalWindowId,
+            tabIndex: session.terminalTabIndex,
+            tmuxPane: session.terminalTmuxPane,
+            tmuxSocket: session.terminalTmuxSocket,
+            tmuxClient: session.terminalTmuxClient,
+            workspaceRoot: session.workspaceRoot
+        )
     }
 
     /// Copies the host-generated resume command for a plugin-requested session to the pasteboard.
     /// Side-effect-free with respect to core state: it never touches the approval queue, pending
     /// requests, provider responses, or session lifecycle — so the plugin path stays observation-
     /// adjacent and cannot influence an approval decision. (architecture doc §8, v1.2)
+    @MainActor
     private func copyResumeCommandFromPlugin(_ sessionID: String) {
         guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }) else {
             print("[DevIsland] [plugin-cmd] copyResumeCommand: no session \(sessionID.prefix(8))")
@@ -1491,6 +1535,7 @@ class AppState: ObservableObject {
     }
 
     /// Host-validated dismissal of a plugin-requested `session.dismiss`.
+    @MainActor
     private func dismissSessionFromPlugin(_ sessionID: String) {
         guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }),
               Self.isPluginDismissable(session)

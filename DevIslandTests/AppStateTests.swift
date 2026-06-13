@@ -50,6 +50,28 @@ final class AppStateTests: XCTestCase {
         poll()
     }
     
+    // MARK: - Plugin focus guard (session.focusTerminal)
+
+    func testCanPluginFocusTerminalWhenNoRequestShown() {
+        appState.isNotchExpanded = false
+        appState.isExpandingFromRequest = false
+        XCTAssertTrue(appState.canPluginFocusTerminal)
+    }
+
+    func testCannotPluginFocusTerminalWhileShowingRequest() {
+        // While a request/notification is on screen, focusing the terminal would let
+        // NotchWindowController's observers auto-pass the approval — so it must be refused.
+        appState.isNotchExpanded = true
+        appState.isExpandingFromRequest = true
+        XCTAssertFalse(appState.canPluginFocusTerminal)
+    }
+
+    func testCanPluginFocusTerminalWhenExpandedButNotFromRequest() {
+        appState.isNotchExpanded = true
+        appState.isExpandingFromRequest = false
+        XCTAssertTrue(appState.canPluginFocusTerminal)
+    }
+
     func testNormalizedHookEventName() {
         XCTAssertEqual(HookEventNormalizer.normalizedName("BeforeTool"), "beforetool")
         XCTAssertEqual(HookEventNormalizer.normalizedName("on_tool_call"), "ontoolcall")
