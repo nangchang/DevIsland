@@ -276,22 +276,7 @@ struct SessionRowView: View {
         }
     }
 
-    private var resumeCommand: String {
-        let cd = session.workspaceRoot.map { shellCdPrefix($0) } ?? ""
-        switch session.agentKind {
-        case .claudeCode:  return "\(cd)claude --resume \(session.id)"
-        case .codex:       return "\(cd)codex --resume \(session.id)"
-        case .gemini:      return "\(cd)gemini"
-        case .antigravity: return "\(cd)agy"
-        case .island:      return cd.isEmpty ? "" : String(cd.dropLast(4)) // cd only
-        }
-    }
-
-    private func shellCdPrefix(_ path: String) -> String {
-        let escaped = path.replacingOccurrences(of: "\\", with: "\\\\")
-                          .replacingOccurrences(of: "\"", with: "\\\"")
-        return "cd \"\(escaped)\" && "
-    }
+    private var resumeCommand: String { session.resumeCommand }
 
     private var autoTerminalName: String {
         TerminalFocuser.resolvedTerminalName(
@@ -569,13 +554,9 @@ struct SessionRowView: View {
 
             openInTerminalMenu
 
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(resumeCommand, forType: .string)
-            } label: {
-                Label(l10n.menuCopyResumeCommand, systemImage: "arrow.counterclockwise")
-            }
-
+            // "Copy Resume Command" is contributed by SessionActionsPlugin via the
+            // session.copyResumeCommand host command (rendered below), so the core item was
+            // removed to avoid a duplicate entry. Disabling the plugin removes this action.
             PluginSessionMenuItemsView(contributions: contextMenuContributions)
         }
     }

@@ -61,10 +61,14 @@
   - v1.1 c. Host Command Catalog 골격 + `session.dismiss` + `session.context-menu` (M4 본체 1차) — 완료. `PluginHost.handleAction`의 `hostExecuted` 분기가 `session.*` capability를 effect executor 대신 MainActor `sessionCommandHandler`(AppState 주입)로 라우팅(catalog 골격). `session.dismiss`는 `showSessionSurface` permission gate(host) + `AppState.isPluginDismissable` 세션 상태 재검증(host): idle·non-pending·!missedApproval·!unread만 허용, pending/current/missed/unread는 거부해 plugin이 provider response pass·approval queue drain 경로에 닿지 못하게 함. `dismissSession`의 지연 제거 완료 시점에 `requirePluginDismissable`로 한 번 더 재검증(TOCTOU 차단). `SessionActionsPlugin`(`com.devisland.session-actions`)이 `session.context-menu`에 host-executed "Dismiss if idle" 액션을 기여(추적 상태 없이 `context.session`만 사용)하고, `SessionRowView` context menu가 `PluginSessionMenuItemsView`로 캐시를 세션별 렌더. 기존 core dismiss 버튼은 불변. restore된 세션도 surface에 보이도록 `startPluginPlatform`에서 `session.started` 1회 재생.
   - v1.1 d. `session.message` 세션 메시지 창 header accessory — 완료. `SessionTimerPlugin`이 `.sessionMessage` surface에도 per-session elapsed badge를 기여(`.notchSessionRow`와 동일 경로)하고, `SessionMessageView` 헤더가 `PluginSlotView`로 캐시를 세션별 렌더(렌더 경로에서 플러그인 코드 호출 없음). `SessionMessageWindow`/`SessionHistoryWindow`의 message/replay data loading은 core 유지. row/header 슬롯은 `PluginSlotView(axis:.horizontal)`로 가로 배치(다중 기여 시 바 왜곡 방지), 세로 카드(`notch.expanded.activity`)는 vertical 유지.
   - v1.1 e. selected/current 세션 신호 — 완료. `PluginHost`가 `selectedSessionProvider`(AppState 주입, `displayedSessionID = currentSessionId.isEmpty ? selectedSessionId : currentSessionId`)로 drain 시점에 사용자가 보는 세션을 pull해 `PluginUIContext.selectedSessionID`에 plumb. `SessionTimerPlugin`의 전역 슬롯(`notch.expanded.activity`)이 recency proxy(`max(lastActiveAt)`) 대신 선택 세션의 elapsed를 우선 표시(미선택·미추적 시 recency fallback). selection-change 전용 이벤트 없이, notch 가시 시 1Hz tick이 ≤1s 내 갱신.
+  - v1.2 a. Host Command Catalog 골격화 — 완료. `PluginHost`의 하드코딩 `isSessionCommand`/`isSessionCommandAllowed` 분기를 데이터 기반 `SessionCommandCatalog`(capability → 필요 permission + `isDestructive` audit 메타데이터)로 대체. `handleAction`의 `.hostExecuted` 분기가 카탈로그 조회로 permission gate 후 routing 직전 audit log(`[plugin-cmd] <pluginID> → <capability> session=… destructive=…`)를 발행. `session.dismiss` 동작 불변(카탈로그 단일 엔트리라 분기 결과 동일).
+  - v1.2 b. `session.copyResumeCommand` — 완료. side-effect-free host command: `AppState.copyResumeCommandFromPlugin`이 sessionID로 세션을 찾아 host가 생성한 `ActiveSession.resumeCommand`(shell-escaped, `NotchComponents`에서 추출해 공유)를 pasteboard에 복사. approval queue/pending/provider response/session lifecycle을 전혀 건드리지 않음. `SessionActionsPlugin`이 `session.context-menu`에 "Copy Resume Command" 버튼을 `showSessionSurface` permission gate로 기여하고, 중복을 피하려 `SessionRowView` 컨텍스트 메뉴의 core "Copy Resume Command" 항목을 제거해 plugin 기여로 대체(plugin disable 시 해당 항목 사라짐; `SessionHistoryWindow`의 core 항목은 plugin surface가 아니라 유지). `resumeCommand` 셸 이스케이프는 POSIX 작은따옴표 방식(`'...'`, 내부 `'`→`'\''`)으로 command substitution/변수 확장을 차단(PR #279 gemini review). 플러그인은 workspace path·shell 문자열을 직접 보지 않음(host-owned sanitization).
 - 마지막 검증:
-  - 플러그인 관련 테스트 스위트 통과 (2026-06-13, v1.1 e 기준 — 워크트리 빌드 성공, 전체 481 테스트 0 실패)
-- 다음 단계 (v1.1 완료 → v1.2):
-  - v1.2 Host Command Catalog 확장(`session.focusTerminal`/`copyResumeCommand`/`openWorkspace`를 같은 validation 경로로) — `session.dismiss`가 이미 공통 capability validation 경로를 타므로 logging/audit/추가 command 정리 중심
+  - 플러그인 관련 테스트 스위트 통과 (2026-06-13, v1.2 b 기준 — 워크트리 빌드 성공, 전체 테스트 0 실패. 카탈로그/copyResumeCommand 라우팅/resumeCommand escaping 테스트 14건 추가)
+- 다음 단계 (v1.2 진행 중):
+  - `session.focusTerminal` — approval 무영향 plugin 전용 focus 경로 필요(기존 `AppState.focusTerminal(for:)`이 completion에서 `passIfTerminalFocused`로 pending approval을 `sendDecision(...passToTerminal:)` pass시키므로 그대로 재사용 불가) + pending/missed/unread 거부 검증
+  - `session.openWorkspace` — workspace root가 있는 세션만 허용
+  - `sound.playCESP`/`power.preventIdleSleep`/`notification.show` effect를 같은 command/effect validation 경로로 통합 정리
   - Migration PR M5 (Update status contribution)는 낮은 우선순위 — v2 network/runtime 설계 후로 보류 가능
 
 
@@ -688,9 +692,10 @@ v1 built-in platform과 migration track이 안정화된 뒤 다음 순서로 확
 v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 이 단계에서 catalog 구조로 확장한다.
 따라서 `session.dismiss`는 v1.1에서 이미 공통 capability validation 경로를 타야 하며, v1.2에서는 logging, failure handling, audit metadata, 추가 command 등록 구조를 정리한다.
 
-- `session.dismiss`: idle/non-pending only, excluding missed/unread sessions
-- `session.focusTerminal`: 기존 `TerminalFocuser` 경유
-- `session.copyResumeCommand`: host가 sanitized command 생성
+- ✅ Host Command Catalog 골격 — `SessionCommandCatalog`(capability → 필요 permission + `isDestructive` 메타데이터) 데이터 구조로 `PluginHost`의 하드코딩 분기를 대체하고 routing 직전 audit log 발행 (완료, v1.2 a)
+- ✅ `session.dismiss`: idle/non-pending only, excluding missed/unread sessions (v1.1 완료, v1.2에서 카탈로그 엔트리로 이전)
+- ✅ `session.copyResumeCommand`: host가 sanitized command 생성 후 pasteboard 복사. side-effect-free (approval/queue/lifecycle 무영향) (완료, v1.2 b — `ActiveSession.resumeCommand` + `SessionActionsPlugin`)
+- `session.focusTerminal`: 기존 `TerminalFocuser` 경유. 단 `AppState.focusTerminal(for:)`은 `passIfTerminalFocused`로 pending approval을 pass시키므로 plugin 경로는 approval 무영향 전용 경로 + pending/missed/unread 거부 검증이 필요
 - `session.openWorkspace`: workspace root가 있는 세션만 허용
 - `sound.playCESP`, `power.preventIdleSleep`, `notification.show`를 같은 command/effect validation 경로로 정리
 

@@ -190,15 +190,17 @@ final class PluginHost: ObservableObject {
 
         switch action.routing {
         case .hostExecuted:
-            // Host Command Catalog (v1.1 skeleton): `session.*` capabilities need MainActor
-            // session state, so they route to `sessionCommandHandler` (AppState) instead of
-            // the off-main effect executor. The host gates the permission here; the handler
+            // Host Command Catalog: `session.*` capabilities need MainActor session state, so
+            // they route to `sessionCommandHandler` (AppState) instead of the off-main effect
+            // executor. The host gates the permission here (via the catalog); the handler
             // re-validates the *session state* it alone owns. (architecture doc §7/§8)
-            if Self.isSessionCommand(action.capability) {
-                guard Self.isSessionCommandAllowed(action.capability, permissions: runner.manifest.permissions),
+            if let descriptor = SessionCommandCatalog.descriptor(for: action.capability) {
+                guard runner.manifest.permissions.contains(descriptor.requiredPermission),
                       let sessionID = action.payload["sessionID"], !sessionID.isEmpty
                 else { return }
-                sessionCommandHandler?(action.capability, sessionID)
+                print("[DevIsland] [plugin-cmd] \(pluginID) → \(descriptor.capability) " +
+                      "session=\(sessionID.prefix(8)) destructive=\(descriptor.isDestructive)")
+                sessionCommandHandler?(descriptor.capability, sessionID)
                 return
             }
             guard PluginEffectExecutor.isHostEffectSupported(
@@ -235,25 +237,6 @@ final class PluginHost: ObservableObject {
 
     private nonisolated static func isPluginEventCapabilityAllowed(_ capability: String) -> Bool {
         capability.hasPrefix("plugin.") || capability.hasPrefix("timer.")
-    }
-
-    /// Host Command Catalog (v1.1 skeleton). Session commands need MainActor session state,
-    /// so they route to `sessionCommandHandler` rather than the off-main effect executor.
-    /// v1.2 expands this set (focusTerminal, copyResumeCommand, …) on the same path.
-    private nonisolated static func isSessionCommand(_ capability: String) -> Bool {
-        capability == "session.dismiss"
-    }
-
-    private nonisolated static func isSessionCommandAllowed(
-        _ capability: String,
-        permissions: Set<PluginPermission>
-    ) -> Bool {
-        switch capability {
-        case "session.dismiss":
-            return permissions.contains(.showSessionSurface)
-        default:
-            return false
-        }
     }
 
     func enqueue(_ event: PluginEvent) {

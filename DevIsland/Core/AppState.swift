@@ -1456,9 +1456,26 @@ class AppState: ObservableObject {
         switch capability {
         case "session.dismiss":
             dismissSessionFromPlugin(sessionID)
+        case "session.copyResumeCommand":
+            copyResumeCommandFromPlugin(sessionID)
         default:
             break
         }
+    }
+
+    /// Copies the host-generated resume command for a plugin-requested session to the pasteboard.
+    /// Side-effect-free with respect to core state: it never touches the approval queue, pending
+    /// requests, provider responses, or session lifecycle — so the plugin path stays observation-
+    /// adjacent and cannot influence an approval decision. (architecture doc §8, v1.2)
+    private func copyResumeCommandFromPlugin(_ sessionID: String) {
+        guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }) else {
+            print("[DevIsland] [plugin-cmd] copyResumeCommand: no session \(sessionID.prefix(8))")
+            return
+        }
+        let command = session.resumeCommand
+        guard !command.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
     }
 
     /// A plugin may dismiss only sessions that need no user attention. Extracted as a pure
