@@ -100,6 +100,46 @@ final class SessionStatsPluginTests: XCTestCase {
         XCTAssertEqual(contribution.components.map { $0.id }, ["sessions"], "no hooks means only the sessions row")
     }
 
+    // MARK: - Approval tallies
+
+    func testApprovalDecisionsTalliedInMenubar() throws {
+        let plugin = SessionStatsPlugin()
+        _ = try plugin.onEvent(approvalEvent(approved: true), context: context())
+        _ = try plugin.onEvent(approvalEvent(approved: true), context: context())
+        _ = try plugin.onEvent(approvalEvent(approved: false), context: context())
+
+        let contribution = try XCTUnwrap(
+            try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu))
+        )
+        let byID = Dictionary(uniqueKeysWithValues: contribution.components.map { ($0.id, $0) })
+        XCTAssertEqual(byID["approved"]?.value, "2")
+        XCTAssertEqual(byID["denied"]?.value, "1")
+    }
+
+    func testApprovalRowsShownWhenOnlyApprovalsObserved() throws {
+        let plugin = SessionStatsPlugin()
+        _ = try plugin.onEvent(approvalEvent(approved: true), context: context())
+
+        let contribution = try XCTUnwrap(
+            try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu)),
+            "an approval decision alone warrants a menu contribution"
+        )
+        XCTAssertEqual(contribution.components.map { $0.id }, ["sessions", "approved", "denied"])
+    }
+
+    func testNoApprovalRowsBeforeAnyDecision() throws {
+        let plugin = SessionStatsPlugin()
+        _ = try plugin.onEvent(hookEvent(provider: "claude"), context: context())
+
+        let contribution = try XCTUnwrap(
+            try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu))
+        )
+        XCTAssertFalse(
+            contribution.components.contains { $0.id == "approved" || $0.id == "denied" },
+            "no approval rows until an approval.decided event is observed"
+        )
+    }
+
     // MARK: - Tick
 
     func testNeverNeedsTick() throws {
@@ -173,6 +213,20 @@ final class SessionStatsPluginTests: XCTestCase {
                 notificationType: nil,
                 message: nil,
                 payload: nil
+            )
+        )
+    }
+
+    private func approvalEvent(approved: Bool) -> PluginEvent {
+        PluginEvent(
+            id: UUID(),
+            kind: .approvalDecided,
+            timestamp: Date(),
+            approval: PluginApprovalSummary(
+                sessionID: "s1",
+                approved: approved,
+                toolName: "Bash",
+                scope: "once"
             )
         )
     }

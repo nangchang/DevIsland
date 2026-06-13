@@ -191,6 +191,42 @@ final class PluginEventFactoryTests: XCTestCase {
         XCTAssertNil(redacted.hook)
     }
 
+    func testMakeApprovalDecidedEventCarriesOnlySanitizedSummary() {
+        let event = factory.makeApprovalDecidedEvent(
+            sessionID: "session-1",
+            approved: false,
+            toolName: "Bash",
+            scope: "once"
+        )
+
+        XCTAssertEqual(event.kind, .approvalDecided)
+        XCTAssertNil(event.hook)
+        XCTAssertNil(event.session)
+        XCTAssertNil(event.action)
+        XCTAssertEqual(event.approval?.sessionID, "session-1")
+        XCTAssertEqual(event.approval?.approved, false)
+        XCTAssertEqual(event.approval?.toolName, "Bash")
+        XCTAssertEqual(event.approval?.scope, "once")
+    }
+
+    func testRedactedApprovalEventRequiresHookSummariesPermission() {
+        let event = factory.makeApprovalDecidedEvent(
+            sessionID: "session-1",
+            approved: true,
+            toolName: "Edit",
+            scope: "session"
+        )
+
+        XCTAssertNil(
+            factory.redactedEvent(from: event, permissions: []).approval,
+            "approval summary needs readHookSummaries"
+        )
+        XCTAssertEqual(
+            factory.redactedEvent(from: event, permissions: [.readHookSummaries]).approval?.toolName,
+            "Edit"
+        )
+    }
+
     private func makeHook(
         parsedJSON: [String: Any] = [:],
         displayToolName: String = "Edit",

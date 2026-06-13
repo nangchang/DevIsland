@@ -94,6 +94,35 @@ struct PluginEventFactory: Sendable {
         )
     }
 
+    /// Builds an observation-only `approval.decided` event. `AppState` emits it *after*
+    /// the provider response has already been sent, so a plugin can tally approve/deny
+    /// outcomes but can never change or delay a decision (architecture doc §6). The
+    /// summary carries no raw payload; `toolName` is a tool identifier, not user content.
+    func makeApprovalDecidedEvent(
+        sessionID: String,
+        approved: Bool,
+        toolName: String,
+        scope: String,
+        id: UUID = UUID(),
+        timestamp: Date = Date()
+    ) -> PluginEvent {
+        PluginEvent(
+            id: id,
+            kind: .approvalDecided,
+            timestamp: timestamp,
+            session: nil,
+            hook: nil,
+            action: nil,
+            approval: PluginApprovalSummary(
+                sessionID: sessionID,
+                approved: approved,
+                toolName: emptyToNil(toolName) ?? "",
+                scope: scope
+            ),
+            powerStatus: nil
+        )
+    }
+
     func snapshot(from session: ActiveSession) -> PluginSessionSnapshot {
         PluginSessionSnapshot(
             id: session.id,
