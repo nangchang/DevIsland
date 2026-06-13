@@ -1994,7 +1994,9 @@ class AppState: ObservableObject {
         // Observation-only `approval.decided`, emitted after the response is already sent
         // so plugin work cannot change or delay it. Pass-through outcomes (timeout, dismiss,
         // terminal-focus) are deferrals, not approve/deny decisions, so they are excluded.
-        if hadResponseHandler, !passToTerminal, !currentSessionId.isEmpty {
+        // A non-nil `toolInput` is an AskUserQuestion structured reply (submitClaudeQuestion):
+        // a question answer, not a tool approval, so it must not count as an approve decision.
+        if hadResponseHandler, !passToTerminal, toolInput == nil, !currentSessionId.isEmpty {
             let decidedSessionID = currentSessionId
             let decidedToolName = currentRawToolName.isEmpty ? currentToolName : currentRawToolName
             let decidedScope = approvalScope?.rawValue ?? RuleScope.once.rawValue
