@@ -203,6 +203,27 @@ struct PluginMenuItemsView: View {
     }
 }
 
+/// Renders `.sessionContextMenu` contributions for one session as context-menu items,
+/// separated from the core items by a Divider. Reuses the menu component renderer, so
+/// only `button` components are interactive (the session context menu is action-only in
+/// v1). Button taps route through `PluginHost.handleAction`, which validates the command.
+struct PluginSessionMenuItemsView: View {
+    let contributions: [PluginUIContribution]
+
+    @ViewBuilder
+    var body: some View {
+        let valid = activePluginContributions(contributions)
+        if !valid.isEmpty {
+            Divider()
+            ForEach(valid, id: \.pluginID) { contribution in
+                ForEach(contribution.components, id: \.id) { component in
+                    PluginMenuComponentView(pluginID: contribution.pluginID, component: component)
+                }
+            }
+        }
+    }
+}
+
 private struct PluginMenuComponentView: View {
     let pluginID: String
     let component: PluginUIComponentDTO

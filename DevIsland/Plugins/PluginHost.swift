@@ -51,6 +51,11 @@ final class PluginHost: ObservableObject {
     private var settingsStore: PluginSettingsStore?
     private var lastResetTimestamps: [String: Date] = [:]
 
+    /// Host Command Catalog handler for validated `session.*` commands, injected by
+    /// `AppState` after registration. `nil` (e.g. in tests) makes session commands no-op.
+    /// The handler re-validates the target session's state before acting (architecture §7).
+    var sessionCommandHandler: (@MainActor (_ capability: String, _ sessionID: String) -> Void)?
+
     nonisolated init(
         enablePlugins: Bool = true,
         pluginDataDirectory: URL = PluginStorageProvider.defaultDirectory,
@@ -174,12 +179,23 @@ final class PluginHost: ObservableObject {
 
     /// Routes a UI action from the plugin that owns `pluginID`.
     /// `.pluginEvent` routing enqueues a pluginActionInvoked event back to that plugin.
-    /// `.hostExecuted` routing sends the action through the same host effect executor.
+    /// `.hostExecuted` routing runs a host command (session catalog) or effect.
     func handleAction(_ action: PluginUIActionDTO, from pluginID: String, componentID: String) {
         guard let runner = runners[pluginID], isActive(pluginID) else { return }
 
         switch action.routing {
         case .hostExecuted:
+            // Host Command Catalog (v1.1 skeleton): `session.*` capabilities need MainActor
+            // session state, so they route to `sessionCommandHandler` (AppState) instead of
+            // the off-main effect executor. The host gates the permission here; the handler
+            // re-validates the *session state* it alone owns. (architecture doc §7/§8)
+            if Self.isSessionCommand(action.capability) {
+                guard Self.isSessionCommandAllowed(action.capability, permissions: runner.manifest.permissions),
+                      let sessionID = action.payload["sessionID"], !sessionID.isEmpty
+                else { return }
+                sessionCommandHandler?(action.capability, sessionID)
+                return
+            }
             guard PluginEffectExecutor.isHostEffectSupported(
                 action.capability,
                 permissions: runner.manifest.permissions
@@ -214,6 +230,25 @@ final class PluginHost: ObservableObject {
 
     private nonisolated static func isPluginEventCapabilityAllowed(_ capability: String) -> Bool {
         capability.hasPrefix("plugin.") || capability.hasPrefix("timer.")
+    }
+
+    /// Host Command Catalog (v1.1 skeleton). Session commands need MainActor session state,
+    /// so they route to `sessionCommandHandler` rather than the off-main effect executor.
+    /// v1.2 expands this set (focusTerminal, copyResumeCommand, …) on the same path.
+    private nonisolated static func isSessionCommand(_ capability: String) -> Bool {
+        capability == "session.dismiss"
+    }
+
+    private nonisolated static func isSessionCommandAllowed(
+        _ capability: String,
+        permissions: Set<PluginPermission>
+    ) -> Bool {
+        switch capability {
+        case "session.dismiss":
+            return permissions.contains(.showSessionSurface)
+        default:
+            return false
+        }
     }
 
     func enqueue(_ event: PluginEvent) {
