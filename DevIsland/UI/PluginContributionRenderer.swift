@@ -15,6 +15,12 @@ func truncatedMenuText(_ text: String?) -> String {
     String((text ?? "").prefix(pluginMenuMaxLength))
 }
 
+func pluginMenuTitle(pluginID: String, displayNames: [String: String]) -> String {
+    let rawTitle = displayNames[pluginID].flatMap { $0.isEmpty ? nil : $0 } ?? pluginID
+    let title = truncatedMenuText(rawTitle)
+    return title.isEmpty ? "Plugin" : title
+}
+
 let pluginLabelMaxLength = 40
 let pluginValueMaxLength = 60
 let pluginMenuMaxLength = 40
@@ -201,6 +207,7 @@ func validatedIcon(_ name: String?) -> String? {
 /// Emits a Divider only when contributions with non-empty components exist.
 struct PluginMenuItemsView: View {
     let contributions: [PluginUIContribution]
+    let pluginDisplayNames: [String: String]
 
     @ViewBuilder
     var body: some View {
@@ -208,8 +215,10 @@ struct PluginMenuItemsView: View {
         if !valid.isEmpty {
             Divider()
             ForEach(valid, id: \.pluginID) { contribution in
-                ForEach(contribution.components, id: \.id) { component in
-                    PluginMenuComponentView(pluginID: contribution.pluginID, component: component)
+                Menu(pluginMenuTitle(pluginID: contribution.pluginID, displayNames: pluginDisplayNames)) {
+                    ForEach(contribution.components, id: \.id) { component in
+                        PluginMenuComponentView(pluginID: contribution.pluginID, component: component)
+                    }
                 }
             }
         }

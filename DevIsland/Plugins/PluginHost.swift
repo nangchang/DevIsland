@@ -51,6 +51,12 @@ final class PluginHost: ObservableObject {
     private var settingsStore: PluginSettingsStore?
     private var lastResetTimestamps: [String: Date] = [:]
 
+    var pluginDisplayNames: [String: String] {
+        Dictionary(uniqueKeysWithValues: runners.map { id, runner in
+            (id, runner.manifest.name)
+        })
+    }
+
     /// Host Command Catalog handler for validated `session.*` commands, injected by
     /// `AppState` after registration. `nil` (e.g. in tests) makes session commands no-op.
     /// The handler re-validates the target session's state before acting (architecture §7).

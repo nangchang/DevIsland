@@ -55,6 +55,27 @@ final class PluginContributionRendererTests: XCTestCase {
         XCTAssertEqual(truncatedMenuText(nil), "")
     }
 
+    func testPluginMenuTitleUsesDisplayName() {
+        XCTAssertEqual(
+            pluginMenuTitle(pluginID: "com.test.plugin", displayNames: ["com.test.plugin": "Test Plugin"]),
+            "Test Plugin"
+        )
+    }
+
+    func testPluginMenuTitleFallsBackToPluginID() {
+        XCTAssertEqual(
+            pluginMenuTitle(pluginID: "com.test.plugin", displayNames: [:]),
+            "com.test.plugin"
+        )
+    }
+
+    func testPluginMenuTitleFallsBackWhenDisplayNameIsEmpty() {
+        XCTAssertEqual(
+            pluginMenuTitle(pluginID: "com.test.plugin", displayNames: ["com.test.plugin": ""]),
+            "com.test.plugin"
+        )
+    }
+
     // MARK: - PluginSlotView — empty contributions render nothing
 
     func testEmptyContributionsProduceNoComponents() {
