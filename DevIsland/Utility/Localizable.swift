@@ -3,7 +3,7 @@ import Combine
 
 // MARK: - Language
 
-enum AppLanguage: String, CaseIterable, Identifiable {
+enum AppLanguage: String, CaseIterable, Identifiable, Codable, Sendable {
     case system
     case english
     case korean
@@ -17,6 +17,16 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .korean:  return "한국어"
         }
     }
+
+    var isKoreanResolved: Bool {
+        switch self {
+        case .system:  return Locale.preferredLanguages.first.map { $0 == "ko" || $0.hasPrefix("ko-") } ?? false
+        case .english: return false
+        case .korean:  return true
+        }
+    }
+
+    func s(_ en: String, _ ko: String) -> String { isKoreanResolved ? ko : en }
 }
 
 // MARK: - L10n
@@ -40,11 +50,7 @@ final class L10n: ObservableObject {
     }
 
     var isKorean: Bool {
-        switch language {
-        case .system:  return Locale.preferredLanguages.first.map { $0 == "ko" || $0.hasPrefix("ko-") } ?? false
-        case .english: return false
-        case .korean:  return true
-        }
+        language.isKoreanResolved
     }
 
     func s(_ en: String, _ ko: String) -> String { isKorean ? ko : en }

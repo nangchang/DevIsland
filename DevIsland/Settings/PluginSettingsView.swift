@@ -43,7 +43,7 @@ private struct PluginSettingsRow: View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(isOn: enabledBinding) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(manifest.name)
+                    Text(manifest.displayName(language: l10n.language))
                     Text("\(manifest.id) · v\(manifest.version)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -138,12 +138,12 @@ private struct PluginSettingControlView: View {
     var body: some View {
         switch descriptor.kind {
         case .toggle:
-            Toggle(descriptor.label, isOn: boolBinding)
+            Toggle(descriptor.displayLabel(language: L10n.shared.language), isOn: boolBinding)
                 .font(.caption)
         case .picker(let options):
-            Picker(descriptor.label, selection: stringBinding) {
+            Picker(descriptor.displayLabel(language: L10n.shared.language), selection: stringBinding) {
                 ForEach(options) { option in
-                    Text(option.label).tag(option.value)
+                    Text(option.displayLabel(language: L10n.shared.language)).tag(option.value)
                 }
             }
             .font(.caption)
@@ -172,7 +172,7 @@ private struct PluginSettingControlView: View {
 
     private func labeledValue(_ value: String) -> some View {
         HStack {
-            Text(descriptor.label)
+            Text(descriptor.displayLabel(language: L10n.shared.language))
             Spacer()
             Text(value).foregroundStyle(.secondary)
         }
@@ -232,7 +232,7 @@ private struct TextSettingRow: View {
 
     var body: some View {
         HStack {
-            Text(descriptor.label)
+            Text(descriptor.displayLabel(language: L10n.shared.language))
             TextField("", text: $localText, onCommit: { commit(.string(localText)) })
                 .textFieldStyle(.roundedBorder)
         }

@@ -72,6 +72,20 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertEqual(metric(menu, id: "count")?.value, "1")
     }
 
+    func testCompletionNotificationUsesPluginLanguage() throws {
+        let plugin = PomodoroPlugin(workSeconds: 1)
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        _ = try plugin.onEvent(toggleEvent(at: t0), context: context(settings: [:]))
+
+        let effects = try plugin.onEvent(
+            tickEvent(at: t0.addingTimeInterval(1)),
+            context: context(settings: [:], language: .korean)
+        )
+
+        XCTAssertEqual(effects.first?.payload["title"], "포모도로")
+        XCTAssertEqual(effects.first?.payload["body"], "집중 세션이 완료되었습니다")
+    }
+
     func testRendersBothSlotsWithToggleAction() throws {
         let plugin = PomodoroPlugin()
 
@@ -88,11 +102,25 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertNotNil(button(menu))
     }
 
+    func testRendersKoreanLabelsFromPluginContext() throws {
+        let plugin = PomodoroPlugin()
+        let notch = try XCTUnwrap(try plugin.makeUIContribution(
+            for: .notchExpandedActivity,
+            context: uiContext(language: .korean)
+        ))
+        XCTAssertEqual(metric(notch, id: "timer")?.label, "대기")
+        XCTAssertEqual(button(notch)?.label, "시작")
+    }
+
     // MARK: - Host integration
 
     /// The toggle action is `pluginEvent`-routed; it must come back only to Pomodoro
     /// and never reach another plugin that also listens for action events.
     func testHandleActionTogglesOnlyTargetPlugin() async {
+        let original = L10n.shared.language
+        L10n.shared.language = .english
+        addTeardownBlock { L10n.shared.language = original }
+
         let pomodoro = PomodoroPlugin()
         let bystander = ActionRecordingPlugin(id: "com.devisland.test.bystander")
         let host = PluginHost()
@@ -113,6 +141,27 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertEqual(button(host.contributions[.notchExpandedActivity]?.first)?.label, "Pause",
                        "Pomodoro must receive its own toggle and start running")
         XCTAssertTrue(bystander.received.isEmpty, "the action must not reach another plugin")
+    }
+
+    func testHostRebuildsContributionsWhenLanguageChanges() async {
+        let original = L10n.shared.language
+        L10n.shared.language = .english
+        addTeardownBlock { L10n.shared.language = original }
+
+        let pomodoro = PomodoroPlugin()
+        let host = PluginHost()
+        host.register([pomodoro])
+
+        host.enqueue(makeBareEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+        XCTAssertEqual(button(host.contributions[.notchExpandedActivity]?.first)?.label, "Start")
+
+        L10n.shared.language = .korean
+        host.pluginLanguageChanged()
+        await host.waitUntilIdle()
+
+        XCTAssertEqual(button(host.contributions[.notchExpandedActivity]?.first)?.label, "시작")
+        XCTAssertEqual(host.pluginDisplayNames[pomodoro.manifest.id], "포모도로")
     }
 
     // MARK: - Settings (v1.3)
@@ -191,17 +240,21 @@ final class PomodoroPluginTests: XCTestCase {
 
     private let noSurfaces = PluginSurfaceState(visibleSurfaces: [])
 
-    private func context(settings: [String: PluginSettingValue] = [:]) -> PluginContext {
+    private func context(
+        settings: [String: PluginSettingValue] = [:],
+        language: AppLanguage = .english
+    ) -> PluginContext {
         PluginContext(
             pluginID: "com.devisland.pomodoro",
             permissions: [],
             storageSnapshot: [:],
-            settings: settings
+            settings: settings,
+            language: language
         )
     }
 
-    private func uiContext() -> PluginUIContext {
-        PluginUIContext(slot: .notchExpandedActivity, timestamp: Date(), session: nil)
+    private func uiContext(language: AppLanguage = .english) -> PluginUIContext {
+        PluginUIContext(slot: .notchExpandedActivity, timestamp: Date(), session: nil, language: language)
     }
 
     private func tickEvent(at time: Date = Date()) -> PluginEvent { makeBareEvent(kind: .pluginTick, at: time) }

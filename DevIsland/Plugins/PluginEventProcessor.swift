@@ -17,7 +17,8 @@ actor PluginEventProcessor {
     func process(
         _ queued: QueuedPluginEvent,
         selectedSessionID: String? = nil,
-        settingsByPlugin: [String: [String: PluginSettingValue]] = [:]
+        settingsByPlugin: [String: [String: PluginSettingValue]] = [:],
+        language: AppLanguage = .english
     ) async -> [PluginContributionSnapshot] {
         let storageProvider = self.storageProvider
         let eventFactory = self.eventFactory
@@ -44,7 +45,8 @@ actor PluginEventProcessor {
                         event,
                         storageSnapshot: storageSnapshot,
                         settings: settings,
-                        selectedSessionID: allowedSelectedSessionID
+                        selectedSessionID: allowedSelectedSessionID,
+                        language: language
                     )
                 }
             }
@@ -57,4 +59,3 @@ actor PluginEventProcessor {
         }
     }
 }
-

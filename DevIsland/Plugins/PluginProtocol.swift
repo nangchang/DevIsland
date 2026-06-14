@@ -14,6 +14,11 @@ struct PluginManifest: Codable, Equatable {
     let permissions: Set<PluginPermission>
     let surfaces: Set<PluginUISlot>
     let activationEvents: Set<String>
+    var localizedName: PluginLocalizedString? = nil
+
+    func displayName(language: AppLanguage) -> String {
+        localizedName?.resolved(for: language) ?? name
+    }
 }
 
 protocol DevIslandPlugin: AnyObject {
@@ -39,17 +44,22 @@ struct PluginContext: Equatable {
     /// Current setting values, with every schema key present (stored value validated, or the
     /// descriptor default). Read-only — plugins never mutate host settings.
     let settings: [String: PluginSettingValue]
+    /// Current app language snapshot. Plugins own their strings and choose localized text
+    /// from this value instead of reaching into host-owned `L10n`.
+    let language: AppLanguage
 
     init(
         pluginID: String,
         permissions: Set<PluginPermission>,
         storageSnapshot: [String: String],
-        settings: [String: PluginSettingValue] = [:]
+        settings: [String: PluginSettingValue] = [:],
+        language: AppLanguage = .english
     ) {
         self.pluginID = pluginID
         self.permissions = permissions
         self.storageSnapshot = storageSnapshot
         self.settings = settings
+        self.language = language
     }
 }
 
@@ -57,4 +67,3 @@ struct PluginEffect: Codable, Equatable {
     let capability: String
     let payload: [String: String]
 }
-

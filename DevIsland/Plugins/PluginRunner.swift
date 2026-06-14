@@ -21,7 +21,8 @@ actor PluginRunner {
         _ event: PluginEvent,
         storageSnapshot: [String: String],
         settings: [String: PluginSettingValue] = [:],
-        selectedSessionID: String? = nil
+        selectedSessionID: String? = nil,
+        language: AppLanguage = .english
     ) async -> PluginContributionSnapshot {
         let startedAt = ContinuousClock.now
         let evaluatedSlots = manifest.surfaces.filter {
@@ -34,7 +35,8 @@ actor PluginRunner {
                 pluginID: manifest.id,
                 permissions: manifest.permissions,
                 storageSnapshot: storageSnapshot,
-                settings: settings
+                settings: settings,
+                language: language
             )
             let effects = try plugin.onEvent(event, context: context)
             var contributions: [PluginUISlot: PluginUIContribution] = [:]
@@ -44,7 +46,8 @@ actor PluginRunner {
                     slot: slot,
                     timestamp: event.timestamp,
                     session: event.session,
-                    selectedSessionID: selectedSessionID
+                    selectedSessionID: selectedSessionID,
+                    language: language
                 )
                 if let contribution = try plugin.makeUIContribution(for: slot, context: context) {
                     contributions[slot] = contribution

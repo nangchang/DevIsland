@@ -49,6 +49,33 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(toggleComponent?.label, "Turn On")
     }
 
+    func testKoreanMenuContributionComesFromPluginContext() throws {
+        let plugin = makePlugin()
+        let status = PluginPowerStatus(
+            caffeineEnabled: false,
+            excludedSSIDs: [],
+            isOnACPower: true,
+            batteryLevel: 0.9,
+            currentSSID: "Home"
+        )
+        let event = PluginEvent(
+            id: UUID(),
+            kind: .powerStatusChanged,
+            timestamp: Date(),
+            powerStatus: status
+        )
+
+        _ = try plugin.onEvent(event, context: makeContext())
+        let contribution = try plugin.makeUIContribution(
+            for: .menubarMenu,
+            context: PluginUIContext(slot: .menubarMenu, timestamp: Date(), session: nil, language: .korean)
+        )
+        let statusComponent = contribution?.components.first(where: { $0.id == "caffeine-status" })
+        XCTAssertEqual(statusComponent?.value, "비활성화됨")
+        let toggleComponent = contribution?.components.first(where: { $0.id == "caffeine-toggle" })
+        XCTAssertEqual(toggleComponent?.label, "켜기")
+    }
+
     func testOnACOnNormalBatteryHolds() throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(

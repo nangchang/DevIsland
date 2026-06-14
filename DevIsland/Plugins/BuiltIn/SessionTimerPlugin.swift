@@ -25,8 +25,10 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginEventKind.sessionUpdated.rawValue,
             PluginEventKind.sessionEnded.rawValue,
             PluginEventKind.pluginTick.rawValue,
-            PluginEventKind.settingsChanged.rawValue
-        ]
+            PluginEventKind.settingsChanged.rawValue,
+            PluginEventKind.languageChanged.rawValue
+        ],
+        localizedName: PluginLocalizedString(english: "Session Timer", korean: "세션 타이머")
     )
 
     /// Whether the elapsed badges include seconds. Toggling it must refresh the per-session
@@ -37,6 +39,7 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginSettingDescriptor(
                 key: "showSeconds",
                 label: "Show seconds",
+                localizedLabel: PluginLocalizedString(english: "Show seconds", korean: "초 표시"),
                 kind: .toggle,
                 defaultValue: .bool(true)
             )
@@ -92,7 +95,7 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
                 session: target,
                 targetSessionID: nil,
                 timestamp: context.timestamp,
-                label: "Elapsed"
+                label: context.language.s("Elapsed", "경과")
             )
         case .notchSessionRow, .sessionMessage:
             // Per-session elapsed badge keyed to the triggering session, on the row and in

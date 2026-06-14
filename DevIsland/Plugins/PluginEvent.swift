@@ -9,6 +9,7 @@ enum PluginEventKind: String, Codable, CaseIterable {
     case approvalDecided = "approval.decided"
     case notificationShown = "notification.shown"
     case settingsChanged = "settings.changed"
+    case languageChanged = "language.changed"
     case pluginStarted = "plugin.started"
     case pluginTick = "plugin.tick"
     case pluginActionInvoked = "plugin.action.invoked"

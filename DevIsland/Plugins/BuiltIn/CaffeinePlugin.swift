@@ -15,8 +15,10 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
             "power.status.changed",
             "plugin.started",
             "plugin.tick",
-            "plugin.action.invoked"
-        ]
+            "plugin.action.invoked",
+            PluginEventKind.languageChanged.rawValue
+        ],
+        localizedName: PluginLocalizedString(english: "Caffeine", korean: "Caffeine")
     )
 
     private var lastLowBattery: Bool = false
@@ -109,25 +111,27 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         let statusText: String
         let tone: PluginUITone?
 
+        let language = context.language
+
         if isPreventingSleep {
-            statusText = "Preventing sleep (AC Power)"
+            statusText = language.s("Preventing sleep (AC Power)", "슬립 차단 중 (AC 전원)")
             tone = .success
         } else {
             tone = nil
             if !caffeineEnabled {
-                statusText = "Disabled"
+                statusText = language.s("Disabled", "비활성화됨")
             } else if lastReason.hasPrefix("excludedSSID:") {
                 let ssid = lastReason.replacingOccurrences(of: "excludedSSID:", with: "")
-                statusText = "Excluded Wi-Fi (\(ssid))"
+                statusText = language.s("Excluded Wi-Fi (\(ssid))", "예외 Wi-Fi (\(ssid))")
             } else if lastReason == "lowBattery" {
-                statusText = "Low Battery"
+                statusText = language.s("Low Battery", "배터리 부족")
             } else if lastReason == "onBattery" {
-                statusText = "Battery Mode"
+                statusText = language.s("Battery Mode", "배터리 모드")
             } else if lastReason.hasPrefix("failure:") {
                 let code = lastReason.replacingOccurrences(of: "failure:", with: "")
-                statusText = "System Failure (\(code))"
+                statusText = language.s("System Failure (\(code))", "시스템 실패 (\(code))")
             } else {
-                statusText = "Idle"
+                statusText = language.s("Idle", "대기")
             }
         }
 
@@ -144,7 +148,7 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
             PluginUIComponentDTO(
                 id: "caffeine-toggle",
                 type: .button,
-                label: caffeineEnabled ? "Turn Off" : "Turn On",
+                label: caffeineEnabled ? language.s("Turn Off", "끄기") : language.s("Turn On", "켜기"),
                 value: nil,
                 tone: nil,
                 iconName: nil,

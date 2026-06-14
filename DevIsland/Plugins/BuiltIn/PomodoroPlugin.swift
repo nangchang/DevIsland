@@ -23,8 +23,10 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginEventKind.pluginStarted.rawValue,
             PluginEventKind.pluginTick.rawValue,
             PluginEventKind.pluginActionInvoked.rawValue,
-            PluginEventKind.settingsChanged.rawValue
-        ]
+            PluginEventKind.settingsChanged.rawValue,
+            PluginEventKind.languageChanged.rawValue
+        ],
+        localizedName: PluginLocalizedString(english: "Pomodoro", korean: "포모도로")
     )
 
     /// User-configurable settings (v1.3 demo): work length and whether to auto-restart a
@@ -34,12 +36,14 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginSettingDescriptor(
                 key: "workMinutes",
                 label: "Work Minutes",
+                localizedLabel: PluginLocalizedString(english: "Work Minutes", korean: "작업 시간(분)"),
                 kind: .stepper(range: 1...60, step: 5),
                 defaultValue: .int(25)
             ),
             PluginSettingDescriptor(
                 key: "autoRestart",
                 label: "Auto-restart",
+                localizedLabel: PluginLocalizedString(english: "Auto-restart", korean: "자동 재시작"),
                 kind: .toggle,
                 defaultValue: .bool(false)
             )
@@ -96,7 +100,7 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
             guard mode == .running, let end = expectedEndTime else { return [] }
             remainingSeconds = Self.secondsRemaining(until: end, now: event.timestamp)
             if remainingSeconds == 0 {
-                return complete(now: event.timestamp, autoRestart: autoRestart)
+                return complete(now: event.timestamp, autoRestart: autoRestart, language: context.language)
             }
         case .pluginActionInvoked:
             guard event.action?.actionID == toggleActionID else { break }
@@ -117,7 +121,7 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
         return []
     }
 
-    private func complete(now: Date, autoRestart: Bool) -> [PluginEffect] {
+    private func complete(now: Date, autoRestart: Bool, language: AppLanguage) -> [PluginEffect] {
         completedCount += 1
         remainingSeconds = workSeconds
         if autoRestart {
@@ -129,7 +133,10 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
         }
         return [PluginEffect(
             capability: "notification.show",
-            payload: ["title": "Pomodoro", "body": "Focus session complete"]
+            payload: [
+                "title": language.s("Pomodoro", "포모도로"),
+                "body": language.s("Focus session complete", "집중 세션이 완료되었습니다")
+            ]
         )]
     }
 
@@ -149,20 +156,20 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
                 PluginUIComponentDTO(
                     id: "timer",
                     type: .metric,
-                    label: statusLabel,
+                    label: statusLabel(language: context.language),
                     value: time,
                     tone: mode == .running ? .success : nil,
                     iconName: "timer",
                     action: nil
                 ),
-                toggleButton
+                toggleButton(language: context.language)
             ]
         case .menubarMenu:
             components = [
                 PluginUIComponentDTO(
                     id: "timer",
                     type: .metric,
-                    label: "Pomodoro",
+                    label: context.language.s("Pomodoro", "포모도로"),
                     value: time,
                     tone: mode == .running ? .success : nil,
                     iconName: "timer",
@@ -171,13 +178,13 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
                 PluginUIComponentDTO(
                     id: "count",
                     type: .metric,
-                    label: "Completed",
+                    label: context.language.s("Completed", "완료"),
                     value: "\(completedCount)",
                     tone: nil,
                     iconName: nil,
                     action: nil
                 ),
-                toggleButton
+                toggleButton(language: context.language)
             ]
         default:
             return nil
@@ -193,19 +200,19 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    private var statusLabel: String {
+    private func statusLabel(language: AppLanguage) -> String {
         switch mode {
-        case .idle: return "Idle"
-        case .running: return "Focus"
-        case .paused: return "Paused"
+        case .idle: return language.s("Idle", "대기")
+        case .running: return language.s("Focus", "집중")
+        case .paused: return language.s("Paused", "일시정지")
         }
     }
 
-    private var toggleButton: PluginUIComponentDTO {
+    private func toggleButton(language: AppLanguage) -> PluginUIComponentDTO {
         PluginUIComponentDTO(
             id: "toggle",
             type: .button,
-            label: mode == .running ? "Pause" : "Start",
+            label: mode == .running ? language.s("Pause", "일시정지") : language.s("Start", "시작"),
             value: nil,
             tone: nil,
             iconName: nil,

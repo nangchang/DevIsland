@@ -720,27 +720,20 @@ v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 �
 - ✅ plugin setting 변경이 contribution/tick/action에 반영되는지 (`settings.changed` 후 Pomodoro contribution 값 변화 + host end-to-end 테스트)
 - ✅ core app settings, bridge settings, approval settings를 plugin이 직접 mutate하지 않는지 (`PluginSettingsStore`가 별도 `pluginSettings.<id>` namespace만 사용, plugin은 읽기 전용 `PluginContext.settings`만 수신)
 
-### v1.x Plugin Contribution i18n
+### v1.x Plugin Contribution i18n (완료)
 
-배경: built-in 플러그인이 contribution label을 영어로 하드코딩(`SessionTimerPlugin`의 `"Elapsed"`, `PomodoroPlugin`의 `"Focus"`/`"Paused"`/`"Idle"`/`"Start"`/`"Pause"`/`"Pomodoro"`/`"Completed"`)해 앱 나머지의 `L10n.shared.s(en, ko)` 현지화와 불일치한다. 플러그인은 `PluginRunner`(actor, off-MainActor)에서 실행되므로 `L10n.shared`를 직접 호출하면 (1) "플러그인은 host state를 context/snapshot으로 받는다"는 격리 원칙 위배, (2) `@Published var language` 동시 접근, (3) v2 외부 플러그인 적용 불가 문제가 있다. 아래 두 옵션 중 하나를 택해 진행하며, 결정 시 "v1에서 플러그인 contribution label을 i18n 대상에 포함할지" 정책부터 확정한다.
+배경: built-in 플러그인이 contribution label을 영어로 하드코딩(`SessionTimerPlugin`의 `"Elapsed"`, `PomodoroPlugin`의 `"Focus"`/`"Paused"`/`"Idle"`/`"Start"`/`"Pause"`/`"Pomodoro"`/`"Completed"` 등)해 앱 나머지의 언어 설정과 불일치했다. 플러그인이 `L10n.shared`를 직접 호출하면 "플러그인은 host state를 context/snapshot으로 받는다"는 격리 원칙과 `@Published var language` 동시 접근 규칙이 흐려지므로, 문자열 소유권은 플러그인에 두고 host는 현재 언어 스냅샷만 전달한다.
 
-옵션 1 — Host-resolved label key (권장):
+- ✅ `AppLanguage`를 `Sendable` 스냅샷으로 만들고 `PluginContext.language`/`PluginUIContext.language`에 주입한다. 플러그인은 이 값으로 자신의 표시 문자열을 직접 선택한다.
+- ✅ `PluginLocalizedString`을 추가해 manifest display name과 settings schema label도 플러그인이 영어 fallback + 한국어 문자열을 함께 선언할 수 있게 했다. host는 plugin-owned 문자열을 해석해 렌더링할 뿐 별도 플러그인 문자열 카탈로그를 갖지 않는다.
+- ✅ `language.changed` 이벤트와 `PluginHost.pluginLanguageChanged()`를 추가해 언어 설정 변경 시 cached contribution을 재계산한다. session-scoped surface는 `settings.changed`와 같은 방식으로 active session snapshot별 이벤트를 fan-out한다.
+- ✅ SessionTimer, Pomodoro, Caffeine, SessionStats, SessionActions, OpenPeon built-in manifest/settings/contribution/notification 문자열을 plugin-owned i18n으로 전환했다.
 
-- `PluginUIComponentDTO`에 `labelKey: String?`를 추가한다(Codable optional, 하위호환). 플러그인은 의미 키(`"sessiontimer.elapsed"` 등)만 선언하고 `label`은 영어 fallback으로 둔다.
-- 렌더러(MainActor)가 render 시점에 host-owned 카탈로그로 키를 현지화 문자열로 해석하고, 키가 없으면 `label`로 fallback한다. notch/menubar 슬롯 뷰가 `L10n.shared`를 `@ObservedObject`로 관찰해 **언어 전환 시 즉시 갱신**된다.
-- host 카탈로그: `pluginLocalizedLabel(_:)` 매핑 + `Localizable.swift`에 플러그인 라벨용 `s(en, ko)` 프로퍼티 추가.
-- 장점: 선언형 모델(플러그인=의도, host=표현)과 일치, 라이브 언어 전환, v2 외부 플러그인 확장 여지. 단점: DTO 필드·렌더러·카탈로그 추가.
+검증:
 
-옵션 2 — Context에 AppLanguage 주입:
-
-- `PluginUIContext`/`PluginContext`에 현재 `AppLanguage`(Sendable enum)를 스냅샷으로 주입하고, 플러그인이 직접 현지화 문자열을 고른다.
-- 장점: 최소 변경, Sendable-safe, "host state는 context로" 원칙과 일치, 플러그인 자족적. 단점: 라벨이 이벤트 시점에 baked되어 **언어 전환이 즉시 반영되지 않음**(다음 tick/이벤트 전까지 옛 언어 유지).
-
-공통 작업/검증:
-
-- SessionTimer/Pomodoro 라벨을 선택한 방식으로 전환한다.
-- 플러그인 단위 테스트는 표시 문자열(`label == "Elapsed"`) 단정을 로케일 독립(`labelKey == "…"` 또는 주입 언어 기준)으로 바꾸고, 실제 현지화 해석은 host/렌더러 레벨에서 검증한다.
-- 외부 플러그인(v2)은 host 키 카탈로그에 등록할 수 없으므로 raw label 제공 또는 별도 translation 등록 API가 필요하다(v2 설계로 미룸).
+- ✅ 플러그인 단위 테스트에서 한국어 `PluginContext`/`PluginUIContext` 주입 시 contribution label과 notification payload가 한국어로 생성되는지 확인
+- ✅ host end-to-end 테스트에서 `L10n.shared.language` 변경 후 `pluginLanguageChanged()`가 cached contribution과 plugin display name을 갱신하는지 확인
+- ✅ schema validation/default fallback은 기존 로직을 유지하고, `PluginSettingDescriptor.displayLabel(language:)`가 plugin-owned localization을 해석하는지만 별도 검증
 
 ## 7. v2+ 후보
 
