@@ -328,7 +328,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [PluginEffect(capability: "audio.playFile", payload: ["scope": "packs", "path": "done.wav"])],
             pluginID: "openpeon",
-            permissions: Set<PluginPermission>([.playSound])
+            permissions: Set<PluginPermission>([.showNotification])
         )
 
         XCTAssertTrue(delivered.value.isEmpty)

@@ -19,6 +19,8 @@ Default pack directory:
 
 ## Runtime Modules
 
+OpenPeon CESP implementation files live under `DevIsland/Plugins/BuiltIn/OpenPeon/`.
+
 | Module | Responsibility |
 |---|---|
 | `CESPModels.swift` | Manifest, category, sound, validation, and runtime pack models |

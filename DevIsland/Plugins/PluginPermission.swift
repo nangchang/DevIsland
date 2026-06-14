@@ -11,6 +11,5 @@ enum PluginPermission: String, Codable, CaseIterable, Hashable {
     case readScopedFiles
     case playScopedAudio
     case showNotification
-    case playSound
     case controlPowerSleep
 }

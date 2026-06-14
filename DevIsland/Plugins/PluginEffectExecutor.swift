@@ -55,16 +55,6 @@ actor PluginEffectExecutor {
             return
         }
 
-        if effect.capability == "sound.play" {
-            if let categoryString = effect.payload["category"],
-               let category = CESPCategory(rawValue: categoryString) {
-                Task { @MainActor in
-                    CESPAudioPlayer.shared.play(category: category)
-                }
-            }
-            return
-        }
-
         if effect.capability == "audio.playFile" {
             guard let scopeID = normalizedText(effect.payload["scope"]),
                   let relativePath = normalizedText(effect.payload["path"]) else {

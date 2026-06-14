@@ -73,7 +73,7 @@ xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
 | `SQLiteApprovalStore.swift` | Rules, session cache, replay log, decisions, PTY transcript storage |
 | `SettingsStore.swift` | UserDefaults-backed app and bridge runtime settings |
 | `NotchWindowController.swift` | NSPanel and SwiftUI notch UI host |
-| `OpenPeon/` | CESP models, pack store/validation, event mapping, audio playback |
+| `Plugins/BuiltIn/OpenPeon/` | OpenPeon plugin, CESP models, pack store/validation, event mapping, audio playback |
 | `scripts/devisland-bridge.sh` | Shell hook entrypoint |
 | `scripts/devisland_bridge.py` | Payload enrichment, IPC forwarding, provider response formatting |
 | `scripts/install-bridge.sh` | Hook registration for Claude, Codex, and Gemini |

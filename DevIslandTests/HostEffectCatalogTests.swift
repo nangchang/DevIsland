@@ -14,14 +14,9 @@ final class HostEffectCatalogTests: XCTestCase {
         XCTAssertFalse(HostEffectCatalog.isSupported("notification.show", pluginID: "x", permissions: []))
     }
 
-    func testSoundRequiresPlaySound() {
-        XCTAssertTrue(HostEffectCatalog.isSupported("sound.play", pluginID: "openpeon", permissions: [.playSound]))
-        XCTAssertFalse(HostEffectCatalog.isSupported("sound.play", pluginID: "openpeon", permissions: []))
-    }
-
     func testScopedAudioRequiresPlayScopedAudio() {
         XCTAssertTrue(HostEffectCatalog.isSupported("audio.playFile", pluginID: "openpeon", permissions: [.playScopedAudio]))
-        XCTAssertFalse(HostEffectCatalog.isSupported("audio.playFile", pluginID: "openpeon", permissions: [.playSound]))
+        XCTAssertFalse(HostEffectCatalog.isSupported("audio.playFile", pluginID: "openpeon", permissions: [.showNotification]))
         XCTAssertFalse(HostEffectCatalog.isSupported("audio.playFile", pluginID: "openpeon", permissions: []))
     }
 
@@ -39,7 +34,7 @@ final class HostEffectCatalogTests: XCTestCase {
     }
 
     func testUnknownEffectNeverSupported() {
-        let everything: Set<PluginPermission> = [.controlPowerSleep, .writePluginStorage, .showNotification, .playSound]
+        let everything: Set<PluginPermission> = [.controlPowerSleep, .writePluginStorage, .showNotification, .playScopedAudio]
         XCTAssertFalse(HostEffectCatalog.isSupported("bogus.effect", pluginID: "caffeine", permissions: everything))
     }
 

@@ -29,8 +29,6 @@ enum HostEffectCatalog {
             capability: "storage.increment", requiredPermission: .writePluginStorage, builtInOnlyPluginIDs: nil),
         "notification.show": HostEffectDescriptor(
             capability: "notification.show", requiredPermission: .showNotification, builtInOnlyPluginIDs: nil),
-        "sound.play": HostEffectDescriptor(
-            capability: "sound.play", requiredPermission: .playSound, builtInOnlyPluginIDs: nil),
         "audio.playFile": HostEffectDescriptor(
             capability: "audio.playFile", requiredPermission: .playScopedAudio, builtInOnlyPluginIDs: nil),
         "power.preventIdleSleep": HostEffectDescriptor(
