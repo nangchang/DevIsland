@@ -163,6 +163,46 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(statusComponent?.value, "Low Battery")
     }
 
+    func testAssertionFailureResultUpdatesMenuWithoutReemittingEffect() throws {
+        let plugin = makePlugin()
+        let initialStatus = PluginPowerStatus(
+            caffeineEnabled: true,
+            excludedSSIDs: [],
+            isOnACPower: true,
+            batteryLevel: 0.9,
+            currentSSID: "Home"
+        )
+        _ = try plugin.onEvent(
+            PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: initialStatus),
+            context: makeContext()
+        )
+
+        let failureStatus = PluginPowerStatus(
+            caffeineEnabled: true,
+            excludedSSIDs: [],
+            isOnACPower: true,
+            batteryLevel: 0.9,
+            currentSSID: "Home",
+            isHoldingAssertion: false,
+            assertionReason: "onAC",
+            assertionFailureCode: -536870212,
+            isAssertionResult: true
+        )
+
+        let effects = try plugin.onEvent(
+            PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: failureStatus),
+            context: makeContext()
+        )
+        XCTAssertTrue(effects.isEmpty, "assertion result events must update UI only, not re-emit power effects")
+
+        let contribution = try plugin.makeUIContribution(
+            for: .menubarMenu,
+            context: PluginUIContext(slot: .menubarMenu, timestamp: Date(), session: nil)
+        )
+        let statusComponent = contribution?.components.first(where: { $0.id == "caffeine-status" })
+        XCTAssertEqual(statusComponent?.value, "System Failure (-536870212)")
+    }
+
     func testHysteresisLogic() throws {
         let plugin = makePlugin()
         let context = makeContext()

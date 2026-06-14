@@ -44,6 +44,18 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
 
         self.caffeineEnabled = status.caffeineEnabled
 
+        if status.isAssertionResult {
+            isPreventingSleep = status.isHoldingAssertion ?? false
+            if let code = status.assertionFailureCode {
+                lastReason = "failure:\(code)"
+            } else if let reason = status.assertionReason, !reason.isEmpty {
+                lastReason = reason
+            } else {
+                lastReason = isPreventingSleep ? "onAC" : "off"
+            }
+            return []
+        }
+
         let (nextLow, intendedReason) = decide(
             status: status,
             prevLowBattery: lastLowBattery
@@ -112,7 +124,8 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
             } else if lastReason == "onBattery" {
                 statusText = "Battery Mode"
             } else if lastReason.hasPrefix("failure:") {
-                statusText = "System Failure"
+                let code = lastReason.replacingOccurrences(of: "failure:", with: "")
+                statusText = "System Failure (\(code))"
             } else {
                 statusText = "Idle"
             }
