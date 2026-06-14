@@ -57,12 +57,11 @@ final class PluginSettingsStore: ObservableObject {
     // MARK: - Per-plugin settings
 
     /// Raw stored settings for a plugin (no schema validation — callers resolve against the
-    /// schema). Lazily reads and caches from defaults on first access.
+    /// schema). Pure read: never mutates `settingsValues`, so it is safe to call from a
+    /// SwiftUI view body (mutating `@Published` during view update triggers a runtime
+    /// warning). The cache is populated only by `setValue`; until then reads hit defaults.
     func settings(forPluginID pluginID: String) -> [String: PluginSettingValue] {
-        if let cached = settingsValues[pluginID] { return cached }
-        let loaded = loadSettings(pluginID: pluginID)
-        settingsValues[pluginID] = loaded
-        return loaded
+        settingsValues[pluginID] ?? loadSettings(pluginID: pluginID)
     }
 
     func value(forKey key: String, pluginID: String) -> PluginSettingValue? {
