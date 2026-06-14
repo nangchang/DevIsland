@@ -8,7 +8,7 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         name: "Caffeine",
         version: "1.0.0",
         apiVersion: 1,
-        kind: .utility,
+        kind: .system,
         permissions: [.controlPowerSleep, .showMenubarMenu],
         surfaces: [.menubarMenu],
         activationEvents: [

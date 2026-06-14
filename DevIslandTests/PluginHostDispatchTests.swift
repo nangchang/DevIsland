@@ -207,6 +207,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.storage",
+            kind: .utility,
             permissions: []
         )
 
@@ -222,6 +223,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.power",
+            kind: .utility,
             permissions: [.showNotification]
         )
 
@@ -246,6 +248,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.notification",
+            kind: .utility,
             permissions: [.showNotification]
         )
 
@@ -269,6 +272,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.notification",
+            kind: .utility,
             permissions: [.showNotification]
         )
 
@@ -300,6 +304,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "openpeon",
+            kind: .utility,
             permissions: Set<PluginPermission>([.playScopedAudio])
         )
 
@@ -328,6 +333,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [PluginEffect(capability: "audio.playFile", payload: ["scope": "packs", "path": "done.wav"])],
             pluginID: "openpeon",
+            kind: .utility,
             permissions: Set<PluginPermission>([.showNotification])
         )
 
@@ -376,6 +382,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.storage",
+            kind: .utility,
             permissions: [.writePluginStorage]
         )
 

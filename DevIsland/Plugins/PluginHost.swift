@@ -216,12 +216,7 @@ final class PluginHost: ObservableObject {
         } else {
             disabledPluginIDs.insert(pluginID)
             contributions = removeContributions(pluginID: pluginID, from: contributions)
-            if pluginID == "caffeine" {
-                let handler = powerSleepHandler
-                Task {
-                    await handler?(false, "off")
-                }
-            }
+            releasePowerIfControlled(pluginID: pluginID)
         }
     }
 
@@ -233,11 +228,17 @@ final class PluginHost: ObservableObject {
         safemodePluginIDs.insert(pluginID)
         settingsStore?.setSafemode(true, pluginID: pluginID)
         contributions = removeContributions(pluginID: pluginID, from: contributions)
-        if pluginID == "caffeine" {
-            let handler = powerSleepHandler
-            Task {
-                await handler?(false, "off")
-            }
+        releasePowerIfControlled(pluginID: pluginID)
+    }
+
+    /// Releases any held power assertion when a plugin that controls power sleep is deactivated
+    /// (disabled or moved to safemode). Gated on the declared `.controlPowerSleep` permission, so
+    /// the host does not special-case a plugin by name.
+    private func releasePowerIfControlled(pluginID: String) {
+        guard runners[pluginID]?.manifest.permissions.contains(.controlPowerSleep) == true else { return }
+        let handler = powerSleepHandler
+        Task {
+            await handler?(false, "off")
         }
     }
 
@@ -289,13 +290,14 @@ final class PluginHost: ObservableObject {
             }
             guard HostEffectCatalog.isSupported(
                 action.capability,
-                pluginID: pluginID,
+                kind: runner.manifest.kind,
                 permissions: runner.manifest.permissions
             ) else { return }
             let effect = PluginEffect(capability: action.capability, payload: action.payload)
+            let kind = runner.manifest.kind
             let permissions = runner.manifest.permissions
             Task { [effectExecutor] in
-                await effectExecutor.enqueue([effect], pluginID: pluginID, permissions: permissions)
+                await effectExecutor.enqueue([effect], pluginID: pluginID, kind: kind, permissions: permissions)
             }
         case .pluginEvent:
             guard Self.isPluginEventCapabilityAllowed(action.capability) else { return }
@@ -576,11 +578,12 @@ final class PluginHost: ObservableObject {
 
     private func processEffectBatches(_ batches: [PendingEffectBatch]) async {
         for batch in batches {
-            let permissions = runners[batch.pluginID]?.manifest.permissions ?? []
+            let manifest = runners[batch.pluginID]?.manifest
             await effectExecutor.enqueue(
                 batch.effects,
                 pluginID: batch.pluginID,
-                permissions: permissions
+                kind: manifest?.kind ?? .utility,
+                permissions: manifest?.permissions ?? []
             )
         }
     }

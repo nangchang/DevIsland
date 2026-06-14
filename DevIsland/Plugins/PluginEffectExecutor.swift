@@ -34,9 +34,10 @@ actor PluginEffectExecutor {
     func enqueue(
         _ effects: [PluginEffect],
         pluginID: String,
+        kind: PluginKind,
         permissions: Set<PluginPermission>
     ) async {
-        for effect in effects where HostEffectCatalog.isSupported(effect.capability, pluginID: pluginID, permissions: permissions) {
+        for effect in effects where HostEffectCatalog.isSupported(effect.capability, kind: kind, permissions: permissions) {
             await execute(effect, pluginID: pluginID)
         }
     }

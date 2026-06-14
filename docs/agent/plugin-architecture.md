@@ -143,7 +143,7 @@ enum PluginPermission: String, Codable, Hashable {
 | `writePluginStorage` | 플러그인 전용 격리 저장소에만 읽기·쓰기를 수행한다. |
 | `readScopedFiles` | Host broker가 허용한 plugin별 scope 아래 파일만 읽는다. |
 | `playScopedAudio` | Host broker가 허용한 plugin별 scope 아래 오디오 파일 재생을 요청한다. |
-| `controlPowerSleep` | 전원 상태 이벤트를 수신하고 idle sleep 제어 이펙트를 발행한다. |
+| `controlPowerSleep` | 전원 상태 이벤트를 수신하고 idle sleep 제어 이펙트를 발행한다. **system-only**(`PluginPermission.systemOnly`) — `kind: .system` plugin만 effect를 행사할 수 있다. |
 
 surface permission 매핑:
 
@@ -543,12 +543,12 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 | `storage.increment` | `writePluginStorage` | effect processor가 카운터 atomic 증가 수행 |
 | `notification.show` | `showNotification` | DevIsland 알림 렌더링 요청 |
 | `audio.playFile` | `playScopedAudio` | Host-owned audio broker가 플러그인별 허용 scope 아래의 로컬 오디오 파일만 검증 후 재생 |
-| `power.preventIdleSleep` | built-in allowlist only | Host-owned Caffeine service에 display sleep 방지 assertion 보유/해제를 요청. 외부 plugin/declarative preset에는 열지 않는다. |
+| `power.preventIdleSleep` | `controlPowerSleep` (system-only) | Host-owned Caffeine service에 display sleep 방지 assertion 보유/해제를 요청. `controlPowerSleep`은 system-only 권한이라 `kind: .system` plugin만 행사 가능. |
 | `session.dismiss` | `showSessionSurface` + host validation | v1.1 세션 context action. 대상 세션이 idle/non-pending이고 missed/unread가 아닐 때만 host가 목록에서 제거한다. |
 
 `timer.*`처럼 민감 자원에 접근하지 않고 플러그인 내부 상태만 다루는 capability는 permission 없이 허용한다. 외부 자원(저장소, 알림 등)에 닿는 capability는 반드시 대응 permission을 manifest에 선언해야 한다.
 `audio.playFile`은 CESP/OpenPeon 같은 도메인 포맷을 알지 않는 generic broker다. Host는 plugin ID + scope ID + 상대 경로를 정규화해 scope 밖 탈출, symlink 탈출, 확장자, 파일 크기를 검증하고, 플러그인은 포맷별 manifest 해석과 파일 선택 정책을 소유한다. 실현 예: `OpenPeonPlugin`이 `.readScopedFiles`로 `PluginContext.scopedFiles`를 받아 `CESPScopedPackResolver`로 pack을 broker 경유 스캔·검증하고 `OpenPeonRuntime`이 `audio.playFile` effect를 만든다(자세한 내용은 `openpeon-cesp.md`).
-`power.preventIdleSleep`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
+`power.preventIdleSleep`처럼 시스템 자원(IOPMAssertion)을 만지는 capability는 host가 plugin **이름**으로 게이팅하지 않는다. 대신 필요한 permission(`controlPowerSleep`)을 **system-only**(`PluginPermission.systemOnly`)로 표시하고, system-only permission을 요구하는 effect는 plugin이 `kind: .system`을 선언한 경우에만 `HostEffectCatalog.isSupported(_:kind:permissions:)`가 허용한다. 따라서 third-party `.utility` plugin이 `controlPowerSleep`을 선언해도 power effect는 거부된다(이름 결합 없이 trust tier로 경계 유지). plugin 비활성화/safemode 시 power assertion release도 `pluginID == "caffeine"` 대신 `controlPowerSleep` 보유 여부로 일반화한다.
 
 `PomodoroPlugin` built-in 구현 예시:
 
