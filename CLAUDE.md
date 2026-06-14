@@ -113,6 +113,11 @@ xcodebuild build -scheme DevIsland -quiet -project "$(pwd)/DevIsland.xcodeproj"
 
 앱 실행 시에도 이 워크트리 DerivedData 경로의 .app을 사용할 것.
 
+`./scripts/run-tests.sh`는 별도 DerivedData(`/tmp/DevIsland-Test-DerivedData`)를 쓴다.
+"Could not resolve package dependencies"가 나면 `rm -rf /tmp/DevIsland-Test-DerivedData/SourcePackages`
+후 재실행. `-quiet`라 테스트 수는 안 보이고 성공 시 마지막 줄에 "✅ All tests passed!" —
+`grep -c`로 확인(exit 0이어도 "Could not resolve"면 테스트 미실행).
+
 ## Swift SourceKit 진단 오류
 
 `xcode-build-server`를 설정하면 cross-file 참조 오류가 사라진다 (AGENTS.md "One-Time Local Setup" 참고). 설정 전이거나 DerivedData 초기화 후에는 "Cannot find 'AppState' in scope" 류의 오류가 표시될 수 있으나 빌드 오류가 아님 — `xcodebuild build`로 실제 오류 여부 확인.
@@ -138,3 +143,17 @@ soft reset 후 Edit으로 하나씩 적용하고 커밋하면 된다.
 `git commit -m "$(cat <<'EOF' ... EOF)"` 형식은 hook에 막힐 수 있다.
 `/tmp/commit_msg.txt` 생성 후 `git commit -F /tmp/commit_msg.txt` 사용.
 `Write` 툴은 새 파일도 Read 선행이 필요하므로 임시 파일엔 Bash `cat > /tmp/commit_msg.txt << 'EOF' ... EOF` 방식 사용.
+
+`git add ... && git commit`, `git commit ... && git push` 같은 `&&` git 명령 체인도
+PreToolUse hook에 막힐 수 있다 — git 명령은 단독으로 실행한다.
+
+## 플러그인 작업 주의점 (host command·UI 기여)
+
+플러그인이 보는 session/hook 데이터는 `PluginEventFactory.redactedSession`을 거친다:
+`.readTerminalMetadata`가 없으면 `workspaceRoot`(와 cwd/terminalApp)가 `nil`이 된다.
+`session.workspaceRoot`를 쓰는 plugin은 `.readTerminalMetadata`를 선언해야 한다.
+
+host command의 부수효과는 observer로 우회될 수 있다. 터미널을 frontmost로 만들면
+`NotchWindowController`의 앱 활성화/클릭 observer가 `passIfTerminalFocused()`를 호출해
+표시 중인 approval을 terminal로 pass시킨다. 직접 호출하지 않아도 영향을 주므로,
+approval/notification 표시 중엔 동작을 거부할 것(`AppState.canPluginFocusTerminal` 참고).
