@@ -115,7 +115,11 @@ final class PluginHost: ObservableObject {
     /// Notifies a plugin that its own settings changed so it can rebuild contributions.
     /// Restricted to that plugin only (a plugin reacts to its own settings — design §v1.3).
     /// The latest values are re-read at drain time, so the new values reach the plugin's
-    /// `PluginContext` on this event.
+    /// `PluginContext` on this event. This is a session-less event, so it rebuilds only the
+    /// global slots (`notch.expanded.activity`, `menubar.menu`); session-scoped slots are
+    /// skipped by `PluginRunner.shouldEvaluate` when `event.session == nil` and refresh on the
+    /// next session event. v1.3 has no plugin contributing settings-derived session surfaces,
+    /// so this is sufficient; reopen if one is added.
     func pluginSettingChanged(pluginID: String) {
         guard isEnabled, runners[pluginID] != nil else { return }
         enqueue(eventFactory.makeLifecycleEvent(kind: .settingsChanged), restrictedTo: pluginID)
