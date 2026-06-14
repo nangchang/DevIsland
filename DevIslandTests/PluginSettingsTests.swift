@@ -249,6 +249,29 @@ final class PluginSettingsTests: XCTestCase {
                        "settings.changed must reach only the plugin whose settings changed")
     }
 
+    func testSettingChangedDoesNotFanOutForGlobalOnlyPlugin() async {
+        // SettingsTestPlugin declares only a global surface (.notchExpandedActivity).
+        let plugin = SettingsTestPlugin(id: "com.devisland.test.globalOnly",
+            activationEvents: [.pluginStarted, .settingsChanged])
+        let host = PluginHost()
+        host.register([plugin])
+        // Even with active sessions available, a plugin with no session-scoped surface
+        // must get a single session-less settings.changed — no per-session fan-out.
+        host.activeSessionsProvider = {
+            ["s1", "s2"].map {
+                PluginSessionSnapshot(id: $0, agentKind: "codex", startTime: Date(),
+                    lastActiveAt: Date(), lastToolName: nil, lastEventName: nil, workspaceRoot: nil)
+            }
+        }
+
+        host.pluginSettingChanged(pluginID: plugin.manifest.id)
+        await host.waitUntilIdle()
+
+        let count = plugin.receivedKinds.filter { $0 == .settingsChanged }.count
+        XCTAssertEqual(count, 1,
+                       "a plugin without a session-scoped surface gets one session-less settings.changed")
+    }
+
     // MARK: - Helpers
 
     private func waitFor(

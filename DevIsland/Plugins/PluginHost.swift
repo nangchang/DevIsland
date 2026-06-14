@@ -61,6 +61,11 @@ final class PluginHost: ObservableObject {
     /// proxy. Injected by `AppState`; `nil` (e.g. in tests) means no selection signal.
     var selectedSessionProvider: (@MainActor () -> String?)?
 
+    /// Supplies snapshots of the currently active sessions, used to fan out `settings.changed`
+    /// to session-scoped slots (see `pluginSettingChanged`). Injected by `AppState`; `nil`
+    /// (e.g. in tests) means no active sessions are known.
+    var activeSessionsProvider: (@MainActor () -> [PluginSessionSnapshot])?
+
     nonisolated init(
         enablePlugins: Bool = true,
         pluginDataDirectory: URL = PluginStorageProvider.defaultDirectory,
@@ -115,14 +120,22 @@ final class PluginHost: ObservableObject {
     /// Notifies a plugin that its own settings changed so it can rebuild contributions.
     /// Restricted to that plugin only (a plugin reacts to its own settings — design §v1.3).
     /// The latest values are re-read at drain time, so the new values reach the plugin's
-    /// `PluginContext` on this event. This is a session-less event, so it rebuilds only the
-    /// global slots (`notch.expanded.activity`, `menubar.menu`); session-scoped slots are
-    /// skipped by `PluginRunner.shouldEvaluate` when `event.session == nil` and refresh on the
-    /// next session event. v1.3 has no plugin contributing settings-derived session surfaces,
-    /// so this is sufficient; reopen if one is added.
+    /// `PluginContext` on these events.
+    ///
+    /// The session-less event rebuilds the global slots (`notch.expanded.activity`,
+    /// `menubar.menu`). `PluginRunner.shouldEvaluate` skips session-scoped slots when
+    /// `event.session == nil`, so for plugins that declare a session-scoped surface we also
+    /// fan out one session-bearing event per active session, refreshing their cached
+    /// per-session contributions with the new settings instead of waiting for the next
+    /// session event.
     func pluginSettingChanged(pluginID: String) {
-        guard isEnabled, runners[pluginID] != nil else { return }
+        guard isEnabled, let runner = runners[pluginID] else { return }
         enqueue(eventFactory.makeLifecycleEvent(kind: .settingsChanged), restrictedTo: pluginID)
+        guard runner.manifest.surfaces.contains(where: { Self.isSessionScoped($0) }) else { return }
+        for snapshot in activeSessionsProvider?() ?? [] {
+            enqueue(eventFactory.makeSessionEvent(kind: .settingsChanged, from: snapshot),
+                    restrictedTo: pluginID)
+        }
     }
 
     /// Resolves persisted setting values against each plugin's schema on the MainActor before
