@@ -136,6 +136,31 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(statusComponent?.value, "Excluded Wi-Fi (Office-Internal)")
     }
 
+    func testExcludedSSIDPreservesEmbeddedPrefixText() throws {
+        let plugin = makePlugin()
+        let status = PluginPowerStatus(
+            caffeineEnabled: true,
+            excludedSSIDs: ["Guest-excludedSSID:Lab"],
+            isOnACPower: true,
+            batteryLevel: 0.8,
+            currentSSID: "Guest-excludedSSID:Lab"
+        )
+        let event = PluginEvent(
+            id: UUID(),
+            kind: .powerStatusChanged,
+            timestamp: Date(),
+            powerStatus: status
+        )
+
+        _ = try plugin.onEvent(event, context: makeContext())
+        let contribution = try plugin.makeUIContribution(
+            for: .menubarMenu,
+            context: PluginUIContext(slot: .menubarMenu, timestamp: Date(), session: nil)
+        )
+        let statusComponent = contribution?.components.first(where: { $0.id == "caffeine-status" })
+        XCTAssertEqual(statusComponent?.value, "Excluded Wi-Fi (Guest-excludedSSID:Lab)")
+    }
+
     func testOnBatteryReleases() throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(

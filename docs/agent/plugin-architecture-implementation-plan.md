@@ -726,7 +726,7 @@ v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 �
 
 - ✅ `AppLanguage`를 `Sendable` 스냅샷으로 만들고 `PluginContext.language`/`PluginUIContext.language`에 주입한다. 플러그인은 이 값으로 자신의 표시 문자열을 직접 선택한다.
 - ✅ `PluginLocalizedString`을 추가해 manifest display name과 settings schema label도 플러그인이 영어 fallback + 한국어 문자열을 함께 선언할 수 있게 했다. host는 plugin-owned 문자열을 해석해 렌더링할 뿐 별도 플러그인 문자열 카탈로그를 갖지 않는다.
-- ✅ `language.changed` 이벤트와 `PluginHost.pluginLanguageChanged()`를 추가해 언어 설정 변경 시 cached contribution을 재계산한다. session-scoped surface는 `settings.changed`와 같은 방식으로 active session snapshot별 이벤트를 fan-out한다.
+- ✅ `language.changed` 이벤트와 `PluginHost.pluginLanguageChanged()`를 추가해 언어 설정 변경 시 cached contribution을 재계산한다. session-scoped surface는 `.readSessionEvents` 권한을 가진 플러그인에만 active session snapshot별 targeted 이벤트를 fan-out한다.
 - ✅ SessionTimer, Pomodoro, Caffeine, SessionStats, SessionActions, OpenPeon built-in manifest/settings/contribution/notification 문자열을 plugin-owned i18n으로 전환했다.
 
 검증:

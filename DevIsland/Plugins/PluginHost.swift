@@ -131,8 +131,16 @@ final class PluginHost: ObservableObject {
             (id, runner.manifest.displayName(language: L10n.shared.language))
         })
         enqueue(eventFactory.makeLifecycleEvent(kind: .languageChanged))
+        let sessionScopedRunners = runners.values.filter { runner in
+            runner.manifest.permissions.contains(.readSessionEvents)
+                && runner.manifest.surfaces.contains { Self.isSessionScoped($0) }
+        }
+        guard !sessionScopedRunners.isEmpty else { return }
         for snapshot in activeSessionsProvider?() ?? [] {
-            enqueue(eventFactory.makeSessionEvent(kind: .languageChanged, from: snapshot))
+            for runner in sessionScopedRunners {
+                enqueue(eventFactory.makeSessionEvent(kind: .languageChanged, from: snapshot),
+                        restrictedTo: runner.manifest.id)
+            }
         }
     }
 

@@ -121,14 +121,14 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
             if !caffeineEnabled {
                 statusText = language.s("Disabled", "비활성화됨")
             } else if lastReason.hasPrefix("excludedSSID:") {
-                let ssid = lastReason.replacingOccurrences(of: "excludedSSID:", with: "")
+                let ssid = String(lastReason.dropFirst("excludedSSID:".count))
                 statusText = language.s("Excluded Wi-Fi (\(ssid))", "예외 Wi-Fi (\(ssid))")
             } else if lastReason == "lowBattery" {
                 statusText = language.s("Low Battery", "배터리 부족")
             } else if lastReason == "onBattery" {
                 statusText = language.s("Battery Mode", "배터리 모드")
             } else if lastReason.hasPrefix("failure:") {
-                let code = lastReason.replacingOccurrences(of: "failure:", with: "")
+                let code = String(lastReason.dropFirst("failure:".count))
                 statusText = language.s("System Failure (\(code))", "시스템 실패 (\(code))")
             } else {
                 statusText = language.s("Idle", "대기")
