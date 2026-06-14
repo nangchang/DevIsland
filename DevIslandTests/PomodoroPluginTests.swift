@@ -115,12 +115,89 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertTrue(bystander.received.isEmpty, "the action must not reach another plugin")
     }
 
+    // MARK: - Settings (v1.3)
+
+    func testWorkMinutesSettingChangesDurationWhenIdle() throws {
+        let plugin = PomodoroPlugin()   // default 25:00
+        let t0 = Date(timeIntervalSince1970: 1_000)
+
+        _ = try plugin.onEvent(
+            makeBareEvent(kind: .settingsChanged, at: t0),
+            context: context(settings: ["workMinutes": .int(10)])
+        )
+        XCTAssertEqual(try timerValue(plugin), "10:00",
+                       "a workMinutes change must reset the idle timer to the new duration")
+    }
+
+    func testWorkMinutesChangeMidRunDefersToNextBlock() throws {
+        let plugin = PomodoroPlugin(workSeconds: 90)
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        _ = try plugin.onEvent(toggleEvent(at: t0), context: context())              // running, end = t0+90
+        _ = try plugin.onEvent(tickEvent(at: t0.addingTimeInterval(1)), context: context())  // 01:29
+
+        // Changing the setting while running must not reset the active countdown to 05:00.
+        _ = try plugin.onEvent(
+            makeBareEvent(kind: .settingsChanged, at: t0.addingTimeInterval(2)),
+            context: context(settings: ["workMinutes": .int(5)])
+        )
+        XCTAssertEqual(try timerValue(plugin), "01:29", "mid-run setting change must not reset the timer")
+    }
+
+    func testAutoRestartBeginsNewBlockOnCompletion() throws {
+        let plugin = PomodoroPlugin(workSeconds: 2)
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let settings: [String: PluginSettingValue] = ["autoRestart": .bool(true)]
+
+        _ = try plugin.onEvent(toggleEvent(at: t0), context: context(settings: settings))   // running
+        let onComplete = try plugin.onEvent(
+            tickEvent(at: t0.addingTimeInterval(2)),
+            context: context(settings: settings)
+        )
+        XCTAssertEqual(onComplete.first?.capability, "notification.show")
+        XCTAssertTrue(plugin.needsTick(surfaceState: noSurfaces),
+                      "auto-restart must immediately resume a running block")
+        let running = try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext())
+        XCTAssertEqual(metric(running, id: "timer")?.label, "Focus")
+    }
+
+    func testExposesSettingsSchema() {
+        let schema = PomodoroPlugin().settingsSchema
+        XCTAssertEqual(schema.map(\.key), ["workMinutes", "autoRestart"])
+    }
+
+    /// End-to-end: a stored setting resolved against the schema must drive the rendered
+    /// contribution after a lifecycle event flows through the host.
+    func testStoredSettingDrivesContributionThroughHost() async {
+        let suiteName = "PomodoroPluginTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PluginSettingsStore(userDefaults: defaults)
+        store.setValue(.int(10), forKey: "workMinutes", pluginID: "com.devisland.pomodoro")
+
+        let plugin = PomodoroPlugin()
+        let host = PluginHost()
+        host.register([plugin], settingsStore: store)
+
+        host.enqueue(makeBareEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+
+        let timer = host.contributions[.notchExpandedActivity]?.first?
+            .components.first { $0.id == "timer" }
+        XCTAssertEqual(timer?.value, "10:00",
+                       "the resolved workMinutes setting must drive the contribution value")
+    }
+
     // MARK: - Helpers
 
     private let noSurfaces = PluginSurfaceState(visibleSurfaces: [])
 
-    private func context() -> PluginContext {
-        PluginContext(pluginID: "com.devisland.pomodoro", permissions: [], storageSnapshot: [:])
+    private func context(settings: [String: PluginSettingValue] = [:]) -> PluginContext {
+        PluginContext(
+            pluginID: "com.devisland.pomodoro",
+            permissions: [],
+            storageSnapshot: [:],
+            settings: settings
+        )
     }
 
     private func uiContext() -> PluginUIContext {

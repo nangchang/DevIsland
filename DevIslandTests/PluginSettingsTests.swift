@@ -156,6 +156,99 @@ final class PluginSettingsTests: XCTestCase {
         XCTAssertTrue(snapshot.isEmpty, "reset must wipe the plugin's durable storage")
     }
 
+    // MARK: - Settings schema (v1.3)
+
+    func testPluginSettingValueCodableRoundTrip() throws {
+        let values: [PluginSettingValue] = [.bool(true), .int(42), .double(3.5), .string("hi")]
+        for value in values {
+            let data = try JSONEncoder().encode(value)
+            let decoded = try JSONDecoder().decode(PluginSettingValue.self, from: data)
+            XCTAssertEqual(decoded, value)
+        }
+    }
+
+    func testDescriptorValidatedFallbackClampAndTruncate() {
+        let toggle = PluginSettingDescriptor(key: "t", label: "T", kind: .toggle, defaultValue: .bool(false))
+        XCTAssertEqual(toggle.validated(.bool(true)), .bool(true))
+        XCTAssertEqual(toggle.validated(.int(1)), .bool(false), "wrong kind falls back to default")
+        XCTAssertEqual(toggle.validated(nil), .bool(false), "missing value falls back to default")
+
+        let stepper = PluginSettingDescriptor(key: "s", label: "S",
+            kind: .stepper(range: 1...10, step: 1), defaultValue: .int(5))
+        XCTAssertEqual(stepper.validated(.int(20)), .int(10), "clamp to upper bound")
+        XCTAssertEqual(stepper.validated(.int(0)), .int(1), "clamp to lower bound")
+        XCTAssertEqual(stepper.validated(.string("x")), .int(5), "wrong kind falls back to default")
+
+        let slider = PluginSettingDescriptor(key: "d", label: "D",
+            kind: .slider(range: 0...1, step: 0.1), defaultValue: .double(0.5))
+        XCTAssertEqual(slider.validated(.double(2)), .double(1))
+        XCTAssertEqual(slider.validated(.double(-1)), .double(0))
+
+        let picker = PluginSettingDescriptor(key: "p", label: "P",
+            kind: .picker(options: [.init(value: "a", label: "A"), .init(value: "b", label: "B")]),
+            defaultValue: .string("a"))
+        XCTAssertEqual(picker.validated(.string("b")), .string("b"))
+        XCTAssertEqual(picker.validated(.string("z")), .string("a"), "value outside options falls back")
+
+        let text = PluginSettingDescriptor(key: "x", label: "X",
+            kind: .text(maxLength: 3), defaultValue: .string(""))
+        XCTAssertEqual(text.validated(.string("abcdef")), .string("abc"), "truncate to maxLength")
+
+        let negativeText = PluginSettingDescriptor(key: "n", label: "N",
+            kind: .text(maxLength: -1), defaultValue: .string("d"))
+        XCTAssertEqual(negativeText.validated(.string("abc")), .string(""),
+                       "negative maxLength must clamp to 0 rather than trapping")
+    }
+
+    func testSettingsStorePersistsAndIsolatesPerPlugin() {
+        let suiteName = "PluginSettingsTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = PluginSettingsStore(userDefaults: defaults)
+        store.setValue(.int(10), forKey: "workMinutes", pluginID: "a")
+        store.setValue(.bool(true), forKey: "flag", pluginID: "b")
+
+        XCTAssertEqual(store.value(forKey: "workMinutes", pluginID: "a"), .int(10))
+        XCTAssertNil(store.value(forKey: "workMinutes", pluginID: "b"),
+                     "settings must not leak across plugins")
+
+        let reopened = PluginSettingsStore(userDefaults: defaults)
+        XCTAssertEqual(reopened.value(forKey: "workMinutes", pluginID: "a"), .int(10),
+                       "settings must survive a fresh store reading the same defaults")
+        XCTAssertEqual(reopened.value(forKey: "flag", pluginID: "b"), .bool(true))
+    }
+
+    func testResetSettingsClearsPluginValues() {
+        let suiteName = "PluginSettingsTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = PluginSettingsStore(userDefaults: defaults)
+        store.setValue(.int(10), forKey: "workMinutes", pluginID: "a")
+        store.resetSettings(forPluginID: "a")
+        XCTAssertNil(store.value(forKey: "workMinutes", pluginID: "a"))
+    }
+
+    func testSettingChangedRestrictedToTargetPlugin() async {
+        let target = SettingsTestPlugin(id: "com.devisland.test.scTarget",
+            activationEvents: [.pluginStarted, .settingsChanged])
+        let other = SettingsTestPlugin(id: "com.devisland.test.scOther",
+            activationEvents: [.pluginStarted, .settingsChanged])
+        let host = PluginHost()
+        host.register([target, other])
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+
+        host.pluginSettingChanged(pluginID: target.manifest.id)
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(target.receivedKinds.contains(.settingsChanged))
+        XCTAssertFalse(other.receivedKinds.contains(.settingsChanged),
+                       "settings.changed must reach only the plugin whose settings changed")
+    }
+
     // MARK: - Helpers
 
     private func waitFor(

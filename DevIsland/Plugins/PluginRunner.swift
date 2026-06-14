@@ -2,11 +2,15 @@ import Foundation
 
 actor PluginRunner {
     nonisolated let manifest: PluginManifest
+    /// Cached at init like `manifest`: the schema is static, so the host (MainActor) can read
+    /// it without hopping into the actor to resolve persisted setting values at drain time.
+    nonisolated let settingsSchema: [PluginSettingDescriptor]
     private let plugin: any DevIslandPlugin & Sendable
 
     init(plugin: any DevIslandPlugin & Sendable) {
         self.plugin = plugin
         self.manifest = plugin.manifest
+        self.settingsSchema = plugin.settingsSchema
     }
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
@@ -16,6 +20,7 @@ actor PluginRunner {
     func handle(
         _ event: PluginEvent,
         storageSnapshot: [String: String],
+        settings: [String: PluginSettingValue] = [:],
         selectedSessionID: String? = nil
     ) async -> PluginContributionSnapshot {
         let startedAt = ContinuousClock.now
@@ -28,7 +33,8 @@ actor PluginRunner {
             let context = PluginContext(
                 pluginID: manifest.id,
                 permissions: manifest.permissions,
-                storageSnapshot: storageSnapshot
+                storageSnapshot: storageSnapshot,
+                settings: settings
             )
             let effects = try plugin.onEvent(event, context: context)
             var contributions: [PluginUISlot: PluginUIContribution] = [:]

@@ -22,14 +22,37 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
         activationEvents: [
             PluginEventKind.pluginStarted.rawValue,
             PluginEventKind.pluginTick.rawValue,
-            PluginEventKind.pluginActionInvoked.rawValue
+            PluginEventKind.pluginActionInvoked.rawValue,
+            PluginEventKind.settingsChanged.rawValue
         ]
     )
+
+    /// User-configurable settings (v1.3 demo): work length and whether to auto-restart a
+    /// new focus block on completion. The host renders, validates, and persists these.
+    var settingsSchema: [PluginSettingDescriptor] {
+        [
+            PluginSettingDescriptor(
+                key: "workMinutes",
+                label: "Work Minutes",
+                kind: .stepper(range: 1...60, step: 5),
+                defaultValue: .int(25)
+            ),
+            PluginSettingDescriptor(
+                key: "autoRestart",
+                label: "Auto-restart",
+                kind: .toggle,
+                defaultValue: .bool(false)
+            )
+        ]
+    }
 
     private enum Mode { case idle, running, paused }
 
     private let toggleActionID = "pomodoro.toggle"
-    private let workSeconds: Int
+    /// Fallback when no `workMinutes` setting is resolved (e.g. unit tests inject this directly).
+    private let defaultWorkSeconds: Int
+    /// Effective work length, refreshed from settings at the top of every `onEvent`.
+    private var workSeconds: Int
 
     private var mode: Mode = .idle
     private var remainingSeconds: Int
@@ -41,8 +64,10 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
     private var expectedEndTime: Date?
 
     /// `workSeconds` is injectable so tests can reach completion without 25 minutes
-    /// of ticks; production always uses the 25-minute default.
+    /// of ticks; production resolves the length from the `workMinutes` setting and only
+    /// falls back to this when no setting is present.
     init(workSeconds: Int = 25 * 60) {
+        self.defaultWorkSeconds = workSeconds
         self.workSeconds = workSeconds
         self.remainingSeconds = workSeconds
     }
@@ -55,12 +80,23 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        // Refresh the effective work length from settings every event. Changing it mid-run
+        // never disturbs the active countdown (driven by `expectedEndTime`); it takes effect
+        // on the next idle reset or completion.
+        workSeconds = context.settings["workMinutes"]?.intValue.map { $0 * 60 } ?? defaultWorkSeconds
+        let autoRestart = context.settings["autoRestart"]?.boolValue ?? false
+
         switch event.kind {
+        case .pluginStarted, .settingsChanged:
+            // Reflect a new work length when not actively counting down.
+            if mode != .running {
+                remainingSeconds = workSeconds
+            }
         case .pluginTick:
             guard mode == .running, let end = expectedEndTime else { return [] }
             remainingSeconds = Self.secondsRemaining(until: end, now: event.timestamp)
             if remainingSeconds == 0 {
-                return complete()
+                return complete(now: event.timestamp, autoRestart: autoRestart)
             }
         case .pluginActionInvoked:
             guard event.action?.actionID == toggleActionID else { break }
@@ -81,11 +117,16 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
         return []
     }
 
-    private func complete() -> [PluginEffect] {
+    private func complete(now: Date, autoRestart: Bool) -> [PluginEffect] {
         completedCount += 1
-        mode = .idle
         remainingSeconds = workSeconds
-        expectedEndTime = nil
+        if autoRestart {
+            mode = .running
+            expectedEndTime = now.addingTimeInterval(Double(workSeconds))
+        } else {
+            mode = .idle
+            expectedEndTime = nil
+        }
         return [PluginEffect(
             capability: "notification.show",
             payload: ["title": "Pomodoro", "body": "Focus session complete"]

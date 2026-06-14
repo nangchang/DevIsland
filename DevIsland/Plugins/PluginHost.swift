@@ -106,6 +106,45 @@ final class PluginHost: ObservableObject {
         runners.values.map(\.manifest).sorted { $0.name < $1.name }
     }
 
+    /// The declarative settings schema a plugin exposes, for the host-owned settings UI.
+    /// Empty when the plugin declares none or is not registered.
+    func settingsSchema(forPluginID pluginID: String) -> [PluginSettingDescriptor] {
+        runners[pluginID]?.settingsSchema ?? []
+    }
+
+    /// Notifies a plugin that its own settings changed so it can rebuild contributions.
+    /// Restricted to that plugin only (a plugin reacts to its own settings — design §v1.3).
+    /// The latest values are re-read at drain time, so the new values reach the plugin's
+    /// `PluginContext` on this event. This is a session-less event, so it rebuilds only the
+    /// global slots (`notch.expanded.activity`, `menubar.menu`); session-scoped slots are
+    /// skipped by `PluginRunner.shouldEvaluate` when `event.session == nil` and refresh on the
+    /// next session event. v1.3 has no plugin contributing settings-derived session surfaces,
+    /// so this is sufficient; reopen if one is added.
+    func pluginSettingChanged(pluginID: String) {
+        guard isEnabled, runners[pluginID] != nil else { return }
+        enqueue(eventFactory.makeLifecycleEvent(kind: .settingsChanged), restrictedTo: pluginID)
+    }
+
+    /// Resolves persisted setting values against each plugin's schema on the MainActor before
+    /// the async hop, mirroring how `selectedSessionID` is pulled. Every schema key is present
+    /// in the result (stored value validated, or the descriptor default), so plugins read
+    /// settings without missing-key handling.
+    private func resolveSettings(
+        for runners: [PluginRunner]
+    ) -> [String: [String: PluginSettingValue]] {
+        guard let store = settingsStore else { return [:] }
+        var result: [String: [String: PluginSettingValue]] = [:]
+        for runner in runners where !runner.settingsSchema.isEmpty {
+            let stored = store.settings(forPluginID: runner.manifest.id)
+            var resolved: [String: PluginSettingValue] = [:]
+            for descriptor in runner.settingsSchema {
+                resolved[descriptor.key] = descriptor.validated(stored[descriptor.key])
+            }
+            result[runner.manifest.id] = resolved
+        }
+        return result
+    }
+
     func isPluginEnabled(_ pluginID: String) -> Bool {
         !disabledPluginIDs.contains(pluginID)
     }
@@ -367,7 +406,14 @@ final class PluginHost: ObservableObject {
             // Pull the user's current selection on the MainActor before the async hop, so
             // contributions render for the selected session rather than a recency proxy.
             let selectedSessionID = selectedSessionProvider?()
-            let snapshots = await eventProcessor.process(activeQueued, selectedSessionID: selectedSessionID)
+            // Resolve persisted setting values against each plugin's schema here (MainActor)
+            // too, so a plugin sees the latest settings on this event.
+            let settingsByPlugin = resolveSettings(for: activeRunners)
+            let snapshots = await eventProcessor.process(
+                activeQueued,
+                selectedSessionID: selectedSessionID,
+                settingsByPlugin: settingsByPlugin
+            )
             let effectBatches = applySnapshots(snapshots, eventKind: queued.baseEvent.kind)
             if queued.baseEvent.kind == .sessionEnded,
                let sessionID = queued.baseEvent.session?.id {

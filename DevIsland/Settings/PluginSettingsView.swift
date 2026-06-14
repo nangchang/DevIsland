@@ -69,6 +69,22 @@ private struct PluginSettingsRow: View {
                 }
             }
 
+            let schema = pluginHost.settingsSchema(forPluginID: manifest.id)
+            if !schema.isEmpty && settings.isEnabled(manifest.id) {
+                Divider()
+                Text(l10n.lblPluginSettings)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(schema) { descriptor in
+                    PluginSettingControlView(
+                        descriptor: descriptor,
+                        pluginID: manifest.id,
+                        pluginHost: pluginHost,
+                        settings: settings
+                    )
+                }
+            }
+
             HStack {
                 if pluginHost.isInSafemode(manifest.id) {
                     Button(l10n.btnPluginReset) {
@@ -106,5 +122,128 @@ private struct PluginSettingsRow: View {
                 pluginHost.setPluginEnabled(newValue, pluginID: manifest.id)
             }
         )
+    }
+}
+
+/// Renders a single plugin-declared setting as the matching SwiftUI control. The host owns
+/// presentation; the plugin only declared the descriptor. Every write is validated/clamped
+/// via `descriptor.validated` before persisting, then `pluginSettingChanged` notifies the
+/// plugin so its contributions rebuild.
+private struct PluginSettingControlView: View {
+    let descriptor: PluginSettingDescriptor
+    let pluginID: String
+    @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var settings: PluginSettingsStore
+
+    var body: some View {
+        switch descriptor.kind {
+        case .toggle:
+            Toggle(descriptor.label, isOn: boolBinding)
+                .font(.caption)
+        case .picker(let options):
+            Picker(descriptor.label, selection: stringBinding) {
+                ForEach(options) { option in
+                    Text(option.label).tag(option.value)
+                }
+            }
+            .font(.caption)
+        case .stepper(let range, let step):
+            Stepper(value: intBinding, in: range, step: step) {
+                labeledValue(String(current.intValue ?? 0))
+            }
+            .font(.caption)
+        case .slider(let range, let step):
+            VStack(alignment: .leading, spacing: 2) {
+                labeledValue(String(format: "%g", current.doubleValue ?? 0))
+                Slider(value: doubleBinding, in: range, step: step)
+            }
+            .font(.caption)
+        case .text:
+            // A local @State row so typing doesn't write to UserDefaults and drain a plugin
+            // event on every keystroke; it commits once on return/blur.
+            TextSettingRow(
+                descriptor: descriptor,
+                pluginID: pluginID,
+                settings: settings,
+                commit: commit
+            )
+        }
+    }
+
+    private func labeledValue(_ value: String) -> some View {
+        HStack {
+            Text(descriptor.label)
+            Spacer()
+            Text(value).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Current value resolved against the schema (default fallback), so controls always show
+    /// a valid value even before the user has changed anything.
+    private var current: PluginSettingValue {
+        descriptor.validated(settings.value(forKey: descriptor.key, pluginID: pluginID))
+    }
+
+    private func commit(_ value: PluginSettingValue) {
+        settings.setValue(descriptor.validated(value), forKey: descriptor.key, pluginID: pluginID)
+        pluginHost.pluginSettingChanged(pluginID: pluginID)
+    }
+
+    private var boolBinding: Binding<Bool> {
+        Binding(get: { current.boolValue ?? false }, set: { commit(.bool($0)) })
+    }
+    // Stepper/Slider require a value inside their range; fall back to the lower bound (not 0,
+    // which may be out of range) and clamp, in case a plugin's default is the wrong kind.
+    private var intBinding: Binding<Int> {
+        Binding(
+            get: {
+                guard case .stepper(let range, _) = descriptor.kind else { return current.intValue ?? 0 }
+                let value = current.intValue ?? range.lowerBound
+                return min(max(value, range.lowerBound), range.upperBound)
+            },
+            set: { commit(.int($0)) }
+        )
+    }
+    private var doubleBinding: Binding<Double> {
+        Binding(
+            get: {
+                guard case .slider(let range, _) = descriptor.kind else { return current.doubleValue ?? 0 }
+                let value = current.doubleValue ?? range.lowerBound
+                return min(max(value, range.lowerBound), range.upperBound)
+            },
+            set: { commit(.double($0)) }
+        )
+    }
+    private var stringBinding: Binding<String> {
+        Binding(get: { current.stringValue ?? "" }, set: { commit(.string($0)) })
+    }
+}
+
+/// Text setting backed by local `@State` so editing stays in-memory and only commits on
+/// return/blur — avoids a UserDefaults write plus plugin event drain per keystroke. Stays in
+/// sync if the stored value changes elsewhere.
+private struct TextSettingRow: View {
+    let descriptor: PluginSettingDescriptor
+    let pluginID: String
+    @ObservedObject var settings: PluginSettingsStore
+    let commit: (PluginSettingValue) -> Void
+
+    @State private var localText = ""
+
+    var body: some View {
+        HStack {
+            Text(descriptor.label)
+            TextField("", text: $localText, onCommit: { commit(.string(localText)) })
+                .textFieldStyle(.roundedBorder)
+        }
+        .font(.caption)
+        .onAppear { localText = resolved }
+        .onChange(of: settings.value(forKey: descriptor.key, pluginID: pluginID)) { _, _ in
+            localText = resolved
+        }
+    }
+
+    private var resolved: String {
+        descriptor.validated(settings.value(forKey: descriptor.key, pluginID: pluginID)).stringValue ?? ""
     }
 }

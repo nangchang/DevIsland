@@ -66,9 +66,11 @@
   - v1.2 c. `session.focusTerminal` — 완료. host command: `AppState.focusTerminalFromPlugin`이 sessionID로 세션을 찾아 그 세션의 terminal metadata로 `TerminalFocuser.focusTerminal`을 직접 호출(core `focusTerminal(for:)`의 unread/missed 해제·`passIfTerminalFocused` completion을 재사용하지 않음). 단 터미널을 frontmost로 만들면 `NotchWindowController`의 앱 활성화/클릭 observer가 `passIfTerminalFocused`를 호출해 표시 중인 approval을 pass시킬 수 있으므로, request/notification 표시 중이면 focus를 거부한다(`canPluginFocusTerminal` = `passIfTerminalFocused` 가드와 동일 조건, PR #280 codex review). 그 외에는 윈도우 포커스만 이동하고 approval queue/session 상태를 건드리지 않는다. `SessionActionsPlugin`이 `session.context-menu`에 "Focus Terminal" 버튼을 `showSessionSurface` permission gate로 기여(`isDestructive: false`). plugin 세션 명령 핸들러(`handlePluginSessionCommand`/`dismissSessionFromPlugin`/`copyResumeCommandFromPlugin`/`focusTerminalFromPlugin`)는 `@MainActor`로 명시(PR #280 gemini review).
   - v1.2 d. `session.openWorkspace` — 완료. side-effect-free host command: `AppState.openWorkspaceFromPlugin`이 sessionID로 세션을 찾아 `workspaceRoot`가 있으면 `NSWorkspace.shared.open`으로 Finder에 연다. Finder만 활성화하므로(터미널 frontmost가 아니라) observer의 `passIfTerminalFocused`가 발동해도 approval을 pass하지 않아 별도 가드가 불필요. `SessionActionsPlugin`이 `workspaceRoot`가 비어있지 않은 세션에만 "Open in Finder" 버튼을 `showSessionSurface` permission gate로 기여하고, 중복을 피하려 `SessionRowView` 컨텍스트 메뉴의 core "Open in Finder" 항목을 제거해 plugin 기여로 대체(plugin disable 시 사라짐; "Copy Path"·`SessionHistoryWindow`의 항목은 유지). `workspaceRoot`는 `PluginEventFactory.redactedSession`이 `readTerminalMetadata` 없이는 `nil`로 만들므로 plugin에 `.readTerminalMetadata`를 부여한다(session 이벤트만 구독해 cwd/terminalApp은 받지 않고 workspaceRoot만 보존; 미부여 시 버튼이 절대 기여되지 않아 회귀 — PR #281 codex review).
   - v1.2 e. Host Effect 카탈로그 통합 — 완료. `PluginEffectExecutor.isHostEffectSupported`의 하드코딩 `switch`를 `SessionCommandCatalog`와 대칭인 `HostEffectCatalog`(capability → 필요 permission + `builtInOnlyPluginIDs` allowlist 메타데이터)로 대체. `PluginEffectExecutor.enqueue`와 `PluginHost.handleAction`이 같은 `HostEffectCatalog.isSupported(_:pluginID:permissions:)` 경로로 effect를 검증한다. `power.preventIdleSleep`/`power.toggle`의 built-in allowlist(`caffeine` 전용)가 `execute`의 `guard pluginID == "caffeine"`에 흩어져 있던 것을 카탈로그 메타데이터로 옮겨 dispatch 전에 검증(동작 불변 — caffeine만 통과). `notification.show`/`sound.play`/`storage.*`는 permission만으로 허용(allowlist nil).
+  - v1.3 a. Plugin Settings Schema — 완료. 플러그인이 선언형 설정 schema(`PluginSettingDescriptor`: toggle/picker/stepper/slider/text + `validated(_:)` 검증·clamp·truncate)를 `DevIslandPlugin.settingsSchema`로 노출하고, host가 렌더·검증·저장·주입을 모두 담당한다. 저장은 `PluginSettingsStore`가 `pluginSettings.<id>` UserDefaults namespace에 JSON으로 격리(core/bridge/approval defaults 불가침; plugin SQLite storage는 effect 경유 비동기라 동기 설정 UI에 부적합해 미사용). 주입은 `selectedSessionID` 패턴 재사용 — `PluginRunner`가 `manifest`처럼 `settingsSchema`를 `nonisolated`로 캐싱하고, `PluginHost.drainEvents`가 MainActor에서 `resolveSettings`(저장값을 schema에 `validated` 적용, 누락 키는 default)로 `[pluginID: [key: value]]`를 만들어 `PluginEventProcessor.process` → `PluginRunner.handle` → `PluginContext.settings`(읽기 전용)로 흘린다. 변경 통지는 `PluginHost.pluginSettingChanged(pluginID:)`가 `settings.changed`를 해당 plugin에만 `restrictedTo`로 발행(자기 설정에만 반응); drain 시 최신 값을 재해석하므로 같은 이벤트에서 새 값이 context로 들어가 contribution이 재계산된다. UI는 host-owned `PluginSettingsView`의 `PluginSettingControlView`가 schema를 SwiftUI 컨트롤로 렌더(plugin은 SwiftUI 미생성 — Declarative UI). 데모: `PomodoroPlugin`이 `workMinutes`(stepper)·`autoRestart`(toggle)를 노출하고 `onEvent`에서 `context.settings`로 작업 길이/자동재시작을 적용(running 중 변경은 다음 블록부터 반영).
 - 마지막 검증:
-  - 플러그인 관련 테스트 스위트 통과 (2026-06-14, v1.2 e 기준 — 워크트리 빌드 성공, 전체 테스트 0 실패. HostEffectCatalog 단위 테스트(permission/allowlist/unknown) 6건 추가)
-- 다음 단계 (v1.2 완료):
+  - 플러그인 관련 테스트 스위트 통과 (2026-06-14, v1.3 a 기준 — 워크트리 빌드 성공, 전체 테스트 0 실패. `PluginSettingValue` Codable round-trip, `validated` kind별 fallback/clamp/truncate, store persistence/isolation/reset, `settings.changed` restrictedTo, Pomodoro workMinutes/autoRestart 및 host end-to-end 반영 테스트 추가)
+- 다음 단계 (v1.3 a 완료):
+  - v1.3은 schema·렌더링·이벤트·데모까지 한 번에 완료. picker/slider/text 컨트롤은 단위 테스트로 검증했고 built-in 데모 노출은 후속 필요 시 추가.
   - Migration PR M5 (Update status contribution)는 낮은 우선순위 — v2 network/runtime 설계 후로 보류 가능
 
 
@@ -705,18 +707,18 @@ v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 �
 - 실패한 command가 provider response, approval queue, session lifecycle ownership을 바꾸지 않는지
 - pending/current approval/missed/unread 세션에 대한 destructive command가 거부되는지
 
-### v1.3 Plugin Settings Schema
+### v1.3 Plugin Settings Schema (완료, v1.3 a)
 
-- boolean toggle, enum picker, number stepper/slider, short text input만 우선 허용
-- `settings.changed` 이벤트 — 플러그인 자신의 설정 변경에만 반응
-- path picker, Wi-Fi scan, Location permission, pack validation UI는 host-owned settings pane으로 유지
-- Caffeine처럼 권한성 UI가 핵심인 built-in plugin은 schema가 생긴 뒤에도 host-owned settings pane을 유지할 수 있다.
+- ✅ boolean toggle, enum picker, number stepper/slider, short text input만 우선 허용 (`PluginSettingDescriptor.Kind` 5종, `validated(_:)`가 kind별 검증·clamp·truncate)
+- ✅ `settings.changed` 이벤트 — 플러그인 자신의 설정 변경에만 반응 (`PluginHost.pluginSettingChanged`가 `restrictedTo`로 해당 plugin에만 발행)
+- ✅ path picker, Wi-Fi scan, Location permission, pack validation UI는 host-owned settings pane으로 유지 (schema는 4종 기본 컨트롤만; Caffeine 등은 기존 pane 유지)
+- ✅ Caffeine처럼 권한성 UI가 핵심인 built-in plugin은 schema가 생긴 뒤에도 host-owned settings pane을 유지할 수 있다.
 
 검증:
 
-- schema validation과 default fallback
-- plugin setting 변경이 contribution/tick/action에 반영되는지
-- core app settings, bridge settings, approval settings를 plugin이 직접 mutate하지 않는지
+- ✅ schema validation과 default fallback (`validated` 단위 테스트 — 타입 불일치/범위 이탈/누락 키)
+- ✅ plugin setting 변경이 contribution/tick/action에 반영되는지 (`settings.changed` 후 Pomodoro contribution 값 변화 + host end-to-end 테스트)
+- ✅ core app settings, bridge settings, approval settings를 plugin이 직접 mutate하지 않는지 (`PluginSettingsStore`가 별도 `pluginSettings.<id>` namespace만 사용, plugin은 읽기 전용 `PluginContext.settings`만 수신)
 
 ### v1.x Plugin Contribution i18n
 
