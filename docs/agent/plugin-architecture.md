@@ -329,6 +329,8 @@ struct PluginContext {
     let pluginID: String
     let permissions: Set<PluginPermission>
     let storageSnapshot: [String: String]
+    let settings: [String: PluginSettingValue]
+    let language: AppLanguage
 }
 
 /// 플러그인이 직접 수행하지 않고 Host에 위임하는 side effect.
@@ -340,6 +342,7 @@ struct PluginEffect: Codable {
 ```
 
 `PluginContext.storageSnapshot`은 `PluginEventProcessor`가 runner 호출 직전에 플러그인 전용 storage에서 읽어온 작은 read-only snapshot이다.
+`PluginContext.language`는 현재 앱 언어의 Sendable snapshot이다. 플러그인은 이 값으로 자신이 소유한 문자열을 직접 선택하며, `L10n.shared` 같은 host-owned observable state를 직접 읽지 않는다.
 v1 플러그인 API가 동기 함수이므로 플러그인은 storage를 직접 비동기로 읽지 않는다.
 초기 상태 복원이 필요한 built-in plugin은 `plugin.started` 또는 첫 event에서 snapshot을 읽어 내부 상태를 복원한다.
 storage write effect는 event 처리 이후 비동기로 커밋되므로, 플러그인은 방금 반환한 storage effect를 같은 event 안에서 다시 읽을 수 있다고 가정하지 않는다. v1 built-in plugin의 화면 상태는 플러그인 내부 메모리 상태가 기준이고, storage는 재시작 후 복원을 위한 durable cache로 취급한다.
@@ -351,6 +354,8 @@ struct PluginUIContext {
     let slot: PluginUISlot
     let timestamp: Date
     let session: PluginSessionSnapshot?   // session.* 슬롯에서만 채워진다 (대상 세션)
+    let selectedSessionID: String?
+    let language: AppLanguage
 }
 
 struct PluginSurfaceState: Codable {
@@ -940,10 +945,16 @@ actor PluginRunner {
         do {
             let context = PluginContext(pluginID: manifest.id,
                                         permissions: manifest.permissions,
-                                        storageSnapshot: storageSnapshot)
+                                        storageSnapshot: storageSnapshot,
+                                        settings: settings,
+                                        language: language)
             effects = try plugin.onEvent(event, context: context)
             for slot in manifest.surfaces {
-                let ctx = PluginUIContext(slot: slot, timestamp: event.timestamp, session: event.session)
+                let ctx = PluginUIContext(slot: slot,
+                                          timestamp: event.timestamp,
+                                          session: event.session,
+                                          selectedSessionID: selectedSessionID,
+                                          language: language)
                 if let c = try plugin.makeUIContribution(for: slot, context: ctx) {
                     result[slot] = c
                 }

@@ -27,8 +27,10 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginEventKind.sessionUpdated.rawValue,
             PluginEventKind.sessionEnded.rawValue,
             PluginEventKind.hookReceived.rawValue,
-            PluginEventKind.approvalDecided.rawValue
-        ]
+            PluginEventKind.approvalDecided.rawValue,
+            PluginEventKind.languageChanged.rawValue
+        ],
+        localizedName: PluginLocalizedString(english: "Session Stats", korean: "세션 통계")
     )
 
     private var activeSessionIDs: Set<String> = []
@@ -87,7 +89,7 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
                 PluginUIComponentDTO(
                     id: "sessions",
                     type: .metric,
-                    label: "Sessions",
+                    label: context.language.s("Sessions", "세션"),
                     value: "\(activeSessionIDs.count)",
                     tone: nil,
                     iconName: "rectangle.stack",
@@ -101,7 +103,7 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
                 PluginUIComponentDTO(
                     id: "sessions",
                     type: .metric,
-                    label: "Active Sessions",
+                    label: context.language.s("Active Sessions", "활성 세션"),
                     value: "\(activeSessionIDs.count)",
                     tone: nil,
                     iconName: "rectangle.stack",
@@ -113,7 +115,7 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
                     PluginUIComponentDTO(
                         id: "hooks",
                         type: .metric,
-                        label: "Hook Events",
+                        label: context.language.s("Hook Events", "훅 이벤트"),
                         value: "\(totalHooks)",
                         tone: nil,
                         iconName: nil,
@@ -140,7 +142,7 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
                     PluginUIComponentDTO(
                         id: "approved",
                         type: .metric,
-                        label: "Approved",
+                        label: context.language.s("Approved", "승인"),
                         value: "\(approvalsApproved)",
                         tone: nil,
                         iconName: "checkmark.circle",
@@ -151,7 +153,7 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
                     PluginUIComponentDTO(
                         id: "denied",
                         type: .metric,
-                        label: "Denied",
+                        label: context.language.s("Denied", "거부"),
                         value: "\(approvalsDenied)",
                         tone: nil,
                         iconName: "xmark.circle",

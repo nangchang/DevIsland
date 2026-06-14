@@ -26,6 +26,21 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(component.value, "01:05")
     }
 
+    func testSessionStartProducesKoreanElapsedMetric() throws {
+        let plugin = SessionTimerPlugin()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
+
+        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
+
+        let contribution = try plugin.makeUIContribution(
+            for: .notchExpandedActivity,
+            context: uiContext(timestamp: start.addingTimeInterval(65), language: .korean)
+        )
+
+        XCTAssertEqual(contribution?.components.first?.label, "경과")
+    }
+
     func testElapsedFormatsHoursPastSixtyMinutes() throws {
         let plugin = SessionTimerPlugin()
         let start = Date(timeIntervalSince1970: 1_000)
@@ -398,8 +413,8 @@ final class SessionTimerPluginTests: XCTestCase {
         )
     }
 
-    private func uiContext(timestamp: Date) -> PluginUIContext {
-        PluginUIContext(slot: .notchExpandedActivity, timestamp: timestamp, session: nil)
+    private func uiContext(timestamp: Date, language: AppLanguage = .english) -> PluginUIContext {
+        PluginUIContext(slot: .notchExpandedActivity, timestamp: timestamp, session: nil, language: language)
     }
 }
 

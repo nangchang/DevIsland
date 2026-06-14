@@ -200,6 +200,25 @@ final class PluginSettingsTests: XCTestCase {
                        "negative maxLength must clamp to 0 rather than trapping")
     }
 
+    func testDescriptorDisplayLabelUsesPluginOwnedLocalization() {
+        let descriptor = PluginSettingDescriptor(
+            key: "showSeconds",
+            label: "Show seconds",
+            localizedLabel: PluginLocalizedString(english: "Show seconds", korean: "초 표시"),
+            kind: .toggle,
+            defaultValue: .bool(true)
+        )
+        let option = PluginSettingDescriptor.Option(
+            value: "compact",
+            label: "Compact",
+            localizedLabel: PluginLocalizedString(english: "Compact", korean: "간결")
+        )
+
+        XCTAssertEqual(descriptor.displayLabel(language: .english), "Show seconds")
+        XCTAssertEqual(descriptor.displayLabel(language: .korean), "초 표시")
+        XCTAssertEqual(option.displayLabel(language: .korean), "간결")
+    }
+
     func testSettingsStorePersistsAndIsolatesPerPlugin() {
         let suiteName = "PluginSettingsTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

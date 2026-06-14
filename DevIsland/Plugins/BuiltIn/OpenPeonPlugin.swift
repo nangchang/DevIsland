@@ -9,7 +9,8 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
         kind: .system,
         permissions: [.playSound, .readHookSummaries],
         surfaces: [],
-        activationEvents: ["hook.received"]
+        activationEvents: ["hook.received"],
+        localizedName: PluginLocalizedString(english: "OpenPeon", korean: "OpenPeon")
     )
 
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {

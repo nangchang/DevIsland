@@ -1,5 +1,16 @@
 import Foundation
 
+/// Localized text owned by a plugin. The host only passes the current language snapshot
+/// and renders the resolved string; it does not keep a plugin string catalog.
+struct PluginLocalizedString: Codable, Equatable, Sendable {
+    let english: String
+    let korean: String
+
+    func resolved(for language: AppLanguage) -> String {
+        language.s(english, korean)
+    }
+}
+
 /// A single setting value a plugin can hold. Codable so it can persist in UserDefaults
 /// (via `PluginSettingsStore`) and be injected into `PluginContext.settings`. v1.3 supports
 /// four kinds, one per supported UI control (toggle/picker/stepper-slider/text).
@@ -46,11 +57,16 @@ enum PluginSettingValue: Codable, Equatable, Sendable {
 /// Plugins never build SwiftUI — they declare intent, the host owns presentation.
 struct PluginSettingDescriptor: Equatable, Sendable, Identifiable {
     let key: String              // unique within a plugin
-    let label: String            // English label; plugin-label i18n is deferred (doc §v1.x i18n)
+    let label: String            // English fallback
+    var localizedLabel: PluginLocalizedString? = nil
     let kind: Kind
     let defaultValue: PluginSettingValue
 
     var id: String { key }
+
+    func displayLabel(language: AppLanguage) -> String {
+        localizedLabel?.resolved(for: language) ?? label
+    }
 
     enum Kind: Equatable, Sendable {
         case toggle
@@ -63,7 +79,12 @@ struct PluginSettingDescriptor: Equatable, Sendable, Identifiable {
     struct Option: Equatable, Sendable, Identifiable {
         let value: String
         let label: String
+        var localizedLabel: PluginLocalizedString? = nil
         var id: String { value }
+
+        func displayLabel(language: AppLanguage) -> String {
+            localizedLabel?.resolved(for: language) ?? label
+        }
     }
 
     /// Coerces a stored or user-entered value into a valid value for this descriptor.

@@ -486,6 +486,33 @@ final class PluginHostDispatchTests: XCTestCase {
                        "a plugin with no session-scoped surface gets only the session-less tick")
     }
 
+    func testLanguageChangedSessionFanoutIsLimitedToSessionScopedPlugins() async {
+        let global = RecordingPlugin(
+            id: "com.devisland.test.language-global",
+            activationEvents: [.languageChanged],
+            surfaces: [.menubarMenu]
+        )
+        let sessionScoped = RecordingPlugin(
+            id: "com.devisland.test.language-session",
+            permissions: [.readSessionEvents, .showSessionSurface],
+            activationEvents: [.languageChanged],
+            surfaces: [.sessionMessage]
+        )
+        let host = PluginHost()
+        host.register([global, sessionScoped])
+        host.activeSessionsProvider = {
+            [self.makeSessionSnapshot(id: "s1"), self.makeSessionSnapshot(id: "s2")]
+        }
+
+        host.pluginLanguageChanged()
+        await host.waitUntilIdle()
+
+        XCTAssertEqual(global.receivedKinds.filter { $0 == .languageChanged }.count, 1,
+                       "global-only plugins must not infer active-session count from fan-out")
+        XCTAssertEqual(sessionScoped.receivedKinds.filter { $0 == .languageChanged }.count, 3,
+                       "session-scoped plugins get the global rebuild plus one session-bearing rebuild per active session")
+    }
+
     func testSafemodeTriggeredAfterThreeErrorsWithinSixtySeconds() async {
         let plugin = RecordingPlugin(
             id: "com.devisland.test.safemode.errors",

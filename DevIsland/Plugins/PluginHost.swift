@@ -98,7 +98,7 @@ final class PluginHost: ObservableObject {
             }
         )
         pluginDisplayNames = Dictionary(uniqueKeysWithValues: runners.map { id, runner in
-            (id, runner.manifest.name)
+            (id, runner.manifest.displayName(language: L10n.shared.language))
         })
         self.disabledPluginIDs = disabledPluginIDs.filter { runners[$0] != nil }
 
@@ -120,6 +120,28 @@ final class PluginHost: ObservableObject {
     /// Empty when the plugin declares none or is not registered.
     func settingsSchema(forPluginID pluginID: String) -> [PluginSettingDescriptor] {
         runners[pluginID]?.settingsSchema ?? []
+    }
+
+    /// Rebuilds cached plugin-owned strings after the app language setting changes. The
+    /// language itself is injected at drain time, so this only asks active plugins to
+    /// recalculate contributions they already own.
+    func pluginLanguageChanged() {
+        guard isEnabled else { return }
+        pluginDisplayNames = Dictionary(uniqueKeysWithValues: runners.map { id, runner in
+            (id, runner.manifest.displayName(language: L10n.shared.language))
+        })
+        enqueue(eventFactory.makeLifecycleEvent(kind: .languageChanged))
+        let sessionScopedRunners = runners.values.filter { runner in
+            runner.manifest.permissions.contains(.readSessionEvents)
+                && runner.manifest.surfaces.contains { Self.isSessionScoped($0) }
+        }
+        guard !sessionScopedRunners.isEmpty else { return }
+        for snapshot in activeSessionsProvider?() ?? [] {
+            for runner in sessionScopedRunners {
+                enqueue(eventFactory.makeSessionEvent(kind: .languageChanged, from: snapshot),
+                        restrictedTo: runner.manifest.id)
+            }
+        }
     }
 
     /// Notifies a plugin that its own settings changed so it can rebuild contributions.
@@ -446,7 +468,8 @@ final class PluginHost: ObservableObject {
             let snapshots = await eventProcessor.process(
                 activeQueued,
                 selectedSessionID: selectedSessionID,
-                settingsByPlugin: settingsByPlugin
+                settingsByPlugin: settingsByPlugin,
+                language: L10n.shared.language
             )
             let effectBatches = applySnapshots(snapshots, eventKind: queued.baseEvent.kind)
             if queued.baseEvent.kind == .sessionEnded,

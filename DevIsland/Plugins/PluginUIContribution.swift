@@ -20,6 +20,8 @@ struct PluginUIContext: Equatable {
     /// session is selected, the host provides no selection signal (e.g. in tests), or the
     /// plugin lacks `readSessionEvents` (gated in `PluginEventProcessor`).
     let selectedSessionID: String?
+    /// Current app language snapshot for plugin-owned contribution strings.
+    let language: AppLanguage
 
     /// Explicit init keeps `selectedSessionID` immutable (`let`) while defaulting it, so a
     /// `let` with an inline default doesn't drop it from the memberwise initializer.
@@ -27,12 +29,14 @@ struct PluginUIContext: Equatable {
         slot: PluginUISlot,
         timestamp: Date,
         session: PluginSessionSnapshot?,
-        selectedSessionID: String? = nil
+        selectedSessionID: String? = nil,
+        language: AppLanguage = .english
     ) {
         self.slot = slot
         self.timestamp = timestamp
         self.session = session
         self.selectedSessionID = selectedSessionID
+        self.language = language
     }
 }
 

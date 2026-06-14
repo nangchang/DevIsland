@@ -169,7 +169,7 @@ private struct GeneralSettingsPane: View {
     var body: some View {
         Form {
             Section(l10n.secLanguage) {
-                Picker(l10n.lblLanguage, selection: $l10n.language) {
+                Picker(l10n.lblLanguage, selection: languageBinding) {
                     ForEach(AppLanguage.allCases) { lang in
                         Text(lang.displayName).tag(lang)
                     }
@@ -223,6 +223,16 @@ private struct GeneralSettingsPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var languageBinding: Binding<AppLanguage> {
+        Binding(
+            get: { l10n.language },
+            set: { newValue in
+                l10n.language = newValue
+                AppState.shared.pluginHost.pluginLanguageChanged()
+            }
+        )
     }
 }
 

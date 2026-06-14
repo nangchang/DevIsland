@@ -29,8 +29,10 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
         activationEvents: [
             PluginEventKind.sessionStarted.rawValue,
             PluginEventKind.sessionUpdated.rawValue,
-            PluginEventKind.sessionEnded.rawValue
-        ]
+            PluginEventKind.sessionEnded.rawValue,
+            PluginEventKind.languageChanged.rawValue
+        ],
+        localizedName: PluginLocalizedString(english: "Session Actions", korean: "세션 작업")
     )
 
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
@@ -45,11 +47,12 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
         context: PluginUIContext
     ) throws -> PluginUIContribution? {
         guard slot == .sessionContextMenu, let session = context.session else { return nil }
+        let language = context.language
 
         let dismiss = PluginUIComponentDTO(
             id: "dismiss",
             type: .button,
-            label: "Dismiss if idle",
+            label: language.s("Dismiss if idle", "대기 중이면 닫기"),
             value: nil,
             tone: nil,
             iconName: "xmark.circle",
@@ -66,7 +69,7 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
         let copyResume = PluginUIComponentDTO(
             id: "copy-resume",
             type: .button,
-            label: "Copy Resume Command",
+            label: language.s("Copy Resume Command", "재개 명령 복사"),
             value: nil,
             tone: nil,
             iconName: "arrow.counterclockwise",
@@ -83,7 +86,7 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
         let focusTerminal = PluginUIComponentDTO(
             id: "focus-terminal",
             type: .button,
-            label: "Focus Terminal",
+            label: language.s("Focus Terminal", "터미널 포커스"),
             value: nil,
             tone: nil,
             iconName: "terminal",
@@ -104,7 +107,7 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
             components.append(PluginUIComponentDTO(
                 id: "open-workspace",
                 type: .button,
-                label: "Open in Finder",
+                label: language.s("Open in Finder", "Finder에서 열기"),
                 value: nil,
                 tone: nil,
                 iconName: "folder",

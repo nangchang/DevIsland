@@ -43,7 +43,7 @@ private struct PluginSettingsRow: View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(isOn: enabledBinding) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(manifest.name)
+                    Text(manifest.displayName(language: l10n.language))
                     Text("\(manifest.id) · v\(manifest.version)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -134,16 +134,17 @@ private struct PluginSettingControlView: View {
     let pluginID: String
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var settings: PluginSettingsStore
+    @ObservedObject private var l10n = L10n.shared
 
     var body: some View {
         switch descriptor.kind {
         case .toggle:
-            Toggle(descriptor.label, isOn: boolBinding)
+            Toggle(descriptor.displayLabel(language: l10n.language), isOn: boolBinding)
                 .font(.caption)
         case .picker(let options):
-            Picker(descriptor.label, selection: stringBinding) {
+            Picker(descriptor.displayLabel(language: l10n.language), selection: stringBinding) {
                 ForEach(options) { option in
-                    Text(option.label).tag(option.value)
+                    Text(option.displayLabel(language: l10n.language)).tag(option.value)
                 }
             }
             .font(.caption)
@@ -172,7 +173,7 @@ private struct PluginSettingControlView: View {
 
     private func labeledValue(_ value: String) -> some View {
         HStack {
-            Text(descriptor.label)
+            Text(descriptor.displayLabel(language: l10n.language))
             Spacer()
             Text(value).foregroundStyle(.secondary)
         }
@@ -227,12 +228,13 @@ private struct TextSettingRow: View {
     let pluginID: String
     @ObservedObject var settings: PluginSettingsStore
     let commit: (PluginSettingValue) -> Void
+    @ObservedObject private var l10n = L10n.shared
 
     @State private var localText = ""
 
     var body: some View {
         HStack {
-            Text(descriptor.label)
+            Text(descriptor.displayLabel(language: l10n.language))
             TextField("", text: $localText, onCommit: { commit(.string(localText)) })
                 .textFieldStyle(.roundedBorder)
         }
