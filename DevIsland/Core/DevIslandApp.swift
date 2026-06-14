@@ -101,7 +101,10 @@ struct MenuBarMenu: View {
             .keyboardShortcut("n", modifiers: [.command, .shift])
             .disabled(!state.hasResponseHandler)
 
-        PluginMenuItemsView(contributions: pluginHost.contributions[.menubarMenu] ?? [])
+        PluginMenuItemsView(
+            contributions: pluginHost.contributions[.menubarMenu] ?? [],
+            pluginDisplayNames: pluginHost.pluginDisplayNames
+        )
 
         Divider()
 

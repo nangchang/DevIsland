@@ -467,7 +467,7 @@ enum PluginUISlot: String, Codable, CaseIterable {
 | `session.detail.timeline` | 세션 히스토리 타임라인 | 특정 시점의 주석 (Annotation) | 세션 | v2 |
 | `session.detail.summary` | 세션 상세 상단 | 세션별 요약 카드 | 세션 | v2 |
 
-`menubar.menu`는 메뉴 스타일 `MenuBarExtra`의 top-level `MenuBarMenu`에 직접 렌더링한다. 별도 window popover(`.menuBarExtraStyle(.window)`)는 현재 구현과 다르므로 v2로 미룬다.
+`menubar.menu`는 메뉴 스타일 `MenuBarExtra`의 top-level `MenuBarMenu`에 플러그인별 하위 메뉴로 직접 렌더링한다. 별도 window popover(`.menuBarExtraStyle(.window)`)는 현재 구현과 다르므로 v2로 미룬다.
 
 첫 구현은 `notch.expanded.activity`, `menubar.menu` 두 슬롯만 연다. 설정 화면은 플러그인 contribution slot이 아니라 DevIsland host가 manifest·enable 상태·safemode·storage 삭제 기능을 렌더링하는 `PluginSettingsView`다. 플러그인별 custom settings schema는 v1.1 이후 별도로 검토한다.
 `SessionRowView`, `SessionMessageView`, `SessionHistoryWindow`에 닿는 세션별 슬롯은 UI 접점이 여러 곳이라 v1.1로 분리한다. collapsed notch 3영역(`leading`/`center`/`trailing`)은 현재 좌·우 버디와 중앙 `notchCenterText`가 점유하고 unread dot까지 겹쳐 가산 contribution이 들어갈 공간이 없다. 따라서 `PluginUISlot`에 넣지 않고, §7.1의 exclusive region provider 모델로 별도 설계한다.

@@ -51,6 +51,8 @@ final class PluginHost: ObservableObject {
     private var settingsStore: PluginSettingsStore?
     private var lastResetTimestamps: [String: Date] = [:]
 
+    private(set) var pluginDisplayNames: [String: String] = [:]
+
     /// Host Command Catalog handler for validated `session.*` commands, injected by
     /// `AppState` after registration. `nil` (e.g. in tests) makes session commands no-op.
     /// The handler re-validates the target session's state before acting (architecture §7).
@@ -95,6 +97,9 @@ final class PluginHost: ObservableObject {
                 return (runner.manifest.id, runner)
             }
         )
+        pluginDisplayNames = Dictionary(uniqueKeysWithValues: runners.map { id, runner in
+            (id, runner.manifest.name)
+        })
         self.disabledPluginIDs = disabledPluginIDs.filter { runners[$0] != nil }
 
         // Startup probation recovery:
