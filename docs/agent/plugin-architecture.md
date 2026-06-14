@@ -547,7 +547,7 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 | `session.dismiss` | `showSessionSurface` + host validation | v1.1 세션 context action. 대상 세션이 idle/non-pending이고 missed/unread가 아닐 때만 host가 목록에서 제거한다. |
 
 `timer.*`처럼 민감 자원에 접근하지 않고 플러그인 내부 상태만 다루는 capability는 permission 없이 허용한다. 외부 자원(저장소, 알림 등)에 닿는 capability는 반드시 대응 permission을 manifest에 선언해야 한다.
-`audio.playFile`은 CESP/OpenPeon 같은 도메인 포맷을 알지 않는 generic broker다. Host는 plugin ID + scope ID + 상대 경로를 정규화해 scope 밖 탈출, symlink 탈출, 확장자, 파일 크기를 검증하고, 플러그인은 포맷별 manifest 해석과 파일 선택 정책을 소유한다.
+`audio.playFile`은 CESP/OpenPeon 같은 도메인 포맷을 알지 않는 generic broker다. Host는 plugin ID + scope ID + 상대 경로를 정규화해 scope 밖 탈출, symlink 탈출, 확장자, 파일 크기를 검증하고, 플러그인은 포맷별 manifest 해석과 파일 선택 정책을 소유한다. 실현 예: `OpenPeonPlugin`이 `.readScopedFiles`로 `PluginContext.scopedFiles`를 받아 `CESPScopedPackResolver`로 pack을 broker 경유 스캔·검증하고 `OpenPeonRuntime`이 `audio.playFile` effect를 만든다(자세한 내용은 `openpeon-cesp.md`).
 `power.preventIdleSleep`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
 
 `PomodoroPlugin` built-in 구현 예시:
