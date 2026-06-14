@@ -77,6 +77,30 @@ final class SessionActionsPluginTests: XCTestCase {
                      "open-workspace must not be offered for a session with no workspace root")
     }
 
+    func testNoOpenWorkspaceWhenWorkspaceRootEmpty() throws {
+        let plugin = SessionActionsPlugin()
+        let contribution = try XCTUnwrap(try plugin.makeUIContribution(
+            for: .sessionContextMenu,
+            context: uiContext(session: makeSnapshot(id: "s1", workspaceRoot: ""))
+        ))
+        XCTAssertNil(contribution.components.first { $0.id == "open-workspace" },
+                     "open-workspace must not be offered for an empty workspace root")
+    }
+
+    /// Regression (PR #281 codex): `SessionActionsPlugin` must hold a permission that survives
+    /// `PluginEventFactory.redactedSession` keeping `workspaceRoot`, otherwise the host path
+    /// always sees `nil` and the open-workspace button — now the only one, since the core item
+    /// was removed — is never contributed.
+    func testHostContributesOpenWorkspaceThroughRedactionPath() async {
+        let host = PluginHost()
+        host.register([SessionActionsPlugin()])
+        host.enqueue(sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1", workspaceRoot: "/tmp/proj")))
+        await host.waitUntilIdle()
+        let contribution = host.contributions[.sessionContextMenu]?.first
+        XCTAssertNotNil(contribution?.components.first { $0.id == "open-workspace" },
+                        "workspaceRoot must survive redaction so the open-workspace button is contributed")
+    }
+
     func testNoContributionForOtherSlots() throws {
         let plugin = SessionActionsPlugin()
         XCTAssertNil(try plugin.makeUIContribution(
