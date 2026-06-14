@@ -220,6 +220,23 @@ struct PluginMenuItemsView: View {
 /// separated from the core items by a Divider. Reuses the menu component renderer, so
 /// only `button` components are interactive (the session context menu is action-only in
 /// v1). Button taps route through `PluginHost.handleAction`, which validates the command.
+/// Renders a session's `notch.session.row` plugin badges in a child view that observes
+/// `pluginHost`. Keeping this observation off the parent `SessionRowView` means the
+/// per-second tick refresh of the row slot re-renders only the badges — not the row body,
+/// whose `contextMenu` would otherwise rebuild and make open submenus flicker.
+struct SessionRowPluginBadges: View {
+    let sessionID: String
+    @ObservedObject private var pluginHost = AppState.shared.pluginHost
+
+    var body: some View {
+        let contributions = pluginHost.contributions[.notchSessionRow]?
+            .filter { $0.targetSessionID == sessionID } ?? []
+        if !contributions.isEmpty {
+            PluginSlotView(contributions: contributions, axis: .horizontal)
+        }
+    }
+}
+
 struct PluginSessionMenuItemsView: View {
     let contributions: [PluginUIContribution]
 

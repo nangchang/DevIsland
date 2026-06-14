@@ -242,8 +242,6 @@ struct SessionRowView: View {
 
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var appState = AppState.shared
-    @ObservedObject private var pluginHost = AppState.shared.pluginHost
-    @State private var timeAgo: String = ""
     @State private var isRenaming: Bool = false
     @State private var renameText: String = ""
     @FocusState private var renameFocused: Bool
@@ -255,16 +253,15 @@ struct SessionRowView: View {
         appState.sessionLabels[session.id] != nil
     }
 
-    /// Read-only plugin accessories for this row, filtered to this session.
-    /// Reads only the pre-computed cache; never calls plugin code during render.
-    private var rowContributions: [PluginUIContribution] {
-        pluginHost.contributions[.notchSessionRow]?.filter { $0.targetSessionID == session.id } ?? []
-    }
-
     /// Plugin-contributed context-menu actions for this session (e.g. host-validated
-    /// session.dismiss). Filtered to this session; reads only the cache.
+    /// session.dismiss). Read without observing `pluginHost`: the row must NOT re-render on
+    /// every contributions change, or the per-second `notch.session.row` tick refresh would
+    /// rebuild an open context menu and make its submenus flicker. The menu closure is
+    /// evaluated when the menu opens, so it still reads the current cache then. Row badges
+    /// observe `pluginHost` in their own child view (`SessionRowPluginBadges`) instead.
     private var contextMenuContributions: [PluginUIContribution] {
-        pluginHost.contributions[.sessionContextMenu]?.filter { $0.targetSessionID == session.id } ?? []
+        AppState.shared.pluginHost.contributions[.sessionContextMenu]?
+            .filter { $0.targetSessionID == session.id } ?? []
     }
 
     private struct AppBadge { let label: String; let color: Color }
@@ -315,8 +312,6 @@ struct SessionRowView: View {
             return .white.opacity(0.3)
         }
     }
-
-    private static let sharedTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var badgeSize: CGFloat    { isSubAgent ? 24 : 32 }
     private var badgeFrame: CGFloat   { isSubAgent ? 28 : 36 }
@@ -415,9 +410,7 @@ struct SessionRowView: View {
                             Spacer()
 
                             if !isRenaming {
-                                Text(timeAgo)
-                                    .font(.system(size: metaFont - 1, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.3))
+                                SessionRowTimeAgo(lastActiveAt: session.lastActiveAt, fontSize: metaFont - 1)
                             }
                         }
 
@@ -479,9 +472,7 @@ struct SessionRowView: View {
             }
             .buttonStyle(.plain)
 
-            if !rowContributions.isEmpty {
-                PluginSlotView(contributions: rowContributions, axis: .horizontal)
-            }
+            SessionRowPluginBadges(sessionID: session.id)
 
             Button(action: { AppState.shared.focusTerminal(for: session.id) }) {
                 Image(systemName: "arrow.up.forward.app.fill")
@@ -515,8 +506,6 @@ struct SessionRowView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isCurrent ? tool.color.opacity(0.5) : Color.clear, lineWidth: 1)
         )
-        .onAppear { updateTimeAgo() }
-        .onReceive(Self.sharedTimer) { _ in updateTimeAgo() }
         .contextMenu {
             Button {
                 SessionMessageWindowManager.shared.openWindow(for: session.id)
@@ -589,8 +578,27 @@ struct SessionRowView: View {
         isRenaming = false
     }
 
-    private func updateTimeAgo() {
-        let diff = Int(Date().timeIntervalSince(session.lastActiveAt))
+}
+
+/// "N seconds/minutes ago" label in its own view so its per-second self-refresh re-renders
+/// only this label — not the parent SessionRowView, whose `contextMenu` would otherwise
+/// rebuild and make open submenus flicker. Same isolation rationale as SessionRowPluginBadges.
+private struct SessionRowTimeAgo: View {
+    let lastActiveAt: Date
+    let fontSize: CGFloat
+    @State private var timeAgo: String = ""
+    private static let sharedTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Text(timeAgo)
+            .font(.system(size: fontSize, weight: .medium))
+            .foregroundColor(.white.opacity(0.3))
+            .onAppear { update() }
+            .onReceive(Self.sharedTimer) { _ in update() }
+    }
+
+    private func update() {
+        let diff = Int(Date().timeIntervalSince(lastActiveAt))
         let l = L10n.shared
         if diff < 5 { timeAgo = l.timeJustNow() }
         else if diff < 60 { timeAgo = l.timeSecsAgo(diff) }
