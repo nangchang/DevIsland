@@ -253,6 +253,12 @@ class AppState: ObservableObject {
             pluginHost.selectedSessionProvider = { [weak self] in
                 self?.displayedSessionID
             }
+            // Active sessions: lets the host fan out settings.changed to session-scoped
+            // slots so per-session contributions refresh when a plugin's settings change.
+            pluginHost.activeSessionsProvider = { [weak self] in
+                guard let self else { return [] }
+                return self.sessionStore.activeSessions.map { self.pluginEventFactory.snapshot(from: $0) }
+            }
         }
 
         // Register after restoreOpenSessions so restored sessions don't emit spurious events.

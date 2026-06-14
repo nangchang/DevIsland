@@ -24,17 +24,36 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginEventKind.sessionStarted.rawValue,
             PluginEventKind.sessionUpdated.rawValue,
             PluginEventKind.sessionEnded.rawValue,
-            PluginEventKind.pluginTick.rawValue
+            PluginEventKind.pluginTick.rawValue,
+            PluginEventKind.settingsChanged.rawValue
         ]
     )
 
+    /// Whether the elapsed badges include seconds. Toggling it must refresh the per-session
+    /// badges (`notch.session.row`, `session.message`) too, which is what exercises the
+    /// settings.changed → session-scoped fan-out in `PluginHost.pluginSettingChanged`.
+    var settingsSchema: [PluginSettingDescriptor] {
+        [
+            PluginSettingDescriptor(
+                key: "showSeconds",
+                label: "Show seconds",
+                kind: .toggle,
+                defaultValue: .bool(true)
+            )
+        ]
+    }
+
     private var sessions: [String: PluginSessionSnapshot] = [:]
+    private var showSeconds = true
 
     private var currentSession: PluginSessionSnapshot? {
         sessions.values.max { $0.lastActiveAt < $1.lastActiveAt }
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        // Refresh from settings on every event so makeUIContribution (which has no settings in
+        // its context) reflects the current value. Mirrors PomodoroPlugin's pattern.
+        showSeconds = context.settings["showSeconds"]?.boolValue ?? true
         switch event.kind {
         case .sessionStarted, .sessionUpdated:
             if let session = event.session {
@@ -114,7 +133,7 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
                     id: "elapsed",
                     type: .metric,
                     label: label,
-                    value: Self.formattedElapsed(elapsed),
+                    value: Self.formattedElapsed(elapsed, showSeconds: showSeconds),
                     tone: nil,
                     iconName: "clock",
                     action: nil
@@ -123,14 +142,21 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    private static func formattedElapsed(_ seconds: Int) -> String {
+    private static func formattedElapsed(_ seconds: Int, showSeconds: Bool) -> String {
         let total = max(0, seconds)
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         let secs = total % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        if showSeconds {
+            if hours > 0 {
+                return String(format: "%d:%02d:%02d", hours, minutes, secs)
+            }
+            return String(format: "%02d:%02d", minutes, secs)
         }
-        return String(format: "%02d:%02d", minutes, secs)
+        // Seconds hidden: hours:minutes, or whole minutes when under an hour.
+        if hours > 0 {
+            return String(format: "%d:%02d", hours, minutes)
+        }
+        return String(format: "%dm", minutes)
     }
 }

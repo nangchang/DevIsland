@@ -308,6 +308,58 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(allowed.received, [.sessionStarted])
     }
 
+    // MARK: - Settings (show-seconds) and settings.changed fan-out
+
+    func testShowSecondsSettingControlsBadgeFormat() throws {
+        let plugin = SessionTimerPlugin()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
+        let ctx = PluginContext(
+            pluginID: "com.devisland.timer",
+            permissions: [.readSessionEvents, .showNotchCard, .showSessionSurface],
+            storageSnapshot: [:],
+            settings: ["showSeconds": .bool(false)]
+        )
+        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: ctx)
+
+        let contribution = try XCTUnwrap(try plugin.makeUIContribution(
+            for: .notchSessionRow,
+            context: PluginUIContext(slot: .notchSessionRow, timestamp: start.addingTimeInterval(65), session: snapshot)
+        ))
+        XCTAssertEqual(contribution.components.first?.value, "1m",
+                       "with seconds hidden the badge shows whole minutes")
+    }
+
+    /// The core of the codex P2 fix: changing a setting must refresh a *session-scoped*
+    /// contribution, which only happens if the host fans out settings.changed per active
+    /// session. Without the fan-out the row badge keeps its old (seconds) format.
+    func testSettingChangeRefreshesSessionScopedBadgeViaHost() async {
+        let suiteName = "SessionTimerPluginTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PluginSettingsStore(userDefaults: defaults)
+
+        let host = PluginHost()
+        host.register([SessionTimerPlugin()], settingsStore: store)
+        // Recent startTime so elapsed stays under an hour (format differs only by the colon).
+        let snapshot = makeSnapshot(id: "s1", startTime: Date(), lastActiveAt: Date())
+        host.activeSessionsProvider = { [snapshot] }
+
+        host.enqueue(sessionEvent(kind: .sessionStarted, session: snapshot))
+        await host.waitUntilIdle()
+        let before = host.contributions[.notchSessionRow]?.first?.components.first?.value
+        XCTAssertEqual(before?.contains(":"), true, "default (showSeconds=true) badge uses MM:SS")
+
+        store.setValue(.bool(false), forKey: "showSeconds", pluginID: "com.devisland.timer")
+        host.pluginSettingChanged(pluginID: "com.devisland.timer")
+        await host.waitUntilIdle()
+
+        let after = host.contributions[.notchSessionRow]?.first?.components.first?.value
+        XCTAssertNotNil(after)
+        XCTAssertEqual(after?.contains(":"), false,
+                       "settings.changed must refresh the session-scoped badge to seconds-hidden format")
+    }
+
     // MARK: - Helpers
 
     private func makeSnapshot(

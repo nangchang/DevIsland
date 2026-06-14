@@ -77,6 +77,27 @@ struct PluginEventFactory: Sendable {
         )
     }
 
+    /// Overload for when the caller already holds a snapshot (e.g. the host fanning out
+    /// `settings.changed` to active sessions). Per-plugin redaction is still applied later by
+    /// `redactedEvent`, so the full snapshot is safe to attach here.
+    func makeSessionEvent(
+        kind: PluginEventKind,
+        from snapshot: PluginSessionSnapshot,
+        id: UUID = UUID(),
+        timestamp: Date = Date()
+    ) -> PluginEvent {
+        PluginEvent(
+            id: id,
+            kind: kind,
+            timestamp: timestamp,
+            session: snapshot,
+            hook: nil,
+            action: nil,
+            approval: nil,
+            powerStatus: nil
+        )
+    }
+
     func makePowerStatusEvent(
         status: PluginPowerStatus,
         id: UUID = UUID(),
