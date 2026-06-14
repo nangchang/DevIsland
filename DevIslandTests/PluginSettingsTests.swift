@@ -193,6 +193,11 @@ final class PluginSettingsTests: XCTestCase {
         let text = PluginSettingDescriptor(key: "x", label: "X",
             kind: .text(maxLength: 3), defaultValue: .string(""))
         XCTAssertEqual(text.validated(.string("abcdef")), .string("abc"), "truncate to maxLength")
+
+        let negativeText = PluginSettingDescriptor(key: "n", label: "N",
+            kind: .text(maxLength: -1), defaultValue: .string("d"))
+        XCTAssertEqual(negativeText.validated(.string("abc")), .string(""),
+                       "negative maxLength must clamp to 0 rather than trapping")
     }
 
     func testSettingsStorePersistsAndIsolatesPerPlugin() {

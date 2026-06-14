@@ -89,7 +89,8 @@ struct PluginSettingDescriptor: Equatable, Sendable, Identifiable {
             return .double(min(max(d, range.lowerBound), range.upperBound))
         case .text(let maxLength):
             guard let s = value?.stringValue else { return defaultValue }
-            return .string(String(s.prefix(maxLength)))
+            // `prefix` traps on a negative length; a plugin could declare one by mistake.
+            return .string(String(s.prefix(max(0, maxLength))))
         }
     }
 }
