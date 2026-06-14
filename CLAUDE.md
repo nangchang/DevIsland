@@ -145,7 +145,7 @@ soft reset 후 Edit으로 하나씩 적용하고 커밋하면 된다.
 `Write` 툴은 새 파일도 Read 선행이 필요하므로 임시 파일엔 Bash `cat > /tmp/commit_msg.txt << 'EOF' ... EOF` 방식 사용.
 
 `git add ... && git commit`, `git commit ... && git push` 같은 `&&` git 명령 체인도
-PreToolUse hook에 막힐 수 있다 — git 명령은 단독으로 실행한다.
+PreToolUse hook에 막힐 수 있다 — git 명령은 단독으로 실행할 것.
 
 ## 플러그인 작업 주의점 (host command·UI 기여)
 
