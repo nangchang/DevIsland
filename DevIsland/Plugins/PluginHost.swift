@@ -203,8 +203,9 @@ final class PluginHost: ObservableObject {
                 sessionCommandHandler?(descriptor.capability, sessionID)
                 return
             }
-            guard PluginEffectExecutor.isHostEffectSupported(
+            guard HostEffectCatalog.isSupported(
                 action.capability,
+                pluginID: pluginID,
                 permissions: runner.manifest.permissions
             ) else { return }
             let effect = PluginEffect(capability: action.capability, payload: action.payload)
