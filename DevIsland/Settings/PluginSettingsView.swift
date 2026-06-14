@@ -159,12 +159,14 @@ private struct PluginSettingControlView: View {
             }
             .font(.caption)
         case .text:
-            HStack {
-                Text(descriptor.label)
-                TextField("", text: stringBinding)
-                    .textFieldStyle(.roundedBorder)
-            }
-            .font(.caption)
+            // A local @State row so typing doesn't write to UserDefaults and drain a plugin
+            // event on every keystroke; it commits once on return/blur.
+            TextSettingRow(
+                descriptor: descriptor,
+                pluginID: pluginID,
+                settings: settings,
+                commit: commit
+            )
         }
     }
 
@@ -214,5 +216,34 @@ private struct PluginSettingControlView: View {
     }
     private var stringBinding: Binding<String> {
         Binding(get: { current.stringValue ?? "" }, set: { commit(.string($0)) })
+    }
+}
+
+/// Text setting backed by local `@State` so editing stays in-memory and only commits on
+/// return/blur — avoids a UserDefaults write plus plugin event drain per keystroke. Stays in
+/// sync if the stored value changes elsewhere.
+private struct TextSettingRow: View {
+    let descriptor: PluginSettingDescriptor
+    let pluginID: String
+    @ObservedObject var settings: PluginSettingsStore
+    let commit: (PluginSettingValue) -> Void
+
+    @State private var localText = ""
+
+    var body: some View {
+        HStack {
+            Text(descriptor.label)
+            TextField("", text: $localText, onCommit: { commit(.string(localText)) })
+                .textFieldStyle(.roundedBorder)
+        }
+        .font(.caption)
+        .onAppear { localText = resolved }
+        .onChange(of: settings.value(forKey: descriptor.key, pluginID: pluginID)) { _, _ in
+            localText = resolved
+        }
+    }
+
+    private var resolved: String {
+        descriptor.validated(settings.value(forKey: descriptor.key, pluginID: pluginID)).stringValue ?? ""
     }
 }
