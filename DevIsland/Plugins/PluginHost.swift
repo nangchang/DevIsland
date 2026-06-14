@@ -15,15 +15,18 @@ final class PluginHost: ObservableObject {
 
     private var runners: [String: PluginRunner] = [:]
     private let storageProvider: PluginStorageProvider
+    private let scopedFileBroker: PluginScopedFileBroker
     private let powerSleepHandler: PluginEffectExecutor.PowerSleepHandler?
     private let powerToggleHandler: PluginEffectExecutor.PowerToggleHandler?
     private let eventFactory = PluginEventFactory()
     private lazy var eventProcessor = PluginEventProcessor(
         storageProvider: storageProvider,
+        scopedFileBroker: scopedFileBroker,
         eventFactory: eventFactory
     )
     private lazy var effectExecutor = PluginEffectExecutor(
         storageProvider: storageProvider,
+        scopedFileBroker: scopedFileBroker,
         notificationHandler: { title, body in
             await AppState.presentSharedPluginNotification(title: title, body: body)
         },
@@ -71,11 +74,13 @@ final class PluginHost: ObservableObject {
     nonisolated init(
         enablePlugins: Bool = true,
         pluginDataDirectory: URL = PluginStorageProvider.defaultDirectory,
+        scopedFileBroker: PluginScopedFileBroker = PluginScopedFileBroker(),
         powerSleepHandler: PluginEffectExecutor.PowerSleepHandler? = nil,
         powerToggleHandler: PluginEffectExecutor.PowerToggleHandler? = nil
     ) {
         self.isEnabled = enablePlugins
         self.storageProvider = PluginStorageProvider(baseDirectory: pluginDataDirectory)
+        self.scopedFileBroker = scopedFileBroker
         self.powerSleepHandler = powerSleepHandler
         self.powerToggleHandler = powerToggleHandler
     }

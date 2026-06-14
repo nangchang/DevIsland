@@ -53,7 +53,7 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
         sessions.values.max { $0.lastActiveAt < $1.lastActiveAt }
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         // Refresh from settings on every event so makeUIContribution (which has no settings in
         // its context) reflects the current value. Mirrors PomodoroPlugin's pattern.
         showSeconds = context.settings["showSeconds"]?.boolValue ?? true

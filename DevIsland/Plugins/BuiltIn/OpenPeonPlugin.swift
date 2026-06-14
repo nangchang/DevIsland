@@ -13,7 +13,7 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
         localizedName: PluginLocalizedString(english: "OpenPeon", korean: "OpenPeon")
     )
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         guard event.kind == .hookReceived, let hook = event.hook else {
             return []
         }

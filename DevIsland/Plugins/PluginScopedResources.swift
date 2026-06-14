@@ -33,6 +33,49 @@ struct PluginScopedFileInfo: Equatable, Sendable {
     let byteCount: Int64?
 }
 
+struct PluginScopedFileClient: Sendable {
+    private let pluginID: String
+    private let permissions: Set<PluginPermission>
+    private let broker: PluginScopedFileBroker
+
+    init(
+        pluginID: String,
+        permissions: Set<PluginPermission>,
+        broker: PluginScopedFileBroker
+    ) {
+        self.pluginID = pluginID
+        self.permissions = permissions
+        self.broker = broker
+    }
+
+    func listDirectory(scopeID: String, relativePath: String = "") async throws -> [PluginScopedFileInfo] {
+        try await broker.listDirectory(
+            pluginID: pluginID,
+            permissions: permissions,
+            scopeID: scopeID,
+            relativePath: relativePath
+        )
+    }
+
+    func readText(scopeID: String, relativePath: String) async throws -> String {
+        try await broker.readText(
+            pluginID: pluginID,
+            permissions: permissions,
+            scopeID: scopeID,
+            relativePath: relativePath
+        )
+    }
+
+    func metadata(scopeID: String, relativePath: String) async throws -> PluginScopedFileInfo {
+        try await broker.metadata(
+            pluginID: pluginID,
+            permissions: permissions,
+            scopeID: scopeID,
+            relativePath: relativePath
+        )
+    }
+}
+
 enum PluginScopedFileError: Error, Equatable {
     case missingPermission
     case unknownScope

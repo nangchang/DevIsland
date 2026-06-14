@@ -20,6 +20,7 @@ actor PluginRunner {
     func handle(
         _ event: PluginEvent,
         storageSnapshot: [String: String],
+        scopedFileBroker: PluginScopedFileBroker,
         settings: [String: PluginSettingValue] = [:],
         selectedSessionID: String? = nil,
         language: AppLanguage = .english
@@ -35,10 +36,17 @@ actor PluginRunner {
                 pluginID: manifest.id,
                 permissions: manifest.permissions,
                 storageSnapshot: storageSnapshot,
+                scopedFiles: manifest.permissions.contains(.readScopedFiles)
+                    ? PluginScopedFileClient(
+                        pluginID: manifest.id,
+                        permissions: manifest.permissions,
+                        broker: scopedFileBroker
+                    )
+                    : nil,
                 settings: settings,
                 language: language
             )
-            let effects = try plugin.onEvent(event, context: context)
+            let effects = try await plugin.onEvent(event, context: context)
             var contributions: [PluginUISlot: PluginUIContribution] = [:]
 
             for slot in evaluatedSlots {

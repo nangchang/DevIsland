@@ -29,7 +29,7 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
     private static let lowBatteryOffThreshold: Double = 0.20
     private static let lowBatteryOnThreshold: Double = 0.23
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginActionInvoked, event.action?.actionID == "caffeine.toggle" {
             // Request host to toggle caffeine settings
             return [

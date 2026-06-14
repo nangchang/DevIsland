@@ -11,14 +11,14 @@ final class CaffeinePluginTests: XCTestCase {
         return PluginContext(pluginID: "caffeine", permissions: [.controlPowerSleep], storageSnapshot: [:])
     }
 
-    func testPluginManifest() {
+    func testPluginManifest() async {
         let plugin = makePlugin()
         XCTAssertEqual(plugin.manifest.id, "caffeine")
         XCTAssertTrue(plugin.manifest.permissions.contains(.controlPowerSleep))
         XCTAssertTrue(plugin.manifest.permissions.contains(.showMenubarMenu))
     }
 
-    func testDisabledReturnsFalse() throws {
+    func testDisabledReturnsFalse() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
             caffeineEnabled: false,
@@ -34,7 +34,7 @@ final class CaffeinePluginTests: XCTestCase {
             powerStatus: status
         )
 
-        let effects = try plugin.onEvent(event, context: makeContext())
+        let effects = try await plugin.onEvent(event, context: makeContext())
         XCTAssertEqual(effects.count, 1)
         XCTAssertEqual(effects[0].capability, "power.preventIdleSleep")
         XCTAssertEqual(effects[0].payload["preventSleep"], "false")
@@ -49,7 +49,7 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(toggleComponent?.label, "Turn On")
     }
 
-    func testKoreanMenuContributionComesFromPluginContext() throws {
+    func testKoreanMenuContributionComesFromPluginContext() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
             caffeineEnabled: false,
@@ -65,7 +65,7 @@ final class CaffeinePluginTests: XCTestCase {
             powerStatus: status
         )
 
-        _ = try plugin.onEvent(event, context: makeContext())
+        _ = try await plugin.onEvent(event, context: makeContext())
         let contribution = try plugin.makeUIContribution(
             for: .menubarMenu,
             context: PluginUIContext(slot: .menubarMenu, timestamp: Date(), session: nil, language: .korean)
@@ -76,7 +76,7 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(toggleComponent?.label, "켜기")
     }
 
-    func testOnACOnNormalBatteryHolds() throws {
+    func testOnACOnNormalBatteryHolds() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
             caffeineEnabled: true,
@@ -92,7 +92,7 @@ final class CaffeinePluginTests: XCTestCase {
             powerStatus: status
         )
 
-        let effects = try plugin.onEvent(event, context: makeContext())
+        let effects = try await plugin.onEvent(event, context: makeContext())
         XCTAssertEqual(effects.count, 1)
         XCTAssertEqual(effects[0].capability, "power.preventIdleSleep")
         XCTAssertEqual(effects[0].payload["preventSleep"], "true")
@@ -107,7 +107,7 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(toggleComponent?.label, "Turn Off")
     }
 
-    func testExcludedSSIDReleases() throws {
+    func testExcludedSSIDReleases() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
             caffeineEnabled: true,
@@ -123,7 +123,7 @@ final class CaffeinePluginTests: XCTestCase {
             powerStatus: status
         )
 
-        let effects = try plugin.onEvent(event, context: makeContext())
+        let effects = try await plugin.onEvent(event, context: makeContext())
         XCTAssertEqual(effects.count, 1)
         XCTAssertEqual(effects[0].capability, "power.preventIdleSleep")
         XCTAssertEqual(effects[0].payload["preventSleep"], "false")
@@ -136,7 +136,7 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(statusComponent?.value, "Excluded Wi-Fi (Office-Internal)")
     }
 
-    func testExcludedSSIDPreservesEmbeddedPrefixText() throws {
+    func testExcludedSSIDPreservesEmbeddedPrefixText() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
             caffeineEnabled: true,
@@ -152,7 +152,7 @@ final class CaffeinePluginTests: XCTestCase {
             powerStatus: status
         )
 
-        _ = try plugin.onEvent(event, context: makeContext())
+        _ = try await plugin.onEvent(event, context: makeContext())
         let contribution = try plugin.makeUIContribution(
             for: .menubarMenu,
             context: PluginUIContext(slot: .menubarMenu, timestamp: Date(), session: nil)
@@ -161,7 +161,7 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(statusComponent?.value, "Excluded Wi-Fi (Guest-excludedSSID:Lab)")
     }
 
-    func testOnBatteryReleases() throws {
+    func testOnBatteryReleases() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
             caffeineEnabled: true,
@@ -177,7 +177,7 @@ final class CaffeinePluginTests: XCTestCase {
             powerStatus: status
         )
 
-        let updateEffects = try plugin.onEvent(event, context: makeContext())
+        let updateEffects = try await plugin.onEvent(event, context: makeContext())
         XCTAssertEqual(updateEffects[0].payload["preventSleep"], "false")
         XCTAssertEqual(updateEffects[0].payload["reason"], "onBattery")
 
@@ -188,7 +188,7 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(statusComponent?.value, "Battery Mode")
     }
 
-    func testLowBatteryReleasesEvenOnAC() throws {
+    func testLowBatteryReleasesEvenOnAC() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
             caffeineEnabled: true,
@@ -204,7 +204,7 @@ final class CaffeinePluginTests: XCTestCase {
             powerStatus: status
         )
 
-        let effects = try plugin.onEvent(event, context: makeContext())
+        let effects = try await plugin.onEvent(event, context: makeContext())
         XCTAssertEqual(effects[0].payload["preventSleep"], "false")
         XCTAssertEqual(effects[0].payload["reason"], "lowBattery")
 
@@ -215,7 +215,7 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(statusComponent?.value, "Low Battery")
     }
 
-    func testAssertionFailureResultUpdatesMenuWithoutReemittingEffect() throws {
+    func testAssertionFailureResultUpdatesMenuWithoutReemittingEffect() async throws {
         let plugin = makePlugin()
         let initialStatus = PluginPowerStatus(
             caffeineEnabled: true,
@@ -224,7 +224,7 @@ final class CaffeinePluginTests: XCTestCase {
             batteryLevel: 0.9,
             currentSSID: "Home"
         )
-        _ = try plugin.onEvent(
+        _ = try await plugin.onEvent(
             PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: initialStatus),
             context: makeContext()
         )
@@ -241,7 +241,7 @@ final class CaffeinePluginTests: XCTestCase {
             isAssertionResult: true
         )
 
-        let effects = try plugin.onEvent(
+        let effects = try await plugin.onEvent(
             PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: failureStatus),
             context: makeContext()
         )
@@ -255,7 +255,7 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(statusComponent?.value, "System Failure (-536870212)")
     }
 
-    func testHysteresisLogic() throws {
+    func testHysteresisLogic() async throws {
         let plugin = makePlugin()
         let context = makeContext()
 
@@ -268,7 +268,7 @@ final class CaffeinePluginTests: XCTestCase {
             currentSSID: "Home"
         )
         let event1 = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status1)
-        let fx1 = try plugin.onEvent(event1, context: context)
+        let fx1 = try await plugin.onEvent(event1, context: context)
         XCTAssertEqual(fx1[0].payload["preventSleep"], "false")
         XCTAssertEqual(fx1[0].payload["reason"], "lowBattery")
 
@@ -281,7 +281,7 @@ final class CaffeinePluginTests: XCTestCase {
             currentSSID: "Home"
         )
         let event2 = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status2)
-        let fx2 = try plugin.onEvent(event2, context: context)
+        let fx2 = try await plugin.onEvent(event2, context: context)
         XCTAssertEqual(fx2[0].payload["preventSleep"], "false")
         XCTAssertEqual(fx2[0].payload["reason"], "lowBattery")
 
@@ -294,7 +294,7 @@ final class CaffeinePluginTests: XCTestCase {
             currentSSID: "Home"
         )
         let event3 = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status3)
-        let fx3 = try plugin.onEvent(event3, context: context)
+        let fx3 = try await plugin.onEvent(event3, context: context)
         XCTAssertEqual(fx3[0].payload["preventSleep"], "true")
         XCTAssertEqual(fx3[0].payload["reason"], "onAC")
     }

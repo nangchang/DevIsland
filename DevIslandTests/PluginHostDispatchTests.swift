@@ -334,6 +334,40 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertTrue(delivered.value.isEmpty)
     }
 
+    func testPluginContextProvidesScopedFileClientWhenPermitted() async throws {
+        let root = makeTempStorageDirectory()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("hello".utf8).write(to: root.appendingPathComponent("manifest.txt"))
+        let broker = PluginScopedFileBroker(scopesByPluginID: [
+            "com.devisland.test.scoped-reader": [
+                PluginScopedFileScope(id: "packs", baseDirectory: root)
+            ]
+        ])
+        let plugin = ScopedReaderPlugin(
+            id: "com.devisland.test.scoped-reader",
+            permissions: [.readScopedFiles]
+        )
+        let host = PluginHost(scopedFileBroker: broker)
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+
+        XCTAssertEqual(plugin.readText, "hello")
+    }
+
+    func testPluginContextOmitsScopedFileClientWithoutPermission() async {
+        let plugin = ScopedReaderPlugin(id: "com.devisland.test.no-scope", permissions: [])
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+
+        XCTAssertNil(plugin.readText)
+        XCTAssertTrue(plugin.sawMissingClient)
+    }
+
     func testEffectExecutorAllowsStorageEffectWithPermission() async {
         let storage = PluginStorageProvider(baseDirectory: makeTempStorageDirectory())
         let executor = PluginEffectExecutor(storageProvider: storage)
@@ -963,7 +997,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
         self.delayOnKinds = delayOnKinds
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         let shouldDelay = delayOnKinds?.contains(event.kind) ?? true
         if shouldDelay && delay > 0 {
             Thread.sleep(forTimeInterval: delay)
@@ -1031,7 +1065,7 @@ private final class GatedPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         lock.lock()
         _receivedKinds.append(event.kind)
         lock.unlock()
@@ -1044,6 +1078,60 @@ private final class GatedPlugin: DevIslandPlugin, @unchecked Sendable {
 
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
         contribution
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+private final class ScopedReaderPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let lock = NSLock()
+    private var _readText: String?
+    private var _sawMissingClient = false
+
+    var readText: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _readText
+    }
+
+    var sawMissingClient: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _sawMissingClient
+    }
+
+    init(id: String, permissions: Set<PluginPermission>) {
+        manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: permissions,
+            surfaces: [],
+            activationEvents: [PluginEventKind.pluginStarted.rawValue]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
+        guard let scopedFiles = context.scopedFiles else {
+            lock.lock()
+            _sawMissingClient = true
+            lock.unlock()
+            return []
+        }
+        let text = try await scopedFiles.readText(scopeID: "packs", relativePath: "manifest.txt")
+        lock.lock()
+        _readText = text
+        lock.unlock()
+        return []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        nil
     }
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
@@ -1076,7 +1164,7 @@ private final class VisibilityTickingPlugin: DevIslandPlugin, @unchecked Sendabl
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         lock.lock()
         _receivedKinds.append(event.kind)
         lock.unlock()
@@ -1113,7 +1201,7 @@ private final class SessionRowTickPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .sessionStarted, let session = event.session {
             lock.lock(); trackedSessionIDs.insert(session.id); lock.unlock()
         }
@@ -1170,7 +1258,7 @@ private final class RotatingContributionPlugin: DevIslandPlugin, @unchecked Send
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         []
     }
 
@@ -1229,7 +1317,7 @@ private final class ToggleContributionPlugin: DevIslandPlugin, @unchecked Sendab
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginTick {
             lock.lock()
             shouldRender = false
@@ -1285,7 +1373,7 @@ private final class ExpiringContributionPlugin: DevIslandPlugin, @unchecked Send
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         []
     }
 
@@ -1331,7 +1419,7 @@ private final class SessionScopedContributionPlugin: DevIslandPlugin, @unchecked
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         []
     }
 
@@ -1383,7 +1471,7 @@ private final class ToggleSessionScopedContributionPlugin: DevIslandPlugin, @unc
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginTick, let sessionID = event.session?.id {
             lock.lock()
             hiddenSessionIDs.insert(sessionID)
@@ -1445,7 +1533,7 @@ private final class GlobalToggleSessionScopedContributionPlugin: DevIslandPlugin
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginTick {
             lock.lock()
             hideAll = true
@@ -1515,7 +1603,7 @@ private final class ProbationTestPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if shouldThrow {
             throw RecordingPlugin.TestError()
         }

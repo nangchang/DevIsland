@@ -2323,7 +2323,7 @@ private final class LifecycleRecordingPlugin: DevIslandPlugin, @unchecked Sendab
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         lock.lock()
         _receivedKinds.append(event.kind)
         lock.unlock()

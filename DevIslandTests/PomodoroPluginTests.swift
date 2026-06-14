@@ -6,12 +6,12 @@ final class PomodoroPluginTests: XCTestCase {
 
     // MARK: - Plugin logic (direct calls)
 
-    func testStartPauseResumePreservesRemainingViaTimestamps() throws {
+    func testStartPauseResumePreservesRemainingViaTimestamps() async throws {
         let plugin = PomodoroPlugin(workSeconds: 1500)   // 25:00
         let t0 = Date(timeIntervalSince1970: 1_000)
         XCTAssertFalse(plugin.needsTick(surfaceState: noSurfaces), "idle must not request ticks")
 
-        _ = try plugin.onEvent(toggleEvent(at: t0), context: context())   // start: end = t0+1500
+        _ = try await plugin.onEvent(toggleEvent(at: t0), context: context())   // start: end = t0+1500
         XCTAssertTrue(plugin.needsTick(surfaceState: noSurfaces), "running must request ticks")
         let running = try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext())
         XCTAssertEqual(metric(running, id: "timer")?.label, "Focus")
@@ -19,7 +19,7 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertEqual(button(running)?.label, "Pause")
 
         // Pause after 60s of wall clock → 24:00 remaining, retained while paused.
-        _ = try plugin.onEvent(toggleEvent(at: t0.addingTimeInterval(60)), context: context())
+        _ = try await plugin.onEvent(toggleEvent(at: t0.addingTimeInterval(60)), context: context())
         XCTAssertFalse(plugin.needsTick(surfaceState: noSurfaces), "paused must not request ticks")
         let paused = try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext())
         XCTAssertEqual(metric(paused, id: "timer")?.label, "Paused")
@@ -27,40 +27,40 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertEqual(metric(paused, id: "timer")?.value, "24:00")
 
         // Resume 100s later, then tick 1s in: continues from 24:00, not wall-clock-since-pause.
-        _ = try plugin.onEvent(toggleEvent(at: t0.addingTimeInterval(160)), context: context())
-        _ = try plugin.onEvent(tickEvent(at: t0.addingTimeInterval(161)), context: context())
+        _ = try await plugin.onEvent(toggleEvent(at: t0.addingTimeInterval(160)), context: context())
+        _ = try await plugin.onEvent(tickEvent(at: t0.addingTimeInterval(161)), context: context())
         let resumed = try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext())
         XCTAssertEqual(metric(resumed, id: "timer")?.value, "23:59")
     }
 
-    func testTickDerivesRemainingFromWallClockAndCatchesUp() throws {
+    func testTickDerivesRemainingFromWallClockAndCatchesUp() async throws {
         let plugin = PomodoroPlugin(workSeconds: 90)
         let t0 = Date(timeIntervalSince1970: 1_000)
 
         // Idle: tick is a no-op.
-        _ = try plugin.onEvent(tickEvent(at: t0), context: context())
+        _ = try await plugin.onEvent(tickEvent(at: t0), context: context())
         XCTAssertEqual(try timerValue(plugin), "01:30")
 
         // Running: remaining tracks the wall-clock delta, not a per-tick decrement.
-        _ = try plugin.onEvent(toggleEvent(at: t0), context: context())   // end = t0+90
-        _ = try plugin.onEvent(tickEvent(at: t0.addingTimeInterval(1)), context: context())
+        _ = try await plugin.onEvent(toggleEvent(at: t0), context: context())   // end = t0+90
+        _ = try await plugin.onEvent(tickEvent(at: t0.addingTimeInterval(1)), context: context())
         XCTAssertEqual(try timerValue(plugin), "01:29")
 
         // A single tick after a 60s gap (e.g. sleep/throttle) catches up rather than drifting.
-        _ = try plugin.onEvent(tickEvent(at: t0.addingTimeInterval(60)), context: context())
+        _ = try await plugin.onEvent(tickEvent(at: t0.addingTimeInterval(60)), context: context())
         XCTAssertEqual(try timerValue(plugin), "00:30")
     }
 
-    func testCompletesWhenWallClockPassesEndAndCountsUp() throws {
+    func testCompletesWhenWallClockPassesEndAndCountsUp() async throws {
         let plugin = PomodoroPlugin(workSeconds: 2)
         let t0 = Date(timeIntervalSince1970: 1_000)
-        _ = try plugin.onEvent(toggleEvent(at: t0), context: context())   // running, end = t0+2
+        _ = try await plugin.onEvent(toggleEvent(at: t0), context: context())   // running, end = t0+2
 
-        let beforeLast = try plugin.onEvent(tickEvent(at: t0.addingTimeInterval(1)), context: context())
+        let beforeLast = try await plugin.onEvent(tickEvent(at: t0.addingTimeInterval(1)), context: context())
         XCTAssertTrue(beforeLast.isEmpty, "no effect until the block completes")
 
         // Tick past the end (sleep-through) still completes exactly once.
-        let onComplete = try plugin.onEvent(tickEvent(at: t0.addingTimeInterval(10)), context: context())
+        let onComplete = try await plugin.onEvent(tickEvent(at: t0.addingTimeInterval(10)), context: context())
         XCTAssertEqual(onComplete.count, 1)
         XCTAssertEqual(onComplete.first?.capability, "notification.show")
         XCTAssertEqual(onComplete.first?.payload["title"], "Pomodoro")
@@ -72,12 +72,12 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertEqual(metric(menu, id: "count")?.value, "1")
     }
 
-    func testCompletionNotificationUsesPluginLanguage() throws {
+    func testCompletionNotificationUsesPluginLanguage() async throws {
         let plugin = PomodoroPlugin(workSeconds: 1)
         let t0 = Date(timeIntervalSince1970: 1_000)
-        _ = try plugin.onEvent(toggleEvent(at: t0), context: context(settings: [:]))
+        _ = try await plugin.onEvent(toggleEvent(at: t0), context: context(settings: [:]))
 
-        let effects = try plugin.onEvent(
+        let effects = try await plugin.onEvent(
             tickEvent(at: t0.addingTimeInterval(1)),
             context: context(settings: [:], language: .korean)
         )
@@ -86,7 +86,7 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertEqual(effects.first?.payload["body"], "집중 세션이 완료되었습니다")
     }
 
-    func testRendersBothSlotsWithToggleAction() throws {
+    func testRendersBothSlotsWithToggleAction() async throws {
         let plugin = PomodoroPlugin()
 
         let notch = try XCTUnwrap(try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext()))
@@ -102,7 +102,7 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertNotNil(button(menu))
     }
 
-    func testRendersKoreanLabelsFromPluginContext() throws {
+    func testRendersKoreanLabelsFromPluginContext() async throws {
         let plugin = PomodoroPlugin()
         let notch = try XCTUnwrap(try plugin.makeUIContribution(
             for: .notchExpandedActivity,
@@ -166,11 +166,11 @@ final class PomodoroPluginTests: XCTestCase {
 
     // MARK: - Settings (v1.3)
 
-    func testWorkMinutesSettingChangesDurationWhenIdle() throws {
+    func testWorkMinutesSettingChangesDurationWhenIdle() async throws {
         let plugin = PomodoroPlugin()   // default 25:00
         let t0 = Date(timeIntervalSince1970: 1_000)
 
-        _ = try plugin.onEvent(
+        _ = try await plugin.onEvent(
             makeBareEvent(kind: .settingsChanged, at: t0),
             context: context(settings: ["workMinutes": .int(10)])
         )
@@ -178,27 +178,27 @@ final class PomodoroPluginTests: XCTestCase {
                        "a workMinutes change must reset the idle timer to the new duration")
     }
 
-    func testWorkMinutesChangeMidRunDefersToNextBlock() throws {
+    func testWorkMinutesChangeMidRunDefersToNextBlock() async throws {
         let plugin = PomodoroPlugin(workSeconds: 90)
         let t0 = Date(timeIntervalSince1970: 1_000)
-        _ = try plugin.onEvent(toggleEvent(at: t0), context: context())              // running, end = t0+90
-        _ = try plugin.onEvent(tickEvent(at: t0.addingTimeInterval(1)), context: context())  // 01:29
+        _ = try await plugin.onEvent(toggleEvent(at: t0), context: context())              // running, end = t0+90
+        _ = try await plugin.onEvent(tickEvent(at: t0.addingTimeInterval(1)), context: context())  // 01:29
 
         // Changing the setting while running must not reset the active countdown to 05:00.
-        _ = try plugin.onEvent(
+        _ = try await plugin.onEvent(
             makeBareEvent(kind: .settingsChanged, at: t0.addingTimeInterval(2)),
             context: context(settings: ["workMinutes": .int(5)])
         )
         XCTAssertEqual(try timerValue(plugin), "01:29", "mid-run setting change must not reset the timer")
     }
 
-    func testAutoRestartBeginsNewBlockOnCompletion() throws {
+    func testAutoRestartBeginsNewBlockOnCompletion() async throws {
         let plugin = PomodoroPlugin(workSeconds: 2)
         let t0 = Date(timeIntervalSince1970: 1_000)
         let settings: [String: PluginSettingValue] = ["autoRestart": .bool(true)]
 
-        _ = try plugin.onEvent(toggleEvent(at: t0), context: context(settings: settings))   // running
-        let onComplete = try plugin.onEvent(
+        _ = try await plugin.onEvent(toggleEvent(at: t0), context: context(settings: settings))   // running
+        let onComplete = try await plugin.onEvent(
             tickEvent(at: t0.addingTimeInterval(2)),
             context: context(settings: settings)
         )
@@ -209,7 +209,7 @@ final class PomodoroPluginTests: XCTestCase {
         XCTAssertEqual(metric(running, id: "timer")?.label, "Focus")
     }
 
-    func testExposesSettingsSchema() {
+    func testExposesSettingsSchema() async {
         let schema = PomodoroPlugin().settingsSchema
         XCTAssertEqual(schema.map(\.key), ["workMinutes", "autoRestart"])
     }
@@ -318,7 +318,7 @@ private final class ActionRecordingPlugin: DevIslandPlugin, @unchecked Sendable 
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         lock.lock()
         _received.append(event.kind)
         lock.unlock()

@@ -6,7 +6,7 @@ final class SessionActionsPluginTests: XCTestCase {
 
     // MARK: - Plugin contribution
 
-    func testContributesHostExecutedDismissActionForSession() throws {
+    func testContributesHostExecutedDismissActionForSession() async throws {
         let plugin = SessionActionsPlugin()
         // No tracking: the plugin contributes whenever the host evaluates it against a
         // session (the host decides which sessions are evaluated and evicts on ended).
@@ -25,7 +25,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(action.payload["sessionID"], "s1", "host needs the target session id in the payload")
     }
 
-    func testContributesHostExecutedCopyResumeActionForSession() throws {
+    func testContributesHostExecutedCopyResumeActionForSession() async throws {
         let plugin = SessionActionsPlugin()
         let contribution = try XCTUnwrap(try plugin.makeUIContribution(
             for: .sessionContextMenu,
@@ -39,7 +39,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(action.payload["sessionID"], "s1")
     }
 
-    func testContributesHostExecutedFocusTerminalActionForSession() throws {
+    func testContributesHostExecutedFocusTerminalActionForSession() async throws {
         let plugin = SessionActionsPlugin()
         let contribution = try XCTUnwrap(try plugin.makeUIContribution(
             for: .sessionContextMenu,
@@ -53,7 +53,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(action.payload["sessionID"], "s1")
     }
 
-    func testContributesOpenWorkspaceWhenSessionHasWorkspaceRoot() throws {
+    func testContributesOpenWorkspaceWhenSessionHasWorkspaceRoot() async throws {
         let plugin = SessionActionsPlugin()
         let contribution = try XCTUnwrap(try plugin.makeUIContribution(
             for: .sessionContextMenu,
@@ -67,7 +67,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(action.payload["sessionID"], "s1")
     }
 
-    func testNoOpenWorkspaceWhenSessionHasNoWorkspaceRoot() throws {
+    func testNoOpenWorkspaceWhenSessionHasNoWorkspaceRoot() async throws {
         let plugin = SessionActionsPlugin()
         let contribution = try XCTUnwrap(try plugin.makeUIContribution(
             for: .sessionContextMenu,
@@ -77,7 +77,7 @@ final class SessionActionsPluginTests: XCTestCase {
                      "open-workspace must not be offered for a session with no workspace root")
     }
 
-    func testNoOpenWorkspaceWhenWorkspaceRootEmpty() throws {
+    func testNoOpenWorkspaceWhenWorkspaceRootEmpty() async throws {
         let plugin = SessionActionsPlugin()
         let contribution = try XCTUnwrap(try plugin.makeUIContribution(
             for: .sessionContextMenu,
@@ -101,7 +101,7 @@ final class SessionActionsPluginTests: XCTestCase {
                         "workspaceRoot must survive redaction so the open-workspace button is contributed")
     }
 
-    func testNoContributionForOtherSlots() throws {
+    func testNoContributionForOtherSlots() async throws {
         let plugin = SessionActionsPlugin()
         XCTAssertNil(try plugin.makeUIContribution(
             for: .notchSessionRow,
@@ -109,9 +109,9 @@ final class SessionActionsPluginTests: XCTestCase {
         ))
     }
 
-    func testReturnsNoEffectsAndNeverTicks() throws {
+    func testReturnsNoEffectsAndNeverTicks() async throws {
         let plugin = SessionActionsPlugin()
-        let effects = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1")), context: context())
+        let effects = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1")), context: context())
         XCTAssertTrue(effects.isEmpty, "session actions plugin is observation-only")
         XCTAssertFalse(plugin.needsTick(surfaceState: PluginSurfaceState(visibleSurfaces: [.sessionContextMenu])))
     }
@@ -135,60 +135,60 @@ final class SessionActionsPluginTests: XCTestCase {
 
     // MARK: - Session Command Catalog
 
-    func testCatalogRecognizesSessionDismiss() {
+    func testCatalogRecognizesSessionDismiss() async {
         XCTAssertTrue(SessionCommandCatalog.isSessionCommand("session.dismiss"))
         XCTAssertNotNil(SessionCommandCatalog.descriptor(for: "session.dismiss"))
     }
 
-    func testCatalogRejectsUnknownCapability() {
+    func testCatalogRejectsUnknownCapability() async {
         XCTAssertFalse(SessionCommandCatalog.isSessionCommand("session.bogus"))
         XCTAssertNil(SessionCommandCatalog.descriptor(for: "session.bogus"))
         XCTAssertFalse(SessionCommandCatalog.isAllowed("session.bogus", permissions: [.showSessionSurface]))
     }
 
-    func testCatalogAllowsDismissOnlyWithShowSessionSurface() {
+    func testCatalogAllowsDismissOnlyWithShowSessionSurface() async {
         XCTAssertTrue(SessionCommandCatalog.isAllowed("session.dismiss", permissions: [.showSessionSurface]))
         XCTAssertFalse(SessionCommandCatalog.isAllowed("session.dismiss", permissions: []))
         XCTAssertFalse(SessionCommandCatalog.isAllowed("session.dismiss", permissions: [.readSessionEvents]))
     }
 
-    func testDismissDescriptorIsDestructive() {
+    func testDismissDescriptorIsDestructive() async {
         XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.dismiss")?.isDestructive, true)
     }
 
-    func testCatalogRecognizesCopyResumeCommand() {
+    func testCatalogRecognizesCopyResumeCommand() async {
         XCTAssertTrue(SessionCommandCatalog.isSessionCommand("session.copyResumeCommand"))
         XCTAssertTrue(SessionCommandCatalog.isAllowed("session.copyResumeCommand", permissions: [.showSessionSurface]))
         XCTAssertFalse(SessionCommandCatalog.isAllowed("session.copyResumeCommand", permissions: []))
     }
 
-    func testCopyResumeCommandDescriptorIsNonDestructive() {
+    func testCopyResumeCommandDescriptorIsNonDestructive() async {
         XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.copyResumeCommand")?.isDestructive, false)
     }
 
-    func testCatalogRecognizesFocusTerminal() {
+    func testCatalogRecognizesFocusTerminal() async {
         XCTAssertTrue(SessionCommandCatalog.isSessionCommand("session.focusTerminal"))
         XCTAssertTrue(SessionCommandCatalog.isAllowed("session.focusTerminal", permissions: [.showSessionSurface]))
         XCTAssertFalse(SessionCommandCatalog.isAllowed("session.focusTerminal", permissions: []))
     }
 
-    func testFocusTerminalDescriptorIsNonDestructive() {
+    func testFocusTerminalDescriptorIsNonDestructive() async {
         XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.focusTerminal")?.isDestructive, false)
     }
 
-    func testCatalogRecognizesOpenWorkspace() {
+    func testCatalogRecognizesOpenWorkspace() async {
         XCTAssertTrue(SessionCommandCatalog.isSessionCommand("session.openWorkspace"))
         XCTAssertTrue(SessionCommandCatalog.isAllowed("session.openWorkspace", permissions: [.showSessionSurface]))
         XCTAssertFalse(SessionCommandCatalog.isAllowed("session.openWorkspace", permissions: []))
     }
 
-    func testOpenWorkspaceDescriptorIsNonDestructive() {
+    func testOpenWorkspaceDescriptorIsNonDestructive() async {
         XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.openWorkspace")?.isDestructive, false)
     }
 
     // MARK: - Host Command Catalog routing
 
-    func testHostRoutesSessionDismissToCommandHandler() {
+    func testHostRoutesSessionDismissToCommandHandler() async {
         let host = PluginHost()
         host.register([SessionActionsPlugin()])
         var received: (capability: String, sessionID: String)?
@@ -200,7 +200,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(received?.sessionID, "s1")
     }
 
-    func testHostRoutesCopyResumeCommandToCommandHandler() {
+    func testHostRoutesCopyResumeCommandToCommandHandler() async {
         let host = PluginHost()
         host.register([SessionActionsPlugin()])
         var received: (capability: String, sessionID: String)?
@@ -212,7 +212,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(received?.sessionID, "s1")
     }
 
-    func testHostRejectsCopyResumeCommandWithoutShowSessionSurface() {
+    func testHostRejectsCopyResumeCommandWithoutShowSessionSurface() async {
         let host = PluginHost()
         host.register([DismissStubPlugin(permissions: [])])
         var called = false
@@ -223,7 +223,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertFalse(called, "session.copyResumeCommand requires showSessionSurface")
     }
 
-    func testHostRoutesFocusTerminalToCommandHandler() {
+    func testHostRoutesFocusTerminalToCommandHandler() async {
         let host = PluginHost()
         host.register([SessionActionsPlugin()])
         var received: (capability: String, sessionID: String)?
@@ -235,7 +235,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(received?.sessionID, "s1")
     }
 
-    func testHostRejectsFocusTerminalWithoutShowSessionSurface() {
+    func testHostRejectsFocusTerminalWithoutShowSessionSurface() async {
         let host = PluginHost()
         host.register([DismissStubPlugin(permissions: [])])
         var called = false
@@ -246,7 +246,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertFalse(called, "session.focusTerminal requires showSessionSurface")
     }
 
-    func testHostRoutesOpenWorkspaceToCommandHandler() {
+    func testHostRoutesOpenWorkspaceToCommandHandler() async {
         let host = PluginHost()
         host.register([SessionActionsPlugin()])
         var received: (capability: String, sessionID: String)?
@@ -258,7 +258,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(received?.sessionID, "s1")
     }
 
-    func testHostRejectsOpenWorkspaceWithoutShowSessionSurface() {
+    func testHostRejectsOpenWorkspaceWithoutShowSessionSurface() async {
         let host = PluginHost()
         host.register([DismissStubPlugin(permissions: [])])
         var called = false
@@ -269,7 +269,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertFalse(called, "session.openWorkspace requires showSessionSurface")
     }
 
-    func testHostRejectsSessionDismissWithoutShowSessionSurface() {
+    func testHostRejectsSessionDismissWithoutShowSessionSurface() async {
         let host = PluginHost()
         host.register([DismissStubPlugin(permissions: [])])
         var called = false
@@ -280,7 +280,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertFalse(called, "session.dismiss requires showSessionSurface")
     }
 
-    func testHostRejectsSessionDismissWithoutSessionID() {
+    func testHostRejectsSessionDismissWithoutSessionID() async {
         let host = PluginHost()
         host.register([SessionActionsPlugin()])
         var called = false
@@ -292,7 +292,7 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertFalse(called, "a session command with no target id must not run")
     }
 
-    func testDisabledPluginCannotInvokeSessionCommand() {
+    func testDisabledPluginCannotInvokeSessionCommand() async {
         let host = PluginHost()
         host.register([SessionActionsPlugin()])
         host.setPluginEnabled(false, pluginID: "com.devisland.session-actions")
@@ -306,23 +306,23 @@ final class SessionActionsPluginTests: XCTestCase {
 
     // MARK: - Host dismissal policy (AppState.isPluginDismissable)
 
-    func testIdleCleanSessionIsDismissable() {
+    func testIdleCleanSessionIsDismissable() async {
         XCTAssertTrue(AppState.isPluginDismissable(makeActiveSession()))
     }
 
-    func testPendingSessionIsNotDismissable() {
+    func testPendingSessionIsNotDismissable() async {
         XCTAssertFalse(AppState.isPluginDismissable(makeActiveSession(isPending: true, status: .pending)))
     }
 
-    func testMissedApprovalSessionIsNotDismissable() {
+    func testMissedApprovalSessionIsNotDismissable() async {
         XCTAssertFalse(AppState.isPluginDismissable(makeActiveSession(hasMissedApproval: true)))
     }
 
-    func testUnreadSessionIsNotDismissable() {
+    func testUnreadSessionIsNotDismissable() async {
         XCTAssertFalse(AppState.isPluginDismissable(makeActiveSession(isUnread: true)))
     }
 
-    func testNonIdleStatusSessionIsNotDismissable() {
+    func testNonIdleStatusSessionIsNotDismissable() async {
         XCTAssertFalse(
             AppState.isPluginDismissable(makeActiveSession(status: .autoApproved(Date()))),
             "only fully idle sessions may be dismissed by a plugin"
@@ -414,34 +414,34 @@ final class SessionActionsPluginTests: XCTestCase {
 
     // MARK: - ActiveSession.resumeCommand (host-generated, shell-escaped)
 
-    func testResumeCommandClaudeCodeWithWorkspace() {
+    func testResumeCommandClaudeCodeWithWorkspace() async {
         let session = makeActiveSession(id: "abc123", agentKind: .claudeCode, workspaceRoot: "/Users/me/proj")
         XCTAssertEqual(session.resumeCommand, "cd '/Users/me/proj' && claude --resume abc123")
     }
 
-    func testResumeCommandCodexWithoutWorkspace() {
+    func testResumeCommandCodexWithoutWorkspace() async {
         let session = makeActiveSession(id: "abc123", agentKind: .codex, workspaceRoot: nil)
         XCTAssertEqual(session.resumeCommand, "codex --resume abc123")
     }
 
-    func testResumeCommandGeminiIgnoresSessionID() {
+    func testResumeCommandGeminiIgnoresSessionID() async {
         let session = makeActiveSession(id: "abc123", agentKind: .gemini, workspaceRoot: "/tmp/x")
         XCTAssertEqual(session.resumeCommand, "cd '/tmp/x' && gemini")
     }
 
-    func testResumeCommandIslandIsCdOnlyOrEmpty() {
+    func testResumeCommandIslandIsCdOnlyOrEmpty() async {
         XCTAssertEqual(makeActiveSession(agentKind: .island, workspaceRoot: "/tmp/x").resumeCommand, "cd '/tmp/x'")
         XCTAssertEqual(makeActiveSession(agentKind: .island, workspaceRoot: nil).resumeCommand, "")
     }
 
-    func testResumeCommandEscapesSingleQuotesInPath() {
+    func testResumeCommandEscapesSingleQuotesInPath() async {
         let session = makeActiveSession(agentKind: .codex, workspaceRoot: "/tmp/a'b")
         XCTAssertEqual(session.resumeCommand, "cd '/tmp/a'\\''b' && codex --resume s1")
     }
 
     /// Command-injection guard: shell metacharacters in the path must survive as literals
     /// inside the single quotes, never as command substitution or variable expansion.
-    func testResumeCommandPreservesShellMetacharactersLiterally() {
+    func testResumeCommandPreservesShellMetacharactersLiterally() async {
         let session = makeActiveSession(agentKind: .codex, workspaceRoot: "/tmp/$(whoami)`id`$HOME")
         XCTAssertEqual(session.resumeCommand, "cd '/tmp/$(whoami)`id`$HOME' && codex --resume s1")
     }
@@ -463,7 +463,7 @@ private final class DismissStubPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] { [] }
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] { [] }
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? { nil }
     func needsTick(surfaceState: PluginSurfaceState) -> Bool { false }
 }

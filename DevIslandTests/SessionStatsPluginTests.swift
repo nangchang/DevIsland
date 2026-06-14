@@ -6,11 +6,11 @@ final class SessionStatsPluginTests: XCTestCase {
 
     // MARK: - Session counting
 
-    func testActiveSessionCountShownInNotch() throws {
+    func testActiveSessionCountShownInNotch() async throws {
         let plugin = SessionStatsPlugin()
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s2"), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s2"), context: context())
 
         let contribution = try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext())
         let component = try XCTUnwrap(contribution?.components.first)
@@ -20,7 +20,7 @@ final class SessionStatsPluginTests: XCTestCase {
         XCTAssertEqual(component.value, "2")
     }
 
-    func testNoNotchContributionWhenNoActiveSessions() throws {
+    func testNoNotchContributionWhenNoActiveSessions() async throws {
         let plugin = SessionStatsPlugin()
         XCTAssertNil(
             try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext()),
@@ -28,20 +28,20 @@ final class SessionStatsPluginTests: XCTestCase {
         )
     }
 
-    func testSessionEndDecrementsCount() throws {
+    func testSessionEndDecrementsCount() async throws {
         let plugin = SessionStatsPlugin()
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s2"), context: context())
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionEnded, id: "s1"), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s2"), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionEnded, id: "s1"), context: context())
 
         let contribution = try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext())
         XCTAssertEqual(contribution?.components.first?.value, "1")
     }
 
-    func testRepeatedUpdatesDoNotDoubleCount() throws {
+    func testRepeatedUpdatesDoNotDoubleCount() async throws {
         let plugin = SessionStatsPlugin()
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionUpdated, id: "s1"), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionUpdated, id: "s1"), context: context())
 
         let contribution = try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext())
         XCTAssertEqual(contribution?.components.first?.value, "1", "same session id must be counted once")
@@ -49,11 +49,11 @@ final class SessionStatsPluginTests: XCTestCase {
 
     // MARK: - Hook tallies
 
-    func testHookEventsTalliedPerProviderInMenubar() throws {
+    func testHookEventsTalliedPerProviderInMenubar() async throws {
         let plugin = SessionStatsPlugin()
-        _ = try plugin.onEvent(hookEvent(provider: "claude"), context: context())
-        _ = try plugin.onEvent(hookEvent(provider: "claude"), context: context())
-        _ = try plugin.onEvent(hookEvent(provider: "codex"), context: context())
+        _ = try await plugin.onEvent(hookEvent(provider: "claude"), context: context())
+        _ = try await plugin.onEvent(hookEvent(provider: "claude"), context: context())
+        _ = try await plugin.onEvent(hookEvent(provider: "codex"), context: context())
 
         let contribution = try XCTUnwrap(
             try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu))
@@ -67,11 +67,11 @@ final class SessionStatsPluginTests: XCTestCase {
         XCTAssertEqual(byID["provider.codex"]?.value, "1")
     }
 
-    func testProviderRowsSortedDeterministically() throws {
+    func testProviderRowsSortedDeterministically() async throws {
         let plugin = SessionStatsPlugin()
-        _ = try plugin.onEvent(hookEvent(provider: "gemini"), context: context())
-        _ = try plugin.onEvent(hookEvent(provider: "claude"), context: context())
-        _ = try plugin.onEvent(hookEvent(provider: "codex"), context: context())
+        _ = try await plugin.onEvent(hookEvent(provider: "gemini"), context: context())
+        _ = try await plugin.onEvent(hookEvent(provider: "claude"), context: context())
+        _ = try await plugin.onEvent(hookEvent(provider: "codex"), context: context())
 
         let contribution = try XCTUnwrap(
             try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu))
@@ -82,7 +82,7 @@ final class SessionStatsPluginTests: XCTestCase {
         XCTAssertEqual(providerLabels, ["Claude", "Codex", "Gemini"])
     }
 
-    func testNoMenubarContributionWhenNothingObserved() throws {
+    func testNoMenubarContributionWhenNothingObserved() async throws {
         let plugin = SessionStatsPlugin()
         XCTAssertNil(
             try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu)),
@@ -90,9 +90,9 @@ final class SessionStatsPluginTests: XCTestCase {
         )
     }
 
-    func testNoHookRowsWhenOnlySessionsObserved() throws {
+    func testNoHookRowsWhenOnlySessionsObserved() async throws {
         let plugin = SessionStatsPlugin()
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
 
         let contribution = try XCTUnwrap(
             try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu))
@@ -102,11 +102,11 @@ final class SessionStatsPluginTests: XCTestCase {
 
     // MARK: - Approval tallies
 
-    func testApprovalDecisionsTalliedInMenubar() throws {
+    func testApprovalDecisionsTalliedInMenubar() async throws {
         let plugin = SessionStatsPlugin()
-        _ = try plugin.onEvent(approvalEvent(approved: true), context: context())
-        _ = try plugin.onEvent(approvalEvent(approved: true), context: context())
-        _ = try plugin.onEvent(approvalEvent(approved: false), context: context())
+        _ = try await plugin.onEvent(approvalEvent(approved: true), context: context())
+        _ = try await plugin.onEvent(approvalEvent(approved: true), context: context())
+        _ = try await plugin.onEvent(approvalEvent(approved: false), context: context())
 
         let contribution = try XCTUnwrap(
             try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu))
@@ -116,9 +116,9 @@ final class SessionStatsPluginTests: XCTestCase {
         XCTAssertEqual(byID["denied"]?.value, "1")
     }
 
-    func testApprovalRowsShownWhenOnlyApprovalsObserved() throws {
+    func testApprovalRowsShownWhenOnlyApprovalsObserved() async throws {
         let plugin = SessionStatsPlugin()
-        _ = try plugin.onEvent(approvalEvent(approved: true), context: context())
+        _ = try await plugin.onEvent(approvalEvent(approved: true), context: context())
 
         let contribution = try XCTUnwrap(
             try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu)),
@@ -127,9 +127,9 @@ final class SessionStatsPluginTests: XCTestCase {
         XCTAssertEqual(contribution.components.map { $0.id }, ["sessions", "approved", "denied"])
     }
 
-    func testNoApprovalRowsBeforeAnyDecision() throws {
+    func testNoApprovalRowsBeforeAnyDecision() async throws {
         let plugin = SessionStatsPlugin()
-        _ = try plugin.onEvent(hookEvent(provider: "claude"), context: context())
+        _ = try await plugin.onEvent(hookEvent(provider: "claude"), context: context())
 
         let contribution = try XCTUnwrap(
             try plugin.makeUIContribution(for: .menubarMenu, context: uiContext(slot: .menubarMenu))
@@ -142,9 +142,9 @@ final class SessionStatsPluginTests: XCTestCase {
 
     // MARK: - Tick
 
-    func testNeverNeedsTick() throws {
+    func testNeverNeedsTick() async throws {
         let plugin = SessionStatsPlugin()
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, id: "s1"), context: context())
         XCTAssertFalse(
             plugin.needsTick(surfaceState: PluginSurfaceState(visibleSurfaces: [.notchExpandedActivity, .menubarMenu])),
             "stats are event-driven and never request the central tick"

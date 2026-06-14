@@ -46,7 +46,7 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
         approvalsApproved + approvalsDenied
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         switch event.kind {
         case .sessionStarted, .sessionUpdated:
             if let id = event.session?.id {

@@ -7,10 +7,16 @@ struct QueuedPluginEvent {
 
 actor PluginEventProcessor {
     private let storageProvider: PluginStorageProvider
+    private let scopedFileBroker: PluginScopedFileBroker
     private let eventFactory: PluginEventFactory
 
-    init(storageProvider: PluginStorageProvider, eventFactory: PluginEventFactory) {
+    init(
+        storageProvider: PluginStorageProvider,
+        scopedFileBroker: PluginScopedFileBroker,
+        eventFactory: PluginEventFactory
+    ) {
         self.storageProvider = storageProvider
+        self.scopedFileBroker = scopedFileBroker
         self.eventFactory = eventFactory
     }
 
@@ -21,6 +27,7 @@ actor PluginEventProcessor {
         language: AppLanguage = .english
     ) async -> [PluginContributionSnapshot] {
         let storageProvider = self.storageProvider
+        let scopedFileBroker = self.scopedFileBroker
         let eventFactory = self.eventFactory
 
         return await withTaskGroup(of: PluginContributionSnapshot.self) { group in
@@ -44,6 +51,7 @@ actor PluginEventProcessor {
                     return await runner.handle(
                         event,
                         storageSnapshot: storageSnapshot,
+                        scopedFileBroker: scopedFileBroker,
                         settings: settings,
                         selectedSessionID: allowedSelectedSessionID,
                         language: language

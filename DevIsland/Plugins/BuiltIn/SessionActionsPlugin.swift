@@ -35,7 +35,7 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
         localizedName: PluginLocalizedString(english: "Session Actions", korean: "세션 작업")
     )
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         []
     }
 

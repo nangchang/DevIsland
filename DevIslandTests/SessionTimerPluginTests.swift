@@ -6,12 +6,12 @@ final class SessionTimerPluginTests: XCTestCase {
 
     // MARK: - Plugin logic (direct calls)
 
-    func testSessionStartProducesElapsedMetric() throws {
+    func testSessionStartProducesElapsedMetric() async throws {
         let plugin = SessionTimerPlugin()
         let start = Date(timeIntervalSince1970: 1_000)
         let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
 
         let contribution = try plugin.makeUIContribution(
             for: .notchExpandedActivity,
@@ -26,12 +26,12 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(component.value, "01:05")
     }
 
-    func testSessionStartProducesKoreanElapsedMetric() throws {
+    func testSessionStartProducesKoreanElapsedMetric() async throws {
         let plugin = SessionTimerPlugin()
         let start = Date(timeIntervalSince1970: 1_000)
         let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
 
         let contribution = try plugin.makeUIContribution(
             for: .notchExpandedActivity,
@@ -41,10 +41,10 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(contribution?.components.first?.label, "경과")
     }
 
-    func testElapsedFormatsHoursPastSixtyMinutes() throws {
+    func testElapsedFormatsHoursPastSixtyMinutes() async throws {
         let plugin = SessionTimerPlugin()
         let start = Date(timeIntervalSince1970: 1_000)
-        _ = try plugin.onEvent(
+        _ = try await plugin.onEvent(
             sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)),
             context: context()
         )
@@ -57,17 +57,17 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(contribution?.components.first?.value, "1:01:05")
     }
 
-    func testSessionEndClearsContribution() throws {
+    func testSessionEndClearsContribution() async throws {
         let plugin = SessionTimerPlugin()
         let start = Date(timeIntervalSince1970: 1_000)
         let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
         XCTAssertNotNil(
             try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext(timestamp: start))
         )
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionEnded, session: snapshot), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionEnded, session: snapshot), context: context())
         XCTAssertNil(
             try plugin.makeUIContribution(for: .notchExpandedActivity, context: uiContext(timestamp: start)),
             "no active session means no contribution"
@@ -76,12 +76,12 @@ final class SessionTimerPluginTests: XCTestCase {
 
     // MARK: - Per-session row badge (notch.session.row)
 
-    func testSessionRowProducesPerSessionElapsedBadge() throws {
+    func testSessionRowProducesPerSessionElapsedBadge() async throws {
         let plugin = SessionTimerPlugin()
         let start = Date(timeIntervalSince1970: 1_000)
         let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
 
         let contribution = try XCTUnwrap(try plugin.makeUIContribution(
             for: .notchSessionRow,
@@ -93,7 +93,7 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertNil(contribution.components.first?.label, "row badge omits the label to stay compact")
     }
 
-    func testSessionRowBadgeAbsentForUntrackedSession() throws {
+    func testSessionRowBadgeAbsentForUntrackedSession() async throws {
         let plugin = SessionTimerPlugin()
         // No session.started observed, so the session is not tracked.
         XCTAssertNil(try plugin.makeUIContribution(
@@ -104,12 +104,12 @@ final class SessionTimerPluginTests: XCTestCase {
 
     // MARK: - Message-window header badge (session.message)
 
-    func testSessionMessageProducesPerSessionElapsedBadge() throws {
+    func testSessionMessageProducesPerSessionElapsedBadge() async throws {
         let plugin = SessionTimerPlugin()
         let start = Date(timeIntervalSince1970: 1_000)
         let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: context())
 
         let contribution = try XCTUnwrap(try plugin.makeUIContribution(
             for: .sessionMessage,
@@ -135,14 +135,14 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertNil(host.contributions[.sessionMessage])
     }
 
-    func testCurrentSessionIsMostRecentlyActive() throws {
+    func testCurrentSessionIsMostRecentlyActive() async throws {
         let plugin = SessionTimerPlugin()
         let base = Date(timeIntervalSince1970: 1_000)
         let older = makeSnapshot(id: "old", startTime: base, lastActiveAt: base.addingTimeInterval(10))
         let newer = makeSnapshot(id: "new", startTime: base.addingTimeInterval(30), lastActiveAt: base.addingTimeInterval(40))
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: older), context: context())
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: newer), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: older), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: newer), context: context())
 
         // Elapsed is measured from the most recently active session (newer, startTime base+30).
         let contribution = try plugin.makeUIContribution(
@@ -154,14 +154,14 @@ final class SessionTimerPluginTests: XCTestCase {
 
     // MARK: - Selected-session signal (global slot)
 
-    func testGlobalSlotFollowsSelectedSessionOverRecency() throws {
+    func testGlobalSlotFollowsSelectedSessionOverRecency() async throws {
         let plugin = SessionTimerPlugin()
         let base = Date(timeIntervalSince1970: 1_000)
         let older = makeSnapshot(id: "old", startTime: base, lastActiveAt: base.addingTimeInterval(10))
         let newer = makeSnapshot(id: "new", startTime: base.addingTimeInterval(30), lastActiveAt: base.addingTimeInterval(40))
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: older), context: context())
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: newer), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: older), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: newer), context: context())
 
         // The user selected the older session; the global elapsed must follow the selection,
         // not the most-recently-active (newer) one. older startTime = base → base+90 = 90s.
@@ -175,12 +175,12 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(contribution?.components.first?.value, "01:30")
     }
 
-    func testGlobalSlotFallsBackToRecencyWhenSelectionUntracked() throws {
+    func testGlobalSlotFallsBackToRecencyWhenSelectionUntracked() async throws {
         let plugin = SessionTimerPlugin()
         let base = Date(timeIntervalSince1970: 1_000)
         let newer = makeSnapshot(id: "new", startTime: base.addingTimeInterval(30), lastActiveAt: base.addingTimeInterval(40))
 
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: newer), context: context())
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: newer), context: context())
 
         // Selection points at a session this plugin never tracked → recency fallback (newer).
         let ctx = PluginUIContext(
@@ -193,14 +193,14 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(contribution?.components.first?.value, "01:00")
     }
 
-    func testNeedsTickOnlyWhenSessionActiveAndNotchVisible() throws {
+    func testNeedsTickOnlyWhenSessionActiveAndNotchVisible() async throws {
         let plugin = SessionTimerPlugin()
         let visible = PluginSurfaceState(visibleSurfaces: [.notchExpandedActivity])
         let hidden = PluginSurfaceState(visibleSurfaces: [])
 
         XCTAssertFalse(plugin.needsTick(surfaceState: visible), "no session means no tick")
 
-        _ = try plugin.onEvent(
+        _ = try await plugin.onEvent(
             sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1")),
             context: context()
         )
@@ -325,7 +325,7 @@ final class SessionTimerPluginTests: XCTestCase {
 
     // MARK: - Settings (show-seconds) and settings.changed fan-out
 
-    func testShowSecondsSettingControlsBadgeFormat() throws {
+    func testShowSecondsSettingControlsBadgeFormat() async throws {
         let plugin = SessionTimerPlugin()
         let start = Date(timeIntervalSince1970: 1_000)
         let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
@@ -335,7 +335,7 @@ final class SessionTimerPluginTests: XCTestCase {
             storageSnapshot: [:],
             settings: ["showSeconds": .bool(false)]
         )
-        _ = try plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: ctx)
+        _ = try await plugin.onEvent(sessionEvent(kind: .sessionStarted, session: snapshot), context: ctx)
 
         let contribution = try XCTUnwrap(try plugin.makeUIContribution(
             for: .notchSessionRow,
@@ -440,7 +440,7 @@ private final class GatingStubPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         lock.lock()
         _received.append(event.kind)
         lock.unlock()
@@ -477,7 +477,7 @@ private final class SelectionEchoPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] { [] }
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] { [] }
     func needsTick(surfaceState: PluginSurfaceState) -> Bool { false }
 
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {

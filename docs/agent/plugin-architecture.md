@@ -303,9 +303,8 @@ protocol DevIslandPlugin: AnyObject {
     var manifest: PluginManifest { get }
 
     /// PluginRunner(actor)가 이벤트를 순차 전달한다.
-    /// v1 built-in plugin API는 actor reentrancy를 피하기 위해 동기 함수로 둔다.
-    /// 외부 I/O나 긴 작업은 직접 수행하지 않고 PluginEffect로 Host에 요청한다.
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect]
+    /// 외부 I/O나 긴 작업은 직접 수행하지 않고 PluginEffect 또는 scoped host broker로 요청한다.
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect]
 
     /// onEvent 직후 PluginRunner가 manifest.surfaces에 해당하는 슬롯만 호출한다.
     /// 렌더링 경로에서는 호출되지 않는다.
@@ -317,9 +316,9 @@ protocol DevIslandPlugin: AnyObject {
 }
 ```
 
-**플러그인은 plain `final class`로 작성한다.** 가변 상태 보호는 플러그인을 감싸는 `PluginRunner`(actor)가 담당하므로 플러그인 작성자가 직접 actor를 다룰 필요가 없다. 플러그인 인스턴스는 `PluginRunner` 외부로 노출되지 않으며, 모든 호출이 runner의 actor executor를 통과한다. v1 API를 동기 함수로 제한하므로 `await` 지점에서 actor가 재진입해 같은 플러그인 상태를 동시에 만지는 위험을 피한다.
+**플러그인은 plain `final class`로 작성한다.** 가변 상태 보호는 플러그인을 감싸는 `PluginRunner`(actor)가 담당하므로 플러그인 작성자가 직접 actor를 다룰 필요가 없다. 플러그인 인스턴스는 `PluginRunner` 외부로 노출되지 않으며, 모든 호출이 runner의 actor executor를 통과한다. `onEvent`는 async지만 runner가 플러그인별 호출을 직렬화하므로 scoped broker 요청을 사용해도 같은 플러그인의 이벤트 처리는 순서대로 진행된다.
 
-v1 built-in plugin은 앱 프로세스 안에서 실행되므로 완전한 crash isolation을 제공하지 않는다. 플러그인 호출은 `PluginRunner` 내부에서 동기적으로 실행되며, `PluginHost`가 전체 dispatch를 background task로 예약해 hook response path를 기다리지 않게 한다. 강제 종료 수준의 isolation이 필요하면 v2 worker process에서 처리한다.
+v1 built-in plugin은 앱 프로세스 안에서 실행되므로 완전한 crash isolation을 제공하지 않는다. 플러그인 호출은 `PluginRunner` 내부에서 실행되며, `PluginHost`가 전체 dispatch를 background task로 예약해 hook response path를 기다리지 않게 한다. 강제 종료 수준의 isolation이 필요하면 v2 worker process에서 처리한다.
 
 ### 6.5. 실행 컨텍스트와 Effect
 
@@ -329,6 +328,7 @@ struct PluginContext {
     let pluginID: String
     let permissions: Set<PluginPermission>
     let storageSnapshot: [String: String]
+    let scopedFiles: PluginScopedFileClient?
     let settings: [String: PluginSettingValue]
     let language: AppLanguage
 }
@@ -342,8 +342,9 @@ struct PluginEffect: Codable {
 ```
 
 `PluginContext.storageSnapshot`은 `PluginEventProcessor`가 runner 호출 직전에 플러그인 전용 storage에서 읽어온 작은 read-only snapshot이다.
+`PluginContext.scopedFiles`는 `.readScopedFiles` 권한을 가진 플러그인에만 주입되는 async host broker client다. 플러그인은 scope ID와 상대 경로로 list/read/metadata를 요청하고, host broker가 plugin ID별 허용 base directory와 경로 제약을 검증한다.
 `PluginContext.language`는 현재 앱 언어의 Sendable snapshot이다. 플러그인은 이 값으로 자신이 소유한 문자열을 직접 선택하며, `L10n.shared` 같은 host-owned observable state를 직접 읽지 않는다.
-v1 플러그인 API가 동기 함수이므로 플러그인은 storage를 직접 비동기로 읽지 않는다.
+플러그인은 storage를 직접 비동기로 읽지 않는다.
 초기 상태 복원이 필요한 built-in plugin은 `plugin.started` 또는 첫 event에서 snapshot을 읽어 내부 상태를 복원한다.
 storage write effect는 event 처리 이후 비동기로 커밋되므로, 플러그인은 방금 반환한 storage effect를 같은 event 안에서 다시 읽을 수 있다고 가정하지 않는다. v1 built-in plugin의 화면 상태는 플러그인 내부 메모리 상태가 기준이고, storage는 재시작 후 복원을 위한 durable cache로 취급한다.
 
@@ -577,7 +578,7 @@ final class PomodoroPlugin: DevIslandPlugin {
             || surfaceState.visibleSurfaces.contains(.menubarMenu)
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         switch event.kind {
         case .pluginTick:
             if mode == .running {
@@ -949,7 +950,7 @@ actor PluginRunner {
                                         storageSnapshot: storageSnapshot,
                                         settings: settings,
                                         language: language)
-            effects = try plugin.onEvent(event, context: context)
+            effects = try await plugin.onEvent(event, context: context)
             for slot in manifest.surfaces {
                 let ctx = PluginUIContext(slot: slot,
                                           timestamp: event.timestamp,
@@ -989,7 +990,7 @@ actor PluginRunner {
 }
 ```
 
-`PluginRunner`가 `actor`이고 플러그인 API가 동기 함수이므로 `plugin.onEvent` 안에서 발생하는 플러그인 상태 변경은 자동으로 직렬화된다.
+`PluginRunner`가 `actor`이고 플러그인 호출을 직렬화하므로 `plugin.onEvent` 안에서 발생하는 플러그인 상태 변경은 순서대로 적용된다.
 `manifest.surfaces`만 순회하므로 선언하지 않은 슬롯에는 `makeUIContribution`을 호출하지 않는다.
 
 ### 10.4. 오류 및 세이프모드 (Safemode)
