@@ -113,6 +113,10 @@ xcodebuild build -scheme DevIsland -quiet -project "$(pwd)/DevIsland.xcodeproj"
 
 앱 실행 시에도 이 워크트리 DerivedData 경로의 .app을 사용할 것.
 
+빌드/실행 전 `pwd`로 현재 워크트리를 확인할 것. 세션 재개·plan mode 전환 시 shell cwd가
+다른 워크트리로 리셋될 수 있고, `build_and_run.sh`/`run-tests.sh`는 스크립트 위치(cwd)
+기준으로 대상을 정하므로 엉뚱한 워크트리를 빌드하게 된다. `EnterWorktree`(path)로 재진입.
+
 `./scripts/run-tests.sh`는 별도 DerivedData(`/tmp/DevIsland-Test-DerivedData`)를 쓴다.
 "Could not resolve package dependencies"가 나면 `rm -rf /tmp/DevIsland-Test-DerivedData/SourcePackages`
 후 재실행. `-quiet`라 테스트 수는 안 보이고 성공 시 마지막 줄에 "✅ All tests passed!" —
