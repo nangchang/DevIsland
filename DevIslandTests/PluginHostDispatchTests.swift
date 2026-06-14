@@ -13,6 +13,20 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertTrue(host.failures.isEmpty)
     }
 
+    func testPluginDisplayNamesAreCachedOnRegister() {
+        let plugin = RecordingPlugin(
+            id: "com.devisland.test.display",
+            name: "Display Plugin",
+            activationEvents: [.pluginStarted]
+        )
+        let host = PluginHost()
+
+        XCTAssertTrue(host.pluginDisplayNames.isEmpty)
+        host.register([plugin])
+
+        XCTAssertEqual(host.pluginDisplayNames, ["com.devisland.test.display": "Display Plugin"])
+    }
+
     func testEnqueuePreservesEventOrderForRunner() async {
         let plugin = RecordingPlugin(
             id: "com.devisland.test.order",
@@ -838,6 +852,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
 
     init(
         id: String,
+        name: String? = nil,
         permissions: Set<PluginPermission> = [],
         activationEvents: Set<PluginEventKind>,
         contribution: PluginUIContribution? = nil,
@@ -848,7 +863,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
     ) {
         self.manifest = PluginManifest(
             id: id,
-            name: id,
+            name: name ?? id,
             version: "1.0.0",
             apiVersion: 1,
             kind: .utility,

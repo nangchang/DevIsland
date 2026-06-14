@@ -16,8 +16,9 @@ func truncatedMenuText(_ text: String?) -> String {
 }
 
 func pluginMenuTitle(pluginID: String, displayNames: [String: String]) -> String {
-    let rawTitle = displayNames[pluginID].flatMap { $0.isEmpty ? nil : $0 } ?? pluginID
-    let title = truncatedMenuText(rawTitle)
+    let rawTitle = displayNames[pluginID] ?? ""
+    let fallbackTitle = rawTitle.isEmpty ? pluginID : rawTitle
+    let title = truncatedMenuText(fallbackTitle)
     return title.isEmpty ? "Plugin" : title
 }
 
