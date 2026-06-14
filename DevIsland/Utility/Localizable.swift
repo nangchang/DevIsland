@@ -212,6 +212,7 @@ extension L10n {
     var btnPluginResetStorage: String { s("Reset Storage",               "저장소 초기화") }
     var msgPluginResetStorageConfirm: String { s("Are you sure you want to delete all stored data for this plugin? This cannot be undone.", "이 플러그인의 모든 저장 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.") }
     func pluginFailures(_ count: Int) -> String { s("Errors: \(count)", "오류: \(count)회") }
+    var lblPluginSettings:   String { s("Settings",                       "설정") }
 
     // Caffeine (Extras section)
     var secCaffeineStatus:            String { s("Status",                                    "현재 상태") }
