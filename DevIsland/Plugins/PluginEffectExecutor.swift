@@ -27,26 +27,8 @@ actor PluginEffectExecutor {
         pluginID: String,
         permissions: Set<PluginPermission>
     ) async {
-        for effect in effects where Self.isHostEffectSupported(effect.capability, permissions: permissions) {
+        for effect in effects where HostEffectCatalog.isSupported(effect.capability, pluginID: pluginID, permissions: permissions) {
             await execute(effect, pluginID: pluginID)
-        }
-    }
-
-    nonisolated static func isHostEffectSupported(
-        _ capability: String,
-        permissions: Set<PluginPermission>
-    ) -> Bool {
-        switch capability {
-        case "storage.keyValue", "storage.increment":
-            return permissions.contains(.writePluginStorage)
-        case "notification.show":
-            return permissions.contains(.showNotification)
-        case "sound.play":
-            return permissions.contains(.playSound)
-        case "power.preventIdleSleep", "power.toggle":
-            return permissions.contains(.controlPowerSleep)
-        default:
-            return false
         }
     }
 
@@ -74,8 +56,9 @@ actor PluginEffectExecutor {
             return
         }
 
+        // The built-in allowlist (`caffeine` only) is enforced by `HostEffectCatalog.isSupported`
+        // in `enqueue`, so an unauthorized plugin's power effect never reaches here.
         if effect.capability == "power.preventIdleSleep" {
-            guard pluginID == "caffeine" else { return }
             let prevent = effect.payload["preventSleep"] == "true"
             let reason = effect.payload["reason"] ?? "off"
             await powerSleepHandler?(prevent, reason)
@@ -83,7 +66,6 @@ actor PluginEffectExecutor {
         }
 
         if effect.capability == "power.toggle" {
-            guard pluginID == "caffeine" else { return }
             await powerToggleHandler?()
             return
         }
