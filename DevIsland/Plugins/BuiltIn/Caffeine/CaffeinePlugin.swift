@@ -44,13 +44,13 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
             return []
         }
 
-        self.caffeineEnabled = status.caffeineEnabled
+        self.caffeineEnabled = status.featureEnabled
 
-        if status.isAssertionResult {
-            isPreventingSleep = status.isHoldingAssertion ?? false
-            if let code = status.assertionFailureCode {
+        if status.isEffectResult {
+            isPreventingSleep = status.isPreventingSleep ?? false
+            if let code = status.effectFailureCode {
                 lastReason = "failure:\(code)"
-            } else if let reason = status.assertionReason, !reason.isEmpty {
+            } else if let reason = status.effectReason, !reason.isEmpty {
                 lastReason = reason
             } else {
                 lastReason = isPreventingSleep ? "onAC" : "off"
@@ -200,7 +200,7 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
             nextLow = false
         }
 
-        guard status.caffeineEnabled else { return (nextLow, .off) }
+        guard status.featureEnabled else { return (nextLow, .off) }
 
         if let ssid = status.currentSSID, status.excludedSSIDs.contains(ssid) {
             return (nextLow, .excludedSSID(ssid))

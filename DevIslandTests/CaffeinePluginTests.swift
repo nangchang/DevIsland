@@ -21,7 +21,7 @@ final class CaffeinePluginTests: XCTestCase {
     func testDisabledReturnsFalse() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
-            caffeineEnabled: false,
+            featureEnabled: false,
             excludedSSIDs: [],
             isOnACPower: true,
             batteryLevel: 0.9,
@@ -52,7 +52,7 @@ final class CaffeinePluginTests: XCTestCase {
     func testKoreanMenuContributionComesFromPluginContext() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
-            caffeineEnabled: false,
+            featureEnabled: false,
             excludedSSIDs: [],
             isOnACPower: true,
             batteryLevel: 0.9,
@@ -79,7 +79,7 @@ final class CaffeinePluginTests: XCTestCase {
     func testOnACOnNormalBatteryHolds() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: ["Office-Internal"],
             isOnACPower: true,
             batteryLevel: 0.8,
@@ -110,7 +110,7 @@ final class CaffeinePluginTests: XCTestCase {
     func testExcludedSSIDReleases() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: ["Office-Internal", "Guest"],
             isOnACPower: true,
             batteryLevel: 0.8,
@@ -139,7 +139,7 @@ final class CaffeinePluginTests: XCTestCase {
     func testExcludedSSIDPreservesEmbeddedPrefixText() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: ["Guest-excludedSSID:Lab"],
             isOnACPower: true,
             batteryLevel: 0.8,
@@ -164,7 +164,7 @@ final class CaffeinePluginTests: XCTestCase {
     func testOnBatteryReleases() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: [],
             isOnACPower: false,
             batteryLevel: 0.6,
@@ -191,7 +191,7 @@ final class CaffeinePluginTests: XCTestCase {
     func testLowBatteryReleasesEvenOnAC() async throws {
         let plugin = makePlugin()
         let status = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: [],
             isOnACPower: true,
             batteryLevel: 0.18,
@@ -215,10 +215,10 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(statusComponent?.value, "Low Battery")
     }
 
-    func testAssertionFailureResultUpdatesMenuWithoutReemittingEffect() async throws {
+    func testEffectFailureResultUpdatesMenuWithoutReemittingEffect() async throws {
         let plugin = makePlugin()
         let initialStatus = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: [],
             isOnACPower: true,
             batteryLevel: 0.9,
@@ -230,22 +230,22 @@ final class CaffeinePluginTests: XCTestCase {
         )
 
         let failureStatus = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: [],
             isOnACPower: true,
             batteryLevel: 0.9,
             currentSSID: "Home",
-            isHoldingAssertion: false,
-            assertionReason: "onAC",
-            assertionFailureCode: -536870212,
-            isAssertionResult: true
+            isPreventingSleep: false,
+            effectReason: "onAC",
+            effectFailureCode: -536870212,
+            isEffectResult: true
         )
 
         let effects = try await plugin.onEvent(
             PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: failureStatus),
             context: makeContext()
         )
-        XCTAssertTrue(effects.isEmpty, "assertion result events must update UI only, not re-emit power effects")
+        XCTAssertTrue(effects.isEmpty, "effect result events must update UI only, not re-emit power effects")
 
         let contribution = try plugin.makeUIContribution(
             for: .menubarMenu,
@@ -261,7 +261,7 @@ final class CaffeinePluginTests: XCTestCase {
 
         // 1. 18% -> Low battery (prevLowBattery = false) -> releases
         let status1 = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: [],
             isOnACPower: true,
             batteryLevel: 0.18,
@@ -274,7 +274,7 @@ final class CaffeinePluginTests: XCTestCase {
 
         // 2. 22% -> Still low battery (prevLowBattery = true) -> releases
         let status2 = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: [],
             isOnACPower: true,
             batteryLevel: 0.22,
@@ -287,7 +287,7 @@ final class CaffeinePluginTests: XCTestCase {
 
         // 3. 23% -> Recovers (prevLowBattery = true) -> holds (onAC)
         let status3 = PluginPowerStatus(
-            caffeineEnabled: true,
+            featureEnabled: true,
             excludedSSIDs: [],
             isOnACPower: true,
             batteryLevel: 0.23,
