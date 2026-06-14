@@ -190,11 +190,27 @@ private struct PluginSettingControlView: View {
     private var boolBinding: Binding<Bool> {
         Binding(get: { current.boolValue ?? false }, set: { commit(.bool($0)) })
     }
+    // Stepper/Slider require a value inside their range; fall back to the lower bound (not 0,
+    // which may be out of range) and clamp, in case a plugin's default is the wrong kind.
     private var intBinding: Binding<Int> {
-        Binding(get: { current.intValue ?? 0 }, set: { commit(.int($0)) })
+        Binding(
+            get: {
+                guard case .stepper(let range, _) = descriptor.kind else { return current.intValue ?? 0 }
+                let value = current.intValue ?? range.lowerBound
+                return min(max(value, range.lowerBound), range.upperBound)
+            },
+            set: { commit(.int($0)) }
+        )
     }
     private var doubleBinding: Binding<Double> {
-        Binding(get: { current.doubleValue ?? 0 }, set: { commit(.double($0)) })
+        Binding(
+            get: {
+                guard case .slider(let range, _) = descriptor.kind else { return current.doubleValue ?? 0 }
+                let value = current.doubleValue ?? range.lowerBound
+                return min(max(value, range.lowerBound), range.upperBound)
+            },
+            set: { commit(.double($0)) }
+        )
     }
     private var stringBinding: Binding<String> {
         Binding(get: { current.stringValue ?? "" }, set: { commit(.string($0)) })
