@@ -53,6 +53,54 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(action.payload["sessionID"], "s1")
     }
 
+    func testContributesOpenWorkspaceWhenSessionHasWorkspaceRoot() throws {
+        let plugin = SessionActionsPlugin()
+        let contribution = try XCTUnwrap(try plugin.makeUIContribution(
+            for: .sessionContextMenu,
+            context: uiContext(session: makeSnapshot(id: "s1", workspaceRoot: "/tmp/proj"))
+        ))
+        let open = try XCTUnwrap(contribution.components.first { $0.id == "open-workspace" })
+        XCTAssertEqual(open.type, .button)
+        let action = try XCTUnwrap(open.action)
+        XCTAssertEqual(action.capability, "session.openWorkspace")
+        XCTAssertEqual(action.routing, .hostExecuted)
+        XCTAssertEqual(action.payload["sessionID"], "s1")
+    }
+
+    func testNoOpenWorkspaceWhenSessionHasNoWorkspaceRoot() throws {
+        let plugin = SessionActionsPlugin()
+        let contribution = try XCTUnwrap(try plugin.makeUIContribution(
+            for: .sessionContextMenu,
+            context: uiContext(session: makeSnapshot(id: "s1", workspaceRoot: nil))
+        ))
+        XCTAssertNil(contribution.components.first { $0.id == "open-workspace" },
+                     "open-workspace must not be offered for a session with no workspace root")
+    }
+
+    func testNoOpenWorkspaceWhenWorkspaceRootEmpty() throws {
+        let plugin = SessionActionsPlugin()
+        let contribution = try XCTUnwrap(try plugin.makeUIContribution(
+            for: .sessionContextMenu,
+            context: uiContext(session: makeSnapshot(id: "s1", workspaceRoot: ""))
+        ))
+        XCTAssertNil(contribution.components.first { $0.id == "open-workspace" },
+                     "open-workspace must not be offered for an empty workspace root")
+    }
+
+    /// Regression (PR #281 codex): `SessionActionsPlugin` must hold a permission that survives
+    /// `PluginEventFactory.redactedSession` keeping `workspaceRoot`, otherwise the host path
+    /// always sees `nil` and the open-workspace button — now the only one, since the core item
+    /// was removed — is never contributed.
+    func testHostContributesOpenWorkspaceThroughRedactionPath() async {
+        let host = PluginHost()
+        host.register([SessionActionsPlugin()])
+        host.enqueue(sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1", workspaceRoot: "/tmp/proj")))
+        await host.waitUntilIdle()
+        let contribution = host.contributions[.sessionContextMenu]?.first
+        XCTAssertNotNil(contribution?.components.first { $0.id == "open-workspace" },
+                        "workspaceRoot must survive redaction so the open-workspace button is contributed")
+    }
+
     func testNoContributionForOtherSlots() throws {
         let plugin = SessionActionsPlugin()
         XCTAssertNil(try plugin.makeUIContribution(
@@ -128,6 +176,16 @@ final class SessionActionsPluginTests: XCTestCase {
         XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.focusTerminal")?.isDestructive, false)
     }
 
+    func testCatalogRecognizesOpenWorkspace() {
+        XCTAssertTrue(SessionCommandCatalog.isSessionCommand("session.openWorkspace"))
+        XCTAssertTrue(SessionCommandCatalog.isAllowed("session.openWorkspace", permissions: [.showSessionSurface]))
+        XCTAssertFalse(SessionCommandCatalog.isAllowed("session.openWorkspace", permissions: []))
+    }
+
+    func testOpenWorkspaceDescriptorIsNonDestructive() {
+        XCTAssertEqual(SessionCommandCatalog.descriptor(for: "session.openWorkspace")?.isDestructive, false)
+    }
+
     // MARK: - Host Command Catalog routing
 
     func testHostRoutesSessionDismissToCommandHandler() {
@@ -186,6 +244,29 @@ final class SessionActionsPluginTests: XCTestCase {
         host.handleAction(focusTerminalAction(sessionID: "s1"), from: "com.devisland.test.dismiss-stub", componentID: "focus-terminal")
 
         XCTAssertFalse(called, "session.focusTerminal requires showSessionSurface")
+    }
+
+    func testHostRoutesOpenWorkspaceToCommandHandler() {
+        let host = PluginHost()
+        host.register([SessionActionsPlugin()])
+        var received: (capability: String, sessionID: String)?
+        host.sessionCommandHandler = { received = ($0, $1) }
+
+        host.handleAction(openWorkspaceAction(sessionID: "s1"), from: "com.devisland.session-actions", componentID: "open-workspace")
+
+        XCTAssertEqual(received?.capability, "session.openWorkspace")
+        XCTAssertEqual(received?.sessionID, "s1")
+    }
+
+    func testHostRejectsOpenWorkspaceWithoutShowSessionSurface() {
+        let host = PluginHost()
+        host.register([DismissStubPlugin(permissions: [])])
+        var called = false
+        host.sessionCommandHandler = { _, _ in called = true }
+
+        host.handleAction(openWorkspaceAction(sessionID: "s1"), from: "com.devisland.test.dismiss-stub", componentID: "open-workspace")
+
+        XCTAssertFalse(called, "session.openWorkspace requires showSessionSurface")
     }
 
     func testHostRejectsSessionDismissWithoutShowSessionSurface() {
@@ -250,7 +331,7 @@ final class SessionActionsPluginTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeSnapshot(id: String) -> PluginSessionSnapshot {
+    private func makeSnapshot(id: String, workspaceRoot: String? = nil) -> PluginSessionSnapshot {
         PluginSessionSnapshot(
             id: id,
             agentKind: "codex",
@@ -258,7 +339,7 @@ final class SessionActionsPluginTests: XCTestCase {
             lastActiveAt: Date(timeIntervalSince1970: 0),
             lastToolName: nil,
             lastEventName: nil,
-            workspaceRoot: nil
+            workspaceRoot: workspaceRoot
         )
     }
 
@@ -288,6 +369,10 @@ final class SessionActionsPluginTests: XCTestCase {
 
     private func focusTerminalAction(sessionID: String) -> PluginUIActionDTO {
         PluginUIActionDTO(id: "session.focusTerminal", capability: "session.focusTerminal", routing: .hostExecuted, payload: ["sessionID": sessionID])
+    }
+
+    private func openWorkspaceAction(sessionID: String) -> PluginUIActionDTO {
+        PluginUIActionDTO(id: "session.openWorkspace", capability: "session.openWorkspace", routing: .hostExecuted, payload: ["sessionID": sessionID])
     }
 
     private func makeActiveSession(

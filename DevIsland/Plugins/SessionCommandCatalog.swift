@@ -33,6 +33,11 @@ enum SessionCommandCatalog {
             capability: "session.focusTerminal",
             requiredPermission: .showSessionSurface,
             isDestructive: false
+        ),
+        "session.openWorkspace": SessionCommandDescriptor(
+            capability: "session.openWorkspace",
+            requiredPermission: .showSessionSurface,
+            isDestructive: false
         )
     ]
 

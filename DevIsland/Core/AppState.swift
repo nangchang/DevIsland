@@ -1461,9 +1461,25 @@ class AppState: ObservableObject {
             copyResumeCommandFromPlugin(sessionID)
         case "session.focusTerminal":
             focusTerminalFromPlugin(sessionID)
+        case "session.openWorkspace":
+            openWorkspaceFromPlugin(sessionID)
         default:
             break
         }
+    }
+
+    /// Opens a plugin-requested session's workspace root in Finder. Side-effect-free with
+    /// respect to core state: it only activates Finder (never a terminal), so the window
+    /// observers' `passIfTerminalFocused()` finds no terminal frontmost and the approval queue
+    /// is untouched. No-op when the session has no workspace root. (architecture doc §8, v1.2)
+    @MainActor
+    private func openWorkspaceFromPlugin(_ sessionID: String) {
+        guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }) else {
+            print("[DevIsland] [plugin-cmd] openWorkspace: no session \(sessionID.prefix(8))")
+            return
+        }
+        guard let root = session.workspaceRoot, !root.isEmpty else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: root))
     }
 
     /// Whether a plugin may focus a session terminal right now without disturbing an approval.

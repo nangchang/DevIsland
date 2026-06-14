@@ -21,7 +21,10 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
         version: "1.0.0",
         apiVersion: 1,
         kind: .system,
-        permissions: [.readSessionEvents, .showSessionSurface],
+        // `.readTerminalMetadata` is required so `PluginEventFactory.redactedSession` keeps
+        // `workspaceRoot` (it nils it out otherwise). The plugin only subscribes to session
+        // events — not `hook.received` — so this grants workspaceRoot but no cwd/terminalApp.
+        permissions: [.readSessionEvents, .showSessionSurface, .readTerminalMetadata],
         surfaces: [.sessionContextMenu],
         activationEvents: [
             PluginEventKind.sessionStarted.rawValue,
@@ -92,13 +95,35 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
             )
         )
 
+        var components = [dismiss, copyResume, focusTerminal]
+
+        // Open the workspace root in Finder — only offered when the session has a non-empty one.
+        // Replaces the core "Open in Finder" context item (removed to avoid a duplicate); the host
+        // opens Finder so the plugin never handles the path beyond passing the session id.
+        if let root = session.workspaceRoot, !root.isEmpty {
+            components.append(PluginUIComponentDTO(
+                id: "open-workspace",
+                type: .button,
+                label: "Open in Finder",
+                value: nil,
+                tone: nil,
+                iconName: "folder",
+                action: PluginUIActionDTO(
+                    id: "session.openWorkspace",
+                    capability: "session.openWorkspace",
+                    routing: .hostExecuted,
+                    payload: ["sessionID": session.id]
+                )
+            ))
+        }
+
         return PluginUIContribution(
             pluginID: manifest.id,
             slot: slot,
             targetSessionID: session.id,
             priority: 50,
             expiresAt: nil,
-            components: [dismiss, copyResume, focusTerminal]
+            components: components
         )
     }
 }
