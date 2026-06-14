@@ -3,49 +3,27 @@ import XCTest
 
 @MainActor
 final class OpenPeonPluginTests: XCTestCase {
-    func testHookEventProducesScopedAudioEffect() async throws {
-        let tempRoot = try makePackRoot()
-        let previousSettings = SettingsStore.shared.settings
-        addTeardownBlock {
-            await MainActor.run {
-                SettingsStore.shared.settings = previousSettings
-                CESPPackStore.shared.replacePacksForTesting([])
-            }
-        }
+    private var previousSettings: AppSettings!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        previousSettings = SettingsStore.shared.settings
         SettingsStore.shared.settings.openPeonEnabled = true
-        SettingsStore.shared.settings.openPeonPacksDirectory = tempRoot.path
-        SettingsStore.shared.settings.openPeonActivePackName = "sample"
+        SettingsStore.shared.settings.openPeonGlobalMuted = false
         SettingsStore.shared.settings.openPeonMutedCategories = []
         SettingsStore.shared.settings.openPeonDebounceMilliseconds = 0
-        let packURL = tempRoot.appendingPathComponent("sample", isDirectory: true)
-        let pack = try XCTUnwrap(CESPPackValidator.loadPack(at: packURL))
-        CESPPackStore.shared.replacePacksForTesting([pack])
+        SettingsStore.shared.settings.openPeonActivePackName = "sample"
+    }
 
-        let plugin = OpenPeonPlugin()
-        let effects = try await plugin.onEvent(
-            PluginEvent(
-                id: UUID(),
-                kind: .hookReceived,
-                timestamp: Date(),
-                hook: PluginHookSummary(
-                    provider: "codex",
-                    eventType: "pretooluse",
-                    commandSummary: nil,
-                    cwd: nil,
-                    terminalApp: nil,
-                    rawEvent: "PreToolUse",
-                    toolName: "Bash",
-                    notificationType: nil,
-                    message: nil,
-                    payload: nil
-                )
-            ),
-            context: PluginContext(
-                pluginID: OpenPeonPlugin.pluginID,
-                permissions: [.readHookSummaries, .playScopedAudio],
-                storageSnapshot: [:]
-            )
-        )
+    override func tearDown() async throws {
+        SettingsStore.shared.settings = previousSettings
+        try await super.tearDown()
+    }
+
+    func testHookEventProducesScopedAudioEffect() async throws {
+        let (_, client) = try makeBroker()
+
+        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
 
         XCTAssertEqual(effects.count, 1)
         XCTAssertEqual(effects.first?.capability, "audio.playFile")
@@ -53,15 +31,117 @@ final class OpenPeonPluginTests: XCTestCase {
         XCTAssertEqual(effects.first?.payload["path"], "sample/sounds/input.wav")
     }
 
-    private func makePackRoot() throws -> URL {
+    func testMissingScopedFilesProducesNoEffect() async throws {
+        let context = PluginContext(
+            pluginID: OpenPeonPlugin.pluginID,
+            permissions: [.readHookSummaries, .playScopedAudio],
+            storageSnapshot: [:]
+        )
+
+        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context)
+
+        XCTAssertTrue(effects.isEmpty)
+    }
+
+    func testGlobalMuteProducesNoEffect() async throws {
+        SettingsStore.shared.settings.openPeonGlobalMuted = true
+        let (_, client) = try makeBroker()
+
+        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
+
+        XCTAssertTrue(effects.isEmpty)
+    }
+
+    func testMutedCategoryProducesNoEffect() async throws {
+        SettingsStore.shared.settings.openPeonMutedCategories = ["task.acknowledge"]
+        let (_, client) = try makeBroker()
+
+        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
+
+        XCTAssertTrue(effects.isEmpty)
+    }
+
+    func testInvalidPackProducesNoEffect() async throws {
+        let (_, client) = try makeBroker(cespVersion: "2.0")
+
+        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
+
+        XCTAssertTrue(effects.isEmpty)
+    }
+
+    func testActivePackResolvesWhenNameUnset() async throws {
+        SettingsStore.shared.settings.openPeonActivePackName = nil
+        let (_, client) = try makeBroker()
+
+        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
+
+        XCTAssertEqual(effects.first?.payload["path"], "sample/sounds/input.wav")
+    }
+
+    func testDebounceSuppressesRepeatWithinInterval() async throws {
+        SettingsStore.shared.settings.openPeonDebounceMilliseconds = 1000
+        let (_, client) = try makeBroker()
+        let runtime = OpenPeonRuntime()
+        let base = Date()
+
+        let first = await runtime.resolveEffects(
+            category: .taskAcknowledge, scoped: client, scopeID: OpenPeonPlugin.packScopeID, now: base
+        )
+        let within = await runtime.resolveEffects(
+            category: .taskAcknowledge, scoped: client, scopeID: OpenPeonPlugin.packScopeID,
+            now: base.addingTimeInterval(0.1)
+        )
+        let after = await runtime.resolveEffects(
+            category: .taskAcknowledge, scoped: client, scopeID: OpenPeonPlugin.packScopeID,
+            now: base.addingTimeInterval(2.0)
+        )
+
+        XCTAssertEqual(first.count, 1)
+        XCTAssertTrue(within.isEmpty)
+        XCTAssertEqual(after.count, 1)
+    }
+
+    // MARK: - Helpers
+
+    private func context(_ client: PluginScopedFileClient) -> PluginContext {
+        PluginContext(
+            pluginID: OpenPeonPlugin.pluginID,
+            permissions: [.readHookSummaries, .playScopedAudio, .readScopedFiles],
+            storageSnapshot: [:],
+            scopedFiles: client
+        )
+    }
+
+    private func hookEvent() -> PluginEvent {
+        PluginEvent(
+            id: UUID(),
+            kind: .hookReceived,
+            timestamp: Date(),
+            hook: PluginHookSummary(
+                provider: "codex",
+                eventType: "pretooluse",
+                commandSummary: nil,
+                cwd: nil,
+                terminalApp: nil,
+                rawEvent: "PreToolUse",
+                toolName: "Bash",
+                notificationType: nil,
+                message: nil,
+                payload: nil
+            )
+        )
+    }
+
+    /// Builds a real broker over a temp packs directory containing a single `sample` pack
+    /// (category `task.acknowledge` → `sounds/input.wav`) and a `.readScopedFiles` client.
+    private func makeBroker(cespVersion: String = "1.0") throws -> (PluginScopedFileBroker, PluginScopedFileClient) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("OpenPeonPluginTests-\(UUID().uuidString)", isDirectory: true)
-        let pack = root.appendingPathComponent("sample", isDirectory: true)
-        let sounds = pack.appendingPathComponent("sounds", isDirectory: true)
+        let sounds = root.appendingPathComponent("sample/sounds", isDirectory: true)
         try FileManager.default.createDirectory(at: sounds, withIntermediateDirectories: true)
         let manifest = """
         {
-          "cesp_version": "1.0",
+          "cesp_version": "\(cespVersion)",
           "name": "sample",
           "version": "1.0.0",
           "categories": {
@@ -73,9 +153,17 @@ final class OpenPeonPluginTests: XCTestCase {
           }
         }
         """
-        try Data(manifest.utf8).write(to: pack.appendingPathComponent("openpeon.json"))
+        try Data(manifest.utf8).write(to: root.appendingPathComponent("sample/openpeon.json"))
         try Data("wav".utf8).write(to: sounds.appendingPathComponent("input.wav"))
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
-        return root
+
+        let scope = PluginScopedFileScope(id: OpenPeonPlugin.packScopeID, baseDirectory: root)
+        let broker = PluginScopedFileBroker(scopesByPluginID: [OpenPeonPlugin.pluginID: [scope]])
+        let client = PluginScopedFileClient(
+            pluginID: OpenPeonPlugin.pluginID,
+            permissions: [.readScopedFiles],
+            broker: broker
+        )
+        return (broker, client)
     }
 }
