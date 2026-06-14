@@ -75,3 +75,8 @@ struct CESPPack: Identifiable, Equatable {
         manifest.displayName.flatMap { $0.isEmpty ? nil : $0 } ?? manifest.name
     }
 }
+
+struct CESPScopedAudioRequest: Equatable {
+    let relativePath: String
+    let volume: String
+}

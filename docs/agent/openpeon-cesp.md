@@ -25,7 +25,7 @@ Default pack directory:
 | `CESPPackStore.swift` | Pack directory reload, background scan, active pack selection |
 | `CESPPackValidator.swift` | Manifest/file/path/audio validation |
 | `CESPEventMapper.swift` | Hook event to CESP category mapping |
-| `CESPAudioPlayer.swift` | Sound selection, debounce, mute, volume, playback |
+| `CESPAudioPlayer.swift` | Sound selection, debounce, mute, volume, scoped playback request creation, settings preview playback |
 
 ## Event Mapping
 
@@ -99,6 +99,7 @@ Use `Int64` for file size checks. Stop pack-size enumeration once the limit is e
 - Debounce applies per category.
 - Sound selection avoids immediate repeat when possible.
 - Master volume applies to each player.
+- Runtime hook playback is requested by `OpenPeonPlugin` through generic `audio.playFile` with a plugin-scoped relative path. The host validates only the scope/path/audio constraints before playback; CESP category mapping and file selection stay in the plugin path.
 - Playback failure is logged only and must not affect hook responses.
 - `.ogg` is recognized by validation but currently warned as not playable. MVP playback promises `.wav` and `.mp3` only because `AVAudioPlayer` does not reliably support OGG on stock macOS.
 

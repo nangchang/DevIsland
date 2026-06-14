@@ -70,4 +70,12 @@ final class CESPPackStore: ObservableObject {
             CESPCategory.supportedExtensions.contains(URL(fileURLWithPath: sound.file).pathExtension.lowercased())
         }
     }
+
+    #if DEBUG
+    func replacePacksForTesting(_ packs: [CESPPack]) {
+        reloadID = UUID()
+        self.packs = packs
+        self.lastReloadErrorPath = nil
+    }
+    #endif
 }

@@ -76,6 +76,13 @@ struct PluginScopedFileClient: Sendable {
     }
 }
 
+protocol PluginScopedFileScopeProvider {
+    static var scopedFilePluginID: String { get }
+
+    static func scopedFileScopes(userDefaults: UserDefaults) -> [PluginScopedFileScope]
+    static func scopedFileScopes(settings: AppSettings) -> [PluginScopedFileScope]
+}
+
 enum PluginScopedFileError: Error, Equatable {
     case missingPermission
     case unknownScope

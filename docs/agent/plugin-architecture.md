@@ -1296,7 +1296,7 @@ struct PluginSlotView: View {
 
 | 현재 기능 | 현재 위치 | Built-in plugin 형태 | 우선순위 | 전환 조건 |
 | :--- | :--- | :--- | :--- | :--- |
-| OpenPeon CESP sound playback | `OpenPeon/*`, `AppState.playOpenPeonSound`, `OpenPeonSettingsPane` | `OpenPeonPlugin`이 sanitized events를 관찰해 CESP category와 pack file을 선택하고, host-owned scoped `audio.playFile` effect를 요청 | 높음 | Host는 OpenPeon/CESP 도메인 포맷을 알지 않고 scoped file/audio broker만 제공한다. 플러그인은 pack manifest 해석, event mapping, sound selection을 소유하되 pack scope 밖 파일은 읽거나 재생할 수 없다. |
+| OpenPeon CESP sound playback | `OpenPeon/*`, `OpenPeonSettingsPane`, built-in `OpenPeonPlugin` | `OpenPeonPlugin`이 sanitized events를 관찰해 CESP category와 pack file을 선택하고, host-owned scoped `audio.playFile` effect를 요청 | 높음 | Host는 OpenPeon/CESP 도메인 포맷을 알지 않고 scoped file/audio broker만 제공한다. 플러그인은 pack manifest 해석, event mapping, sound selection을 소유하되 pack scope 밖 파일은 읽거나 재생할 수 없다. |
 | Caffeine sleep prevention | `Caffeine/*`, `AppState.setupCaffeine`, `CaffeineSettingsPane`, `menubar.menu` contribution | `CaffeinePlugin`이 host-provided power/SSID/settings status와 assertion result를 관찰하고 host-owned `power.preventIdleSleep` effect를 요청 | 중간 | `IOPMAssertion`, 전원/SSID 모니터링, 위치 권한 요청, Wi-Fi 스캔, SSID 설정 UI와 settings persistence는 host service에 남긴다. 플러그인은 sleep assertion을 직접 만들거나 Location/CoreWLAN API를 직접 호출하지 않는다. |
 | 세션 경과 시간/현재 상태 표시 | 신규 `SessionTimerPlugin` | `notch.expanded.activity` metric contribution | 높음 | core 상태를 바꾸지 않고 `readSessionEvents`만 사용한다. |
 | provider/session 통계 | 신규 `ProviderStatsPlugin` 또는 `SessionStatsPlugin` | `notch.expanded.activity`, `menubar.menu` 요약 metric | 중간 | `readHookSummaries`, `readSessionEvents`, v1.1 `approval.decided`만 사용한다. replay DB를 직접 조회하지 않는다. |
