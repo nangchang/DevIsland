@@ -365,14 +365,15 @@ final class PluginHost: ObservableObject {
     func tickIfNeeded() async {
         guard isEnabled else { return }
         let state = PluginSurfaceState(visibleSurfaces: visibleSurfaces)
-        var anyNeedsTick = false
+        var tickingRunners: [PluginRunner] = []
         for runner in runners.values where isActive(runner.manifest.id) {
             if await runner.needsTick(surfaceState: state) {
-                anyNeedsTick = true
-                break
+                tickingRunners.append(runner)
             }
         }
-        guard anyNeedsTick else { return }
+        guard !tickingRunners.isEmpty else { return }
+
+        // Global session-less tick refreshes global slots for every ticking plugin.
         enqueue(PluginEvent(
             id: UUID(),
             kind: .pluginTick,
@@ -383,6 +384,21 @@ final class PluginHost: ObservableObject {
             approval: nil,
             powerStatus: nil
         ))
+
+        // `shouldEvaluate` skips session-scoped slots on the session-less tick, so for ticking
+        // plugins that declare one, fan out a session-bearing tick per active session
+        // (restricted to that plugin) — same mechanism as `pluginSettingChanged` — so their
+        // per-session badges advance each second instead of only on session events.
+        let sessionScopedRunners = tickingRunners.filter {
+            $0.manifest.surfaces.contains { Self.isSessionScoped($0) }
+        }
+        guard !sessionScopedRunners.isEmpty else { return }
+        for snapshot in activeSessionsProvider?() ?? [] {
+            for runner in sessionScopedRunners {
+                enqueue(eventFactory.makeSessionEvent(kind: .pluginTick, from: snapshot),
+                        restrictedTo: runner.manifest.id)
+            }
+        }
     }
 
     private func shouldDispatch(_ event: PluginEvent, to runner: PluginRunner) -> Bool {

@@ -433,6 +433,45 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertFalse(plugin.receivedKinds.contains(.pluginTick))
     }
 
+    func testTickFansOutToSessionScopedSlotsForActiveSessions() async {
+        let plugin = SessionRowTickPlugin(id: "com.devisland.test.rowtick")
+        let host = PluginHost()
+        host.register([plugin])
+        host.setVisibleSurfaces([.notchSessionRow])
+        let snapshot = PluginSessionSnapshot(
+            id: "s1", agentKind: "codex", startTime: Date(), lastActiveAt: Date(),
+            lastToolName: nil, lastEventName: nil, workspaceRoot: nil)
+        host.activeSessionsProvider = { [snapshot] }
+
+        host.enqueue(PluginEvent(id: UUID(), kind: .sessionStarted, timestamp: Date(), session: snapshot))
+        await host.waitUntilIdle()
+        let before = host.contributions[.notchSessionRow]?.first?.components.first?.value
+        XCTAssertNotNil(before, "an active session contributes a row badge")
+
+        await host.tickIfNeeded()
+        await host.waitUntilIdle()
+        let after = host.contributions[.notchSessionRow]?.first?.components.first?.value
+
+        XCTAssertNotEqual(before, after,
+                          "a session-bearing tick must re-evaluate the session-scoped row slot")
+    }
+
+    func testTickDoesNotFanOutToGlobalOnlyPlugin() async {
+        let plugin = VisibilityTickingPlugin(id: "com.devisland.test.tick-global")
+        let host = PluginHost()
+        host.register([plugin])
+        host.setVisibleSurfaces([.notchExpandedActivity])
+        host.activeSessionsProvider = {
+            [PluginSessionSnapshot(id: "s1", agentKind: "codex", startTime: Date(), lastActiveAt: Date(),
+                lastToolName: nil, lastEventName: nil, workspaceRoot: nil)]
+        }
+
+        await host.tickIfNeeded()
+        await host.waitUntilIdle()
+        XCTAssertEqual(plugin.receivedKinds.filter { $0 == .pluginTick }.count, 1,
+                       "a plugin with no session-scoped surface gets only the session-less tick")
+    }
+
     func testSafemodeTriggeredAfterThreeErrorsWithinSixtySeconds() async {
         let plugin = RecordingPlugin(
             id: "com.devisland.test.safemode.errors",
@@ -949,6 +988,54 @@ private final class VisibilityTickingPlugin: DevIslandPlugin, @unchecked Sendabl
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
         surfaceState.visibleSurfaces.contains(tickSurface)
+    }
+}
+
+/// Contributes a session-scoped row badge whose value changes on every evaluation, so a test
+/// can detect whether a session-bearing tick re-evaluated the slot. Tracks sessions from
+/// `session.started` and ticks while the row surface is visible.
+private final class SessionRowTickPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let lock = NSLock()
+    private var trackedSessionIDs: Set<String> = []
+    private var rowEvalCount = 0
+
+    init(id: String) {
+        manifest = PluginManifest(
+            id: id, name: id, version: "1.0.0", apiVersion: 1, kind: .system,
+            permissions: [.readSessionEvents, .showSessionSurface],
+            surfaces: [.notchSessionRow],
+            activationEvents: [
+                PluginEventKind.sessionStarted.rawValue,
+                PluginEventKind.pluginTick.rawValue
+            ]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+        if event.kind == .sessionStarted, let session = event.session {
+            lock.lock(); trackedSessionIDs.insert(session.id); lock.unlock()
+        }
+        return []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        guard slot == .notchSessionRow, let session = context.session else { return nil }
+        lock.lock()
+        guard trackedSessionIDs.contains(session.id) else { lock.unlock(); return nil }
+        rowEvalCount += 1
+        let count = rowEvalCount
+        lock.unlock()
+        return PluginUIContribution(
+            pluginID: manifest.id, slot: slot, targetSessionID: session.id,
+            priority: 10, expiresAt: nil,
+            components: [PluginUIComponentDTO(id: "c", type: .text, label: nil,
+                value: "\(count)", tone: nil, iconName: nil, action: nil)]
+        )
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        surfaceState.visibleSurfaces.contains(.notchSessionRow)
     }
 }
 
