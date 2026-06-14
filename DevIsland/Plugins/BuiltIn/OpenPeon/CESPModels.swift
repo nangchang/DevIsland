@@ -76,7 +76,11 @@ struct CESPPack: Identifiable, Equatable {
     }
 }
 
-struct CESPScopedAudioRequest: Equatable {
-    let relativePath: String
-    let volume: String
+/// File facts collected for one pack before rule evaluation. Built from a `FileManager`
+/// scan (host Settings) or a scoped-broker scan (plugin runtime) so `CESPPackValidator`
+/// applies identical rules regardless of how files were read.
+struct CESPPackFileIndex: Equatable {
+    /// Regular-file byte counts keyed by pack-root-relative path (forward slashes).
+    let fileSizesByRelativePath: [String: Int64]
+    let totalByteCount: Int64
 }

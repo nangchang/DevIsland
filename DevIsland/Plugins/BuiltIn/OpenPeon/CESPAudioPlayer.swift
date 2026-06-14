@@ -49,40 +49,6 @@ final class CESPAudioPlayer: NSObject, @preconcurrency AVAudioPlayerDelegate {
         }
     }
 
-    func scopedAudioRequest(
-        category: CESPCategory,
-        settings: AppSettings,
-        scopeRootPath: String,
-        now: Date = Date()
-    ) -> CESPScopedAudioRequest? {
-        let pack = CESPPackStore.shared.activePack(settings: settings)
-        guard shouldPlay(category: category, pack: pack, settings: settings, now: now),
-              let pack,
-              let categoryManifest = pack.manifest.categories[category.rawValue],
-              let sound = selectSound(for: category, sounds: categoryManifest.sounds) else {
-            return nil
-        }
-
-        let url = pack.rootURL.appendingPathComponent(sound.file).standardizedFileURL
-        guard CESPCategory.supportedExtensions.contains(url.pathExtension.lowercased()) else { return nil }
-
-        let scopeRoot = URL(
-            fileURLWithPath: NSString(string: scopeRootPath).expandingTildeInPath,
-            isDirectory: true
-        ).standardizedFileURL
-        let rootPath = scopeRoot.path
-        let path = url.path
-        guard path.hasPrefix(rootPath + "/") else { return nil }
-
-        lastPlayedAt[category] = now
-        lastSoundPathByCategory[category] = sound.file
-
-        return CESPScopedAudioRequest(
-            relativePath: String(path.dropFirst(rootPath.count + 1)),
-            volume: String(settings.openPeonMasterVolume)
-        )
-    }
-
     func shouldPlay(category: CESPCategory, pack: CESPPack?, settings: AppSettings, now: Date = Date()) -> Bool {
         guard settings.openPeonEnabled,
               !settings.openPeonGlobalMuted,

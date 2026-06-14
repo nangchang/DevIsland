@@ -10,22 +10,25 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
         version: "1.0.0",
         apiVersion: 1,
         kind: .system,
-        permissions: [.playScopedAudio, .readHookSummaries],
+        permissions: [.playScopedAudio, .readHookSummaries, .readScopedFiles],
         surfaces: [],
         activationEvents: ["hook.received"],
         localizedName: PluginLocalizedString(english: "OpenPeon", korean: "OpenPeon")
     )
 
+    private let runtime = OpenPeonRuntime()
+
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
-        guard event.kind == .hookReceived, let hook = event.hook else {
+        guard event.kind == .hookReceived,
+              let hook = event.hook,
+              let scoped = context.scopedFiles else {
             return []
         }
 
         let agentKind = BuddyKind(from: hook.provider)
-
         let payloadDict = hook.payload?.mapValues { $0.rawValue }
 
-        if let category = CESPEventMapper.category(
+        guard let category = CESPEventMapper.category(
             event: hook.rawEvent ?? "",
             normalizedEvent: hook.eventType,
             agentKind: agentKind,
@@ -33,28 +36,15 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
             notificationType: hook.notificationType ?? "",
             message: hook.message ?? "",
             payload: payloadDict
-        ) {
-            let settings = await MainActor.run { SettingsStore.shared.settings }
-            guard let request = await CESPAudioPlayer.shared.scopedAudioRequest(
-                category: category,
-                settings: settings,
-                scopeRootPath: settings.openPeonPacksDirectory
-            ) else {
-                return []
-            }
-            return [
-                PluginEffect(
-                    capability: "audio.playFile",
-                    payload: [
-                        "scope": Self.packScopeID,
-                        "path": request.relativePath,
-                        "volume": request.volume
-                    ]
-                )
-            ]
+        ) else {
+            return []
         }
 
-        return []
+        return await runtime.resolveEffects(
+            category: category,
+            scoped: scoped,
+            scopeID: Self.packScopeID
+        )
     }
 
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
