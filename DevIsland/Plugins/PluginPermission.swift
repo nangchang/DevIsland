@@ -8,8 +8,9 @@ enum PluginPermission: String, Codable, CaseIterable, Hashable {
     case showMenubarMenu
     case showSessionSurface
     case writePluginStorage
+    case readScopedFiles
+    case playScopedAudio
     case showNotification
     case playSound
     case controlPowerSleep
 }
-

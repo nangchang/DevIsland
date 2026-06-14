@@ -275,6 +275,65 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(delivered.value, ["Focus session complete"])
     }
 
+    func testEffectExecutorPlaysScopedAudioFileWithPermission() async throws {
+        let root = makeTempStorageDirectory()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("sound".utf8).write(to: root.appendingPathComponent("done.wav"))
+        let broker = PluginScopedFileBroker(scopesByPluginID: [
+            "openpeon": [
+                PluginScopedFileScope(id: "packs", baseDirectory: root)
+            ]
+        ])
+        let delivered = LockIsolated<[(String, Float)]>([])
+        let executor = PluginEffectExecutor(
+            storageProvider: PluginStorageProvider(),
+            scopedFileBroker: broker,
+            audioPlayHandler: { url, volume in
+                delivered.withValue { $0.append((url.lastPathComponent, volume)) }
+            }
+        )
+        let effect = PluginEffect(
+            capability: "audio.playFile",
+            payload: ["scope": "packs", "path": "done.wav", "volume": "0.5"]
+        )
+
+        await executor.enqueue(
+            [effect],
+            pluginID: "openpeon",
+            permissions: Set<PluginPermission>([.playScopedAudio])
+        )
+
+        XCTAssertEqual(delivered.value.map(\.0), ["done.wav"])
+        XCTAssertEqual(delivered.value.first?.1, 0.5)
+    }
+
+    func testEffectExecutorRejectsScopedAudioWithoutPermission() async throws {
+        let root = makeTempStorageDirectory()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("sound".utf8).write(to: root.appendingPathComponent("done.wav"))
+        let broker = PluginScopedFileBroker(scopesByPluginID: [
+            "openpeon": [
+                PluginScopedFileScope(id: "packs", baseDirectory: root)
+            ]
+        ])
+        let delivered = LockIsolated<[String]>([])
+        let executor = PluginEffectExecutor(
+            storageProvider: PluginStorageProvider(),
+            scopedFileBroker: broker,
+            audioPlayHandler: { url, _ in
+                delivered.withValue { $0.append(url.lastPathComponent) }
+            }
+        )
+
+        await executor.enqueue(
+            [PluginEffect(capability: "audio.playFile", payload: ["scope": "packs", "path": "done.wav"])],
+            pluginID: "openpeon",
+            permissions: Set<PluginPermission>([.playSound])
+        )
+
+        XCTAssertTrue(delivered.value.isEmpty)
+    }
+
     func testEffectExecutorAllowsStorageEffectWithPermission() async {
         let storage = PluginStorageProvider(baseDirectory: makeTempStorageDirectory())
         let executor = PluginEffectExecutor(storageProvider: storage)

@@ -19,6 +19,12 @@ final class HostEffectCatalogTests: XCTestCase {
         XCTAssertFalse(HostEffectCatalog.isSupported("sound.play", pluginID: "openpeon", permissions: []))
     }
 
+    func testScopedAudioRequiresPlayScopedAudio() {
+        XCTAssertTrue(HostEffectCatalog.isSupported("audio.playFile", pluginID: "openpeon", permissions: [.playScopedAudio]))
+        XCTAssertFalse(HostEffectCatalog.isSupported("audio.playFile", pluginID: "openpeon", permissions: [.playSound]))
+        XCTAssertFalse(HostEffectCatalog.isSupported("audio.playFile", pluginID: "openpeon", permissions: []))
+    }
+
     func testPowerEffectsRequirePermissionAndCaffeineAllowlist() {
         // caffeine with permission: allowed
         XCTAssertTrue(HostEffectCatalog.isSupported("power.preventIdleSleep", pluginID: "caffeine", permissions: [.controlPowerSleep]))
@@ -41,6 +47,7 @@ final class HostEffectCatalogTests: XCTestCase {
         XCTAssertEqual(HostEffectCatalog.descriptor(for: "power.preventIdleSleep")?.builtInOnlyPluginIDs, ["caffeine"])
         XCTAssertEqual(HostEffectCatalog.descriptor(for: "power.toggle")?.builtInOnlyPluginIDs, ["caffeine"])
         XCTAssertNil(HostEffectCatalog.descriptor(for: "notification.show")?.builtInOnlyPluginIDs)
+        XCTAssertNil(HostEffectCatalog.descriptor(for: "audio.playFile")?.builtInOnlyPluginIDs)
         XCTAssertNil(HostEffectCatalog.descriptor(for: "bogus"))
     }
 }
