@@ -153,4 +153,24 @@ final class CaffeineCoordinatorTests: XCTestCase {
         XCTAssertEqual(next1, next2)
         XCTAssertEqual(reason1, reason2)
     }
+
+    func testApplyPreventIdleSleepEmitsAssertionResultStatus() {
+        let c = makeCoordinator()
+        c.caffeineEnabled = true
+        c.isOnACPower = false
+        c.batteryLevel = 0.6
+        c.currentSSID = "Home"
+
+        let emitted = expectation(description: "assertion result emitted")
+        c.onStatusChanged = { status in
+            guard status.isAssertionResult else { return }
+            XCTAssertEqual(status.isHoldingAssertion, false)
+            XCTAssertEqual(status.assertionReason, "onBattery")
+            XCTAssertNil(status.assertionFailureCode)
+            emitted.fulfill()
+        }
+
+        c.applyPreventIdleSleep(prevent: false, reasonString: "onBattery")
+        wait(for: [emitted], timeout: 1.0)
+    }
 }

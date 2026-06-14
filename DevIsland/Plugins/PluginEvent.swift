@@ -91,4 +91,30 @@ struct PluginPowerStatus: Codable, Equatable {
     let isOnACPower: Bool
     let batteryLevel: Double?
     let currentSSID: String?
+    let isHoldingAssertion: Bool?
+    let assertionReason: String?
+    let assertionFailureCode: Int32?
+    let isAssertionResult: Bool
+
+    init(
+        caffeineEnabled: Bool,
+        excludedSSIDs: [String],
+        isOnACPower: Bool,
+        batteryLevel: Double?,
+        currentSSID: String?,
+        isHoldingAssertion: Bool? = nil,
+        assertionReason: String? = nil,
+        assertionFailureCode: Int32? = nil,
+        isAssertionResult: Bool = false
+    ) {
+        self.caffeineEnabled = caffeineEnabled
+        self.excludedSSIDs = excludedSSIDs
+        self.isOnACPower = isOnACPower
+        self.batteryLevel = batteryLevel
+        self.currentSSID = currentSSID
+        self.isHoldingAssertion = isHoldingAssertion
+        self.assertionReason = assertionReason
+        self.assertionFailureCode = assertionFailureCode
+        self.isAssertionResult = isAssertionResult
+    }
 }

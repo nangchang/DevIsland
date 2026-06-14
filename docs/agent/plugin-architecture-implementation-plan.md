@@ -575,9 +575,9 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - built-in `CaffeinePlugin` 추가
 - `power.preventIdleSleep` 같은 built-in-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 "built-in allowlist only" 행 추가)
 - `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence는 host service로 유지
-- host가 power/SSID/settings 상태를 sanitized caffeine status DTO로 제공
+- host가 power/SSID/settings 상태와 실제 assertion 적용 결과를 sanitized caffeine status DTO로 제공
 - plugin은 host-provided status만 관찰해 assertion 보유/해제 의도를 `power.preventIdleSleep` effect로 반환
-- `CaffeineMenuItem`의 상태 표시는 가능하면 `menubar.menu` contribution으로 단계적으로 대체하되, 자유 입력이 필요한 `CaffeineSettingsPane`은 custom plugin settings schema가 생기기 전까지 유지
+- Caffeine 상태 표시는 `menubar.menu` contribution이 소유한다. 자유 입력이 필요한 `CaffeineSettingsPane`은 custom plugin settings schema가 생기기 전까지 host-owned 설정 UI로 유지
 
 주의:
 

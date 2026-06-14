@@ -58,15 +58,19 @@ final class CaffeineCoordinator: ObservableObject {
 
     func applyPreventIdleSleep(prevent: Bool, reasonString: String) {
         let parsedReason: CaffeineReason
+        let failureCode: Int32?
         if prevent {
             switch assertion.acquire() {
             case .acquired, .alreadyHeld:
                 parsedReason = .onAC
+                failureCode = nil
             case .failed(let status):
                 parsedReason = .failure(status)
+                failureCode = status
             }
         } else {
             assertion.release()
+            failureCode = nil
             if reasonString == "off" {
                 parsedReason = .off
             } else if reasonString == "lowBattery" {
@@ -91,6 +95,17 @@ final class CaffeineCoordinator: ObservableObject {
             guard let self = self else { return }
             if self.isHoldingAssertion != shouldHold { self.isHoldingAssertion = shouldHold }
             if self.reason != parsedReason { self.reason = parsedReason }
+            self.onStatusChanged?(PluginPowerStatus(
+                caffeineEnabled: self.caffeineEnabled,
+                excludedSSIDs: self.excludedSSIDs,
+                isOnACPower: self.isOnACPower,
+                batteryLevel: self.batteryLevel,
+                currentSSID: self.currentSSID,
+                isHoldingAssertion: shouldHold,
+                assertionReason: reasonString,
+                assertionFailureCode: failureCode,
+                isAssertionResult: true
+            ))
         }
     }
 
