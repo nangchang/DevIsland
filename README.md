@@ -2,8 +2,6 @@
 
 **DevIsland**는 macOS 노치 영역에 Claude Code, Codex CLI, Gemini CLI의 활동과 승인 요청을 실시간으로 띄워 주는 오픈소스 메뉴바 앱입니다. CLI 훅 이벤트를 받아 세션 상태를 추적하고, 필요한 승인/거부 결정을 Dynamic Island 스타일 패널에서 빠르게 처리할 수 있게 합니다.
 
-![DevIsland Showcase](https://raw.githubusercontent.com/nangchang/DevIsland/main/Assets/showcase.png)
-
 ## 주요 기능
 
 - **노치 오버레이 UI**: 평상시에는 노치 뒤에 숨어 있다가 에이전트 활동이나 승인 요청이 들어오면 확장됩니다.

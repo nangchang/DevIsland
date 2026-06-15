@@ -695,8 +695,26 @@ private struct BridgeIPCSettingsPane: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject private var l10n = L10n.shared
 
+    private var isGraceMode: Bool { BridgeTokenManager.shared.isGraceMode }
+
     var body: some View {
         Form {
+            if isGraceMode {
+                Section(l10n.secTokenSecurity) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.shield")
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(l10n.warnGraceMode)
+                                .foregroundStyle(.primary)
+                            Text(l10n.hintGraceModeResolve)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
             Section(l10n.secTransport) {
                 Picker(l10n.lblTransport, selection: store.binding(\.bridgeTransportKind)) {
                     ForEach(BridgeTransportKind.allCases) { transport in

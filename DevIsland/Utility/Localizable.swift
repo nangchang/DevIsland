@@ -366,6 +366,11 @@ extension L10n {
     var lblConnectTimeout:   String { s("Connect timeout",               "연결 타임아웃") }
     var lblResponseTimeout:  String { s("Response timeout",              "응답 타임아웃") }
     func labelSeconds(_ n: Int) -> String { s("\(n) seconds", "\(n)초") }
+    var secTokenSecurity:    String { s("Token security",                "토큰 보안") }
+    var warnGraceMode:       String { s("IPC token file not found — running in grace mode. All incoming connections are accepted without authentication.",
+                                        "IPC 토큰 파일이 없어 grace mode로 실행 중입니다. 모든 수신 연결이 인증 없이 허용됩니다.") }
+    var hintGraceModeResolve: String { s("Re-install the bridge to generate a token file.",
+                                         "브리지를 재설치하면 토큰 파일이 생성됩니다.") }
 
     // Sound tab
     var secOpenPeonSoundPacks:       String { s("Sound packs",                   "사운드팩") }

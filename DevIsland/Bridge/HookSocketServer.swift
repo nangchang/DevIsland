@@ -27,6 +27,10 @@ class HookSocketServer {
     var onMessageReceived: ((String, String?, @escaping (String) -> Void) -> Void)?
     var onServerFailed: ((Error) -> Void)?
 
+    /// Returns true when raw JSON on TCP should be rejected (token file present).
+    /// Overridable in tests to avoid dependency on BridgeTokenManager.shared.
+    var rejectsRawJSONOnTCP: () -> Bool = { !BridgeTokenManager.shared.isGraceMode }
+
     deinit {
         stopUnixListener()
     }
@@ -43,12 +47,14 @@ class HookSocketServer {
     private func startTCP(port: NWEndpoint.Port) {
         do {
             let parameters = NWParameters.tcp
-            listener = try NWListener(using: parameters, on: port)
+            // Restrict to loopback to prevent LAN-side connections.
+            parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: port)
+            listener = try NWListener(using: parameters)
 
             listener?.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    print("Server listening on port \(port)")
+                    print("Server listening on 127.0.0.1:\(port)")
                 case .failed(let error):
                     print("Server failed: \(error)")
                     DispatchQueue.main.async { self.onServerFailed?(error) }
@@ -300,7 +306,13 @@ class HookSocketServer {
                 return
             }
             if data[0] == 0x7B {
-                // Raw JSON: accumulate the rest until EOF.
+                // Raw JSON on TCP: reject when a token file is present (envelope required).
+                // Legacy raw-JSON clients should connect via the Unix socket instead.
+                if self.rejectsRawJSONOnTCP() {
+                    print("[HookSocketServer] Rejected raw JSON on TCP: token file present")
+                    self.closeConnection(id: id, connection: connection)
+                    return
+                }
                 self.receiveRawJSON(on: connection, id: id, accumulated: data)
             } else {
                 // Length-prefixed framing: we already have the first byte of the 4-byte header.
@@ -323,7 +335,6 @@ class HookSocketServer {
             }
 
             if isComplete, let message = String(data: payload, encoding: .utf8) {
-                print("Received raw JSON: \(message)")
                 DispatchQueue.main.async {
                     self?.onMessageReceived?(message, nil) { response in
                         // Raw request → raw response, no framing.
@@ -391,7 +402,6 @@ class HookSocketServer {
             closeConnection(id: id, connection: connection)
             return
         }
-        print("Received framed message: \(message)")
 
         // Extract requestId for rich response construction.
         let requestId = extractRequestId(from: data)

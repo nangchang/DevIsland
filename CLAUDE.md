@@ -33,9 +33,9 @@ bash scripts/install-bridge.sh
 bash scripts/install-launch-agent.sh
 ```
 
-`install-bridge.sh` hard-codes `/Volumes/data/Github/DevIsland/scripts` as the source path — update this if working from a different clone location.
+`install-bridge.sh` auto-detects its location via `SCRIPT_DIR` and falls back to the app bundle's `Resources/` directory, so it works from any clone location without modification.
 
-Bridge logs are written to `/tmp/DevIsland.bridge.log`. The app logs to `/tmp/DevIsland.log` and `/tmp/DevIsland.error.log` when running as a LaunchAgent.
+Bridge logs are written to `~/Library/Logs/DevIsland/bridge.log`. The app logs to `/tmp/DevIsland.log` and `/tmp/DevIsland.error.log` when running as a LaunchAgent.
 
 ```bash
 # 브리지 로그 실시간 확인
