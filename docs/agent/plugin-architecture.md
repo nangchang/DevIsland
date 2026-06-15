@@ -107,7 +107,7 @@ plugin enable/disable, safemode 전환, visible surface 변경은 tick loop를 �
 | `session.updated` | notification, auto-approval, policy approval, manual request enqueue 등으로 `ActiveSession`이 갱신된 뒤 | `PendingRequest.responseHandler`나 approval decision에는 접근하지 않는다. |
 | `session.ended` | `handleStopEvent`, `dismissSession`, inactive pruning, Codex superseded session removal 직후 | 해당 session의 `session.*` contribution을 즉시 evict한다. |
 | `notification.shown` | `handleNotificationEvent`에서 실제 노치 확장 또는 unread 표시가 발생한 뒤 | 모든 notification hook이 아니라 사용자에게 표시된 상태 변화만 대상으로 한다. |
-| `approval.decided` | `sendDecision`에서 provider response 전송과 replay decision 기록 enqueue 이후 | 관찰 전용이며 approval 결과를 바꾸지 못한다. SQLite 기록 완료를 기다리지 않는다. 현재 manual approve/deny 결정만 통계용으로 발행하고, pass-through/timeout/dismiss/terminal-focus/AskUserQuestion 구조화 응답은 제외한다. |
+| `approval.decided` | `sendDecision`에서 provider response 전송과 replay decision 기록 enqueue 이후 | 관찰 전용이며 approval 결과를 바꾸지 못한다. SQLite 기록 완료를 기다리지 않는다. 현재 manual approve/deny 결정만 통계용으로 발행하고, pass-through/timeout/dismiss/terminal-focus/`AskUserQuestion` 구조화 응답은 제외한다. |
 
 `respondWithReplay`는 notification에도 decision log를 남기므로, `approval.decided`를 단순히 모든 `respondWithReplay` 호출에 붙이면 noise가 커진다. 현재 구현은 `sendDecision`이 다루는 사용자 승인/거부 결정에만 붙이고, 정책/자동 승인 집계는 열어 두지 않는다.
 

@@ -61,7 +61,7 @@ DevIsland 내부에 **자동 슬립 방지(Caffeine) 기능**을 추가한다.
                             └──────────────────────┘
 ```
 
-### 상태 결정 규칙 (현재는 CaffeinePlugin)
+### 상태 결정 규칙 (현재는 `CaffeinePlugin`)
 입력:
 - `caffeineEnabled: Bool` (마스터 스위치)
 - `currentSSID: String?`

@@ -53,7 +53,7 @@
   - PR 9. PluginStorageProvider (plugin별 durable SQLite storage) — 완료 (`feat: implement durable SQLite plugin storage`)
   - PR 10. PluginSettingsView (플러그인 목록·enable/disable·safemode 상태·storage reset) — 완료
   - PR 11. Safemode hardening (실패 임계값 자동 진입 트리거 + timeout 처리 + reset 후 1회 재시도) — 완료
-  - Migration M1. OpenPeonPlugin — 완료 (`feat: Migrate OpenPeon to plugin-based architecture`)
+  - Migration M1. `OpenPeonPlugin` — 완료 (`feat: Migrate OpenPeon to plugin-based architecture`)
   - Migration M2. CaffeinePlugin — 완료 (`feat: migrate Caffeine to plugin-based architecture`)
   - Migration M3. SessionStatsPlugin — 완료 (단일 `system` 플러그인이 session/hook 관찰 통계를 모두 담당. 별도 ProviderStatsPlugin은 두지 않음)
   - v1.1 a. `approval.decided` 관찰 이벤트 — 완료. `AppState.sendDecision`이 provider response 전송 직후(`recordReplayDecision` 이후) sanitized `PluginApprovalSummary`만 best-effort 발행(`pass-through`/timeout/dismiss/terminal-focus 제외, AskUserQuestion 구조화 응답(`toolInput`)도 제외). 발행은 main actor로 비동기 디스패치(관찰 전용이라 결과 경로 비차단). `SessionStatsPlugin`이 `readHookSummaries` 권한으로 수신해 manual approve/deny 누계를 `menubar.menu`에 추가. 정책/자동승인 결정은 v1에서 집계 대상 아님(문서 §6 emission 표가 `sendDecision`만 지정).
@@ -530,7 +530,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - 기존 설정 기본값이 바뀌지 않는지 확인
 - `SettingsStore`의 Caffeine 사용자 기본값이 계속 off이며, plugin disabled/safemode 상태에서 sleep assertion이 release되는지 확인
 
-#### Migration PR M1. OpenPeonPlugin
+#### Migration PR M1. `OpenPeonPlugin`
 
 > 상태: 완료 (v1.3 c). CESP 도메인 로직이 `OpenPeonPlugin`/`CESPScopedPackResolver`/`OpenPeonRuntime`으로 이동했고 pack scan/validation은 scoped broker 경유. 아래는 원 설계 스펙으로 보존한다.
 
