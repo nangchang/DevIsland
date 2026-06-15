@@ -77,6 +77,90 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(full.receivedEvents.first?.hook?.cwd, "/Users/alice/project")
     }
 
+    func testPowerStatusDispatchRequiresSystemKindWithPermission() async {
+        let utility = RecordingPlugin(
+            id: "com.devisland.test.utility-power",
+            permissions: [.controlPowerSleep],
+            activationEvents: [.powerStatusChanged]
+        )
+        let system = RecordingPlugin(
+            id: "com.devisland.test.system-power",
+            kind: .system,
+            permissions: [.controlPowerSleep],
+            activationEvents: [.powerStatusChanged]
+        )
+        let host = PluginHost()
+        host.register([utility, system])
+
+        host.enqueue(makePowerStatusEvent())
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(utility.receivedEvents.isEmpty)
+        XCTAssertEqual(system.receivedEvents.first?.powerStatus?.effectReason, "ac-power")
+    }
+
+    func testPowerReleaseOnDisableRequiresSystemKindWithPermission() async {
+        let releases = LockIsolated<[String]>([])
+        let utility = RecordingPlugin(
+            id: "com.devisland.test.utility-power",
+            permissions: [.controlPowerSleep],
+            activationEvents: [.pluginStarted]
+        )
+        let system = RecordingPlugin(
+            id: "com.devisland.test.system-power",
+            kind: .system,
+            permissions: [.controlPowerSleep],
+            activationEvents: [.pluginStarted]
+        )
+        let host = PluginHost(powerSleepHandler: { preventSleep, reason in
+            releases.withValue { $0.append("\(preventSleep):\(reason)") }
+        })
+        host.register([utility, system])
+
+        host.setPluginEnabled(false, pluginID: utility.manifest.id)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertTrue(releases.value.isEmpty)
+
+        host.setPluginEnabled(false, pluginID: system.manifest.id)
+        let deadline = Date().addingTimeInterval(1)
+        while releases.value.isEmpty && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(releases.value, ["false:off"])
+    }
+
+    func testPowerReleaseOnSafemodeRequiresSystemKindWithPermission() async {
+        let releases = LockIsolated<[String]>([])
+        let utility = RecordingPlugin(
+            id: "com.devisland.test.utility-power",
+            permissions: [.controlPowerSleep],
+            activationEvents: [.pluginStarted]
+        )
+        let system = RecordingPlugin(
+            id: "com.devisland.test.system-power",
+            kind: .system,
+            permissions: [.controlPowerSleep],
+            activationEvents: [.pluginStarted]
+        )
+        let host = PluginHost(powerSleepHandler: { preventSleep, reason in
+            releases.withValue { $0.append("\(preventSleep):\(reason)") }
+        })
+        host.register([utility, system])
+
+        host.enterSafemode(pluginID: utility.manifest.id)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertTrue(releases.value.isEmpty)
+
+        host.enterSafemode(pluginID: system.manifest.id)
+        let deadline = Date().addingTimeInterval(1)
+        while releases.value.isEmpty && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(releases.value, ["false:off"])
+    }
+
     func testActionEventDispatchesOnlyToTargetPlugin() async {
         let target = RecordingPlugin(
             id: "com.devisland.test.target",
@@ -207,6 +291,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.storage",
+            kind: .utility,
             permissions: []
         )
 
@@ -222,6 +307,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.power",
+            kind: .utility,
             permissions: [.showNotification]
         )
 
@@ -246,6 +332,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.notification",
+            kind: .utility,
             permissions: [.showNotification]
         )
 
@@ -269,10 +356,106 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.notification",
+            kind: .utility,
             permissions: [.showNotification]
         )
 
         XCTAssertEqual(delivered.value, ["Focus session complete"])
+    }
+
+    func testEffectExecutorPlaysScopedAudioFileWithPermission() async throws {
+        let root = makeTempStorageDirectory()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("sound".utf8).write(to: root.appendingPathComponent("done.wav"))
+        let broker = PluginScopedFileBroker(scopesByPluginID: [
+            "openpeon": [
+                PluginScopedFileScope(id: "packs", baseDirectory: root)
+            ]
+        ])
+        let delivered = LockIsolated<[(String, Float)]>([])
+        let executor = PluginEffectExecutor(
+            storageProvider: PluginStorageProvider(),
+            scopedFileBroker: broker,
+            audioPlayHandler: { url, volume in
+                delivered.withValue { $0.append((url.lastPathComponent, volume)) }
+            }
+        )
+        let effect = PluginEffect(
+            capability: "audio.playFile",
+            payload: ["scope": "packs", "path": "done.wav", "volume": "0.5"]
+        )
+
+        await executor.enqueue(
+            [effect],
+            pluginID: "openpeon",
+            kind: .utility,
+            permissions: Set<PluginPermission>([.playScopedAudio])
+        )
+
+        XCTAssertEqual(delivered.value.map(\.0), ["done.wav"])
+        XCTAssertEqual(delivered.value.first?.1, 0.5)
+    }
+
+    func testEffectExecutorRejectsScopedAudioWithoutPermission() async throws {
+        let root = makeTempStorageDirectory()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("sound".utf8).write(to: root.appendingPathComponent("done.wav"))
+        let broker = PluginScopedFileBroker(scopesByPluginID: [
+            "openpeon": [
+                PluginScopedFileScope(id: "packs", baseDirectory: root)
+            ]
+        ])
+        let delivered = LockIsolated<[String]>([])
+        let executor = PluginEffectExecutor(
+            storageProvider: PluginStorageProvider(),
+            scopedFileBroker: broker,
+            audioPlayHandler: { url, _ in
+                delivered.withValue { $0.append(url.lastPathComponent) }
+            }
+        )
+
+        await executor.enqueue(
+            [PluginEffect(capability: "audio.playFile", payload: ["scope": "packs", "path": "done.wav"])],
+            pluginID: "openpeon",
+            kind: .utility,
+            permissions: Set<PluginPermission>([.showNotification])
+        )
+
+        XCTAssertTrue(delivered.value.isEmpty)
+    }
+
+    func testPluginContextProvidesScopedFileClientWhenPermitted() async throws {
+        let root = makeTempStorageDirectory()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("hello".utf8).write(to: root.appendingPathComponent("manifest.txt"))
+        let broker = PluginScopedFileBroker(scopesByPluginID: [
+            "com.devisland.test.scoped-reader": [
+                PluginScopedFileScope(id: "packs", baseDirectory: root)
+            ]
+        ])
+        let plugin = ScopedReaderPlugin(
+            id: "com.devisland.test.scoped-reader",
+            permissions: [.readScopedFiles]
+        )
+        let host = PluginHost(scopedFileBroker: broker)
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+
+        XCTAssertEqual(plugin.readText, "hello")
+    }
+
+    func testPluginContextOmitsScopedFileClientWithoutPermission() async {
+        let plugin = ScopedReaderPlugin(id: "com.devisland.test.no-scope", permissions: [])
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.enqueue(makeEvent(kind: .pluginStarted))
+        await host.waitUntilIdle()
+
+        XCTAssertNil(plugin.readText)
+        XCTAssertTrue(plugin.sawMissingClient)
     }
 
     func testEffectExecutorAllowsStorageEffectWithPermission() async {
@@ -283,6 +466,7 @@ final class PluginHostDispatchTests: XCTestCase {
         await executor.enqueue(
             [effect],
             pluginID: "com.devisland.test.storage",
+            kind: .utility,
             permissions: [.writePluginStorage]
         )
 
@@ -818,6 +1002,29 @@ final class PluginHostDispatchTests: XCTestCase {
         )
     }
 
+    private func makePowerStatusEvent() -> PluginEvent {
+        PluginEvent(
+            id: UUID(),
+            kind: .powerStatusChanged,
+            timestamp: Date(),
+            session: nil,
+            hook: nil,
+            action: nil,
+            approval: nil,
+            powerStatus: PluginPowerStatus(
+                featureEnabled: true,
+                excludedSSIDs: [],
+                isOnACPower: true,
+                batteryLevel: 0.8,
+                currentSSID: "Office",
+                isPreventingSleep: true,
+                effectReason: "ac-power",
+                effectFailureCode: nil,
+                isEffectResult: false
+            )
+        )
+    }
+
     private func makeSessionSnapshot(id: String) -> PluginSessionSnapshot {
         PluginSessionSnapshot(
             id: id,
@@ -880,6 +1087,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
     init(
         id: String,
         name: String? = nil,
+        kind: PluginKind = .utility,
         permissions: Set<PluginPermission> = [],
         activationEvents: Set<PluginEventKind>,
         contribution: PluginUIContribution? = nil,
@@ -893,7 +1101,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
             name: name ?? id,
             version: "1.0.0",
             apiVersion: 1,
-            kind: .utility,
+            kind: kind,
             permissions: permissions,
             surfaces: surfaces,
             activationEvents: Set(activationEvents.map(\.rawValue))
@@ -904,7 +1112,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
         self.delayOnKinds = delayOnKinds
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         let shouldDelay = delayOnKinds?.contains(event.kind) ?? true
         if shouldDelay && delay > 0 {
             Thread.sleep(forTimeInterval: delay)
@@ -972,7 +1180,7 @@ private final class GatedPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         lock.lock()
         _receivedKinds.append(event.kind)
         lock.unlock()
@@ -985,6 +1193,60 @@ private final class GatedPlugin: DevIslandPlugin, @unchecked Sendable {
 
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
         contribution
+    }
+
+    func needsTick(surfaceState: PluginSurfaceState) -> Bool {
+        false
+    }
+}
+
+private final class ScopedReaderPlugin: DevIslandPlugin, @unchecked Sendable {
+    let manifest: PluginManifest
+    private let lock = NSLock()
+    private var _readText: String?
+    private var _sawMissingClient = false
+
+    var readText: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _readText
+    }
+
+    var sawMissingClient: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _sawMissingClient
+    }
+
+    init(id: String, permissions: Set<PluginPermission>) {
+        manifest = PluginManifest(
+            id: id,
+            name: id,
+            version: "1.0.0",
+            apiVersion: 1,
+            kind: .utility,
+            permissions: permissions,
+            surfaces: [],
+            activationEvents: [PluginEventKind.pluginStarted.rawValue]
+        )
+    }
+
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
+        guard let scopedFiles = context.scopedFiles else {
+            lock.lock()
+            _sawMissingClient = true
+            lock.unlock()
+            return []
+        }
+        let text = try await scopedFiles.readText(scopeID: "packs", relativePath: "manifest.txt")
+        lock.lock()
+        _readText = text
+        lock.unlock()
+        return []
+    }
+
+    func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
+        nil
     }
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
@@ -1017,7 +1279,7 @@ private final class VisibilityTickingPlugin: DevIslandPlugin, @unchecked Sendabl
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         lock.lock()
         _receivedKinds.append(event.kind)
         lock.unlock()
@@ -1054,7 +1316,7 @@ private final class SessionRowTickPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .sessionStarted, let session = event.session {
             lock.lock(); trackedSessionIDs.insert(session.id); lock.unlock()
         }
@@ -1111,7 +1373,7 @@ private final class RotatingContributionPlugin: DevIslandPlugin, @unchecked Send
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         []
     }
 
@@ -1170,7 +1432,7 @@ private final class ToggleContributionPlugin: DevIslandPlugin, @unchecked Sendab
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginTick {
             lock.lock()
             shouldRender = false
@@ -1226,7 +1488,7 @@ private final class ExpiringContributionPlugin: DevIslandPlugin, @unchecked Send
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         []
     }
 
@@ -1272,7 +1534,7 @@ private final class SessionScopedContributionPlugin: DevIslandPlugin, @unchecked
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         []
     }
 
@@ -1324,7 +1586,7 @@ private final class ToggleSessionScopedContributionPlugin: DevIslandPlugin, @unc
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginTick, let sessionID = event.session?.id {
             lock.lock()
             hiddenSessionIDs.insert(sessionID)
@@ -1386,7 +1648,7 @@ private final class GlobalToggleSessionScopedContributionPlugin: DevIslandPlugin
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginTick {
             lock.lock()
             hideAll = true
@@ -1456,7 +1718,7 @@ private final class ProbationTestPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if shouldThrow {
             throw RecordingPlugin.TestError()
         }

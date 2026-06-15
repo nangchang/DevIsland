@@ -90,7 +90,7 @@ shouldHoldAssertion =
 
 ## 4. 신규 파일
 
-신규 디렉토리: `DevIsland/Caffeine/`
+신규 디렉토리: `DevIsland/Plugins/BuiltIn/Caffeine/`
 
 | 파일 | 책임 |
 | --- | --- |

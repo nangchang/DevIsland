@@ -86,36 +86,42 @@ struct PluginApprovalSummary: Codable, Equatable {
     let scope: String
 }
 
+/// Generic, sanitized power signal delivered to power-control plugins. Field names stay
+/// host-implementation-agnostic (no "caffeine"/"assertion" leakage): the plugin owns the
+/// prevention policy and only sees system signals plus the result of its last effect.
 struct PluginPowerStatus: Codable, Equatable {
-    let caffeineEnabled: Bool
+    /// Whether the user-facing power-control feature is enabled.
+    let featureEnabled: Bool
     let excludedSSIDs: [String]
     let isOnACPower: Bool
     let batteryLevel: Double?
     let currentSSID: String?
-    let isHoldingAssertion: Bool?
-    let assertionReason: String?
-    let assertionFailureCode: Int32?
-    let isAssertionResult: Bool
+    /// Result feedback (host → plugin) after a `power.preventIdleSleep` effect was applied.
+    let isPreventingSleep: Bool?
+    let effectReason: String?
+    let effectFailureCode: Int32?
+    /// True when this event reports an effect result rather than a fresh input signal.
+    let isEffectResult: Bool
 
     init(
-        caffeineEnabled: Bool,
+        featureEnabled: Bool,
         excludedSSIDs: [String],
         isOnACPower: Bool,
         batteryLevel: Double?,
         currentSSID: String?,
-        isHoldingAssertion: Bool? = nil,
-        assertionReason: String? = nil,
-        assertionFailureCode: Int32? = nil,
-        isAssertionResult: Bool = false
+        isPreventingSleep: Bool? = nil,
+        effectReason: String? = nil,
+        effectFailureCode: Int32? = nil,
+        isEffectResult: Bool = false
     ) {
-        self.caffeineEnabled = caffeineEnabled
+        self.featureEnabled = featureEnabled
         self.excludedSSIDs = excludedSSIDs
         self.isOnACPower = isOnACPower
         self.batteryLevel = batteryLevel
         self.currentSSID = currentSSID
-        self.isHoldingAssertion = isHoldingAssertion
-        self.assertionReason = assertionReason
-        self.assertionFailureCode = assertionFailureCode
-        self.isAssertionResult = isAssertionResult
+        self.isPreventingSleep = isPreventingSleep
+        self.effectReason = effectReason
+        self.effectFailureCode = effectFailureCode
+        self.isEffectResult = isEffectResult
     }
 }

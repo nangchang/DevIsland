@@ -756,6 +756,7 @@ private struct OpenPeonSettingsPane: View {
                         .textFieldStyle(.roundedBorder)
                     Button {
                         CESPPackStore.shared.reload(settings: store.settings)
+                        AppState.shared.refreshPluginScopedFileScopes(settings: store.settings)
                     } label: {
                         Label(l10n.btnReload, systemImage: "arrow.clockwise")
                     }
@@ -850,9 +851,11 @@ private struct OpenPeonSettingsPane: View {
         .formStyle(.grouped)
         .onAppear {
             CESPPackStore.shared.reload(settings: store.settings)
+            AppState.shared.refreshPluginScopedFileScopes(settings: store.settings)
         }
         .onChange(of: store.settings.openPeonPacksDirectory) { _, _ in
             CESPPackStore.shared.reload(settings: store.settings)
+            AppState.shared.refreshPluginScopedFileScopes(settings: store.settings)
         }
     }
 

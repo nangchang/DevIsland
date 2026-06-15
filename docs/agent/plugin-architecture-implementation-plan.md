@@ -65,7 +65,11 @@
   - v1.2 b. `session.copyResumeCommand` — 완료. side-effect-free host command: `AppState.copyResumeCommandFromPlugin`이 sessionID로 세션을 찾아 host가 생성한 `ActiveSession.resumeCommand`(shell-escaped, `NotchComponents`에서 추출해 공유)를 pasteboard에 복사. approval queue/pending/provider response/session lifecycle을 전혀 건드리지 않음. `SessionActionsPlugin`이 `session.context-menu`에 "Copy Resume Command" 버튼을 `showSessionSurface` permission gate로 기여하고, 중복을 피하려 `SessionRowView` 컨텍스트 메뉴의 core "Copy Resume Command" 항목을 제거해 plugin 기여로 대체(plugin disable 시 해당 항목 사라짐; `SessionHistoryWindow`의 core 항목은 plugin surface가 아니라 유지). `resumeCommand` 셸 이스케이프는 POSIX 작은따옴표 방식(`'...'`, 내부 `'`→`'\''`)으로 command substitution/변수 확장을 차단(PR #279 gemini review). 플러그인은 workspace path·shell 문자열을 직접 보지 않음(host-owned sanitization).
   - v1.2 c. `session.focusTerminal` — 완료. host command: `AppState.focusTerminalFromPlugin`이 sessionID로 세션을 찾아 그 세션의 terminal metadata로 `TerminalFocuser.focusTerminal`을 직접 호출(core `focusTerminal(for:)`의 unread/missed 해제·`passIfTerminalFocused` completion을 재사용하지 않음). 단 터미널을 frontmost로 만들면 `NotchWindowController`의 앱 활성화/클릭 observer가 `passIfTerminalFocused`를 호출해 표시 중인 approval을 pass시킬 수 있으므로, request/notification 표시 중이면 focus를 거부한다(`canPluginFocusTerminal` = `passIfTerminalFocused` 가드와 동일 조건, PR #280 codex review). 그 외에는 윈도우 포커스만 이동하고 approval queue/session 상태를 건드리지 않는다. `SessionActionsPlugin`이 `session.context-menu`에 "Focus Terminal" 버튼을 `showSessionSurface` permission gate로 기여(`isDestructive: false`). plugin 세션 명령 핸들러(`handlePluginSessionCommand`/`dismissSessionFromPlugin`/`copyResumeCommandFromPlugin`/`focusTerminalFromPlugin`)는 `@MainActor`로 명시(PR #280 gemini review).
   - v1.2 d. `session.openWorkspace` — 완료. side-effect-free host command: `AppState.openWorkspaceFromPlugin`이 sessionID로 세션을 찾아 `workspaceRoot`가 있으면 `NSWorkspace.shared.open`으로 Finder에 연다. Finder만 활성화하므로(터미널 frontmost가 아니라) observer의 `passIfTerminalFocused`가 발동해도 approval을 pass하지 않아 별도 가드가 불필요. `SessionActionsPlugin`이 `workspaceRoot`가 비어있지 않은 세션에만 "Open in Finder" 버튼을 `showSessionSurface` permission gate로 기여하고, 중복을 피하려 `SessionRowView` 컨텍스트 메뉴의 core "Open in Finder" 항목을 제거해 plugin 기여로 대체(plugin disable 시 사라짐; "Copy Path"·`SessionHistoryWindow`의 항목은 유지). `workspaceRoot`는 `PluginEventFactory.redactedSession`이 `readTerminalMetadata` 없이는 `nil`로 만들므로 plugin에 `.readTerminalMetadata`를 부여한다(session 이벤트만 구독해 cwd/terminalApp은 받지 않고 workspaceRoot만 보존; 미부여 시 버튼이 절대 기여되지 않아 회귀 — PR #281 codex review).
-  - v1.2 e. Host Effect 카탈로그 통합 — 완료. `PluginEffectExecutor.isHostEffectSupported`의 하드코딩 `switch`를 `SessionCommandCatalog`와 대칭인 `HostEffectCatalog`(capability → 필요 permission + `builtInOnlyPluginIDs` allowlist 메타데이터)로 대체. `PluginEffectExecutor.enqueue`와 `PluginHost.handleAction`이 같은 `HostEffectCatalog.isSupported(_:pluginID:permissions:)` 경로로 effect를 검증한다. `power.preventIdleSleep`/`power.toggle`의 built-in allowlist(`caffeine` 전용)가 `execute`의 `guard pluginID == "caffeine"`에 흩어져 있던 것을 카탈로그 메타데이터로 옮겨 dispatch 전에 검증(동작 불변 — caffeine만 통과). `notification.show`/`sound.play`/`storage.*`는 permission만으로 허용(allowlist nil).
+  - v1.2 e. Host Effect 카탈로그 통합 — 완료. `PluginEffectExecutor.isHostEffectSupported`의 하드코딩 `switch`를 `SessionCommandCatalog`와 대칭인 `HostEffectCatalog`(capability → 필요 permission)로 대체. `PluginEffectExecutor.enqueue`와 `PluginHost.handleAction`이 같은 `HostEffectCatalog.isSupported(_:kind:permissions:)` 경로로 effect를 검증한다. `power.preventIdleSleep`/`power.toggle`은 이후 v1.3 e에서 이름 기반 allowlist가 아니라 system-only permission gate로 정리했다. `notification.show`/`storage.*`/`audio.playFile`은 permission만으로 허용한다.
+  - v1.3 e. power capability를 plugin 이름이 아닌 trust tier로 게이팅 — 완료. host가 generic해야 할 곳에서 plugin 이름 `"caffeine"`을 알던 3곳을 제거했다. `controlPowerSleep`을 `PluginPermission.systemOnly`로 표시한 뒤 `isSupported(_:kind:permissions:)`가 system-only 권한을 요구하는 effect를 plugin의 `kind == .system`일 때만 허용하도록 바꿨다(`pluginID` 파라미터 제거, 호출부 `PluginEffectExecutor.enqueue`/`PluginHost`에 `kind` 전달). `PluginHost.setPluginEnabled`/`enterSafemode`의 power release와 `power.status.changed` dispatch/redaction도 같은 `controlPowerSleep + kind == .system` 기준을 사용한다. `CaffeinePlugin` manifest는 `kind: .utility`→`.system`(OpenPeon과 일관, OS power assertion을 다루는 system plugin). 동작 불변 — 현재 power plugin은 Caffeine 하나뿐이고 `.system`으로 통과, 다른 plugin은 `controlPowerSleep` 미선언. third-party `.utility` plugin은 권한을 선언해도 power effect/status/release 경로에서 거부된다(경계 유지).
+  - v1.3 d. Caffeine 경계 정리 — 완료. 카페인 구현(`CaffeineCoordinator`/`SleepAssertion`/`PowerSourceMonitor`/`WifiSSIDMonitor`/`LocationPermissionRequester`)과 `CaffeinePlugin`을 `Plugins/BuiltIn/Caffeine/`로 모으고, plugin↔host 경계를 명확히 했다. plugin-facing DTO `PluginPowerStatus` 필드명을 host 구현 노출 없이 generic하게 정리: `caffeineEnabled`→`featureEnabled`, `isHoldingAssertion`→`isPreventingSleep`, `assertionReason`→`effectReason`, `assertionFailureCode`→`effectFailureCode`, `isAssertionResult`→`isEffectResult`(시스템 신호 `isOnACPower`/`batteryLevel`/`currentSSID`/`excludedSSIDs`는 유지). `CaffeineCoordinator`는 순수 host-side signal/effect adapter로 축소 — production에서 쓰이지 않던 중복 정책(`decide`/`nextLowBatteryState`/`CaffeineReason`/`reason` 죽은 상태)을 제거하고, 정책은 `CaffeinePlugin.decide`가 단독 소유함을 코드/주석으로 명확히 했다. host 내부 `isHoldingAssertion`(Settings·상태바 표시)은 실제 IOPMAssertion을 가리키므로 호스트 용어 그대로 유지. 죽은 정책만 검증하던 `CaffeineCoordinatorTests`는 삭제(정책 커버리지는 `CaffeinePluginTests`가 `onEvent` 경유로 이미 보유). 동작 불변.
+  - v1.3 c. CESP pack scan/validation의 plugin-owned 전환 — 완료. `OpenPeonPlugin`에 `.readScopedFiles`를 부여해 `PluginContext.scopedFiles`를 받고, pack 디스커버리·manifest parsing·validation·active pack 선택을 host 싱글톤(`CESPPackStore.shared`/`CESPAudioPlayer.shared`)이 아니라 `CESPScopedPackResolver`가 broker(`listDirectory`/`readText`)로 수행한다. validation 규칙은 `CESPPackValidator.validate(manifest:fileIndex:)`로 추출해 host `FileManager` 스캔과 broker 스캔이 동일 규칙(50MB 총량 포함)을 공유하고, 파일 facts만 `CESPPackFileIndex`로 미리 수집한다(에러 문자열·`OpenPeonPackValidatorTests` 동작 불변). debounce/mute/selection 상태는 `@MainActor` `OpenPeonRuntime`이 소유(actor 재진입 시 직렬화), 싼 게이트(enabled/mute/debounce)를 broker 접근 전에 통과시켜 스캔 빈도를 debounce로 제한한다. 캐시는 없고 매 debounce-통과 이벤트마다 active pack을 재스캔(런타임 추가 pack 즉시 반영). host `CESPPackStore`/`CESPAudioPlayer`는 Settings **Sound** 탭 전용으로 유지하고, plugin 경로 전용이던 `CESPAudioPlayer.scopedAudioRequest`/`CESPScopedAudioRequest`는 제거했다. OpenPeon 설정은 계획대로 `AppSettings`(host bridge)에 남는다.
+  - v1.3 b. Scoped file/audio capability foundation — 완료. Host가 OpenPeon/CESP 도메인 포맷을 알지 않아도 built-in plugin이 제한된 로컬 파일을 읽고 오디오 재생을 요청할 수 있도록 `readScopedFiles`/`playScopedAudio`, `PluginScopedFileBroker`, generic `audio.playFile` effect를 추가했다. Broker는 plugin ID별 scope ID, 상대 경로 정규화, symlink 탈출 차단, 확장자/파일 크기 제한을 강제한다. `DevIslandPlugin.onEvent`를 async로 열고 `.readScopedFiles` 플러그인에 `PluginContext.scopedFiles`를 주입해 plugin이 broker에 host-mediated file read를 요청할 수 있게 했다. OpenPeon runtime hook playback은 `audio.playFile`로 이전했고, CESP pack scan/validation의 plugin-owned file read 전환은 v1.3 c에서 완료했다.
   - v1.3 a. Plugin Settings Schema — 완료. 플러그인이 선언형 설정 schema(`PluginSettingDescriptor`: toggle/picker/stepper/slider/text + `validated(_:)` 검증·clamp·truncate)를 `DevIslandPlugin.settingsSchema`로 노출하고, host가 렌더·검증·저장·주입을 모두 담당한다. 저장은 `PluginSettingsStore`가 `pluginSettings.<id>` UserDefaults namespace에 JSON으로 격리(core/bridge/approval defaults 불가침; plugin SQLite storage는 effect 경유 비동기라 동기 설정 UI에 부적합해 미사용). 주입은 `selectedSessionID` 패턴 재사용 — `PluginRunner`가 `manifest`처럼 `settingsSchema`를 `nonisolated`로 캐싱하고, `PluginHost.drainEvents`가 MainActor에서 `resolveSettings`(저장값을 schema에 `validated` 적용, 누락 키는 default)로 `[pluginID: [key: value]]`를 만들어 `PluginEventProcessor.process` → `PluginRunner.handle` → `PluginContext.settings`(읽기 전용)로 흘린다. 변경 통지는 `PluginHost.pluginSettingChanged(pluginID:)`가 `settings.changed`를 해당 plugin에만 `restrictedTo`로 발행(자기 설정에만 반응); drain 시 최신 값을 재해석하므로 같은 이벤트에서 새 값이 context로 들어가 contribution이 재계산된다. UI는 host-owned `PluginSettingsView`의 `PluginSettingControlView`가 schema를 SwiftUI 컨트롤로 렌더(plugin은 SwiftUI 미생성 — Declarative UI). 데모: `PomodoroPlugin`이 `workMinutes`(stepper)·`autoRestart`(toggle)를 노출하고 `onEvent`에서 `context.settings`로 작업 길이/자동재시작을 적용(running 중 변경은 다음 블록부터 반영).
 - 마지막 검증:
   - 플러그인 관련 테스트 스위트 통과 (2026-06-14, v1.3 a 기준 — 워크트리 빌드 성공, 전체 테스트 0 실패. `PluginSettingValue` Codable round-trip, `validated` kind별 fallback/clamp/truncate, store persistence/isolation/reset, `settings.changed` restrictedTo, Pomodoro workMinutes/autoRestart 및 host end-to-end 반영 테스트 추가)
@@ -115,7 +119,7 @@
   - 실행 컨텍스트/effect: `PluginContext`, `PluginEffect`
   - UI: `PluginUIContribution`, `PluginUIComponentDTO`, `PluginUIActionDTO`, `PluginUISlot`, `PluginUIContext`, `PluginSurfaceState`, `PluginActionRouting`, `PluginUIComponentType`, `PluginUITone`
   - 결과/오류: `PluginContributionSnapshot`, `PluginFailure`
-- `DevIslandPlugin` 프로토콜 정의 (`onEvent`는 `PluginContext`/`[PluginEffect]`, `makeUIContribution`은 `PluginUIContext`, `needsTick`은 `PluginSurfaceState`에 의존하므로 위 타입이 선행되어야 함)
+- `DevIslandPlugin` 프로토콜 정의 (`onEvent`는 async `PluginContext`/`[PluginEffect]`, `makeUIContribution`은 `PluginUIContext`, `needsTick`은 `PluginSurfaceState`에 의존하므로 위 타입이 선행되어야 함)
 - `PluginHost` skeleton 추가
 - `AppState`에 `let pluginHost: PluginHost` 추가
 - `AppState.init`에 `enablePlugins: Bool = true` 주입 옵션 추가
@@ -150,7 +154,7 @@
 
 - `ParsedHookEvent` -> base `PluginEvent` 변환
 - `ActiveSession` -> `PluginSessionSnapshot` 변환
-- `PluginEventFactory.redactedEvent(from:permissions:)` 구현
+- `PluginEventFactory.redactedEvent(from:kind:permissions:)` 구현
 - `readTerminalMetadata`가 없으면 `cwd`, `terminalApp` 제거
 - `readSessionEvents`가 없으면 hook event의 `session` snapshot 제거
 - `readRawPayload`, `readPtyTranscript`는 v1에서 어떤 DTO에도 포함하지 않음
@@ -188,7 +192,7 @@
 - elapsed time 측정과 `PluginFailure` 생성
 - `PluginHost.enqueue(_:)` MainActor FIFO 구현
 - `QueuedPluginEvent.baseEvent`와 runner 목록 저장
-- `PluginEventProcessor`가 runner별로 `redactedEvent(from:permissions:)` 적용
+- `PluginEventProcessor`가 runner별로 `redactedEvent(from:kind:permissions:)` 적용
 - `PluginHost.applySnapshots`에서 cache 일괄 교체
 - contribution dedup 기준 구현
   - 전역 slot: `(pluginID)`
@@ -525,10 +529,12 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 
 #### Migration PR M1. OpenPeonSoundPlugin
 
+> 상태: 완료 (v1.3 c). CESP 도메인 로직이 `OpenPeonPlugin`/`CESPScopedPackResolver`/`OpenPeonRuntime`으로 이동했고 pack scan/validation은 scoped broker 경유. 아래는 원 설계 스펙으로 보존한다.
+
 선행 조건:
 
-- PR 3의 `PluginEffectExecutor`가 built-in-only capability allowlist를 검증할 수 있어야 한다.
-- `sound.playCESP` capability는 M1에서 추가하되 permission 기반 공개 capability가 아니라 built-in plugin ID allowlist로만 허용한다.
+- PR 3의 `PluginEffectExecutor`가 system-only capability gate를 검증할 수 있어야 한다.
+- scoped file/audio capability foundation이 준비되어 있어야 한다. Host는 OpenPeon/CESP 도메인 포맷을 알지 않고 `readScopedFiles`/`playScopedAudio`와 `audio.playFile`만 검증한다.
 
 목표:
 
@@ -538,23 +544,23 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주요 작업:
 
 - built-in `OpenPeonSoundPlugin` 추가
-- `sound.playCESP` 같은 built-in-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 "built-in allowlist only" 행 추가)
-- `CESPEventMapper`는 host service에 유지하고, raw payload 기반 category 계산은 `PluginEventFactory` 또는 별도 host sound-hint factory에서 수행
-- plugin은 `hook.received`, `session.started`, `session.updated`, `session.ended`, `notification.shown`에 포함된 sanitized sound hint를 관찰해 CESP category 요청만 반환
-- `CESPPackStore`, `CESPPackValidator`, `CESPAudioPlayer`, OpenPeon settings persistence는 host service로 유지
-- `AppState.playOpenPeonSound` 직접 호출부를 event/effect 경로로 단계적으로 대체
+- `OpenPeonPlugin`이 CESP manifest parsing, pack validation, event-to-category mapping, sound selection, mute/debounce 정책을 소유
+- Host는 scoped file broker(`readScopedFiles`)와 scoped audio effect(`audio.playFile`)만 제공하고 CESP/OpenPeon 포맷을 해석하지 않음
+- plugin은 `hook.received`, `session.started`, `session.updated`, `session.ended`, `notification.shown` 같은 sanitized events를 관찰해 CESP category와 재생 파일을 선택
+- OpenPeon settings persistence는 기존 키 호환을 위해 host settings bridge에 남기되, CESP 도메인 로직은 plugin으로 이동
+- runtime hook playback을 `OpenPeonPlugin`의 `audio.playFile` effect 경로로 대체
 
 주의:
 
-- plugin이 pack path, audio file path, raw hook payload, parsed provider payload를 직접 보지 않게 한다.
-- `sound.playCESP`는 permission 기반 공개 capability가 아니라 compiled built-in plugin ID allowlist로만 허용한다.
+- plugin이 임의 파일 path, raw hook payload, parsed provider payload를 직접 보지 않게 한다. 파일 접근은 plugin ID별 허용 scope 아래 상대 경로 요청만 사용한다.
+- `audio.playFile`은 permission 기반 generic capability이며, scope 밖 경로, symlink 탈출, unsupported extension, oversize file은 host broker가 거부한다.
 - sound failure는 plugin failure/log로만 남기고 provider response에 영향 주지 않는다.
 - OpenPeon settings UI는 custom plugin settings schema가 생기기 전까지 기존 Settings pane을 유지한다.
 
 검증:
 
 - 기존 OpenPeon settings 조합별 playback 동작 유지
-- CESP category 산출 테스트는 host sound-hint factory/`CESPEventMapper`에 남고 plugin 테스트에는 raw payload fixture를 넘기지 않음
+- CESP category 산출 테스트는 `OpenPeonPlugin`/`CESPEventMapper`로 이동하되 plugin 테스트에는 raw payload fixture를 넘기지 않음
 - invalid pack, missing sound, mute 상태에서 approval 동작 불변
 - plugin disable/safemode 시 sound만 중지되고 hook/session UI는 정상 동작
 
@@ -562,8 +568,8 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 
 선행 조건:
 
-- built-in-only capability allowlist와 effect executor 경로가 M1 또는 M2 시작 시점에 준비되어 있어야 한다.
-- `power.preventIdleSleep` capability는 M2에서 추가하되 permission 기반 공개 capability가 아니라 built-in plugin ID allowlist로만 허용한다.
+- system-only capability 게이트와 effect executor 경로가 M1 또는 M2 시작 시점에 준비되어 있어야 한다.
+- `power.preventIdleSleep` capability는 M2에서 추가하되 permission 기반 공개 capability가 아니라 system-only 권한(`controlPowerSleep`) + `kind: .system` 게이트로만 허용한다(plugin ID 하드코딩 없이 trust tier로 제한 — v1.3 e).
 
 목표:
 
@@ -573,7 +579,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주요 작업:
 
 - built-in `CaffeinePlugin` 추가
-- `power.preventIdleSleep` 같은 built-in-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 "built-in allowlist only" 행 추가)
+- `power.preventIdleSleep` 같은 system-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 system-only permission gate 행 추가)
 - `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence는 host service로 유지
 - host가 power/SSID/settings 상태와 실제 assertion 적용 결과를 sanitized caffeine status DTO로 제공
 - plugin은 host-provided status만 관찰해 assertion 보유/해제 의도를 `power.preventIdleSleep` effect로 반환
@@ -582,7 +588,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주의:
 
 - plugin이 `IOPMAssertion`, Location, CoreWLAN API를 직접 호출하지 않게 한다.
-- `power.preventIdleSleep`는 permission 기반 공개 capability가 아니라 compiled built-in plugin ID allowlist로만 허용한다.
+- `power.preventIdleSleep`는 공개 capability가 아니라 `controlPowerSleep + kind: .system` 조합으로만 허용한다.
 - `SettingsStore.caffeineEnabled`는 사용자 기능 토글이고, plugin enable/safemode는 상위 feature guard다. 둘 중 하나라도 off이면 host는 assertion을 release해야 한다.
 - Caffeine settings UI는 SSID scan과 자유 텍스트 입력이 필요하므로 v1 contribution UI로 옮기지 않는다.
 
@@ -699,7 +705,7 @@ v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 �
 - ✅ `session.copyResumeCommand`: host가 sanitized command 생성 후 pasteboard 복사. side-effect-free (approval/queue/lifecycle 무영향) (완료, v1.2 b — `ActiveSession.resumeCommand` + `SessionActionsPlugin`)
 - ✅ `session.focusTerminal`: `TerminalFocuser.focusTerminal`을 직접 호출하는 plugin 전용 경로(`AppState.focusTerminalFromPlugin`). core `focusTerminal(for:)`의 completion(`passIfTerminalFocused`)·unread/missed 해제를 재사용하지 않고, 터미널 frontmost가 observer 경유로 approval을 pass시키는 것을 막기 위해 request/notification 표시 중이면 focus를 거부(`canPluginFocusTerminal`) (완료, v1.2 c)
 - ✅ `session.openWorkspace`: `workspaceRoot`가 있는 세션만, host가 `NSWorkspace.shared.open`으로 Finder에 연다(`AppState.openWorkspaceFromPlugin`). Finder만 활성화해 approval-neutral. core "Open in Finder" 컨텍스트 항목을 plugin 기여로 대체 (완료, v1.2 d)
-- ✅ `sound.play`, `power.preventIdleSleep`/`power.toggle`, `notification.show`, `storage.*`를 `HostEffectCatalog`(capability → 필요 permission + built-in allowlist)로 통합해 `PluginEffectExecutor`/`PluginHost`가 한 validation 경로(`isSupported(_:pluginID:permissions:)`)를 탄다. power의 `caffeine` allowlist를 `execute` guard에서 카탈로그로 이동 (완료, v1.2 e)
+- ✅ `power.preventIdleSleep`/`power.toggle`, `notification.show`, `storage.*`, `audio.playFile`을 `HostEffectCatalog`(capability → 필요 permission + system-only gate)로 통합해 `PluginEffectExecutor`/`PluginHost`가 한 validation 경로(`isSupported(_:kind:permissions:)`)를 탄다. power gate는 plugin 이름이 아니라 `controlPowerSleep + kind: .system` 기준이다 (완료, v1.2 e/v1.3 e)
 
 검증:
 

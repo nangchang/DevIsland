@@ -75,3 +75,12 @@ struct CESPPack: Identifiable, Equatable {
         manifest.displayName.flatMap { $0.isEmpty ? nil : $0 } ?? manifest.name
     }
 }
+
+/// File facts collected for one pack before rule evaluation. Built from a `FileManager`
+/// scan (host Settings) or a scoped-broker scan (plugin runtime) so `CESPPackValidator`
+/// applies identical rules regardless of how files were read.
+struct CESPPackFileIndex: Equatable {
+    /// Regular-file byte counts keyed by pack-root-relative path (forward slashes).
+    let fileSizesByRelativePath: [String: Int64]
+    let totalByteCount: Int64
+}

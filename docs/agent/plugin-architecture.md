@@ -125,7 +125,8 @@ enum PluginPermission: String, Codable, Hashable {
     case showMenubarMenu
     case showNotification
     case writePluginStorage
-    case playSound
+    case readScopedFiles
+    case playScopedAudio
     case controlPowerSleep
 }
 ```
@@ -140,8 +141,9 @@ enum PluginPermission: String, Codable, Hashable {
 | `showMenubarMenu` | menubar 메뉴(`menubar.menu`)에 선언형 menu item을 제공한다. |
 | `showNotification` | DevIsland가 렌더링하는 제한된 알림을 요청한다. |
 | `writePluginStorage` | 플러그인 전용 격리 저장소에만 읽기·쓰기를 수행한다. |
-| `playSound` | CESP 카테고리 기반 오디오 재생을 요청한다. |
-| `controlPowerSleep` | 전원 상태 이벤트를 수신하고 idle sleep 제어 이펙트를 발행한다. |
+| `readScopedFiles` | Host broker가 허용한 plugin별 scope 아래 파일만 읽는다. |
+| `playScopedAudio` | Host broker가 허용한 plugin별 scope 아래 오디오 파일 재생을 요청한다. |
+| `controlPowerSleep` | 전원 상태 이벤트를 수신하고 idle sleep 제어 이펙트를 발행한다. **system-only**(`PluginPermission.systemOnly`) — `kind: .system` plugin만 effect를 행사할 수 있다. |
 
 surface permission 매핑:
 
@@ -303,9 +305,8 @@ protocol DevIslandPlugin: AnyObject {
     var manifest: PluginManifest { get }
 
     /// PluginRunner(actor)가 이벤트를 순차 전달한다.
-    /// v1 built-in plugin API는 actor reentrancy를 피하기 위해 동기 함수로 둔다.
-    /// 외부 I/O나 긴 작업은 직접 수행하지 않고 PluginEffect로 Host에 요청한다.
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect]
+    /// 외부 I/O나 긴 작업은 직접 수행하지 않고 PluginEffect 또는 scoped host broker로 요청한다.
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect]
 
     /// onEvent 직후 PluginRunner가 manifest.surfaces에 해당하는 슬롯만 호출한다.
     /// 렌더링 경로에서는 호출되지 않는다.
@@ -317,9 +318,9 @@ protocol DevIslandPlugin: AnyObject {
 }
 ```
 
-**플러그인은 plain `final class`로 작성한다.** 가변 상태 보호는 플러그인을 감싸는 `PluginRunner`(actor)가 담당하므로 플러그인 작성자가 직접 actor를 다룰 필요가 없다. 플러그인 인스턴스는 `PluginRunner` 외부로 노출되지 않으며, 모든 호출이 runner의 actor executor를 통과한다. v1 API를 동기 함수로 제한하므로 `await` 지점에서 actor가 재진입해 같은 플러그인 상태를 동시에 만지는 위험을 피한다.
+**플러그인은 plain `final class`로 작성한다.** 가변 상태 보호는 플러그인을 감싸는 `PluginRunner`(actor)가 담당하므로 플러그인 작성자가 직접 actor를 다룰 필요가 없다. 플러그인 인스턴스는 `PluginRunner` 외부로 노출되지 않으며, 모든 호출이 runner의 actor executor를 통과한다. `onEvent`는 async지만 runner가 플러그인별 호출을 직렬화하므로 scoped broker 요청을 사용해도 같은 플러그인의 이벤트 처리는 순서대로 진행된다.
 
-v1 built-in plugin은 앱 프로세스 안에서 실행되므로 완전한 crash isolation을 제공하지 않는다. 플러그인 호출은 `PluginRunner` 내부에서 동기적으로 실행되며, `PluginHost`가 전체 dispatch를 background task로 예약해 hook response path를 기다리지 않게 한다. 강제 종료 수준의 isolation이 필요하면 v2 worker process에서 처리한다.
+v1 built-in plugin은 앱 프로세스 안에서 실행되므로 완전한 crash isolation을 제공하지 않는다. 플러그인 호출은 `PluginRunner` 내부에서 실행되며, `PluginHost`가 전체 dispatch를 background task로 예약해 hook response path를 기다리지 않게 한다. 강제 종료 수준의 isolation이 필요하면 v2 worker process에서 처리한다.
 
 ### 6.5. 실행 컨텍스트와 Effect
 
@@ -329,6 +330,7 @@ struct PluginContext {
     let pluginID: String
     let permissions: Set<PluginPermission>
     let storageSnapshot: [String: String]
+    let scopedFiles: PluginScopedFileClient?
     let settings: [String: PluginSettingValue]
     let language: AppLanguage
 }
@@ -342,8 +344,9 @@ struct PluginEffect: Codable {
 ```
 
 `PluginContext.storageSnapshot`은 `PluginEventProcessor`가 runner 호출 직전에 플러그인 전용 storage에서 읽어온 작은 read-only snapshot이다.
+`PluginContext.scopedFiles`는 `.readScopedFiles` 권한을 가진 플러그인에만 주입되는 async host broker client다. 플러그인은 scope ID와 상대 경로로 list/read/metadata를 요청하고, host broker가 plugin ID별 허용 base directory와 경로 제약을 검증한다.
 `PluginContext.language`는 현재 앱 언어의 Sendable snapshot이다. 플러그인은 이 값으로 자신이 소유한 문자열을 직접 선택하며, `L10n.shared` 같은 host-owned observable state를 직접 읽지 않는다.
-v1 플러그인 API가 동기 함수이므로 플러그인은 storage를 직접 비동기로 읽지 않는다.
+플러그인은 storage를 직접 비동기로 읽지 않는다.
 초기 상태 복원이 필요한 built-in plugin은 `plugin.started` 또는 첫 event에서 snapshot을 읽어 내부 상태를 복원한다.
 storage write effect는 event 처리 이후 비동기로 커밋되므로, 플러그인은 방금 반환한 storage effect를 같은 event 안에서 다시 읽을 수 있다고 가정하지 않는다. v1 built-in plugin의 화면 상태는 플러그인 내부 메모리 상태가 기준이고, storage는 재시작 후 복원을 위한 durable cache로 취급한다.
 
@@ -539,12 +542,13 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 | `storage.keyValue` | `writePluginStorage` | effect processor가 격리 저장소 read/write 수행 |
 | `storage.increment` | `writePluginStorage` | effect processor가 카운터 atomic 증가 수행 |
 | `notification.show` | `showNotification` | DevIsland 알림 렌더링 요청 |
-| `sound.playCESP` | built-in allowlist only | Host-owned OpenPeon audio service에 sanitized CESP category 재생을 요청. 외부 plugin/declarative preset에는 열지 않는다. |
-| `power.preventIdleSleep` | built-in allowlist only | Host-owned Caffeine service에 display sleep 방지 assertion 보유/해제를 요청. 외부 plugin/declarative preset에는 열지 않는다. |
+| `audio.playFile` | `playScopedAudio` | Host-owned audio broker가 플러그인별 허용 scope 아래의 로컬 오디오 파일만 검증 후 재생 |
+| `power.preventIdleSleep` | `controlPowerSleep` (system-only) | Host-owned Caffeine service에 display sleep 방지 assertion 보유/해제를 요청. `controlPowerSleep`은 system-only 권한이라 `kind: .system` plugin만 행사 가능. |
 | `session.dismiss` | `showSessionSurface` + host validation | v1.1 세션 context action. 대상 세션이 idle/non-pending이고 missed/unread가 아닐 때만 host가 목록에서 제거한다. |
 
 `timer.*`처럼 민감 자원에 접근하지 않고 플러그인 내부 상태만 다루는 capability는 permission 없이 허용한다. 외부 자원(저장소, 알림 등)에 닿는 capability는 반드시 대응 permission을 manifest에 선언해야 한다.
-`sound.playCESP`, `power.preventIdleSleep`처럼 기존 core service를 호출하는 built-in-only capability는 permission으로 개방하지 않고, DevIsland가 컴파일해 넣은 특정 built-in plugin ID allowlist로만 허용한다.
+`audio.playFile`은 CESP/OpenPeon 같은 도메인 포맷을 알지 않는 generic broker다. Host는 plugin ID + scope ID + 상대 경로를 정규화해 scope 밖 탈출, symlink 탈출, 확장자, 파일 크기를 검증하고, 플러그인은 포맷별 manifest 해석과 파일 선택 정책을 소유한다. Broker directory listing은 optional entry cap을 지원해 hook side-effect 경로가 큰 디렉터리를 끝까지 materialize하지 않게 할 수 있다. 실현 예: `OpenPeonPlugin`이 `.readScopedFiles`로 `PluginContext.scopedFiles`를 받아 `CESPScopedPackResolver`로 pack을 broker 경유 스캔·검증하고 `OpenPeonRuntime`이 `audio.playFile` effect를 만든다(자세한 내용은 `openpeon-cesp.md`).
+`power.preventIdleSleep`처럼 시스템 자원(IOPMAssertion)을 만지는 capability는 host가 plugin **이름**으로 게이팅하지 않는다. 대신 필요한 permission(`controlPowerSleep`)을 **system-only**(`PluginPermission.systemOnly`)로 표시하고, system-only permission을 요구하는 effect는 plugin이 `kind: .system`을 선언한 경우에만 `HostEffectCatalog.isSupported(_:kind:permissions:)`가 허용한다. 따라서 third-party `.utility` plugin이 `controlPowerSleep`을 선언해도 power effect는 거부된다(이름 결합 없이 trust tier로 경계 유지). `power.status.changed` dispatch/redaction과 plugin 비활성화/safemode 시 power assertion release도 같은 `controlPowerSleep + kind: .system` 기준을 따른다.
 
 `PomodoroPlugin` built-in 구현 예시:
 
@@ -576,7 +580,7 @@ final class PomodoroPlugin: DevIslandPlugin {
             || surfaceState.visibleSurfaces.contains(.menubarMenu)
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         switch event.kind {
         case .pluginTick:
             if mode == .running {
@@ -734,18 +738,19 @@ final class PluginHost: ObservableObject {
            targetPluginID != runner.manifest.id {
             return false
         }
-        guard isEventAllowed(event, for: runner.manifest.permissions) else { return false }
+        guard isEventAllowed(event, for: runner.manifest) else { return false }
         return runner.manifest.activationEvents.contains(event.kind.rawValue)
     }
 
-    private func isEventAllowed(_ event: PluginEvent, for permissions: Set<PluginPermission>) -> Bool {
+    private func isEventAllowed(_ event: PluginEvent, for manifest: PluginManifest) -> Bool {
         switch event.kind {
         case .sessionStarted, .sessionUpdated, .sessionEnded:
-            return permissions.contains(.readSessionEvents)
+            return manifest.permissions.contains(.readSessionEvents)
         case .hookReceived, .approvalDecided:
-            return permissions.contains(.readHookSummaries)
+            return manifest.permissions.contains(.readHookSummaries)
         case .powerStatusChanged:
-            return permissions.contains(.controlPowerSleep)
+            return manifest.permissions.contains(.controlPowerSleep)
+                && PluginPermission.controlPowerSleep.isAllowed(for: manifest.kind)
         default:
             return true
         }
@@ -859,6 +864,7 @@ actor PluginEventProcessor {
                 group.addTask {
                     let event = eventFactory.redactedEvent(
                         from: queued.baseEvent,
+                        kind: runner.manifest.kind,
                         permissions: runner.manifest.permissions
                     )
                     let snapshot = runner.manifest.permissions.contains(.writePluginStorage)
@@ -876,7 +882,7 @@ actor PluginEventProcessor {
 }
 ```
 
-`QueuedPluginEvent.baseEvent`는 AppState가 만든 sanitized base DTO다. 하지만 field-level redaction은 runner별 permission을 알아야 하므로, `PluginEventProcessor`가 각 runner 호출 직전에 `PluginEventFactory.redactedEvent(from:permissions:)`를 적용한다. 이 구조가 있어야 `readTerminalMetadata`가 없는 플러그인과 있는 플러그인이 같은 hook 이벤트를 구독해도 서로 다른 DTO를 받는다.
+`QueuedPluginEvent.baseEvent`는 AppState가 만든 sanitized base DTO다. 하지만 field-level redaction은 runner별 permission과 trust tier를 알아야 하므로, `PluginEventProcessor`가 각 runner 호출 직전에 `PluginEventFactory.redactedEvent(from:kind:permissions:)`를 적용한다. 이 구조가 있어야 `readTerminalMetadata`가 없는 플러그인과 있는 플러그인이 같은 hook 이벤트를 구독해도 서로 다른 DTO를 받으며, system-only field(`powerStatus`)도 permission만으로 노출되지 않는다.
 `PluginEventFactory`는 mutable 상태를 갖지 않는 `Sendable` value type으로 둔다. runner fan-out task 안에서 공유되므로, 내부 cache나 mutable formatter를 보관하지 않는다.
 
 ```swift
@@ -948,7 +954,7 @@ actor PluginRunner {
                                         storageSnapshot: storageSnapshot,
                                         settings: settings,
                                         language: language)
-            effects = try plugin.onEvent(event, context: context)
+            effects = try await plugin.onEvent(event, context: context)
             for slot in manifest.surfaces {
                 let ctx = PluginUIContext(slot: slot,
                                           timestamp: event.timestamp,
@@ -988,7 +994,7 @@ actor PluginRunner {
 }
 ```
 
-`PluginRunner`가 `actor`이고 플러그인 API가 동기 함수이므로 `plugin.onEvent` 안에서 발생하는 플러그인 상태 변경은 자동으로 직렬화된다.
+`PluginRunner`가 `actor`이고 플러그인 호출을 직렬화하므로 `plugin.onEvent` 안에서 발생하는 플러그인 상태 변경은 순서대로 적용된다.
 `manifest.surfaces`만 순회하므로 선언하지 않은 슬롯에는 `makeUIContribution`을 호출하지 않는다.
 
 ### 10.4. 오류 및 세이프모드 (Safemode)
@@ -1099,24 +1105,12 @@ extension PluginHost {
     /// 등록되지 않은 plugin이나 매핑되지 않은 capability는 거부한다.
     private func isCapabilityAllowed(_ capability: String, forPluginID pluginID: String) -> Bool {
         guard let runner = runners[pluginID] else { return false }
-        if capability == "sound.playCESP" {
-            return isBuiltInSoundPlugin(pluginID)
-        }
         return isCapabilityAllowed(capability, for: runner.manifest.permissions)
     }
-
-    /// built-in-only capability(`sound.playCESP` 등)를 허용할 plugin ID allowlist.
-    /// DevIsland가 컴파일해 넣은 특정 built-in plugin만 포함하는 static set이며,
-    /// 외부 plugin이나 declarative preset의 ID는 절대 포함하지 않는다.
-    private func isBuiltInSoundPlugin(_ pluginID: String) -> Bool {
-        Self.builtInSoundPluginIDs.contains(pluginID)
-    }
-
-    private static let builtInSoundPluginIDs: Set<String> = ["com.devisland.openpeon.sound"]
 }
 ```
 
-`isCapabilityAllowed`와 `processEffects`는 동일한 매핑을 공유한다. 매핑되지 않은 capability는 거부한다. `sound.playCESP` 같은 built-in-only capability는 permission 집합만으로 허용하지 않고 plugin ID allowlist를 함께 확인한다.
+`isCapabilityAllowed`와 `processEffects`는 동일한 매핑을 공유한다. 매핑되지 않은 capability는 거부한다. `audio.playFile`처럼 로컬 자원에 닿는 generic capability는 permission 확인 뒤에도 scoped broker가 plugin ID별 base directory와 파일 제약을 다시 검증한다.
 
 ### 10.7. Contribution 만료 처리
 
@@ -1275,7 +1269,7 @@ struct PluginSlotView: View {
 ### 12.7. 테스트 seam
 
 - `PluginHost`는 `enablePlugins: false`로 주입 가능하므로 기존 `AppStateTests`·`SessionStoreTests`에 영향이 없다.
-- `PluginEventFactory`는 base event 생성과 runner별 `redactedEvent(from:permissions:)`를 각각 테스트한다.
+- `PluginEventFactory`는 base event 생성과 runner별 `redactedEvent(from:kind:permissions:)`를 각각 테스트한다.
 - `PluginRunner`/`PluginHost`는 fake plugin(고정 contribution·의도적 throw)으로 dispatch 순서·safemode 전환·cache dedup을 검증한다.
 
 ### 12.8. 단계적 적용 (롤아웃과의 매핑)
@@ -1306,7 +1300,7 @@ struct PluginSlotView: View {
 
 | 현재 기능 | 현재 위치 | Built-in plugin 형태 | 우선순위 | 전환 조건 |
 | :--- | :--- | :--- | :--- | :--- |
-| OpenPeon CESP sound playback | `OpenPeon/*`, `AppState.playOpenPeonSound`, `OpenPeonSettingsPane` | `OpenPeonSoundPlugin`이 host-computed sound hint를 관찰하고 host-owned `sound.playCESP` effect를 요청 | 높음 | `CESPEventMapper`의 raw payload 기반 category 산출, sound pack scan, validation, `AVAudioPlayer` 재생은 host service에 남긴다. 플러그인은 pack file path나 raw payload를 직접 다루지 않는다. |
+| OpenPeon CESP sound playback | `Plugins/BuiltIn/OpenPeon/*`, `OpenPeonSettingsPane` | `OpenPeonPlugin`이 sanitized events를 관찰해 CESP category와 pack file을 선택하고, host-owned scoped `audio.playFile` effect를 요청 | 높음 | Host는 OpenPeon/CESP 도메인 포맷을 알지 않고 scoped file/audio broker와 current `AppSettings` snapshot만 제공한다. `OpenPeonRuntime`은 `SettingsStore.shared`를 직접 읽지 않는다. 플러그인은 pack manifest 해석, event mapping, sound selection을 소유하되 pack scope 밖 파일은 읽거나 재생할 수 없다. |
 | Caffeine sleep prevention | `Caffeine/*`, `AppState.setupCaffeine`, `CaffeineSettingsPane`, `menubar.menu` contribution | `CaffeinePlugin`이 host-provided power/SSID/settings status와 assertion result를 관찰하고 host-owned `power.preventIdleSleep` effect를 요청 | 중간 | `IOPMAssertion`, 전원/SSID 모니터링, 위치 권한 요청, Wi-Fi 스캔, SSID 설정 UI와 settings persistence는 host service에 남긴다. 플러그인은 sleep assertion을 직접 만들거나 Location/CoreWLAN API를 직접 호출하지 않는다. |
 | 세션 경과 시간/현재 상태 표시 | 신규 `SessionTimerPlugin` | `notch.expanded.activity` metric contribution | 높음 | core 상태를 바꾸지 않고 `readSessionEvents`만 사용한다. |
 | provider/session 통계 | 신규 `ProviderStatsPlugin` 또는 `SessionStatsPlugin` | `notch.expanded.activity`, `menubar.menu` 요약 metric | 중간 | `readHookSummaries`, `readSessionEvents`, v1.1 `approval.decided`만 사용한다. replay DB를 직접 조회하지 않는다. |
@@ -1318,8 +1312,8 @@ struct PluginSlotView: View {
 
 | 현재 기능 | 플러그인으로 옮길 수 있는 부분 | core에 남길 부분 |
 | :--- | :--- | :--- |
-| OpenPeon | sanitized sound hint를 사용할지 결정하는 정책, mute 상태 표시, preview button contribution | raw payload 기반 `CESPEventMapper`, pack scanning/validation, audio playback, settings persistence |
-| Caffeine | sleep 방지 정책 판단, 메뉴/노치 상태 contribution, built-in-only `power.preventIdleSleep` effect 요청 | `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence |
+| OpenPeon | CESP manifest 해석, event mapping, sound selection, mute/debounce 정책, preview button contribution | scoped file/audio broker, settings persistence bridge |
+| Caffeine | sleep 방지 정책 판단, 메뉴/노치 상태 contribution, system-only `power.preventIdleSleep` effect 요청 | `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence |
 | Replay Log / Session History | session별 annotation, 요약 badge, menubar quick action | `SQLiteApprovalStore`, replay query, replay execution |
 | PTY Transcript | transcript 존재 여부 badge, session accessory | PTY capture, transcript storage, raw transcript viewer |
 | Settings | plugin enable/disable, safemode, storage reset | core app settings, bridge config, approval settings |
@@ -1346,9 +1340,9 @@ v1 `PluginUIComponentType`은 `metric`/`badge`/`button`/`text`뿐이며 입력 �
 
 기존 기능 전환은 PR 0–11의 플러그인 플랫폼이 안정화된 뒤 별도 migration track으로 진행한다.
 첫 migration 후보는 OpenPeon sound가 가장 적합하다. 이미 best-effort side effect이고, 실패해도 approval/deny 동작을 바꾸면 안 된다는 기존 원칙과 플러그인 Fail-Safe 원칙이 잘 맞기 때문이다.
-다만 OpenPeon을 옮기더라도 `CESPEventMapper`, CESP pack store와 audio player는 host-owned service로 남겨야 한다. `CESPEventMapper`는 현재 provider별 raw payload를 보고 category를 계산하므로, 이 계산을 plugin으로 옮기면 raw payload 금지 원칙을 깨게 된다. M1에서는 `PluginEventFactory` 또는 별도 host service가 optional `PluginSoundHint(category:)` 같은 sanitized DTO를 만들고, plugin은 이 hint를 사용할지와 `sound.playCESP` effect 요청 여부만 결정한다.
+OpenPeon 이전의 목표는 CESP 스펙 구현을 built-in plugin이 소유하고, host에는 OpenPeon/CESP 이름을 가진 domain service를 남기지 않는 것이다. Host는 sanitized event와 scoped file/audio broker만 제공한다. 플러그인이 파일을 직접 읽거나 임의 경로를 재생하지 않도록, broker는 plugin ID별 허용 base directory, 상대 경로 정규화, symlink 탈출 차단, 확장자와 파일 크기 제한을 강제한다.
 
-Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned 경계가 더 중요하다. Caffeine은 `IOPMAssertion`, Location permission, CoreWLAN scan처럼 시스템 권한과 사용자 환경 side effect를 다루므로, 플러그인은 host가 제공한 sanitized status만 보고 assertion 보유/해제 의도를 effect로 반환한다. `SettingsStore.caffeineEnabled`와 `caffeineExcludedSSIDs`는 기존 core setting으로 유지하고, plugin enable/disable·safemode는 추가 feature guard로만 작동한다. 따라서 plugin disabled 또는 safemode 상태에서는 host가 assertion을 반드시 release해야 하며, 기존 사용자 설정 기본값(`SettingsStore.caffeineEnabled == false`)은 바뀌지 않는다.
+Caffeine도 built-in plugin 후보에 포함하되, OpenPeon보다 host-owned 경계가 더 중요하다. Caffeine은 `IOPMAssertion`, Location permission, CoreWLAN scan처럼 시스템 권한과 사용자 환경 side effect를 다루므로, 플러그인은 host가 제공한 sanitized status만 보고 idle sleep 차단 의도를 effect로 반환한다. 실현 형태(v1.3 d): `CaffeinePlugin`이 prevention **정책의 단독 소유자**(`decide`)이고, `@MainActor` `CaffeineCoordinator`는 시스템 신호를 generic `PluginPowerStatus`로 방출하고 plugin의 `power.preventIdleSleep` effect를 실제 assertion에 적용하는 **host-side signal/effect adapter**로만 남는다. plugin-facing DTO 필드명은 host 구현(IOPMAssertion)이나 plugin 이름을 노출하지 않게 generic하다(`featureEnabled`/`isPreventingSleep`/`effectReason`/`effectFailureCode`/`isEffectResult`). `SettingsStore.caffeineEnabled`와 `caffeineExcludedSSIDs`는 기존 core setting으로 유지하고, plugin enable/disable·safemode는 추가 feature guard로만 작동한다. 따라서 plugin disabled 또는 safemode 상태에서는 host가 assertion을 반드시 release해야 하며, 기존 사용자 설정 기본값(`SettingsStore.caffeineEnabled == false`)은 바뀌지 않는다.
 
 ## 13. 단계별 롤아웃 계획 (Rollout Plan)
 
@@ -1394,8 +1388,8 @@ v1.1 session surface에서 도입한 최소 command path를 이 단계에서 log
 - `session.focusTerminal`: 기존 `TerminalFocuser` 경유, 권한과 대상 세션 상태를 host가 확인
 - `session.copyResumeCommand`: host가 sanitized command를 생성해 pasteboard에 복사
 - `session.openWorkspace`: workspace root가 있는 세션만 Finder로 열기
-- `sound.playCESP`: built-in allowlist only
-- `power.preventIdleSleep`: built-in allowlist only
+- `audio.playFile`: scoped audio broker 경유, `playScopedAudio` permission 필요
+- `power.preventIdleSleep`: `controlPowerSleep` + `kind: .system` only
 - `notification.show`: `showNotification` permission 필요
 
 host command는 실패해도 provider response, approval decision, session lifecycle ownership을 바꾸지 않는다. pending/current approval 세션에 대한 destructive action은 허용하지 않는다.

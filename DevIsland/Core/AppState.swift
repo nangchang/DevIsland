@@ -130,6 +130,7 @@ class AppState: ObservableObject {
     private static let replayTimestampFormatter = ISO8601DateFormatter()
     private let replayRecorder: ReplayRecorder
     private let pluginEventFactory = PluginEventFactory()
+    private let pluginScopedFileBroker: PluginScopedFileBroker
 
     init(
         startServer: Bool = true,
@@ -152,12 +153,21 @@ class AppState: ObservableObject {
         self.claudeQuestionState = ClaudeQuestionState()
         self.powerSourceMonitor = PowerSourceMonitor()
         self.wifiMonitor = WifiSSIDMonitor()
-        let coordinator = CaffeineCoordinator()
+        let coordinator = MainActor.assumeIsolated {
+            CaffeineCoordinator()
+        }
         self.caffeineCoordinator = coordinator
+        let scopedFileBroker = PluginScopedFileBroker(scopesByPluginID: Self.builtInPluginScopedFileScopes(
+            userDefaults: userDefaults
+        ))
+        self.pluginScopedFileBroker = scopedFileBroker
         self.pluginHost = PluginHost(
             enablePlugins: enablePlugins,
+            scopedFileBroker: scopedFileBroker,
             powerSleepHandler: { prevent, reason in
-                coordinator.applyPreventIdleSleep(prevent: prevent, reasonString: reason)
+                await MainActor.run {
+                    coordinator.applyPreventIdleSleep(prevent: prevent, reasonString: reason)
+                }
             },
             powerToggleHandler: {
                 Task { @MainActor in
@@ -240,7 +250,7 @@ class AppState: ObservableObject {
         // disabled plugin never runs for one cycle before `plugin.started` fires.
         MainActor.assumeIsolated {
             pluginHost.register(
-                Self.builtInPlugins(),
+                Self.builtInPlugins(settingsProvider: { SettingsStore.shared.settings }),
                 disabledPluginIDs: PluginSettingsStore.shared.disabledPluginIDs
             )
             // Host Command Catalog: route validated session commands (e.g. session.dismiss)
@@ -278,7 +288,9 @@ class AppState: ObservableObject {
             }
         }
 
-        setupCaffeine()
+        MainActor.assumeIsolated {
+            setupCaffeine()
+        }
 
         if startServer {
             BridgeTokenManager.shared.generateIfNeeded()
@@ -491,8 +503,48 @@ class AppState: ObservableObject {
     }
 
     /// Built-in plugins compiled into DevIsland, registered once at init.
-    private static func builtInPlugins() -> [any DevIslandPlugin & Sendable] {
-        [SessionTimerPlugin(), PomodoroPlugin(), OpenPeonPlugin(), CaffeinePlugin(), SessionStatsPlugin(), SessionActionsPlugin()]
+    private static func builtInPlugins(
+        settingsProvider: @escaping @MainActor @Sendable () -> AppSettings
+    ) -> [any DevIslandPlugin & Sendable] {
+        [
+            SessionTimerPlugin(),
+            PomodoroPlugin(),
+            OpenPeonPlugin(settingsProvider: settingsProvider),
+            CaffeinePlugin(),
+            SessionStatsPlugin(),
+            SessionActionsPlugin()
+        ]
+    }
+
+    private static let builtInScopedFileScopeProviders: [any PluginScopedFileScopeProvider.Type] = [
+        OpenPeonPlugin.self
+    ]
+
+    @MainActor
+    func refreshPluginScopedFileScopes() {
+        refreshPluginScopedFileScopes(settings: SettingsStore.shared.settings)
+    }
+
+    @MainActor
+    func refreshPluginScopedFileScopes(settings: AppSettings) {
+        let scopesByPluginID = Self.builtInPluginScopedFileScopes(settings: settings)
+        Task { [pluginScopedFileBroker] in
+            for (pluginID, scopes) in scopesByPluginID {
+                await pluginScopedFileBroker.setScopes(scopes, forPluginID: pluginID)
+            }
+        }
+    }
+
+    private static func builtInPluginScopedFileScopes(userDefaults: UserDefaults) -> [String: [PluginScopedFileScope]] {
+        Dictionary(uniqueKeysWithValues: builtInScopedFileScopeProviders.map {
+            ($0.scopedFilePluginID, $0.scopedFileScopes(userDefaults: userDefaults))
+        })
+    }
+
+    private static func builtInPluginScopedFileScopes(settings: AppSettings) -> [String: [PluginScopedFileScope]] {
+        Dictionary(uniqueKeysWithValues: builtInScopedFileScopeProviders.map {
+            ($0.scopedFilePluginID, $0.scopedFileScopes(settings: settings))
+        })
     }
 
     /// Starts the plugin platform once the app has finished launching: emits the
@@ -2589,6 +2641,7 @@ class AppState: ObservableObject {
 
     // MARK: - Caffeine
 
+    @MainActor
     private func setupCaffeine() {
         caffeineCoordinator.onStatusChanged = { [weak self] status in
             guard let self = self else { return }

@@ -83,7 +83,7 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
         mode == .running
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         // Refresh the effective work length from settings every event. Changing it mid-run
         // never disturbs the active countdown (driven by `expectedEndTime`); it takes effect
         // on the next idle reset or completion.

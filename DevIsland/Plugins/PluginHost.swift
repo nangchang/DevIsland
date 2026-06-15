@@ -15,15 +15,18 @@ final class PluginHost: ObservableObject {
 
     private var runners: [String: PluginRunner] = [:]
     private let storageProvider: PluginStorageProvider
+    private let scopedFileBroker: PluginScopedFileBroker
     private let powerSleepHandler: PluginEffectExecutor.PowerSleepHandler?
     private let powerToggleHandler: PluginEffectExecutor.PowerToggleHandler?
     private let eventFactory = PluginEventFactory()
     private lazy var eventProcessor = PluginEventProcessor(
         storageProvider: storageProvider,
+        scopedFileBroker: scopedFileBroker,
         eventFactory: eventFactory
     )
     private lazy var effectExecutor = PluginEffectExecutor(
         storageProvider: storageProvider,
+        scopedFileBroker: scopedFileBroker,
         notificationHandler: { title, body in
             await AppState.presentSharedPluginNotification(title: title, body: body)
         },
@@ -71,11 +74,13 @@ final class PluginHost: ObservableObject {
     nonisolated init(
         enablePlugins: Bool = true,
         pluginDataDirectory: URL = PluginStorageProvider.defaultDirectory,
+        scopedFileBroker: PluginScopedFileBroker = PluginScopedFileBroker(),
         powerSleepHandler: PluginEffectExecutor.PowerSleepHandler? = nil,
         powerToggleHandler: PluginEffectExecutor.PowerToggleHandler? = nil
     ) {
         self.isEnabled = enablePlugins
         self.storageProvider = PluginStorageProvider(baseDirectory: pluginDataDirectory)
+        self.scopedFileBroker = scopedFileBroker
         self.powerSleepHandler = powerSleepHandler
         self.powerToggleHandler = powerToggleHandler
     }
@@ -211,12 +216,7 @@ final class PluginHost: ObservableObject {
         } else {
             disabledPluginIDs.insert(pluginID)
             contributions = removeContributions(pluginID: pluginID, from: contributions)
-            if pluginID == "caffeine" {
-                let handler = powerSleepHandler
-                Task {
-                    await handler?(false, "off")
-                }
-            }
+            releasePowerIfControlled(pluginID: pluginID)
         }
     }
 
@@ -228,11 +228,20 @@ final class PluginHost: ObservableObject {
         safemodePluginIDs.insert(pluginID)
         settingsStore?.setSafemode(true, pluginID: pluginID)
         contributions = removeContributions(pluginID: pluginID, from: contributions)
-        if pluginID == "caffeine" {
-            let handler = powerSleepHandler
-            Task {
-                await handler?(false, "off")
-            }
+        releasePowerIfControlled(pluginID: pluginID)
+    }
+
+    /// Releases any held power assertion when a system plugin that controls power sleep is
+    /// deactivated (disabled or moved to safemode). Gated on the same system-only permission
+    /// boundary used for power effects and power-status delivery.
+    private func releasePowerIfControlled(pluginID: String) {
+        guard let manifest = runners[pluginID]?.manifest,
+              manifest.permissions.contains(.controlPowerSleep),
+              PluginPermission.controlPowerSleep.isAllowed(for: manifest.kind)
+        else { return }
+        let handler = powerSleepHandler
+        Task {
+            await handler?(false, "off")
         }
     }
 
@@ -284,13 +293,14 @@ final class PluginHost: ObservableObject {
             }
             guard HostEffectCatalog.isSupported(
                 action.capability,
-                pluginID: pluginID,
+                kind: runner.manifest.kind,
                 permissions: runner.manifest.permissions
             ) else { return }
             let effect = PluginEffect(capability: action.capability, payload: action.payload)
+            let kind = runner.manifest.kind
             let permissions = runner.manifest.permissions
             Task { [effectExecutor] in
-                await effectExecutor.enqueue([effect], pluginID: pluginID, permissions: permissions)
+                await effectExecutor.enqueue([effect], pluginID: pluginID, kind: kind, permissions: permissions)
             }
         case .pluginEvent:
             guard Self.isPluginEventCapabilityAllowed(action.capability) else { return }
@@ -434,18 +444,19 @@ final class PluginHost: ObservableObject {
            targetPluginID != runner.manifest.id {
             return false
         }
-        guard isEventAllowed(event, for: runner.manifest.permissions) else { return false }
+        guard isEventAllowed(event, for: runner.manifest) else { return false }
         return runner.manifest.activationEvents.contains(event.kind.rawValue)
     }
 
-    private func isEventAllowed(_ event: PluginEvent, for permissions: Set<PluginPermission>) -> Bool {
+    private func isEventAllowed(_ event: PluginEvent, for manifest: PluginManifest) -> Bool {
         switch event.kind {
         case .sessionStarted, .sessionUpdated, .sessionEnded:
-            return permissions.contains(.readSessionEvents)
+            return manifest.permissions.contains(.readSessionEvents)
         case .hookReceived, .approvalDecided:
-            return permissions.contains(.readHookSummaries)
+            return manifest.permissions.contains(.readHookSummaries)
         case .powerStatusChanged:
-            return permissions.contains(.controlPowerSleep)
+            return manifest.permissions.contains(.controlPowerSleep)
+                && PluginPermission.controlPowerSleep.isAllowed(for: manifest.kind)
         default:
             return true
         }
@@ -571,11 +582,12 @@ final class PluginHost: ObservableObject {
 
     private func processEffectBatches(_ batches: [PendingEffectBatch]) async {
         for batch in batches {
-            let permissions = runners[batch.pluginID]?.manifest.permissions ?? []
+            let manifest = runners[batch.pluginID]?.manifest
             await effectExecutor.enqueue(
                 batch.effects,
                 pluginID: batch.pluginID,
-                permissions: permissions
+                kind: manifest?.kind ?? .utility,
+                permissions: manifest?.permissions ?? []
             )
         }
     }

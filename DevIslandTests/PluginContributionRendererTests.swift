@@ -314,7 +314,7 @@ private final class ActionCapturingPlugin: DevIslandPlugin, @unchecked Sendable 
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         lock.lock(); defer { lock.unlock() }
         _receivedEvents.append(event)
         return []

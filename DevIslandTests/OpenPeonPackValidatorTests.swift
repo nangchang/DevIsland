@@ -71,10 +71,23 @@ final class OpenPeonPackValidatorTests: XCTestCase {
         XCTAssertTrue(pack?.validation.warnings.contains { $0.contains("not playable") } == true)
     }
 
+    func testOversizePackRejectsPack() throws {
+        let packURL = try makePack(
+            soundPath: "sounds/done.wav",
+            extraFileSize: CESPPackValidator.maxPackSize + 1
+        )
+
+        let pack = CESPPackValidator.loadPack(at: packURL)
+
+        XCTAssertFalse(pack?.validation.isValid == true)
+        XCTAssertTrue(pack?.validation.errors.contains { $0.contains("exceeds 50 MB") } == true)
+    }
+
     private func makePack(
         soundPath: String,
         cespVersion: String = "1.0",
-        createSound: Bool = true
+        createSound: Bool = true,
+        extraFileSize: Int64? = nil
     ) throws -> URL {
         let packURL = tempDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: packURL, withIntermediateDirectories: true)
@@ -82,6 +95,12 @@ final class OpenPeonPackValidatorTests: XCTestCase {
             let soundURL = packURL.appendingPathComponent(soundPath)
             try FileManager.default.createDirectory(at: soundURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data([0, 1, 2, 3]).write(to: soundURL)
+        }
+        if let extraFileSize {
+            try writeSparseFile(
+                at: packURL.appendingPathComponent("oversize.bin"),
+                byteCount: extraFileSize
+            )
         }
         let manifest = """
         {
@@ -99,5 +118,12 @@ final class OpenPeonPackValidatorTests: XCTestCase {
         """
         try Data(manifest.utf8).write(to: packURL.appendingPathComponent("openpeon.json"))
         return packURL
+    }
+
+    private func writeSparseFile(at url: URL, byteCount: Int64) throws {
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: UInt64(byteCount))
+        try handle.close()
     }
 }

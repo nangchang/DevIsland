@@ -6,7 +6,7 @@ enum CESPPackValidator {
     private static let supportedExtensions: Set<String> = ["wav", "mp3", "ogg"]
     private static let playbackSupportedExtensions: Set<String> = ["wav", "mp3"]
     private static let maxAudioFileSize: Int64 = 1_000_000
-    private static let maxPackSize: Int64 = 50_000_000
+    static let maxPackSize: Int64 = 50_000_000
 
     static func loadPack(at rootURL: URL, fileManager: FileManager = .default) -> CESPPack? {
         let manifestURL = rootURL.appendingPathComponent("openpeon.json")
@@ -26,6 +26,13 @@ enum CESPPackValidator {
         rootURL: URL,
         fileManager: FileManager = .default
     ) -> CESPValidationResult {
+        validate(manifest: manifest, fileIndex: makeFileIndex(rootURL: rootURL, fileManager: fileManager))
+    }
+
+    /// Rule evaluation over a pre-collected pack file index. Path/size/existence facts are
+    /// resolved into `CESPPackFileIndex` beforehand so the same rules run over either a
+    /// `FileManager`-backed scan (host Settings) or a scoped-broker scan (the plugin runtime).
+    static func validate(manifest: CESPManifest, fileIndex: CESPPackFileIndex) -> CESPValidationResult {
         var result = CESPValidationResult()
 
         if manifest.cespVersion != "1.0" {
@@ -40,20 +47,8 @@ enum CESPPackValidator {
         if manifest.categories.isEmpty {
             result.errors.append("Pack must define at least one category.")
         }
-
-        let rootPath = rootURL.standardizedFileURL.path
-        var totalSize: Int64 = 0
-
-        if let enumerator = fileManager.enumerator(at: rootURL, includingPropertiesForKeys: [.fileSizeKey]) {
-            for case let fileURL as URL in enumerator {
-                guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
-                      let size = values.fileSize else { continue }
-                totalSize += Int64(size)
-                if totalSize > maxPackSize {
-                    result.errors.append("Pack exceeds 50 MB.")
-                    break
-                }
-            }
+        if fileIndex.totalByteCount > maxPackSize {
+            result.errors.append("Pack exceeds 50 MB.")
         }
 
         for (categoryName, category) in manifest.categories {
@@ -66,8 +61,7 @@ enum CESPPackValidator {
 
             for sound in category.sounds {
                 let path = sound.file
-                let url = rootURL.appendingPathComponent(path).standardizedFileURL
-                let ext = url.pathExtension.lowercased()
+                let ext = (path as NSString).pathExtension.lowercased()
 
                 if path.isEmpty || path.hasPrefix("/") {
                     result.errors.append("\(path) must be a relative path.")
@@ -75,10 +69,6 @@ enum CESPPackValidator {
                 }
                 if path.split(separator: "/").contains("..") {
                     result.errors.append("\(path) must not contain '..'.")
-                    continue
-                }
-                if !url.path.hasPrefix(rootPath + "/") {
-                    result.errors.append("\(path) resolves outside the pack directory.")
                     continue
                 }
                 if !supportedExtensions.contains(ext) {
@@ -90,19 +80,44 @@ enum CESPPackValidator {
                     // only promises WAV/MP3 playback on stock macOS.
                     result.warnings.append("\(path) is recognized by CESP but not playable by the macOS MVP player.")
                 }
-                guard fileManager.fileExists(atPath: url.path) else {
+                guard let size = fileIndex.fileSizesByRelativePath[path] else {
                     result.errors.append("\(path) is missing.")
                     continue
                 }
-                if let attrs = try? fileManager.attributesOfItem(atPath: url.path),
-                   let size = attrs[.size] as? NSNumber,
-                   size.int64Value > maxAudioFileSize {
+                if size > maxAudioFileSize {
                     result.errors.append("\(path) exceeds 1 MB.")
                 }
             }
         }
 
         return result
+    }
+
+    /// Recursively walks `rootURL` summing regular-file sizes and recording each file's size
+    /// keyed by its pack-root-relative path. Directory escape is impossible because relative
+    /// paths are derived from real entries under `rootURL`.
+    private static func makeFileIndex(rootURL: URL, fileManager: FileManager) -> CESPPackFileIndex {
+        var sizes: [String: Int64] = [:]
+        var total: Int64 = 0
+        let rootPath = rootURL.standardizedFileURL.path
+
+        if let enumerator = fileManager.enumerator(at: rootURL, includingPropertiesForKeys: [.fileSizeKey]) {
+            for case let fileURL as URL in enumerator {
+                guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
+                      let fileSize = values.fileSize else { continue }
+                let size = Int64(fileSize)
+                total += size
+                let path = fileURL.standardizedFileURL.path
+                if path.hasPrefix(rootPath + "/") {
+                    sizes[String(path.dropFirst(rootPath.count + 1))] = size
+                }
+                if total > maxPackSize {
+                    break
+                }
+            }
+        }
+
+        return CESPPackFileIndex(fileSizesByRelativePath: sizes, totalByteCount: total)
     }
 
     private static func matches(_ value: String, pattern: String) -> Bool {

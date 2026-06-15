@@ -28,7 +28,7 @@ protocol DevIslandPlugin: AnyObject {
     /// them and injects the resolved values via `PluginContext.settings`. Defaults to none.
     var settingsSchema: [PluginSettingDescriptor] { get }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect]
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect]
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution?
     func needsTick(surfaceState: PluginSurfaceState) -> Bool
 }
@@ -37,10 +37,11 @@ extension DevIslandPlugin {
     var settingsSchema: [PluginSettingDescriptor] { [] }
 }
 
-struct PluginContext: Equatable {
+struct PluginContext {
     let pluginID: String
     let permissions: Set<PluginPermission>
     let storageSnapshot: [String: String]
+    let scopedFiles: PluginScopedFileClient?
     /// Current setting values, with every schema key present (stored value validated, or the
     /// descriptor default). Read-only — plugins never mutate host settings.
     let settings: [String: PluginSettingValue]
@@ -52,12 +53,14 @@ struct PluginContext: Equatable {
         pluginID: String,
         permissions: Set<PluginPermission>,
         storageSnapshot: [String: String],
+        scopedFiles: PluginScopedFileClient? = nil,
         settings: [String: PluginSettingValue] = [:],
         language: AppLanguage = .english
     ) {
         self.pluginID = pluginID
         self.permissions = permissions
         self.storageSnapshot = storageSnapshot
+        self.scopedFiles = scopedFiles
         self.settings = settings
         self.language = language
     }

@@ -361,7 +361,7 @@ private final class SettingsTestPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
-    func onEvent(_ event: PluginEvent, context: PluginContext) throws -> [PluginEffect] {
+    func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if throwOnStart, event.kind == .pluginStarted {
             throw StartError()
         }
