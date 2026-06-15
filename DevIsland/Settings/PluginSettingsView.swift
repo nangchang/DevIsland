@@ -47,6 +47,11 @@ private struct PluginSettingsRow: View {
                     Text("\(manifest.id) · v\(manifest.version)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if let description = manifest.displayDescription(language: l10n.language) {
+                        Text(description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

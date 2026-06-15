@@ -28,7 +28,11 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginEventKind.settingsChanged.rawValue,
             PluginEventKind.languageChanged.rawValue
         ],
-        localizedName: PluginLocalizedString(english: "Session Timer", korean: "세션 타이머")
+        localizedName: PluginLocalizedString(english: "Session Timer", korean: "세션 타이머"),
+        localizedDescription: PluginLocalizedString(
+            english: "Shows elapsed time for the active session in the notch and on each session row.",
+            korean: "노치와 세션 행에 현재 세션의 경과 시간을 표시합니다."
+        )
     )
 
     /// Whether the elapsed badges include seconds. Toggling it must refresh the per-session
