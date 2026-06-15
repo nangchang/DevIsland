@@ -49,9 +49,6 @@ enum HostEffectCatalog {
     ) -> Bool {
         guard let descriptor = effects[capability] else { return false }
         guard permissions.contains(descriptor.requiredPermission) else { return false }
-        if descriptor.requiredPermission.isSystemOnly {
-            return kind == .system
-        }
-        return true
+        return descriptor.requiredPermission.isAllowed(for: kind)
     }
 }

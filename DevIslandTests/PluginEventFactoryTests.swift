@@ -132,7 +132,7 @@ final class PluginEventFactoryTests: XCTestCase {
         )
         let event = factory.makeHookReceivedEvent(from: hook)
 
-        let redacted = factory.redactedEvent(from: event, permissions: [.readHookSummaries])
+        let redacted = factory.redactedEvent(from: event, kind: .utility, permissions: [.readHookSummaries])
 
         XCTAssertEqual(redacted.hook?.provider, "codex")
         XCTAssertNil(redacted.hook?.cwd)
@@ -148,6 +148,7 @@ final class PluginEventFactoryTests: XCTestCase {
 
         let redacted = factory.redactedEvent(
             from: event,
+            kind: .utility,
             permissions: [.readHookSummaries, .readTerminalMetadata]
         )
 
@@ -159,7 +160,7 @@ final class PluginEventFactoryTests: XCTestCase {
         let session = makeSession(lastToolName: "Edit", lastEventName: "PreToolUse")
         let event = factory.makeHookReceivedEvent(from: makeHook(), session: session)
 
-        let redacted = factory.redactedEvent(from: event, permissions: [.readHookSummaries])
+        let redacted = factory.redactedEvent(from: event, kind: .utility, permissions: [.readHookSummaries])
 
         XCTAssertNotNil(event.session)
         XCTAssertNil(redacted.session)
@@ -175,6 +176,7 @@ final class PluginEventFactoryTests: XCTestCase {
 
         let redacted = factory.redactedEvent(
             from: event,
+            kind: .utility,
             permissions: [.readHookSummaries, .readSessionEvents]
         )
 
@@ -185,7 +187,7 @@ final class PluginEventFactoryTests: XCTestCase {
     func testRedactedHookEventRemovesHookSummaryWithoutPermission() {
         let event = factory.makeHookReceivedEvent(from: makeHook())
 
-        let redacted = factory.redactedEvent(from: event, permissions: [])
+        let redacted = factory.redactedEvent(from: event, kind: .utility, permissions: [])
 
         XCTAssertNotNil(event.hook)
         XCTAssertNil(redacted.hook)
@@ -218,13 +220,42 @@ final class PluginEventFactoryTests: XCTestCase {
         )
 
         XCTAssertNil(
-            factory.redactedEvent(from: event, permissions: []).approval,
+            factory.redactedEvent(from: event, kind: .utility, permissions: []).approval,
             "approval summary needs readHookSummaries"
         )
         XCTAssertEqual(
-            factory.redactedEvent(from: event, permissions: [.readHookSummaries]).approval?.toolName,
+            factory.redactedEvent(from: event, kind: .utility, permissions: [.readHookSummaries]).approval?.toolName,
             "Edit"
         )
+    }
+
+    func testRedactedPowerStatusRequiresSystemKindWithPermission() {
+        let status = PluginPowerStatus(
+            featureEnabled: true,
+            excludedSSIDs: [],
+            isOnACPower: true,
+            batteryLevel: 0.8,
+            currentSSID: "Office",
+            isPreventingSleep: true,
+            effectReason: "ac-power",
+            effectFailureCode: nil,
+            isEffectResult: false
+        )
+        let event = factory.makePowerStatusEvent(status: status)
+
+        let utility = factory.redactedEvent(
+            from: event,
+            kind: .utility,
+            permissions: [.controlPowerSleep]
+        )
+        let system = factory.redactedEvent(
+            from: event,
+            kind: .system,
+            permissions: [.controlPowerSleep]
+        )
+
+        XCTAssertNil(utility.powerStatus)
+        XCTAssertEqual(system.powerStatus?.effectReason, "ac-power")
     }
 
     private func makeHook(

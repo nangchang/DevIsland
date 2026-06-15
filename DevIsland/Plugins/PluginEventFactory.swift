@@ -156,10 +156,16 @@ struct PluginEventFactory: Sendable {
         )
     }
 
-    func redactedEvent(from event: PluginEvent, permissions: Set<PluginPermission>) -> PluginEvent {
+    func redactedEvent(
+        from event: PluginEvent,
+        kind: PluginKind,
+        permissions: Set<PluginPermission>
+    ) -> PluginEvent {
         let canReadHookSummaries = permissions.contains(.readHookSummaries)
         let canReadTerminalMetadata = permissions.contains(.readTerminalMetadata)
         let canReadSessionEvents = permissions.contains(.readSessionEvents)
+        let canReadPowerStatus = permissions.contains(.controlPowerSleep)
+            && PluginPermission.controlPowerSleep.isAllowed(for: kind)
         let metadata = canReadTerminalMetadata
             ? (cwd: event.hook?.cwd, terminalApp: event.hook?.terminalApp)
             : nil
@@ -187,7 +193,7 @@ struct PluginEventFactory: Sendable {
             } : nil,
             action: event.action,
             approval: canReadHookSummaries ? event.approval : nil,
-            powerStatus: permissions.contains(.controlPowerSleep) ? event.powerStatus : nil
+            powerStatus: canReadPowerStatus ? event.powerStatus : nil
         )
     }
 

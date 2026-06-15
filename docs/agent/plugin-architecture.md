@@ -548,7 +548,7 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 
 `timer.*`처럼 민감 자원에 접근하지 않고 플러그인 내부 상태만 다루는 capability는 permission 없이 허용한다. 외부 자원(저장소, 알림 등)에 닿는 capability는 반드시 대응 permission을 manifest에 선언해야 한다.
 `audio.playFile`은 CESP/OpenPeon 같은 도메인 포맷을 알지 않는 generic broker다. Host는 plugin ID + scope ID + 상대 경로를 정규화해 scope 밖 탈출, symlink 탈출, 확장자, 파일 크기를 검증하고, 플러그인은 포맷별 manifest 해석과 파일 선택 정책을 소유한다. 실현 예: `OpenPeonPlugin`이 `.readScopedFiles`로 `PluginContext.scopedFiles`를 받아 `CESPScopedPackResolver`로 pack을 broker 경유 스캔·검증하고 `OpenPeonRuntime`이 `audio.playFile` effect를 만든다(자세한 내용은 `openpeon-cesp.md`).
-`power.preventIdleSleep`처럼 시스템 자원(IOPMAssertion)을 만지는 capability는 host가 plugin **이름**으로 게이팅하지 않는다. 대신 필요한 permission(`controlPowerSleep`)을 **system-only**(`PluginPermission.systemOnly`)로 표시하고, system-only permission을 요구하는 effect는 plugin이 `kind: .system`을 선언한 경우에만 `HostEffectCatalog.isSupported(_:kind:permissions:)`가 허용한다. 따라서 third-party `.utility` plugin이 `controlPowerSleep`을 선언해도 power effect는 거부된다(이름 결합 없이 trust tier로 경계 유지). plugin 비활성화/safemode 시 power assertion release도 `pluginID == "caffeine"` 대신 `controlPowerSleep` 보유 여부로 일반화한다.
+`power.preventIdleSleep`처럼 시스템 자원(IOPMAssertion)을 만지는 capability는 host가 plugin **이름**으로 게이팅하지 않는다. 대신 필요한 permission(`controlPowerSleep`)을 **system-only**(`PluginPermission.systemOnly`)로 표시하고, system-only permission을 요구하는 effect는 plugin이 `kind: .system`을 선언한 경우에만 `HostEffectCatalog.isSupported(_:kind:permissions:)`가 허용한다. 따라서 third-party `.utility` plugin이 `controlPowerSleep`을 선언해도 power effect는 거부된다(이름 결합 없이 trust tier로 경계 유지). `power.status.changed` dispatch/redaction과 plugin 비활성화/safemode 시 power assertion release도 같은 `controlPowerSleep + kind: .system` 기준을 따른다.
 
 `PomodoroPlugin` built-in 구현 예시:
 
@@ -738,18 +738,19 @@ final class PluginHost: ObservableObject {
            targetPluginID != runner.manifest.id {
             return false
         }
-        guard isEventAllowed(event, for: runner.manifest.permissions) else { return false }
+        guard isEventAllowed(event, for: runner.manifest) else { return false }
         return runner.manifest.activationEvents.contains(event.kind.rawValue)
     }
 
-    private func isEventAllowed(_ event: PluginEvent, for permissions: Set<PluginPermission>) -> Bool {
+    private func isEventAllowed(_ event: PluginEvent, for manifest: PluginManifest) -> Bool {
         switch event.kind {
         case .sessionStarted, .sessionUpdated, .sessionEnded:
-            return permissions.contains(.readSessionEvents)
+            return manifest.permissions.contains(.readSessionEvents)
         case .hookReceived, .approvalDecided:
-            return permissions.contains(.readHookSummaries)
+            return manifest.permissions.contains(.readHookSummaries)
         case .powerStatusChanged:
-            return permissions.contains(.controlPowerSleep)
+            return manifest.permissions.contains(.controlPowerSleep)
+                && PluginPermission.controlPowerSleep.isAllowed(for: manifest.kind)
         default:
             return true
         }
@@ -863,6 +864,7 @@ actor PluginEventProcessor {
                 group.addTask {
                     let event = eventFactory.redactedEvent(
                         from: queued.baseEvent,
+                        kind: runner.manifest.kind,
                         permissions: runner.manifest.permissions
                     )
                     let snapshot = runner.manifest.permissions.contains(.writePluginStorage)
@@ -880,7 +882,7 @@ actor PluginEventProcessor {
 }
 ```
 
-`QueuedPluginEvent.baseEvent`는 AppState가 만든 sanitized base DTO다. 하지만 field-level redaction은 runner별 permission을 알아야 하므로, `PluginEventProcessor`가 각 runner 호출 직전에 `PluginEventFactory.redactedEvent(from:permissions:)`를 적용한다. 이 구조가 있어야 `readTerminalMetadata`가 없는 플러그인과 있는 플러그인이 같은 hook 이벤트를 구독해도 서로 다른 DTO를 받는다.
+`QueuedPluginEvent.baseEvent`는 AppState가 만든 sanitized base DTO다. 하지만 field-level redaction은 runner별 permission과 trust tier를 알아야 하므로, `PluginEventProcessor`가 각 runner 호출 직전에 `PluginEventFactory.redactedEvent(from:kind:permissions:)`를 적용한다. 이 구조가 있어야 `readTerminalMetadata`가 없는 플러그인과 있는 플러그인이 같은 hook 이벤트를 구독해도 서로 다른 DTO를 받으며, system-only field(`powerStatus`)도 permission만으로 노출되지 않는다.
 `PluginEventFactory`는 mutable 상태를 갖지 않는 `Sendable` value type으로 둔다. runner fan-out task 안에서 공유되므로, 내부 cache나 mutable formatter를 보관하지 않는다.
 
 ```swift
@@ -1267,7 +1269,7 @@ struct PluginSlotView: View {
 ### 12.7. 테스트 seam
 
 - `PluginHost`는 `enablePlugins: false`로 주입 가능하므로 기존 `AppStateTests`·`SessionStoreTests`에 영향이 없다.
-- `PluginEventFactory`는 base event 생성과 runner별 `redactedEvent(from:permissions:)`를 각각 테스트한다.
+- `PluginEventFactory`는 base event 생성과 runner별 `redactedEvent(from:kind:permissions:)`를 각각 테스트한다.
 - `PluginRunner`/`PluginHost`는 fake plugin(고정 contribution·의도적 throw)으로 dispatch 순서·safemode 전환·cache dedup을 검증한다.
 
 ### 12.8. 단계적 적용 (롤아웃과의 매핑)
@@ -1311,7 +1313,7 @@ struct PluginSlotView: View {
 | 현재 기능 | 플러그인으로 옮길 수 있는 부분 | core에 남길 부분 |
 | :--- | :--- | :--- |
 | OpenPeon | CESP manifest 해석, event mapping, sound selection, mute/debounce 정책, preview button contribution | scoped file/audio broker, settings persistence bridge |
-| Caffeine | sleep 방지 정책 판단, 메뉴/노치 상태 contribution, built-in-only `power.preventIdleSleep` effect 요청 | `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence |
+| Caffeine | sleep 방지 정책 판단, 메뉴/노치 상태 contribution, system-only `power.preventIdleSleep` effect 요청 | `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence |
 | Replay Log / Session History | session별 annotation, 요약 badge, menubar quick action | `SQLiteApprovalStore`, replay query, replay execution |
 | PTY Transcript | transcript 존재 여부 badge, session accessory | PTY capture, transcript storage, raw transcript viewer |
 | Settings | plugin enable/disable, safemode, storage reset | core app settings, bridge config, approval settings |
@@ -1387,7 +1389,7 @@ v1.1 session surface에서 도입한 최소 command path를 이 단계에서 log
 - `session.copyResumeCommand`: host가 sanitized command를 생성해 pasteboard에 복사
 - `session.openWorkspace`: workspace root가 있는 세션만 Finder로 열기
 - `audio.playFile`: scoped audio broker 경유, `playScopedAudio` permission 필요
-- `power.preventIdleSleep`: built-in allowlist only
+- `power.preventIdleSleep`: `controlPowerSleep` + `kind: .system` only
 - `notification.show`: `showNotification` permission 필요
 
 host command는 실패해도 provider response, approval decision, session lifecycle ownership을 바꾸지 않는다. pending/current approval 세션에 대한 destructive action은 허용하지 않는다.

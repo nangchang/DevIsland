@@ -231,11 +231,14 @@ final class PluginHost: ObservableObject {
         releasePowerIfControlled(pluginID: pluginID)
     }
 
-    /// Releases any held power assertion when a plugin that controls power sleep is deactivated
-    /// (disabled or moved to safemode). Gated on the declared `.controlPowerSleep` permission, so
-    /// the host does not special-case a plugin by name.
+    /// Releases any held power assertion when a system plugin that controls power sleep is
+    /// deactivated (disabled or moved to safemode). Gated on the same system-only permission
+    /// boundary used for power effects and power-status delivery.
     private func releasePowerIfControlled(pluginID: String) {
-        guard runners[pluginID]?.manifest.permissions.contains(.controlPowerSleep) == true else { return }
+        guard let manifest = runners[pluginID]?.manifest,
+              manifest.permissions.contains(.controlPowerSleep),
+              PluginPermission.controlPowerSleep.isAllowed(for: manifest.kind)
+        else { return }
         let handler = powerSleepHandler
         Task {
             await handler?(false, "off")
@@ -441,18 +444,19 @@ final class PluginHost: ObservableObject {
            targetPluginID != runner.manifest.id {
             return false
         }
-        guard isEventAllowed(event, for: runner.manifest.permissions) else { return false }
+        guard isEventAllowed(event, for: runner.manifest) else { return false }
         return runner.manifest.activationEvents.contains(event.kind.rawValue)
     }
 
-    private func isEventAllowed(_ event: PluginEvent, for permissions: Set<PluginPermission>) -> Bool {
+    private func isEventAllowed(_ event: PluginEvent, for manifest: PluginManifest) -> Bool {
         switch event.kind {
         case .sessionStarted, .sessionUpdated, .sessionEnded:
-            return permissions.contains(.readSessionEvents)
+            return manifest.permissions.contains(.readSessionEvents)
         case .hookReceived, .approvalDecided:
-            return permissions.contains(.readHookSummaries)
+            return manifest.permissions.contains(.readHookSummaries)
         case .powerStatusChanged:
-            return permissions.contains(.controlPowerSleep)
+            return manifest.permissions.contains(.controlPowerSleep)
+                && PluginPermission.controlPowerSleep.isAllowed(for: manifest.kind)
         default:
             return true
         }

@@ -35,6 +35,7 @@ actor PluginEventProcessor {
                 group.addTask {
                     let event = eventFactory.redactedEvent(
                         from: queued.baseEvent,
+                        kind: runner.manifest.kind,
                         permissions: runner.manifest.permissions
                     )
                     let storageSnapshot = runner.manifest.permissions.contains(.writePluginStorage)

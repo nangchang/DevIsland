@@ -74,8 +74,8 @@ actor PluginEffectExecutor {
             return
         }
 
-        // The built-in allowlist (`caffeine` only) is enforced by `HostEffectCatalog.isSupported`
-        // in `enqueue`, so an unauthorized plugin's power effect never reaches here.
+        // System-only power permission is enforced by `HostEffectCatalog.isSupported` in
+        // `enqueue`, so an unauthorized plugin's power effect never reaches here.
         if effect.capability == "power.preventIdleSleep" {
             let prevent = effect.payload["preventSleep"] == "true"
             let reason = effect.payload["reason"] ?? "off"

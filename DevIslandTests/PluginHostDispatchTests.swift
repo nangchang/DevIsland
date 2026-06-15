@@ -77,6 +77,90 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(full.receivedEvents.first?.hook?.cwd, "/Users/alice/project")
     }
 
+    func testPowerStatusDispatchRequiresSystemKindWithPermission() async {
+        let utility = RecordingPlugin(
+            id: "com.devisland.test.utility-power",
+            permissions: [.controlPowerSleep],
+            activationEvents: [.powerStatusChanged]
+        )
+        let system = RecordingPlugin(
+            id: "com.devisland.test.system-power",
+            kind: .system,
+            permissions: [.controlPowerSleep],
+            activationEvents: [.powerStatusChanged]
+        )
+        let host = PluginHost()
+        host.register([utility, system])
+
+        host.enqueue(makePowerStatusEvent())
+        await host.waitUntilIdle()
+
+        XCTAssertTrue(utility.receivedEvents.isEmpty)
+        XCTAssertEqual(system.receivedEvents.first?.powerStatus?.effectReason, "ac-power")
+    }
+
+    func testPowerReleaseOnDisableRequiresSystemKindWithPermission() async {
+        let releases = LockIsolated<[String]>([])
+        let utility = RecordingPlugin(
+            id: "com.devisland.test.utility-power",
+            permissions: [.controlPowerSleep],
+            activationEvents: [.pluginStarted]
+        )
+        let system = RecordingPlugin(
+            id: "com.devisland.test.system-power",
+            kind: .system,
+            permissions: [.controlPowerSleep],
+            activationEvents: [.pluginStarted]
+        )
+        let host = PluginHost(powerSleepHandler: { preventSleep, reason in
+            releases.withValue { $0.append("\(preventSleep):\(reason)") }
+        })
+        host.register([utility, system])
+
+        host.setPluginEnabled(false, pluginID: utility.manifest.id)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertTrue(releases.value.isEmpty)
+
+        host.setPluginEnabled(false, pluginID: system.manifest.id)
+        let deadline = Date().addingTimeInterval(1)
+        while releases.value.isEmpty && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(releases.value, ["false:off"])
+    }
+
+    func testPowerReleaseOnSafemodeRequiresSystemKindWithPermission() async {
+        let releases = LockIsolated<[String]>([])
+        let utility = RecordingPlugin(
+            id: "com.devisland.test.utility-power",
+            permissions: [.controlPowerSleep],
+            activationEvents: [.pluginStarted]
+        )
+        let system = RecordingPlugin(
+            id: "com.devisland.test.system-power",
+            kind: .system,
+            permissions: [.controlPowerSleep],
+            activationEvents: [.pluginStarted]
+        )
+        let host = PluginHost(powerSleepHandler: { preventSleep, reason in
+            releases.withValue { $0.append("\(preventSleep):\(reason)") }
+        })
+        host.register([utility, system])
+
+        host.enterSafemode(pluginID: utility.manifest.id)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertTrue(releases.value.isEmpty)
+
+        host.enterSafemode(pluginID: system.manifest.id)
+        let deadline = Date().addingTimeInterval(1)
+        while releases.value.isEmpty && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(releases.value, ["false:off"])
+    }
+
     func testActionEventDispatchesOnlyToTargetPlugin() async {
         let target = RecordingPlugin(
             id: "com.devisland.test.target",
@@ -918,6 +1002,29 @@ final class PluginHostDispatchTests: XCTestCase {
         )
     }
 
+    private func makePowerStatusEvent() -> PluginEvent {
+        PluginEvent(
+            id: UUID(),
+            kind: .powerStatusChanged,
+            timestamp: Date(),
+            session: nil,
+            hook: nil,
+            action: nil,
+            approval: nil,
+            powerStatus: PluginPowerStatus(
+                featureEnabled: true,
+                excludedSSIDs: [],
+                isOnACPower: true,
+                batteryLevel: 0.8,
+                currentSSID: "Office",
+                isPreventingSleep: true,
+                effectReason: "ac-power",
+                effectFailureCode: nil,
+                isEffectResult: false
+            )
+        )
+    }
+
     private func makeSessionSnapshot(id: String) -> PluginSessionSnapshot {
         PluginSessionSnapshot(
             id: id,
@@ -980,6 +1087,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
     init(
         id: String,
         name: String? = nil,
+        kind: PluginKind = .utility,
         permissions: Set<PluginPermission> = [],
         activationEvents: Set<PluginEventKind>,
         contribution: PluginUIContribution? = nil,
@@ -993,7 +1101,7 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
             name: name ?? id,
             version: "1.0.0",
             apiVersion: 1,
-            kind: .utility,
+            kind: kind,
             permissions: permissions,
             surfaces: surfaces,
             activationEvents: Set(activationEvents.map(\.rawValue))

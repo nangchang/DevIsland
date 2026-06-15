@@ -21,4 +21,8 @@ extension PluginPermission {
     static let systemOnly: Set<PluginPermission> = [.controlPowerSleep]
 
     var isSystemOnly: Bool { Self.systemOnly.contains(self) }
+
+    func isAllowed(for kind: PluginKind) -> Bool {
+        !isSystemOnly || kind == .system
+    }
 }

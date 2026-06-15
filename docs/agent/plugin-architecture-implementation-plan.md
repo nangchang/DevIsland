@@ -65,8 +65,8 @@
   - v1.2 b. `session.copyResumeCommand` — 완료. side-effect-free host command: `AppState.copyResumeCommandFromPlugin`이 sessionID로 세션을 찾아 host가 생성한 `ActiveSession.resumeCommand`(shell-escaped, `NotchComponents`에서 추출해 공유)를 pasteboard에 복사. approval queue/pending/provider response/session lifecycle을 전혀 건드리지 않음. `SessionActionsPlugin`이 `session.context-menu`에 "Copy Resume Command" 버튼을 `showSessionSurface` permission gate로 기여하고, 중복을 피하려 `SessionRowView` 컨텍스트 메뉴의 core "Copy Resume Command" 항목을 제거해 plugin 기여로 대체(plugin disable 시 해당 항목 사라짐; `SessionHistoryWindow`의 core 항목은 plugin surface가 아니라 유지). `resumeCommand` 셸 이스케이프는 POSIX 작은따옴표 방식(`'...'`, 내부 `'`→`'\''`)으로 command substitution/변수 확장을 차단(PR #279 gemini review). 플러그인은 workspace path·shell 문자열을 직접 보지 않음(host-owned sanitization).
   - v1.2 c. `session.focusTerminal` — 완료. host command: `AppState.focusTerminalFromPlugin`이 sessionID로 세션을 찾아 그 세션의 terminal metadata로 `TerminalFocuser.focusTerminal`을 직접 호출(core `focusTerminal(for:)`의 unread/missed 해제·`passIfTerminalFocused` completion을 재사용하지 않음). 단 터미널을 frontmost로 만들면 `NotchWindowController`의 앱 활성화/클릭 observer가 `passIfTerminalFocused`를 호출해 표시 중인 approval을 pass시킬 수 있으므로, request/notification 표시 중이면 focus를 거부한다(`canPluginFocusTerminal` = `passIfTerminalFocused` 가드와 동일 조건, PR #280 codex review). 그 외에는 윈도우 포커스만 이동하고 approval queue/session 상태를 건드리지 않는다. `SessionActionsPlugin`이 `session.context-menu`에 "Focus Terminal" 버튼을 `showSessionSurface` permission gate로 기여(`isDestructive: false`). plugin 세션 명령 핸들러(`handlePluginSessionCommand`/`dismissSessionFromPlugin`/`copyResumeCommandFromPlugin`/`focusTerminalFromPlugin`)는 `@MainActor`로 명시(PR #280 gemini review).
   - v1.2 d. `session.openWorkspace` — 완료. side-effect-free host command: `AppState.openWorkspaceFromPlugin`이 sessionID로 세션을 찾아 `workspaceRoot`가 있으면 `NSWorkspace.shared.open`으로 Finder에 연다. Finder만 활성화하므로(터미널 frontmost가 아니라) observer의 `passIfTerminalFocused`가 발동해도 approval을 pass하지 않아 별도 가드가 불필요. `SessionActionsPlugin`이 `workspaceRoot`가 비어있지 않은 세션에만 "Open in Finder" 버튼을 `showSessionSurface` permission gate로 기여하고, 중복을 피하려 `SessionRowView` 컨텍스트 메뉴의 core "Open in Finder" 항목을 제거해 plugin 기여로 대체(plugin disable 시 사라짐; "Copy Path"·`SessionHistoryWindow`의 항목은 유지). `workspaceRoot`는 `PluginEventFactory.redactedSession`이 `readTerminalMetadata` 없이는 `nil`로 만들므로 plugin에 `.readTerminalMetadata`를 부여한다(session 이벤트만 구독해 cwd/terminalApp은 받지 않고 workspaceRoot만 보존; 미부여 시 버튼이 절대 기여되지 않아 회귀 — PR #281 codex review).
-  - v1.2 e. Host Effect 카탈로그 통합 — 완료. `PluginEffectExecutor.isHostEffectSupported`의 하드코딩 `switch`를 `SessionCommandCatalog`와 대칭인 `HostEffectCatalog`(capability → 필요 permission + `builtInOnlyPluginIDs` allowlist 메타데이터)로 대체. `PluginEffectExecutor.enqueue`와 `PluginHost.handleAction`이 같은 `HostEffectCatalog.isSupported(_:pluginID:permissions:)` 경로로 effect를 검증한다. `power.preventIdleSleep`/`power.toggle`의 built-in allowlist(`caffeine` 전용)가 `execute`의 `guard pluginID == "caffeine"`에 흩어져 있던 것을 카탈로그 메타데이터로 옮겨 dispatch 전에 검증(동작 불변 — caffeine만 통과). `notification.show`/`storage.*`/`audio.playFile`은 permission만으로 허용(allowlist nil).
-  - v1.3 e. power capability를 plugin 이름이 아닌 trust tier로 게이팅 — 완료. host가 generic해야 할 곳에서 plugin 이름 `"caffeine"`을 알던 3곳을 제거했다. `HostEffectCatalog`의 `builtInOnlyPluginIDs: ["caffeine"]` allowlist 필드를 삭제하고, `controlPowerSleep`을 `PluginPermission.systemOnly`로 표시한 뒤 `isSupported(_:kind:permissions:)`가 system-only 권한을 요구하는 effect를 plugin의 `kind == .system`일 때만 허용하도록 바꿨다(`pluginID` 파라미터 제거, 호출부 `PluginEffectExecutor.enqueue`/`PluginHost`에 `kind` 전달). `PluginHost.setPluginEnabled`/`enterSafemode`의 `if pluginID == "caffeine"` power release는 `controlPowerSleep` 보유 여부로 일반화(`releasePowerIfControlled`). `CaffeinePlugin` manifest는 `kind: .utility`→`.system`(OpenPeon과 일관, OS power assertion을 다루는 system plugin). 동작 불변 — 현재 power plugin은 Caffeine 하나뿐이고 `.system`으로 통과, 다른 plugin은 `controlPowerSleep` 미선언. third-party `.utility` plugin은 권한을 선언해도 power effect 거부(경계 유지).
+  - v1.2 e. Host Effect 카탈로그 통합 — 완료. `PluginEffectExecutor.isHostEffectSupported`의 하드코딩 `switch`를 `SessionCommandCatalog`와 대칭인 `HostEffectCatalog`(capability → 필요 permission)로 대체. `PluginEffectExecutor.enqueue`와 `PluginHost.handleAction`이 같은 `HostEffectCatalog.isSupported(_:kind:permissions:)` 경로로 effect를 검증한다. `power.preventIdleSleep`/`power.toggle`은 이후 v1.3 e에서 이름 기반 allowlist가 아니라 system-only permission gate로 정리했다. `notification.show`/`storage.*`/`audio.playFile`은 permission만으로 허용한다.
+  - v1.3 e. power capability를 plugin 이름이 아닌 trust tier로 게이팅 — 완료. host가 generic해야 할 곳에서 plugin 이름 `"caffeine"`을 알던 3곳을 제거했다. `controlPowerSleep`을 `PluginPermission.systemOnly`로 표시한 뒤 `isSupported(_:kind:permissions:)`가 system-only 권한을 요구하는 effect를 plugin의 `kind == .system`일 때만 허용하도록 바꿨다(`pluginID` 파라미터 제거, 호출부 `PluginEffectExecutor.enqueue`/`PluginHost`에 `kind` 전달). `PluginHost.setPluginEnabled`/`enterSafemode`의 power release와 `power.status.changed` dispatch/redaction도 같은 `controlPowerSleep + kind == .system` 기준을 사용한다. `CaffeinePlugin` manifest는 `kind: .utility`→`.system`(OpenPeon과 일관, OS power assertion을 다루는 system plugin). 동작 불변 — 현재 power plugin은 Caffeine 하나뿐이고 `.system`으로 통과, 다른 plugin은 `controlPowerSleep` 미선언. third-party `.utility` plugin은 권한을 선언해도 power effect/status/release 경로에서 거부된다(경계 유지).
   - v1.3 d. Caffeine 경계 정리 — 완료. 카페인 구현(`CaffeineCoordinator`/`SleepAssertion`/`PowerSourceMonitor`/`WifiSSIDMonitor`/`LocationPermissionRequester`)과 `CaffeinePlugin`을 `Plugins/BuiltIn/Caffeine/`로 모으고, plugin↔host 경계를 명확히 했다. plugin-facing DTO `PluginPowerStatus` 필드명을 host 구현 노출 없이 generic하게 정리: `caffeineEnabled`→`featureEnabled`, `isHoldingAssertion`→`isPreventingSleep`, `assertionReason`→`effectReason`, `assertionFailureCode`→`effectFailureCode`, `isAssertionResult`→`isEffectResult`(시스템 신호 `isOnACPower`/`batteryLevel`/`currentSSID`/`excludedSSIDs`는 유지). `CaffeineCoordinator`는 순수 host-side signal/effect adapter로 축소 — production에서 쓰이지 않던 중복 정책(`decide`/`nextLowBatteryState`/`CaffeineReason`/`reason` 죽은 상태)을 제거하고, 정책은 `CaffeinePlugin.decide`가 단독 소유함을 코드/주석으로 명확히 했다. host 내부 `isHoldingAssertion`(Settings·상태바 표시)은 실제 IOPMAssertion을 가리키므로 호스트 용어 그대로 유지. 죽은 정책만 검증하던 `CaffeineCoordinatorTests`는 삭제(정책 커버리지는 `CaffeinePluginTests`가 `onEvent` 경유로 이미 보유). 동작 불변.
   - v1.3 c. CESP pack scan/validation의 plugin-owned 전환 — 완료. `OpenPeonPlugin`에 `.readScopedFiles`를 부여해 `PluginContext.scopedFiles`를 받고, pack 디스커버리·manifest parsing·validation·active pack 선택을 host 싱글톤(`CESPPackStore.shared`/`CESPAudioPlayer.shared`)이 아니라 `CESPScopedPackResolver`가 broker(`listDirectory`/`readText`)로 수행한다. validation 규칙은 `CESPPackValidator.validate(manifest:fileIndex:)`로 추출해 host `FileManager` 스캔과 broker 스캔이 동일 규칙(50MB 총량 포함)을 공유하고, 파일 facts만 `CESPPackFileIndex`로 미리 수집한다(에러 문자열·`OpenPeonPackValidatorTests` 동작 불변). debounce/mute/selection 상태는 `@MainActor` `OpenPeonRuntime`이 소유(actor 재진입 시 직렬화), 싼 게이트(enabled/mute/debounce)를 broker 접근 전에 통과시켜 스캔 빈도를 debounce로 제한한다. 캐시는 없고 매 debounce-통과 이벤트마다 active pack을 재스캔(런타임 추가 pack 즉시 반영). host `CESPPackStore`/`CESPAudioPlayer`는 Settings **Sound** 탭 전용으로 유지하고, plugin 경로 전용이던 `CESPAudioPlayer.scopedAudioRequest`/`CESPScopedAudioRequest`는 제거했다. OpenPeon 설정은 계획대로 `AppSettings`(host bridge)에 남는다.
   - v1.3 b. Scoped file/audio capability foundation — 완료. Host가 OpenPeon/CESP 도메인 포맷을 알지 않아도 built-in plugin이 제한된 로컬 파일을 읽고 오디오 재생을 요청할 수 있도록 `readScopedFiles`/`playScopedAudio`, `PluginScopedFileBroker`, generic `audio.playFile` effect를 추가했다. Broker는 plugin ID별 scope ID, 상대 경로 정규화, symlink 탈출 차단, 확장자/파일 크기 제한을 강제한다. `DevIslandPlugin.onEvent`를 async로 열고 `.readScopedFiles` 플러그인에 `PluginContext.scopedFiles`를 주입해 plugin이 broker에 host-mediated file read를 요청할 수 있게 했다. OpenPeon runtime hook playback은 `audio.playFile`로 이전했고, CESP pack scan/validation의 plugin-owned file read 전환은 v1.3 c에서 완료했다.
@@ -154,7 +154,7 @@
 
 - `ParsedHookEvent` -> base `PluginEvent` 변환
 - `ActiveSession` -> `PluginSessionSnapshot` 변환
-- `PluginEventFactory.redactedEvent(from:permissions:)` 구현
+- `PluginEventFactory.redactedEvent(from:kind:permissions:)` 구현
 - `readTerminalMetadata`가 없으면 `cwd`, `terminalApp` 제거
 - `readSessionEvents`가 없으면 hook event의 `session` snapshot 제거
 - `readRawPayload`, `readPtyTranscript`는 v1에서 어떤 DTO에도 포함하지 않음
@@ -192,7 +192,7 @@
 - elapsed time 측정과 `PluginFailure` 생성
 - `PluginHost.enqueue(_:)` MainActor FIFO 구현
 - `QueuedPluginEvent.baseEvent`와 runner 목록 저장
-- `PluginEventProcessor`가 runner별로 `redactedEvent(from:permissions:)` 적용
+- `PluginEventProcessor`가 runner별로 `redactedEvent(from:kind:permissions:)` 적용
 - `PluginHost.applySnapshots`에서 cache 일괄 교체
 - contribution dedup 기준 구현
   - 전역 slot: `(pluginID)`
@@ -533,7 +533,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 
 선행 조건:
 
-- PR 3의 `PluginEffectExecutor`가 built-in-only capability allowlist를 검증할 수 있어야 한다.
+- PR 3의 `PluginEffectExecutor`가 system-only capability gate를 검증할 수 있어야 한다.
 - scoped file/audio capability foundation이 준비되어 있어야 한다. Host는 OpenPeon/CESP 도메인 포맷을 알지 않고 `readScopedFiles`/`playScopedAudio`와 `audio.playFile`만 검증한다.
 
 목표:
@@ -579,7 +579,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주요 작업:
 
 - built-in `CaffeinePlugin` 추가
-- `power.preventIdleSleep` 같은 built-in-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 "built-in allowlist only" 행 추가)
+- `power.preventIdleSleep` 같은 system-only host effect capability 정의 (설계 문서 §8 capability↔permission 표에 system-only permission gate 행 추가)
 - `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence는 host service로 유지
 - host가 power/SSID/settings 상태와 실제 assertion 적용 결과를 sanitized caffeine status DTO로 제공
 - plugin은 host-provided status만 관찰해 assertion 보유/해제 의도를 `power.preventIdleSleep` effect로 반환
@@ -588,7 +588,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 주의:
 
 - plugin이 `IOPMAssertion`, Location, CoreWLAN API를 직접 호출하지 않게 한다.
-- `power.preventIdleSleep`는 permission 기반 공개 capability가 아니라 compiled built-in plugin ID allowlist로만 허용한다.
+- `power.preventIdleSleep`는 공개 capability가 아니라 `controlPowerSleep + kind: .system` 조합으로만 허용한다.
 - `SettingsStore.caffeineEnabled`는 사용자 기능 토글이고, plugin enable/safemode는 상위 feature guard다. 둘 중 하나라도 off이면 host는 assertion을 release해야 한다.
 - Caffeine settings UI는 SSID scan과 자유 텍스트 입력이 필요하므로 v1 contribution UI로 옮기지 않는다.
 
@@ -705,7 +705,7 @@ v1.1에서 개별 session surface 구현과 함께 둔 최소 command path를 �
 - ✅ `session.copyResumeCommand`: host가 sanitized command 생성 후 pasteboard 복사. side-effect-free (approval/queue/lifecycle 무영향) (완료, v1.2 b — `ActiveSession.resumeCommand` + `SessionActionsPlugin`)
 - ✅ `session.focusTerminal`: `TerminalFocuser.focusTerminal`을 직접 호출하는 plugin 전용 경로(`AppState.focusTerminalFromPlugin`). core `focusTerminal(for:)`의 completion(`passIfTerminalFocused`)·unread/missed 해제를 재사용하지 않고, 터미널 frontmost가 observer 경유로 approval을 pass시키는 것을 막기 위해 request/notification 표시 중이면 focus를 거부(`canPluginFocusTerminal`) (완료, v1.2 c)
 - ✅ `session.openWorkspace`: `workspaceRoot`가 있는 세션만, host가 `NSWorkspace.shared.open`으로 Finder에 연다(`AppState.openWorkspaceFromPlugin`). Finder만 활성화해 approval-neutral. core "Open in Finder" 컨텍스트 항목을 plugin 기여로 대체 (완료, v1.2 d)
-- ✅ `power.preventIdleSleep`/`power.toggle`, `notification.show`, `storage.*`, `audio.playFile`을 `HostEffectCatalog`(capability → 필요 permission + built-in allowlist)로 통합해 `PluginEffectExecutor`/`PluginHost`가 한 validation 경로(`isSupported(_:pluginID:permissions:)`)를 탄다. power의 `caffeine` allowlist를 `execute` guard에서 카탈로그로 이동 (완료, v1.2 e)
+- ✅ `power.preventIdleSleep`/`power.toggle`, `notification.show`, `storage.*`, `audio.playFile`을 `HostEffectCatalog`(capability → 필요 permission + system-only gate)로 통합해 `PluginEffectExecutor`/`PluginHost`가 한 validation 경로(`isSupported(_:kind:permissions:)`)를 탄다. power gate는 plugin 이름이 아니라 `controlPowerSleep + kind: .system` 기준이다 (완료, v1.2 e/v1.3 e)
 
 검증:
 
