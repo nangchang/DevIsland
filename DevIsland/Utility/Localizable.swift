@@ -274,6 +274,8 @@ extension L10n {
     var alertLaunchAtLoginFailed:     String { s("Failed to change Launch at Login",        "자동 시작 설정 변경 실패") }
     var secUpdates:                   String { s("Updates",                                 "업데이트") }
     var lblCheckForUpdatesOnStartup:  String { s("Check for updates on startup",            "시작 시 업데이트 확인") }
+    var secSounds:                    String { s("Sounds",                                  "사운드") }
+    var lblMuteAllSounds:             String { s("Mute all sounds",                         "모든 사운드 음소거") }
 
     // Island tab
     var secNotch:            String { s("Island",                        "아일랜드") }
