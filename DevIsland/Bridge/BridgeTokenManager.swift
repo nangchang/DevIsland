@@ -52,6 +52,10 @@ final class BridgeTokenManager {
         print("BridgeTokenManager: token generated")
     }
 
+    /// True when the token file is absent and any incoming token is accepted.
+    /// Callers can use this to surface a security warning in the UI.
+    var isGraceMode: Bool { !tokenFileExists }
+
     /// Returns true if the incoming token is acceptable.
     ///
     /// - If no token file exists on the app side (grace mode), always returns true.
