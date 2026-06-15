@@ -40,9 +40,7 @@ final class BridgeTokenManager: @unchecked Sendable {
         }
 
         if FileManager.default.fileExists(atPath: tokenURL.path) {
-            lock.lock()
-            reloadLocked()
-            lock.unlock()
+            reload()
             return
         }
 
@@ -64,13 +62,18 @@ final class BridgeTokenManager: @unchecked Sendable {
     /// - If no token file exists on the app side (grace mode), always returns true.
     /// - If a token file exists, the incoming token must match exactly.
     func validate(_ incoming: String?) -> Bool {
+        // Check once under lock whether we need a reload, then do the file I/O outside the lock.
+        // Prevents accepting arbitrary tokens when generateIfNeeded was never called.
+        lock.lock()
+        let needsReload = !_tokenFileExists
+        lock.unlock()
+
+        if needsReload && FileManager.default.fileExists(atPath: tokenURL.path) {
+            reload()
+        }
+
         lock.lock()
         defer { lock.unlock() }
-        // If the cache hasn't been populated yet but the file exists on disk, reload before
-        // deciding — prevents accepting arbitrary tokens when generateIfNeeded was never called.
-        if !_tokenFileExists && FileManager.default.fileExists(atPath: tokenURL.path) {
-            reloadLocked()
-        }
         guard _tokenFileExists, let expected = _cachedToken else {
             // Grace mode: token file genuinely absent on disk, accept anything.
             return true
@@ -80,10 +83,12 @@ final class BridgeTokenManager: @unchecked Sendable {
 
     // MARK: - Private
 
-    /// Must be called while holding `lock`.
-    private func reloadLocked() {
+    private func reload() {
         guard let token = try? String(contentsOf: tokenURL, encoding: .utf8) else { return }
-        _cachedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        lock.lock()
+        _cachedToken = trimmed
         _tokenFileExists = true
+        lock.unlock()
     }
 }
