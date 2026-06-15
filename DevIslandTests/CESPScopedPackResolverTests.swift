@@ -59,6 +59,21 @@ final class CESPScopedPackResolverTests: XCTestCase {
         XCTAssertNil(pack)
     }
 
+    func testOversizePackIsNotResolved() async throws {
+        try writePack(
+            dir: "sample",
+            name: "sample",
+            soundPath: "sounds/done.wav",
+            extraFileSize: CESPPackValidator.maxPackSize + 1
+        )
+
+        let pack = await CESPScopedPackResolver.resolveActivePack(
+            scoped: client(), scopeID: scopeID, activePackName: "sample"
+        )
+
+        XCTAssertNil(pack)
+    }
+
     func testActiveNameSelectsMatchingPack() async throws {
         try writePack(dir: "a", name: "alpha", soundPath: "sounds/done.wav")
         try writePack(dir: "b", name: "beta", soundPath: "sounds/done.wav")
@@ -97,7 +112,8 @@ final class CESPScopedPackResolverTests: XCTestCase {
         name: String,
         soundPath: String,
         cespVersion: String = "1.0",
-        createSound: Bool = true
+        createSound: Bool = true,
+        extraFileSize: Int64? = nil
     ) throws {
         let packURL = root.appendingPathComponent(dir, isDirectory: true)
         try FileManager.default.createDirectory(at: packURL, withIntermediateDirectories: true)
@@ -107,6 +123,12 @@ final class CESPScopedPackResolverTests: XCTestCase {
                 at: soundURL.deletingLastPathComponent(), withIntermediateDirectories: true
             )
             try Data([0, 1, 2, 3]).write(to: soundURL)
+        }
+        if let extraFileSize {
+            try writeSparseFile(
+                at: packURL.appendingPathComponent("oversize.bin"),
+                byteCount: extraFileSize
+            )
         }
         let manifest = """
         {
@@ -123,5 +145,12 @@ final class CESPScopedPackResolverTests: XCTestCase {
         }
         """
         try Data(manifest.utf8).write(to: packURL.appendingPathComponent("openpeon.json"))
+    }
+
+    private func writeSparseFile(at url: URL, byteCount: Int64) throws {
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: UInt64(byteCount))
+        try handle.close()
     }
 }

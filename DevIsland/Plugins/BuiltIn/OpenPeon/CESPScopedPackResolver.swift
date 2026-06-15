@@ -91,6 +91,10 @@ enum CESPScopedPackResolver {
                     if entry.relativePath.hasPrefix(prefix) {
                         sizes[String(entry.relativePath.dropFirst(prefix.count))] = size
                     }
+                    if total > CESPPackValidator.maxPackSize {
+                        pending.removeAll()
+                        break
+                    }
                 }
             }
         }

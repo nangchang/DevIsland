@@ -6,7 +6,7 @@ enum CESPPackValidator {
     private static let supportedExtensions: Set<String> = ["wav", "mp3", "ogg"]
     private static let playbackSupportedExtensions: Set<String> = ["wav", "mp3"]
     private static let maxAudioFileSize: Int64 = 1_000_000
-    private static let maxPackSize: Int64 = 50_000_000
+    static let maxPackSize: Int64 = 50_000_000
 
     static func loadPack(at rootURL: URL, fileManager: FileManager = .default) -> CESPPack? {
         let manifestURL = rootURL.appendingPathComponent("openpeon.json")
@@ -110,6 +110,9 @@ enum CESPPackValidator {
                 let path = fileURL.standardizedFileURL.path
                 if path.hasPrefix(rootPath + "/") {
                     sizes[String(path.dropFirst(rootPath.count + 1))] = size
+                }
+                if total > maxPackSize {
+                    break
                 }
             }
         }
