@@ -387,4 +387,73 @@ final class ApprovalPolicyEngineTests: XCTestCase {
         XCTAssertEqual(persistentDeny.source, .persistentRule)
         XCTAssertEqual(persistentDeny.action, .deny)
     }
+
+    // MARK: - Action-aware regex semantics
+
+    func testRegexDenyUsesSubstringMatchToPreserveBroadCoverage() throws {
+        // Deny rules use substring match so an unanchored pattern like "Dangerous"
+        // still blocks "ReadDangerousTool". Full-match on deny would silently weaken
+        // existing rules on upgrade.
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let engine = ApprovalPolicyEngine(store: store)
+
+        try store.insertRule(ApprovalRule(
+            provider: .claude,
+            toolName: "Dangerous",
+            matchKind: .regex,
+            pattern: "Dangerous",
+            action: .deny,
+            scope: .persistent
+        ))
+
+        let substringMatch = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "ReadDangerousTool"
+        ))
+        XCTAssertEqual(substringMatch.action, .deny,
+                       "Regex deny 'Dangerous' must block 'ReadDangerousTool' via substring match")
+
+        let exactMatch = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "Dangerous"
+        ))
+        XCTAssertEqual(exactMatch.action, .deny,
+                       "Regex deny 'Dangerous' must also block exact match 'Dangerous'")
+    }
+
+    func testRegexDenyOverridesRegexAllow() throws {
+        // Regression: a broad regex deny rule must win even when a narrow regex allow
+        // rule also matches the same tool name. Priority: persistent deny > persistent allow.
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let engine = ApprovalPolicyEngine(store: store)
+
+        // Allow rule: full-match — only matches "Read" exactly.
+        try store.insertRule(ApprovalRule(
+            provider: .claude,
+            toolName: "Read",
+            matchKind: .regex,
+            pattern: "Read",
+            action: .allow,
+            scope: .persistent
+        ))
+        // Deny rule: substring — matches anything containing "Read".
+        try store.insertRule(ApprovalRule(
+            provider: .claude,
+            toolName: "Read",
+            matchKind: .regex,
+            pattern: "Read",
+            action: .deny,
+            scope: .persistent
+        ))
+
+        let decision = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .claude,
+            sessionId: "s1",
+            toolName: "Read"
+        ))
+        XCTAssertEqual(decision.action, .deny,
+                       "Persistent deny must win over persistent allow when both regex rules match")
+    }
 }

@@ -51,7 +51,15 @@ struct ApprovalPolicyEngine {
         case .glob:
             return fnmatch(rule.pattern, toolName, FNM_PATHNAME) == 0
         case .regex:
-            return regexMatches(pattern: rule.pattern, against: toolName)
+            // Allow rules use full-match to prevent over-granting (S6).
+            // Deny rules use substring match to preserve maximum blocking coverage:
+            // a deny pattern should catch any tool name that contains it, not just
+            // exact matches, so upgrading cannot silently weaken an existing deny rule.
+            if rule.action == .allow {
+                return regexMatchesFull(pattern: rule.pattern, against: toolName)
+            } else {
+                return regexMatchesSubstring(pattern: rule.pattern, against: toolName)
+            }
         case .commandPrefix:
             guard rule.toolName == toolName,
                   let command = toolInput?["command"] as? String else { return false }
@@ -66,23 +74,31 @@ struct ApprovalPolicyEngine {
 
     private static let regexCache = NSCache<NSString, NSRegularExpression>()
 
-    private static func regexMatches(pattern: String, against input: String) -> Bool {
-        guard pattern.count <= 200 else { return false }
+    private static func compiledRegex(pattern: String) -> NSRegularExpression? {
+        guard pattern.count <= 200 else { return nil }
         let key = pattern as NSString
-        let regex: NSRegularExpression
-        if let cached = regexCache.object(forKey: key) {
-            regex = cached
-        } else {
-            guard let compiled = try? NSRegularExpression(pattern: pattern) else { return false }
-            regexCache.setObject(compiled, forKey: key)
-            regex = compiled
-        }
+        if let cached = regexCache.object(forKey: key) { return cached }
+        guard let compiled = try? NSRegularExpression(pattern: pattern) else { return nil }
+        regexCache.setObject(compiled, forKey: key)
+        return compiled
+    }
+
+    /// Full-string match: the entire tool name must be covered by the pattern.
+    /// Used for allow rules to prevent over-granting (S6).
+    private static func regexMatchesFull(pattern: String, against input: String) -> Bool {
+        guard let regex = compiledRegex(pattern: pattern) else { return false }
         let range = NSRange(input.startIndex..., in: input)
-        // Full-string match: the pattern must cover the entire tool name, not just a substring.
-        // This prevents a rule for "Read" from matching "ReadDangerousTool".
         guard let match = regex.firstMatch(in: input, options: .withoutAnchoringBounds, range: range) else {
             return false
         }
         return match.range == range
+    }
+
+    /// Substring match: the pattern may match anywhere in the tool name.
+    /// Used for deny rules to preserve maximum blocking coverage on upgrade.
+    private static func regexMatchesSubstring(pattern: String, against input: String) -> Bool {
+        guard let regex = compiledRegex(pattern: pattern) else { return false }
+        let range = NSRange(input.startIndex..., in: input)
+        return regex.firstMatch(in: input, options: .withoutAnchoringBounds, range: range) != nil
     }
 }
