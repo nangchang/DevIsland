@@ -23,7 +23,7 @@ struct PluginManifest: Codable, Equatable {
 
 /// Metadata a plugin provides to contribute a dedicated pane in the host settings window.
 /// The host owns the actual view; the plugin only declares its identity and placement hint.
-struct PluginSettingsPaneDescriptor {
+struct PluginSettingsPaneDescriptor: Sendable {
     let pluginID: String
     let label: PluginLocalizedString
     let systemImage: String
