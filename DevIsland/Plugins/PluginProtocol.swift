@@ -15,9 +15,14 @@ struct PluginManifest: Codable, Equatable {
     let surfaces: Set<PluginUISlot>
     let activationEvents: Set<String>
     var localizedName: PluginLocalizedString? = nil
+    var localizedDescription: PluginLocalizedString? = nil
 
     func displayName(language: AppLanguage) -> String {
         localizedName?.resolved(for: language) ?? name
+    }
+
+    func displayDescription(language: AppLanguage) -> String? {
+        localizedDescription?.resolved(for: language)
     }
 }
 

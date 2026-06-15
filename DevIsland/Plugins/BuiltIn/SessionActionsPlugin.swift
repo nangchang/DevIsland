@@ -32,7 +32,11 @@ final class SessionActionsPlugin: DevIslandPlugin, Sendable {
             PluginEventKind.sessionEnded.rawValue,
             PluginEventKind.languageChanged.rawValue
         ],
-        localizedName: PluginLocalizedString(english: "Session Actions", korean: "세션 작업")
+        localizedName: PluginLocalizedString(english: "Session Actions", korean: "세션 작업"),
+        localizedDescription: PluginLocalizedString(
+            english: "Adds a Dismiss action to idle session context menus.",
+            korean: "유휴 세션의 컨텍스트 메뉴에 닫기 액션을 추가합니다."
+        )
     )
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
