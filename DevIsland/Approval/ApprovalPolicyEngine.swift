@@ -75,7 +75,6 @@ struct ApprovalPolicyEngine {
     private static let regexCache = NSCache<NSString, NSRegularExpression>()
 
     private static func compiledRegex(pattern: String) -> NSRegularExpression? {
-        guard pattern.count <= 200 else { return nil }
         let key = pattern as NSString
         if let cached = regexCache.object(forKey: key) { return cached }
         guard let compiled = try? NSRegularExpression(pattern: pattern) else { return nil }
@@ -83,22 +82,23 @@ struct ApprovalPolicyEngine {
         return compiled
     }
 
-    /// Full-string match: the entire tool name must be covered by the pattern.
+    /// Full-string match: compiles with ^(?:pattern)$ so alternation (e.g. "Read|ReadTool")
+    /// evaluates correctly. Without anchors, firstMatch returns the leftmost branch ("Read")
+    /// and the range comparison would fail for inputs like "ReadTool".
     /// Used for allow rules to prevent over-granting (S6).
     private static func regexMatchesFull(pattern: String, against input: String) -> Bool {
-        guard let regex = compiledRegex(pattern: pattern) else { return false }
+        guard pattern.count <= 200 else { return false }
+        guard let regex = compiledRegex(pattern: "^(?:\(pattern))$") else { return false }
         let range = NSRange(input.startIndex..., in: input)
-        guard let match = regex.firstMatch(in: input, options: .withoutAnchoringBounds, range: range) else {
-            return false
-        }
-        return match.range == range
+        return regex.firstMatch(in: input, options: [], range: range) != nil
     }
 
     /// Substring match: the pattern may match anywhere in the tool name.
     /// Used for deny rules to preserve maximum blocking coverage on upgrade.
     private static func regexMatchesSubstring(pattern: String, against input: String) -> Bool {
+        guard pattern.count <= 200 else { return false }
         guard let regex = compiledRegex(pattern: pattern) else { return false }
         let range = NSRange(input.startIndex..., in: input)
-        return regex.firstMatch(in: input, options: .withoutAnchoringBounds, range: range) != nil
+        return regex.firstMatch(in: input, options: [], range: range) != nil
     }
 }

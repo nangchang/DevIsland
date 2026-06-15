@@ -286,6 +286,34 @@ final class ApprovalPolicyEngineTests: XCTestCase {
         XCTAssertEqual(match.action, .allow, "Pattern 'Read.*' should match 'ReadDangerousTool'")
     }
 
+    func testRegexAlternationFullMatchCorrect() throws {
+        // Regression: without ^(?:)$ anchors, firstMatch on "Read|ReadDangerousTool"
+        // against "ReadDangerousTool" returns the "Read" branch (range 0..<4),
+        // and range comparison would incorrectly reject the match.
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let engine = ApprovalPolicyEngine(store: store)
+
+        try store.insertRule(ApprovalRule(
+            provider: .claude,
+            toolName: "Read|ReadDangerousTool",
+            matchKind: .regex,
+            pattern: "Read|ReadDangerousTool",
+            action: .allow,
+            scope: .persistent
+        ))
+
+        let exactFirst = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .claude, sessionId: "s1", toolName: "Read"
+        ))
+        XCTAssertEqual(exactFirst.action, .allow, "First alternation branch 'Read' must match")
+
+        let exactSecond = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .claude, sessionId: "s1", toolName: "ReadDangerousTool"
+        ))
+        XCTAssertEqual(exactSecond.action, .allow,
+                       "Second alternation branch 'ReadDangerousTool' must match (anchored full-match)")
+    }
+
     func testRegexPatternLengthLimit() throws {
         // Patterns longer than 200 chars must not match anything.
         let longPattern = String(repeating: "a", count: 201)
