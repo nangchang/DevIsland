@@ -213,6 +213,10 @@ private struct GeneralSettingsPane: View {
                 Toggle(l10n.lblCheckForUpdatesOnStartup, isOn: store.binding(\.checkForUpdatesOnStartup))
             }
 
+            Section(l10n.secSounds) {
+                Toggle(l10n.lblMuteAllSounds, isOn: $store.settings.openPeonGlobalMuted)
+            }
+
             Section {
                 Button(l10n.btnResetAllSettings) {
                     store.resetToDefaults()
@@ -764,7 +768,6 @@ private struct OpenPeonSettingsPane: View {
         Form {
             Section(l10n.secOpenPeonSoundPacks) {
                 Toggle(l10n.lblOpenPeonEnable, isOn: $store.settings.openPeonEnabled)
-                Toggle(l10n.lblOpenPeonMuteAll, isOn: $store.settings.openPeonGlobalMuted)
 
                 HStack {
                     TextField(l10n.phOpenPeonPacksFolder, text: $store.settings.openPeonPacksDirectory)

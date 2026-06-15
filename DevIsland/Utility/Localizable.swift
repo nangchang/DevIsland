@@ -274,6 +274,8 @@ extension L10n {
     var alertLaunchAtLoginFailed:     String { s("Failed to change Launch at Login",        "자동 시작 설정 변경 실패") }
     var secUpdates:                   String { s("Updates",                                 "업데이트") }
     var lblCheckForUpdatesOnStartup:  String { s("Check for updates on startup",            "시작 시 업데이트 확인") }
+    var secSounds:                    String { s("Sounds",                                  "사운드") }
+    var lblMuteAllSounds:             String { s("Mute all sounds",                         "모든 사운드 음소거") }
 
     // Island tab
     var secNotch:            String { s("Island",                        "아일랜드") }
@@ -375,7 +377,6 @@ extension L10n {
     // Sound tab
     var secOpenPeonSoundPacks:       String { s("Sound packs",                   "사운드팩") }
     var lblOpenPeonEnable:           String { s("Enable sounds",                 "사운드 활성화") }
-    var lblOpenPeonMuteAll:          String { s("Mute all sounds",               "모든 사운드 음소거") }
     var phOpenPeonPacksFolder:       String { s("Packs folder",                  "팩 폴더") }
     var btnReload:                   String { s("Reload",                        "다시 불러오기") }
     var btnOpen:                     String { s("Open",                          "열기") }
