@@ -78,16 +78,12 @@ final class HookSocketServerTests: XCTestCase {
     // MARK: - HookSocketServer TCP raw JSON in grace mode (S2 backward-compat)
 
     func testTCPServerAcceptsRawJSONInGraceMode() throws {
-        // BridgeTokenManager.shared is in grace mode during tests (no token file in App Support).
-        guard BridgeTokenManager.shared.isGraceMode else {
-            // If a real token file exists (developer machine with bridge installed),
-            // raw JSON on TCP is expected to be rejected — skip rather than fail.
-            throw XCTSkip("Token file present: raw JSON TCP rejection is active, skipping grace-mode test")
-        }
-
         let port = try freeLoopbackPort()
         let server = HookSocketServer()
         defer { _ = server }
+
+        // Force grace mode: raw JSON on TCP must be accepted.
+        server.rejectsRawJSONOnTCP = { false }
 
         let messageExpectation = expectation(description: "raw JSON received in grace mode")
         server.onMessageReceived = { _, _, respond in
@@ -126,16 +122,13 @@ final class HookSocketServerTests: XCTestCase {
 
     func testTCPServerRejectsRawJSONWhenTokenFilePresent() throws {
         // Verify that raw JSON is silently dropped (connection closed) on TCP when not in grace mode.
-        // We instantiate a server that uses a token-aware check (S2 behaviour) and verify
-        // the connection is closed without invoking onMessageReceived.
-        guard !BridgeTokenManager.shared.isGraceMode else {
-            // Grace mode active: rejection is deliberately bypassed — skip.
-            throw XCTSkip("No token file present: grace mode active, rejection test skipped")
-        }
-
+        // Uses injectable predicate to avoid dependency on BridgeTokenManager.shared.
         let port = try freeLoopbackPort()
         let server = HookSocketServer()
         defer { _ = server }
+
+        // Force token-present mode: raw JSON on TCP must be rejected.
+        server.rejectsRawJSONOnTCP = { true }
 
         let noCallExpectation = expectation(description: "onMessageReceived must NOT be called")
         noCallExpectation.isInverted = true

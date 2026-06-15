@@ -27,6 +27,10 @@ class HookSocketServer {
     var onMessageReceived: ((String, String?, @escaping (String) -> Void) -> Void)?
     var onServerFailed: ((Error) -> Void)?
 
+    /// Returns true when raw JSON on TCP should be rejected (token file present).
+    /// Overridable in tests to avoid dependency on BridgeTokenManager.shared.
+    var rejectsRawJSONOnTCP: () -> Bool = { !BridgeTokenManager.shared.isGraceMode }
+
     deinit {
         stopUnixListener()
     }
@@ -304,7 +308,7 @@ class HookSocketServer {
             if data[0] == 0x7B {
                 // Raw JSON on TCP: reject when a token file is present (envelope required).
                 // Legacy raw-JSON clients should connect via the Unix socket instead.
-                if !BridgeTokenManager.shared.isGraceMode {
+                if self.rejectsRawJSONOnTCP() {
                     print("[HookSocketServer] Rejected raw JSON on TCP: token file present")
                     self.closeConnection(id: id, connection: connection)
                     return
