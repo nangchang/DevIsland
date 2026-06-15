@@ -3,27 +3,27 @@ import XCTest
 
 @MainActor
 final class OpenPeonPluginTests: XCTestCase {
-    private var previousSettings: AppSettings!
+    private var settings: AppSettings!
 
     override func setUp() async throws {
         try await super.setUp()
-        previousSettings = SettingsStore.shared.settings
-        SettingsStore.shared.settings.openPeonEnabled = true
-        SettingsStore.shared.settings.openPeonGlobalMuted = false
-        SettingsStore.shared.settings.openPeonMutedCategories = []
-        SettingsStore.shared.settings.openPeonDebounceMilliseconds = 0
-        SettingsStore.shared.settings.openPeonActivePackName = "sample"
+        settings = AppSettings.defaults
+        settings.openPeonEnabled = true
+        settings.openPeonGlobalMuted = false
+        settings.openPeonMutedCategories = []
+        settings.openPeonDebounceMilliseconds = 0
+        settings.openPeonActivePackName = "sample"
     }
 
     override func tearDown() async throws {
-        SettingsStore.shared.settings = previousSettings
+        settings = nil
         try await super.tearDown()
     }
 
     func testHookEventProducesScopedAudioEffect() async throws {
         let (_, client) = try makeBroker()
 
-        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
+        let effects = try await makePlugin().onEvent(hookEvent(), context: context(client))
 
         XCTAssertEqual(effects.count, 1)
         XCTAssertEqual(effects.first?.capability, "audio.playFile")
@@ -38,25 +38,25 @@ final class OpenPeonPluginTests: XCTestCase {
             storageSnapshot: [:]
         )
 
-        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context)
+        let effects = try await makePlugin().onEvent(hookEvent(), context: context)
 
         XCTAssertTrue(effects.isEmpty)
     }
 
     func testGlobalMuteProducesNoEffect() async throws {
-        SettingsStore.shared.settings.openPeonGlobalMuted = true
+        settings.openPeonGlobalMuted = true
         let (_, client) = try makeBroker()
 
-        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
+        let effects = try await makePlugin().onEvent(hookEvent(), context: context(client))
 
         XCTAssertTrue(effects.isEmpty)
     }
 
     func testMutedCategoryProducesNoEffect() async throws {
-        SettingsStore.shared.settings.openPeonMutedCategories = ["task.acknowledge"]
+        settings.openPeonMutedCategories = ["task.acknowledge"]
         let (_, client) = try makeBroker()
 
-        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
+        let effects = try await makePlugin().onEvent(hookEvent(), context: context(client))
 
         XCTAssertTrue(effects.isEmpty)
     }
@@ -64,36 +64,37 @@ final class OpenPeonPluginTests: XCTestCase {
     func testInvalidPackProducesNoEffect() async throws {
         let (_, client) = try makeBroker(cespVersion: "2.0")
 
-        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
+        let effects = try await makePlugin().onEvent(hookEvent(), context: context(client))
 
         XCTAssertTrue(effects.isEmpty)
     }
 
     func testActivePackResolvesWhenNameUnset() async throws {
-        SettingsStore.shared.settings.openPeonActivePackName = nil
+        settings.openPeonActivePackName = nil
         let (_, client) = try makeBroker()
 
-        let effects = try await OpenPeonPlugin().onEvent(hookEvent(), context: context(client))
+        let effects = try await makePlugin().onEvent(hookEvent(), context: context(client))
 
         XCTAssertEqual(effects.first?.payload["path"], "sample/sounds/input.wav")
     }
 
     func testDebounceSuppressesRepeatWithinInterval() async throws {
-        SettingsStore.shared.settings.openPeonDebounceMilliseconds = 1000
+        settings.openPeonDebounceMilliseconds = 1000
         let (_, client) = try makeBroker()
         let runtime = OpenPeonRuntime()
         let base = Date()
 
         let first = await runtime.resolveEffects(
-            category: .taskAcknowledge, scoped: client, scopeID: OpenPeonPlugin.packScopeID, now: base
+            category: .taskAcknowledge, scoped: client, scopeID: OpenPeonPlugin.packScopeID,
+            settings: settings, now: base
         )
         let within = await runtime.resolveEffects(
             category: .taskAcknowledge, scoped: client, scopeID: OpenPeonPlugin.packScopeID,
-            now: base.addingTimeInterval(0.1)
+            settings: settings, now: base.addingTimeInterval(0.1)
         )
         let after = await runtime.resolveEffects(
             category: .taskAcknowledge, scoped: client, scopeID: OpenPeonPlugin.packScopeID,
-            now: base.addingTimeInterval(2.0)
+            settings: settings, now: base.addingTimeInterval(2.0)
         )
 
         XCTAssertEqual(first.count, 1)
@@ -101,7 +102,20 @@ final class OpenPeonPluginTests: XCTestCase {
         XCTAssertEqual(after.count, 1)
     }
 
+    func testEmptyPacksDirectoryDoesNotCreateScope() {
+        settings.openPeonPacksDirectory = ""
+
+        let scopes = OpenPeonPlugin.scopedFileScopes(settings: settings)
+
+        XCTAssertTrue(scopes.isEmpty)
+    }
+
     // MARK: - Helpers
+
+    private func makePlugin() -> OpenPeonPlugin {
+        let settings = self.settings!
+        return OpenPeonPlugin(settingsProvider: { settings })
+    }
 
     private func context(_ client: PluginScopedFileClient) -> PluginContext {
         PluginContext(

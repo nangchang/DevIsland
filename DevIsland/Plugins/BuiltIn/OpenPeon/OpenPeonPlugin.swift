@@ -17,6 +17,11 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
     )
 
     private let runtime = OpenPeonRuntime()
+    private let settingsProvider: @MainActor @Sendable () -> AppSettings
+
+    init(settingsProvider: @escaping @MainActor @Sendable () -> AppSettings) {
+        self.settingsProvider = settingsProvider
+    }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         guard event.kind == .hookReceived,
@@ -40,10 +45,12 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
             return []
         }
 
+        let settings = await settingsProvider()
         return await runtime.resolveEffects(
             category: category,
             scoped: scoped,
-            scopeID: Self.packScopeID
+            scopeID: Self.packScopeID,
+            settings: settings
         )
     }
 
@@ -62,7 +69,7 @@ extension OpenPeonPlugin: PluginScopedFileScopeProvider {
     static func scopedFileScopes(userDefaults: UserDefaults) -> [PluginScopedFileScope] {
         let defaults = AppSettings.defaults
         guard let raw = userDefaults.string(forKey: SettingsStore.DefaultsKey.openPeonPacksDirectory),
-              !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+              !raw.isEmpty else {
             return packScopes(packsDirectory: defaults.openPeonPacksDirectory)
         }
         return packScopes(packsDirectory: raw)
@@ -73,7 +80,8 @@ extension OpenPeonPlugin: PluginScopedFileScopeProvider {
     }
 
     private static func packScopes(packsDirectory: String) -> [PluginScopedFileScope] {
-        [
+        guard !packsDirectory.isEmpty else { return [] }
+        return [
             PluginScopedFileScope(
                 id: packScopeID,
                 baseDirectory: URL(

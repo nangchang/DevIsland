@@ -153,7 +153,9 @@ class AppState: ObservableObject {
         self.claudeQuestionState = ClaudeQuestionState()
         self.powerSourceMonitor = PowerSourceMonitor()
         self.wifiMonitor = WifiSSIDMonitor()
-        let coordinator = CaffeineCoordinator()
+        let coordinator = MainActor.assumeIsolated {
+            CaffeineCoordinator()
+        }
         self.caffeineCoordinator = coordinator
         let scopedFileBroker = PluginScopedFileBroker(scopesByPluginID: Self.builtInPluginScopedFileScopes(
             userDefaults: userDefaults
@@ -163,7 +165,9 @@ class AppState: ObservableObject {
             enablePlugins: enablePlugins,
             scopedFileBroker: scopedFileBroker,
             powerSleepHandler: { prevent, reason in
-                coordinator.applyPreventIdleSleep(prevent: prevent, reasonString: reason)
+                await MainActor.run {
+                    coordinator.applyPreventIdleSleep(prevent: prevent, reasonString: reason)
+                }
             },
             powerToggleHandler: {
                 Task { @MainActor in
@@ -246,7 +250,7 @@ class AppState: ObservableObject {
         // disabled plugin never runs for one cycle before `plugin.started` fires.
         MainActor.assumeIsolated {
             pluginHost.register(
-                Self.builtInPlugins(),
+                Self.builtInPlugins(settingsProvider: { SettingsStore.shared.settings }),
                 disabledPluginIDs: PluginSettingsStore.shared.disabledPluginIDs
             )
             // Host Command Catalog: route validated session commands (e.g. session.dismiss)
@@ -284,7 +288,9 @@ class AppState: ObservableObject {
             }
         }
 
-        setupCaffeine()
+        MainActor.assumeIsolated {
+            setupCaffeine()
+        }
 
         if startServer {
             BridgeTokenManager.shared.generateIfNeeded()
@@ -497,8 +503,17 @@ class AppState: ObservableObject {
     }
 
     /// Built-in plugins compiled into DevIsland, registered once at init.
-    private static func builtInPlugins() -> [any DevIslandPlugin & Sendable] {
-        [SessionTimerPlugin(), PomodoroPlugin(), OpenPeonPlugin(), CaffeinePlugin(), SessionStatsPlugin(), SessionActionsPlugin()]
+    private static func builtInPlugins(
+        settingsProvider: @escaping @MainActor @Sendable () -> AppSettings
+    ) -> [any DevIslandPlugin & Sendable] {
+        [
+            SessionTimerPlugin(),
+            PomodoroPlugin(),
+            OpenPeonPlugin(settingsProvider: settingsProvider),
+            CaffeinePlugin(),
+            SessionStatsPlugin(),
+            SessionActionsPlugin()
+        ]
     }
 
     private static let builtInScopedFileScopeProviders: [any PluginScopedFileScopeProvider.Type] = [
@@ -2626,6 +2641,7 @@ class AppState: ObservableObject {
 
     // MARK: - Caffeine
 
+    @MainActor
     private func setupCaffeine() {
         caffeineCoordinator.onStatusChanged = { [weak self] status in
             guard let self = self else { return }

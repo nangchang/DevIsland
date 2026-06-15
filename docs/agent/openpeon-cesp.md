@@ -32,7 +32,7 @@ OpenPeon CESP implementation files live under `DevIsland/Plugins/BuiltIn/OpenPeo
 | `CESPPackStore.swift` | **Settings UI only** — pack directory reload, background scan, active pack selection for the Sound tab |
 | `CESPAudioPlayer.swift` | **Settings UI only** — sound selection, debounce, mute, volume, settings preview playback |
 
-The runtime hook path (`OpenPeonPlugin` → `OpenPeonRuntime` → `CESPScopedPackResolver`) reads packs only through the scoped file broker (`PluginContext.scopedFiles`) and never touches absolute paths or `FileManager`. `CESPPackStore`/`CESPAudioPlayer` remain as host services backing the Settings **Sound** tab until plugin settings schema covers them.
+The runtime hook path (`OpenPeonPlugin` → `OpenPeonRuntime` → `CESPScopedPackResolver`) reads packs only through the scoped file broker (`PluginContext.scopedFiles`) and never touches absolute paths or `FileManager`. `OpenPeonPlugin` receives the current `AppSettings` through an injected host provider and passes that snapshot into `OpenPeonRuntime`; the runtime must not read `SettingsStore.shared` directly. `CESPPackStore`/`CESPAudioPlayer` remain as host services backing the Settings **Sound** tab until plugin settings schema covers them.
 
 ## Event Mapping
 
@@ -68,6 +68,7 @@ Failure detection is intentionally conservative. Claude tool execution failure i
 - `openPeonDebounceMilliseconds`
 
 The settings window presents these under the user-facing **Sound** tab. Keep the persisted `openPeon` names because they describe the CESP implementation and preserve existing preferences.
+The pack directory setting also defines the plugin's scoped file root. If the resolved pack directory string is empty, the host must not create a scoped file root because `URL(fileURLWithPath: "")` resolves to the process working directory.
 
 Defaults:
 

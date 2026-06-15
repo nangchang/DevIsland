@@ -79,8 +79,10 @@ enum CESPScopedPackResolver {
         var total: Int64 = 0
         let prefix = packRoot + "/"
         var pending = [packRoot]
+        var visited = Set<String>()
 
         while let directory = pending.popLast() {
+            guard visited.insert(directory).inserted else { continue }
             let entries = (try? await scoped.listDirectory(scopeID: scopeID, relativePath: directory)) ?? []
             for entry in entries {
                 if entry.isDirectory {

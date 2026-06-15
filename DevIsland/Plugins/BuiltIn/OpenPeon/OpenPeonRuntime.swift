@@ -20,10 +20,9 @@ final class OpenPeonRuntime {
         category: CESPCategory,
         scoped: PluginScopedFileClient,
         scopeID: String,
+        settings: AppSettings,
         now: Date = Date()
     ) async -> [PluginEffect] {
-        let settings = SettingsStore.shared.settings
-
         guard settings.openPeonEnabled,
               !settings.openPeonGlobalMuted,
               !settings.openPeonMutedCategories.contains(category.rawValue) else {

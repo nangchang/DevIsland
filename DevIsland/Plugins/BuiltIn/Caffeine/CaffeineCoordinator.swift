@@ -6,6 +6,7 @@ import IOKit
 /// (`PluginPowerStatus`) and applies the plugin's `power.preventIdleSleep` effect to the real
 /// `IOPMAssertion`. It holds no prevention policy — `CaffeinePlugin` is the sole policy owner;
 /// this type only adapts host signals in and effect results out.
+@MainActor
 final class CaffeineCoordinator: ObservableObject {
     @Published private(set) var isHoldingAssertion: Bool = false
 
