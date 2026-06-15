@@ -15,7 +15,9 @@ from pathlib import Path
 from typing import Any
 
 
-LOG_PATH = "/tmp/DevIsland.bridge.log"
+_LOG_DIR = Path.home() / "Library" / "Logs" / "DevIsland"
+LOG_PATH = str(_LOG_DIR / "bridge.log")
+_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 
 # Events forwarded to the app (all others are suppressed before reaching the app).
 # Derived from the canonical hook_events.json manifest so this list stays in sync.
@@ -79,6 +81,11 @@ _CONFIG_PATH = _APP_SUPPORT / "bridge-config.json"
 # ---------------------------------------------------------------------------
 
 def log(message: str) -> None:
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = Path(LOG_PATH)
+    if log_path.exists() and log_path.stat().st_size > _LOG_MAX_BYTES:
+        rotated = log_path.with_suffix(".1.log")
+        log_path.replace(rotated)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOG_PATH, "a", encoding="utf-8") as handle:
         handle.write(f"[{timestamp}] {message}\n")
@@ -417,8 +424,8 @@ def main() -> int:
     event = event_name(payload)
     norm_event = _normalize_event(event)
 
-    log(f"Raw Payload: {dump(payload)}")
-    log(f"Event Detected: {event} (Source: {cli_source})")
+    session_id = payload.get("session_id", "")[:8]
+    log(f"Event: {event} session={session_id} source={cli_source}")
     event = norm_event
 
     if event not in _PASSIVE_EVENTS_NORMALIZED:
