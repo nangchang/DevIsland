@@ -1227,13 +1227,31 @@ private struct FeaturesSettingsPane: View {
 
     @ViewBuilder
     private func featureView(for pluginID: String) -> some View {
-        switch pluginID {
-        case "caffeine":
-            CaffeineSettingsPane(store: store, coordinator: appState.caffeineCoordinator)
-        case OpenPeonPlugin.pluginID:
-            OpenPeonSettingsPane(store: store)
-        default:
-            EmptyView()
+        VStack(spacing: 0) {
+            if pluginHost.isInSafemode(pluginID) {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(l10n.lblPluginSafemode)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(l10n.btnPluginReset) {
+                        pluginHost.resetPlugin(pluginID: pluginID)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.orange.opacity(0.08))
+                Divider()
+            }
+            switch pluginID {
+            case "caffeine":
+                CaffeineSettingsPane(store: store, coordinator: appState.caffeineCoordinator)
+            case OpenPeonPlugin.pluginID:
+                OpenPeonSettingsPane(store: store)
+            default:
+                EmptyView()
+            }
         }
     }
 }
