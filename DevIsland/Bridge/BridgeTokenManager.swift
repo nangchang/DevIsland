@@ -7,7 +7,9 @@ import Foundation
 /// Grace mode: if the token file does not exist on the app side, any incoming token
 /// value (including nil) is accepted. This eases the transition from raw-JSON bridges
 /// that have no token support yet.
-final class BridgeTokenManager {
+///
+/// `@unchecked Sendable`: mutable state is protected by `lock`.
+final class BridgeTokenManager: @unchecked Sendable {
     static let shared = BridgeTokenManager()
 
     private let tokenURL: URL = {
@@ -16,8 +18,9 @@ final class BridgeTokenManager {
         return support.appendingPathComponent("DevIsland/bridge-token")
     }()
 
-    private var cachedToken: String?
-    private var tokenFileExists = false
+    private let lock = NSLock()
+    private var _cachedToken: String?
+    private var _tokenFileExists = false
 
     private init() {}
 
@@ -37,7 +40,9 @@ final class BridgeTokenManager {
         }
 
         if FileManager.default.fileExists(atPath: tokenURL.path) {
-            reload()
+            lock.lock()
+            reloadLocked()
+            lock.unlock()
             return
         }
 
@@ -47,8 +52,10 @@ final class BridgeTokenManager {
             print("BridgeTokenManager: failed to write token")
             return
         }
-        cachedToken = token
-        tokenFileExists = true
+        lock.lock()
+        _cachedToken = token
+        _tokenFileExists = true
+        lock.unlock()
         print("BridgeTokenManager: token generated")
     }
 
@@ -57,12 +64,14 @@ final class BridgeTokenManager {
     /// - If no token file exists on the app side (grace mode), always returns true.
     /// - If a token file exists, the incoming token must match exactly.
     func validate(_ incoming: String?) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
         // If the cache hasn't been populated yet but the file exists on disk, reload before
         // deciding — prevents accepting arbitrary tokens when generateIfNeeded was never called.
-        if !tokenFileExists && FileManager.default.fileExists(atPath: tokenURL.path) {
-            reload()
+        if !_tokenFileExists && FileManager.default.fileExists(atPath: tokenURL.path) {
+            reloadLocked()
         }
-        guard tokenFileExists, let expected = cachedToken else {
+        guard _tokenFileExists, let expected = _cachedToken else {
             // Grace mode: token file genuinely absent on disk, accept anything.
             return true
         }
@@ -71,9 +80,10 @@ final class BridgeTokenManager {
 
     // MARK: - Private
 
-    private func reload() {
+    /// Must be called while holding `lock`.
+    private func reloadLocked() {
         guard let token = try? String(contentsOf: tokenURL, encoding: .utf8) else { return }
-        cachedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        tokenFileExists = true
+        _cachedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        _tokenFileExists = true
     }
 }
