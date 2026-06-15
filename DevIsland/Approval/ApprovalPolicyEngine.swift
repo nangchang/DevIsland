@@ -78,6 +78,11 @@ struct ApprovalPolicyEngine {
             regex = compiled
         }
         let range = NSRange(input.startIndex..., in: input)
-        return regex.firstMatch(in: input, options: .withoutAnchoringBounds, range: range) != nil
+        // Full-string match: the pattern must cover the entire tool name, not just a substring.
+        // This prevents a rule for "Read" from matching "ReadDangerousTool".
+        guard let match = regex.firstMatch(in: input, options: .withoutAnchoringBounds, range: range) else {
+            return false
+        }
+        return match.range == range
     }
 }
