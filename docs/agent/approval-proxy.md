@@ -10,7 +10,7 @@ DevIsland macOS app
   ├─ ApprovalProxyController            — orchestrates policy lookup, DB writes, response
   ├─ ProviderAdapter                    — formats decision into per-CLI hook response JSON
   ├─ HookEventNormalizer                — normalizes event names across CLI dialects
-  ├─ ApprovalPolicyEngine               — 8-priority rule evaluation against SQLite
+  ├─ ApprovalPolicyEngine               — 5-priority rule evaluation against SQLite (persistent deny > session deny > persistent allow > session allow > prompt)
   ├─ SQLiteApprovalStore                — rules, session_cache, hook_events, decisions, pty_messages
   ├─ AppSettings / SettingsStore        — UserDefaults-backed settings
   └─ SwiftUI windows                    — Settings, Approval Rules, Replay Log, PTY Transcript
