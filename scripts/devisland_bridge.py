@@ -87,8 +87,13 @@ def log(message: str) -> None:
         rotated = log_path.with_suffix(".1.log")
         log_path.replace(rotated)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_PATH, "a", encoding="utf-8") as handle:
-        handle.write(f"[{timestamp}] {message}\n")
+    fd = os.open(LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            handle.write(f"[{timestamp}] {message}\n")
+    except Exception:
+        # fdopen took ownership; fd already closed on exception
+        pass
 
 
 # ---------------------------------------------------------------------------
