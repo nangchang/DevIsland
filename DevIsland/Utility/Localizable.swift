@@ -202,13 +202,11 @@ extension L10n {
     var tabApproval:         String { s("Approval",     "승인") }
     var tabProviders:        String { s("Providers",    "공급자") }
     var tabBridge:           String { s("Bridge / IPC", "브리지 / IPC") }
-    var tabSound:            String { s("Sound",        "사운드") }
     var tabExperimental:     String { s("Experimental", "실험적") }
     var tabIntegrations:     String { s("Integrations", "통합") }
     var tabExtras:           String { s("Extras",       "부가기능") }
     var tabAdvanced:         String { s("Advanced",     "고급") }
     var tabPlugins:          String { s("Plugins",      "플러그인") }
-    var tabCaffeine:         String { s("Caffeine",    "Caffeine") }
 
     // Plugins (settings tab)
     var pluginsEmpty:        String { s("No plugins registered.",        "등록된 플러그인이 없습니다.") }

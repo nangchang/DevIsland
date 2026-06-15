@@ -5,12 +5,16 @@ actor PluginRunner {
     /// Cached at init like `manifest`: the schema is static, so the host (MainActor) can read
     /// it without hopping into the actor to resolve persisted setting values at drain time.
     nonisolated let settingsSchema: [PluginSettingDescriptor]
+    /// Cached at init: static metadata the host reads from the MainActor to build the
+    /// Features settings pane without hopping into the actor.
+    nonisolated let settingsPaneDescriptor: PluginSettingsPaneDescriptor?
     private let plugin: any DevIslandPlugin & Sendable
 
     init(plugin: any DevIslandPlugin & Sendable) {
         self.plugin = plugin
         self.manifest = plugin.manifest
         self.settingsSchema = plugin.settingsSchema
+        self.settingsPaneDescriptor = plugin.settingsPaneDescriptor
     }
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {

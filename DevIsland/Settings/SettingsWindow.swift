@@ -128,16 +128,13 @@ struct SettingsWindowView: View {
             ApprovalSettingsPane(appState: appState, store: store)
                 .tabItem { Label(l10n.tabApproval, systemImage: "hand.raised") }
 
-            OpenPeonSettingsPane(store: store)
-                .tabItem { Label(l10n.tabSound, systemImage: "speaker.wave.2") }
-
             IntegrationsSettingsPane(store: store)
                 .tabItem { Label(l10n.tabIntegrations, systemImage: "puzzlepiece.extension") }
 
             PluginSettingsView(pluginHost: appState.pluginHost, settings: PluginSettingsStore.shared)
                 .tabItem { Label(l10n.tabPlugins, systemImage: "puzzlepiece") }
 
-            ExtrasSettingsPane(appState: appState, store: store)
+            FeaturesSettingsPane(pluginHost: appState.pluginHost, store: store, appState: appState)
                 .tabItem { Label(l10n.tabExtras, systemImage: "square.stack.3d.up") }
 
             AdvancedSettingsPane(geminiState: appState.geminiState, store: store)
@@ -1182,93 +1179,80 @@ private struct ApprovalRulesWindowView: View {
     }
 }
 
-// ── 부가기능 하위 탭 추가 방법 ───────────────────────────────────────────────
-//
-// 아래 전체 구조체를 그대로 복사해 사용한다.
-// ExtrasSection 케이스와 MyFeatureSettingsPane 을 실제 기능으로 교체하면 된다.
-//
-// private enum ExtrasSection: String, CaseIterable, Identifiable {
-//     case myFeature          // ← 케이스 추가
-//
-//     var id: String { rawValue }
-//
-//     var label: String {
-//         let l = L10n.shared
-//         switch self {
-//         case .myFeature: return l.s("My Feature", "내 기능")
-//         }
-//     }
-//
-//     var systemImage: String {
-//         switch self {
-//         case .myFeature: return "star"
-//         }
-//     }
-// }
-//
-// private struct ExtrasSettingsPane: View {
-//     @ObservedObject private var l10n = L10n.shared
-//     @State private var selection: ExtrasSection = .myFeature  // ← 첫 케이스로 초기화
-//
-//     var body: some View {
-//         VStack(spacing: 12) {
-//             Picker("", selection: $selection) {
-//                 ForEach(ExtrasSection.allCases) { section in
-//                     Label(section.label, systemImage: section.systemImage).tag(section)
-//                 }
-//             }
-//             .pickerStyle(.segmented)
-//             .labelsHidden()
-//
-//             switch selection {
-//             case .myFeature: MyFeatureSettingsPane()   // ← 뷰 연결
-//             }
-//         }
-//         .padding()
-//     }
-// }
-// ─────────────────────────────────────────────────────────────────────────────
-private enum ExtrasSection: String, CaseIterable, Identifiable {
-    case caffeine
-
-    var id: String { rawValue }
-
-    var label: String {
-        let l = L10n.shared
-        switch self {
-        case .caffeine: return l.tabCaffeine
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .caffeine: return "cup.and.saucer"
-        }
-    }
-}
-
-private struct ExtrasSettingsPane: View {
-    @ObservedObject var appState: AppState
+private struct FeaturesSettingsPane: View {
+    @ObservedObject var pluginHost: PluginHost
     @ObservedObject var store: SettingsStore
+    @ObservedObject var appState: AppState
     @ObservedObject private var l10n = L10n.shared
-    @State private var selection: ExtrasSection = .caffeine
+    @State private var selectedPaneID: String = ""
+
+    private var descriptors: [PluginSettingsPaneDescriptor] {
+        pluginHost.settingsPaneDescriptors()
+    }
+
+    private var effectiveSelectedID: String {
+        descriptors.contains(where: { $0.pluginID == selectedPaneID })
+            ? selectedPaneID
+            : descriptors.first?.pluginID ?? ""
+    }
+
+    private var selectionBinding: Binding<String> {
+        Binding(get: { effectiveSelectedID }, set: { selectedPaneID = $0 })
+    }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Picker("", selection: $selection) {
-                ForEach(ExtrasSection.allCases) { section in
-                    Label(section.label, systemImage: section.systemImage).tag(section)
+        let descs = descriptors
+        if descs.isEmpty {
+            Text(l10n.s("No active feature panes.", "활성 기능 창이 없습니다."))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 12) {
+                if descs.count > 1 {
+                    Picker("", selection: selectionBinding) {
+                        ForEach(descs, id: \.pluginID) { desc in
+                            Label(desc.label.resolved(for: l10n.language), systemImage: desc.systemImage)
+                                .tag(desc.pluginID)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
 
-            switch selection {
-            case .caffeine:
+                featureView(for: effectiveSelectedID)
+            }
+            .padding()
+        }
+    }
+
+    @ViewBuilder
+    private func featureView(for pluginID: String) -> some View {
+        VStack(spacing: 0) {
+            if pluginHost.isInSafemode(pluginID) {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(l10n.lblPluginSafemode)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(l10n.btnPluginReset) {
+                        pluginHost.resetPlugin(pluginID: pluginID)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.orange.opacity(0.08))
+                Divider()
+            }
+            switch pluginID {
+            case "caffeine":
                 CaffeineSettingsPane(store: store, coordinator: appState.caffeineCoordinator)
+            case OpenPeonPlugin.pluginID:
+                OpenPeonSettingsPane(store: store)
+            default:
+                EmptyView()
             }
         }
-        .padding()
     }
 }
 
