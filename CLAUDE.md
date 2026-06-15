@@ -133,9 +133,9 @@ xcodebuild build -scheme DevIsland -quiet -project "$(pwd)/DevIsland.xcodeproj"
 `@FocusState` + `onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focused = true } }`
 패턴으로 컨텍스트 메뉴 닫힌 뒤 포커스를 강제 설정한다.
 
-`.contextMenu`가 붙은 행 뷰(`SessionRowView`)가 매초 재렌더되면 열린 메뉴·submenu가
-깜빡인다. 매초 바뀌는 요소("N초 전" timeAgo, plugin contribution badge)는 부모를
-관찰하지 않는 자식 뷰로 분리해 부모 본체가 재렌더되지 않게 할 것
+`.contextMenu`가 붙은 행 뷰(`SessionRowView`)가 매초 재렌더링되면 열린 메뉴·submenu가
+깜빡인다. 매초 바뀌는 요소("N초 전" `timeAgo`, plugin contribution badge)는 부모를
+관찰하지 않는 자식 뷰로 분리해 부모 본체가 재렌더링되지 않게 할 것
 (`SessionRowTimeAgo`, `SessionRowPluginBadges` 참고).
 
 ## 커밋 원자성
