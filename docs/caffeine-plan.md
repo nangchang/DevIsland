@@ -1,5 +1,7 @@
 # Caffeine 기능 구현 Plan
 
+> 현재 상태(플러그인 마이그레이션 이후): 이 문서는 Caffeine 최초 구현 계획을 보존한다. 실제 코드는 `DevIsland/Plugins/BuiltIn/Caffeine/`에 있으며, `CaffeinePlugin`이 sleep prevention 정책(`decide`)의 단독 소유자다. `CaffeineCoordinator`는 전원/SSID/settings 신호를 generic `PluginPowerStatus`로 플러그인에 전달하고, 플러그인이 반환한 `power.preventIdleSleep` effect를 `SleepAssertion`에 적용하는 host-side signal/effect adapter로 축소됐다. `SettingsStore.caffeineEnabled` 기본값은 현재 `false`이며, plugin enable/disable·safemode는 기존 사용자 설정 위의 추가 feature guard로 작동한다.
+
 ## 1. 목표 및 범위
 
 DevIsland 내부에 **자동 슬립 방지(Caffeine) 기능**을 추가한다.
@@ -39,7 +41,7 @@ DevIsland 내부에 **자동 슬립 방지(Caffeine) 기능**을 추가한다.
 │ (IOKit PowerSource:  │    │                      │
 │  AC상태 + 배터리%)    │    │                      │
 └──────────────────────┘    │   CaffeineCoordinator│──▶ IOPMAssertion
-                            │   (상태 결정 엔진)     │     (PreventUserIdleDisplaySleep)
+                            │ (host signal/effect adapter) │ (PreventUserIdleDisplaySleep)
 ┌──────────────────────┐    │                      │
 │   WifiSSIDMonitor    │──▶│                      │
 │ (CoreWLAN + Notif)   │    │                      │
@@ -59,7 +61,7 @@ DevIsland 내부에 **자동 슬립 방지(Caffeine) 기능**을 추가한다.
                             └──────────────────────┘
 ```
 
-### 상태 결정 규칙 (CaffeineCoordinator)
+### 상태 결정 규칙 (현재는 `CaffeinePlugin`)
 입력:
 - `caffeineEnabled: Bool` (마스터 스위치)
 - `currentSSID: String?`

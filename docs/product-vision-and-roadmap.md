@@ -50,7 +50,7 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 | macOS 알림 센터 연동 | ★★★ | 낮음 | `showNotification` capability 설계 존재 | H1 |
 | 노치에서 프롬프트 회신 (PTY 주입 정식화) | ★★★ | 중간 | `devisland_pty.py` + `injection` 응답 필드 (실험 기능) | H1 |
 | 노치에서 새 세션 시작 (Quick Launch) | ★★ | 낮음 | `TerminalFocuser.openNewWindow` 이미 구현됨 | H1 |
-| 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | SQLite에 데이터 전부 축적 중, `approval.decided` 이벤트 설계 완료 | H1 |
+| 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | `approval.decided` 관찰 이벤트와 `SessionStatsPlugin` 기초 통계 구현 완료 | H1 |
 | Fleet 보드 (멀티 세션 관제 뷰) | ★★★ | 중간 | SessionStore, 서브에이전트 그룹화, 세션 히스토리 창 | H2 |
 | Git 컨텍스트 (브랜치·워크트리·PR 상태 표시) | ★★★ | 중간 | `workspaceRoot` 이미 전 세션에 전파됨 | H2 |
 | 승인 정책 프로파일 (워크스페이스별/시간제한 자동 승인) | ★★★ | 중간 | `workspaceRoot` 스코프 룰, `ToolKnowledge` 위험도 | H2 |
@@ -104,7 +104,9 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 
 ### H1-6. 세션 인사이트 v1 (built-in 플러그인)
 
-플러그인 설계의 `approval.decided` 이벤트(설계 완료, 미구현)를 구현하고, 이를 소비하는 `InsightsPlugin`을 built-in으로 추가: 오늘의 세션 수·승인/거부/자동승인 비율·가장 자주 승인한 도구·세션별 소요 시간.
+기초 구현은 완료됐다. `approval.decided` 관찰 이벤트가 provider response 전송 이후 발행되고, `SessionStatsPlugin`이 앱 실행 중 active session 수, hook provider별 누계, manual approve/deny 누계를 menubar/notch contribution으로 표시한다.
+
+다음 제품화 후보는 이를 별도 인사이트 화면으로 확장하는 것이다: 오늘의 세션 수, 승인/거부/자동승인 비율, 가장 자주 승인한 도구, 세션별 소요 시간. durable 통계가 필요하면 replay DB를 plugin이 직접 읽게 하지 말고 host-owned summary API를 추가한다.
 
 - 효과: 플러그인 플랫폼의 첫 "데이터 소비형" 사례 — v2 생태계의 레퍼런스 구현이 된다.
 
@@ -236,5 +238,5 @@ Slack/Discord/일반 webhook으로 "승인 대기 5분 초과", "세션 오류",
 ## 10. 다음 액션
 
 1. 이 문서를 기준으로 H1 항목 6개를 GitHub 이슈로 분해 (각 이슈에 제품 원칙 체크리스트 포함)
-2. H1-6(`approval.decided` 구현)은 플러그인 구현 계획서의 후순위 항목과 동일하므로 `plugin-architecture-implementation-plan.md`에 통합
+2. H1-6의 기초(`approval.decided` + `SessionStatsPlugin`)는 완료됐고, 확장 인사이트 화면은 `plugin-architecture-implementation-plan.md`의 후속 후보와 동기화
 3. 분기마다 이 문서의 후보 지도(§2)를 재평가 — 에이전트 생태계 변화 속도를 감안해 Horizon 2 이후는 고정 약속이 아니라 방향으로 취급

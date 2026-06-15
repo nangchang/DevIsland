@@ -4,12 +4,12 @@
 
 이 문서는 `docs/agent/plugin-architecture.md`의 설계를 실제 코드에 적용하기 위한 단계별 구현 계획이다.
 
-목표는 플러그인 구조를 도입하되, DevIsland의 핵심 hook/approval response path를 바꾸지 않는 것이다. 첫 구현은 앱에 컴파일된 built-in plugin만 대상으로 하며, 외부 플러그인 런타임, 네트워크 권한, 프로세스 실행 권한은 제외한다.
+목표는 플러그인 구조를 도입하되, DevIsland의 핵심 hook/approval response path를 바꾸지 않는 것이다. 현재 v1 계열은 앱에 컴파일된 built-in plugin만 대상으로 하며, 외부 플러그인 런타임, 네트워크 권한, 프로세스 실행 권한은 제외한다.
 
 ## 2. 성공 기준
 
 - 기존 Claude/Codex/Gemini hook 응답 형식과 승인 동작이 바뀌지 않는다.
-- `HookSocketServer`, bridge scripts, `ApprovalProxyController`, `ProviderAdapter`, `SQLiteApprovalStore`는 첫 구현 PR에서 수정하지 않는다.
+- `HookSocketServer`, bridge scripts, `ApprovalProxyController`, `ProviderAdapter`, `SQLiteApprovalStore`는 플러그인 runtime 구현을 위해 수정하지 않는다.
 - 플러그인 실패, storage 실패, UI contribution 오류가 provider response JSON을 바꾸지 않는다.
 - 렌더링 경로에서 플러그인 코드를 호출하지 않는다. UI는 `PluginHost.contributions` cache만 읽는다.
 - 플러그인별 permission redaction이 runner 단위로 적용된다.
@@ -24,7 +24,7 @@
 - approval decision 변경, approval prompt interception
 - session row/context menu/message window contribution
 - collapsed notch contribution
-- custom plugin settings schema
+- plugin-supplied arbitrary SwiftUI settings UI (v1.3의 declarative settings schema는 host-owned UI로 구현 완료)
 
 위 항목은 v1.1 또는 v2에서 별도 설계 후 진행한다.
 
@@ -53,7 +53,7 @@
   - PR 9. PluginStorageProvider (plugin별 durable SQLite storage) — 완료 (`feat: implement durable SQLite plugin storage`)
   - PR 10. PluginSettingsView (플러그인 목록·enable/disable·safemode 상태·storage reset) — 완료
   - PR 11. Safemode hardening (실패 임계값 자동 진입 트리거 + timeout 처리 + reset 후 1회 재시도) — 완료
-  - Migration M1. OpenPeonSoundPlugin — 완료 (`feat: Migrate OpenPeon to plugin-based architecture`)
+  - Migration M1. `OpenPeonPlugin` — 완료 (`feat: Migrate OpenPeon to plugin-based architecture`)
   - Migration M2. CaffeinePlugin — 완료 (`feat: migrate Caffeine to plugin-based architecture`)
   - Migration M3. SessionStatsPlugin — 완료 (단일 `system` 플러그인이 session/hook 관찰 통계를 모두 담당. 별도 ProviderStatsPlugin은 두지 않음)
   - v1.1 a. `approval.decided` 관찰 이벤트 — 완료. `AppState.sendDecision`이 provider response 전송 직후(`recordReplayDecision` 이후) sanitized `PluginApprovalSummary`만 best-effort 발행(`pass-through`/timeout/dismiss/terminal-focus 제외, AskUserQuestion 구조화 응답(`toolInput`)도 제외). 발행은 main actor로 비동기 디스패치(관찰 전용이라 결과 경로 비차단). `SessionStatsPlugin`이 `readHookSummaries` 권한으로 수신해 manual approve/deny 누계를 `menubar.menu`에 추가. 정책/자동승인 결정은 v1에서 집계 대상 아님(문서 §6 emission 표가 `sendDecision`만 지정).
@@ -71,10 +71,11 @@
   - v1.3 c. CESP pack scan/validation의 plugin-owned 전환 — 완료. `OpenPeonPlugin`에 `.readScopedFiles`를 부여해 `PluginContext.scopedFiles`를 받고, pack 디스커버리·manifest parsing·validation·active pack 선택을 host 싱글톤(`CESPPackStore.shared`/`CESPAudioPlayer.shared`)이 아니라 `CESPScopedPackResolver`가 broker(`listDirectory`/`readText`)로 수행한다. validation 규칙은 `CESPPackValidator.validate(manifest:fileIndex:)`로 추출해 host `FileManager` 스캔과 broker 스캔이 동일 규칙(50MB 총량 포함)을 공유하고, 파일 facts만 `CESPPackFileIndex`로 미리 수집한다(에러 문자열·`OpenPeonPackValidatorTests` 동작 불변). debounce/mute/selection 상태는 `@MainActor` `OpenPeonRuntime`이 소유(actor 재진입 시 직렬화), 싼 게이트(enabled/mute/debounce)를 broker 접근 전에 통과시켜 스캔 빈도를 debounce로 제한한다. 캐시는 없고 매 debounce-통과 이벤트마다 active pack을 재스캔(런타임 추가 pack 즉시 반영). host `CESPPackStore`/`CESPAudioPlayer`는 Settings **Sound** 탭 전용으로 유지하고, plugin 경로 전용이던 `CESPAudioPlayer.scopedAudioRequest`/`CESPScopedAudioRequest`는 제거했다. OpenPeon 설정은 계획대로 `AppSettings`(host bridge)에 남는다.
   - v1.3 b. Scoped file/audio capability foundation — 완료. Host가 OpenPeon/CESP 도메인 포맷을 알지 않아도 built-in plugin이 제한된 로컬 파일을 읽고 오디오 재생을 요청할 수 있도록 `readScopedFiles`/`playScopedAudio`, `PluginScopedFileBroker`, generic `audio.playFile` effect를 추가했다. Broker는 plugin ID별 scope ID, 상대 경로 정규화, symlink 탈출 차단, 확장자/파일 크기 제한을 강제한다. `DevIslandPlugin.onEvent`를 async로 열고 `.readScopedFiles` 플러그인에 `PluginContext.scopedFiles`를 주입해 plugin이 broker에 host-mediated file read를 요청할 수 있게 했다. OpenPeon runtime hook playback은 `audio.playFile`로 이전했고, CESP pack scan/validation의 plugin-owned file read 전환은 v1.3 c에서 완료했다.
   - v1.3 a. Plugin Settings Schema — 완료. 플러그인이 선언형 설정 schema(`PluginSettingDescriptor`: toggle/picker/stepper/slider/text + `validated(_:)` 검증·clamp·truncate)를 `DevIslandPlugin.settingsSchema`로 노출하고, host가 렌더·검증·저장·주입을 모두 담당한다. 저장은 `PluginSettingsStore`가 `pluginSettings.<id>` UserDefaults namespace에 JSON으로 격리(core/bridge/approval defaults 불가침; plugin SQLite storage는 effect 경유 비동기라 동기 설정 UI에 부적합해 미사용). 주입은 `selectedSessionID` 패턴 재사용 — `PluginRunner`가 `manifest`처럼 `settingsSchema`를 `nonisolated`로 캐싱하고, `PluginHost.drainEvents`가 MainActor에서 `resolveSettings`(저장값을 schema에 `validated` 적용, 누락 키는 default)로 `[pluginID: [key: value]]`를 만들어 `PluginEventProcessor.process` → `PluginRunner.handle` → `PluginContext.settings`(읽기 전용)로 흘린다. 변경 통지는 `PluginHost.pluginSettingChanged(pluginID:)`가 `settings.changed`를 해당 plugin에만 `restrictedTo`로 발행(자기 설정에만 반응); drain 시 최신 값을 재해석하므로 같은 이벤트에서 새 값이 context로 들어가 contribution이 재계산된다. UI는 host-owned `PluginSettingsView`의 `PluginSettingControlView`가 schema를 SwiftUI 컨트롤로 렌더(plugin은 SwiftUI 미생성 — Declarative UI). 데모: `PomodoroPlugin`이 `workMinutes`(stepper)·`autoRestart`(toggle)를 노출하고 `onEvent`에서 `context.settings`로 작업 길이/자동재시작을 적용(running 중 변경은 다음 블록부터 반영).
+  - v1.x Plugin Contribution i18n — 완료. `PluginContext.language`/`PluginUIContext.language`, `PluginLocalizedString`, `language.changed` 이벤트를 추가해 built-in plugin 표시 문자열과 manifest/settings label을 앱 언어 설정에 맞춰 재계산한다. SessionTimer, Pomodoro, Caffeine, SessionStats, SessionActions, OpenPeon 문자열이 plugin-owned i18n으로 전환됐다.
 - 마지막 검증:
   - 플러그인 관련 테스트 스위트 통과 (2026-06-14, v1.3 a 기준 — 워크트리 빌드 성공, 전체 테스트 0 실패. `PluginSettingValue` Codable round-trip, `validated` kind별 fallback/clamp/truncate, store persistence/isolation/reset, `settings.changed` restrictedTo, Pomodoro workMinutes/autoRestart 및 host end-to-end 반영 테스트 추가)
-- 다음 단계 (v1.3 a 완료):
-  - v1.3은 schema·렌더링·이벤트·데모까지 한 번에 완료. picker/slider/text 컨트롤은 단위 테스트로 검증했고 built-in 데모 노출은 후속 필요 시 추가.
+- 다음 단계 (v1.3 + i18n 완료):
+  - v1 built-in plugin surface는 현재 `notch.expanded.activity`, `menubar.menu`, `notch.session.row`, `session.context-menu`, `session.message`가 열려 있다. `notch.expanded.details`, session detail timeline/summary, collapsed notch exclusive region은 아직 보류다.
   - Migration PR M5 (Update status contribution)는 낮은 우선순위 — v2 network/runtime 설계 후로 보류 가능
 
 
@@ -176,7 +177,7 @@
 목표:
 
 - event queue, runner fan-out, contribution cache를 구현한다.
-- 아직 등록된 플러그인은 없다.
+- PR3 시점에는 아직 등록된 플러그인이 없다.
 
 신규 파일:
 
@@ -273,7 +274,7 @@ MenuBar 렌더링 제약:
 - `AppState`가 직접 `sessionStore.activeSessions.remove(...)` 하는 경로를 `SessionStore` 메서드로 중앙화
 - `handleParsedEvent`에서 `hook.received` 발행
 - `handleNotificationEvent`에서 실제 표시 상태 변화 후 `notification.shown` 발행
-- `approval.decided`는 아직 발행하지 않는다
+- PR5 시점에는 `approval.decided`를 아직 발행하지 않는다. 현재는 v1.1 a에서 response 이후 관찰 이벤트로 구현 완료.
 
 주의:
 
@@ -376,7 +377,7 @@ MenuBar 렌더링 제약:
 - `plugin.action.invoked` target plugin 라우팅
 - `timer.startStop` capability 처리
 - completed 시 `notification.show` effect 요청
-- storage persistence는 아직 선택 사항
+- PR8 시점에는 storage persistence가 선택 사항이었다. 현재 Pomodoro는 plugin settings schema로 작업 길이/자동 재시작 설정을 받고, durable key-value storage는 PR9에서 구현됐다.
 
 테스트:
 
@@ -434,7 +435,7 @@ MenuBar 렌더링 제약:
 목표:
 
 - 플러그인 목록과 상태 관리를 Settings UI에 추가한다.
-- v1에서는 plugin-provided settings UI를 렌더링하지 않는다.
+- v1에서는 plugin-provided SwiftUI view를 렌더링하지 않는다. 이후 v1.3에서 declarative `settingsSchema`만 host-owned UI로 렌더링하도록 확장했다.
 
 신규 파일:
 
@@ -529,7 +530,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - 기존 설정 기본값이 바뀌지 않는지 확인
 - `SettingsStore`의 Caffeine 사용자 기본값이 계속 off이며, plugin disabled/safemode 상태에서 sleep assertion이 release되는지 확인
 
-#### Migration PR M1. OpenPeonSoundPlugin
+#### Migration PR M1. `OpenPeonPlugin`
 
 > 상태: 완료 (v1.3 c). CESP 도메인 로직이 `OpenPeonPlugin`/`CESPScopedPackResolver`/`OpenPeonRuntime`으로 이동했고 pack scan/validation은 scoped broker 경유. 아래는 원 설계 스펙으로 보존한다.
 
@@ -545,7 +546,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 
 주요 작업:
 
-- built-in `OpenPeonSoundPlugin` 추가
+- built-in `OpenPeonPlugin` 추가
 - `OpenPeonPlugin`이 CESP manifest parsing, pack validation, event-to-category mapping, sound selection, mute/debounce 정책을 소유
 - Host는 scoped file broker(`readScopedFiles`)와 scoped audio effect(`audio.playFile`)만 제공하고 CESP/OpenPeon 포맷을 해석하지 않음
 - plugin은 `hook.received`, `session.started`, `session.updated`, `session.ended`, `notification.shown` 같은 sanitized events를 관찰해 CESP category와 재생 파일을 선택
@@ -557,7 +558,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - plugin이 임의 파일 path, raw hook payload, parsed provider payload를 직접 보지 않게 한다. 파일 접근은 plugin ID별 허용 scope 아래 상대 경로 요청만 사용한다.
 - `audio.playFile`은 permission 기반 generic capability이며, scope 밖 경로, symlink 탈출, unsupported extension, oversize file은 host broker가 거부한다.
 - sound failure는 plugin failure/log로만 남기고 provider response에 영향 주지 않는다.
-- OpenPeon settings UI는 custom plugin settings schema가 생기기 전까지 기존 Settings pane을 유지한다.
+- OpenPeon settings UI는 pack validation, scoped directory, preview playback 같은 host-owned 동작이 있어 declarative settings schema로 옮기지 않고 기존 Settings **Sound** pane을 유지한다.
 
 검증:
 
@@ -585,7 +586,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - `SleepAssertion`, `PowerSourceMonitor`, `WifiSSIDMonitor`, `LocationPermissionRequester`, Wi-Fi scan, SSID 입력/제외 설정 UI, `SettingsStore` persistence는 host service로 유지
 - host가 power/SSID/settings 상태와 실제 assertion 적용 결과를 sanitized caffeine status DTO로 제공
 - plugin은 host-provided status만 관찰해 assertion 보유/해제 의도를 `power.preventIdleSleep` effect로 반환
-- Caffeine 상태 표시는 `menubar.menu` contribution이 소유한다. 자유 입력이 필요한 `CaffeineSettingsPane`은 custom plugin settings schema가 생기기 전까지 host-owned 설정 UI로 유지
+- Caffeine 상태 표시는 `menubar.menu` contribution이 소유한다. Wi-Fi scan, Location permission, SSID 자유 입력이 필요한 `CaffeineSettingsPane`은 declarative settings schema 범위를 넘어 host-owned 설정 UI로 유지
 
 주의:
 
@@ -611,7 +612,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 구현 결정:
 
 - SessionStats와 ProviderStats를 분리하지 않고 단일 `system` 플러그인 `SessionStatsPlugin`(`com.devisland.stats`)으로 통합했다. 두 권한(`readSessionEvents`, `readHookSummaries`)을 한 플러그인이 선언해 중복 구현을 피한다.
-- 통계는 앱 실행 동안 in-memory로만 유지하고 storage는 쓰지 않는다(durable 통계는 v1.1 이후 검토).
+- 통계는 앱 실행 동안 in-memory로만 유지하고 storage는 쓰지 않는다(durable 통계/대시보드는 별도 host-owned summary API가 필요할 때 검토).
 - tick은 불필요하다(이벤트 기반 갱신).
 
 주요 작업:
@@ -619,7 +620,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - `readSessionEvents`, `readHookSummaries` 기반 metric contribution 추가
 - `notch.expanded.activity`: 활성 세션 수(세션 0개면 미기여)
 - `menubar.menu`: 활성 세션 수 + hook 총계 + provider별 누계(provider 이름 정렬)
-- v1.1 `approval.decided`가 추가되기 전에는 approval 통계 제외
+- `approval.decided`가 추가된 뒤 manual approve/deny 누계를 `menubar.menu`에 표시
 - replay DB 직접 조회 금지
 
 검증:
@@ -628,7 +629,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 - 긴 provider/tool name truncation
 - plugin disable 시 contribution 즉시 제거
 
-#### Migration PR M4. Session accessory plugins
+#### Migration PR M4. Session accessory plugins (완료)
 
 목표:
 
@@ -642,7 +643,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 
 주요 작업:
 
-- 세션 행 badge, 세션 메시지 header accessory, 간단한 context action을 contribution으로 이동
+- 세션 행 badge와 세션 메시지 header accessory는 `SessionTimerPlugin`, context action은 `SessionActionsPlugin` contribution으로 검증
 - `session.dismiss` host-executed action은 idle/non-pending이면서 `hasMissedApproval == false`, `isUnread == false`인 세션에만 허용하고, pending/current approval/missed/unread 세션은 host validation에서 거부
 - `targetSessionID` dedup/evict 검증
 - SessionMessageWindow와 SessionHistoryWindow의 data loading은 core에 유지
