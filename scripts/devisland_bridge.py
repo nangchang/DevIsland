@@ -432,7 +432,7 @@ def main() -> int:
     event = event_name(payload)
     norm_event = _normalize_event(event)
 
-    session_id = payload.get("session_id", "")[:8]
+    session_id = str(payload.get("session_id") or "")[:8]
     log(f"Event: {event} session={session_id} source={cli_source}")
     event = norm_event
 
