@@ -127,6 +127,15 @@ final class PluginHost: ObservableObject {
         runners[pluginID]?.settingsSchema ?? []
     }
 
+    /// Ordered list of settings pane descriptors for enabled, non-safemoded plugins.
+    /// The host Features pane uses this to build the segment picker.
+    func settingsPaneDescriptors() -> [PluginSettingsPaneDescriptor] {
+        registeredPlugins.compactMap { manifest in
+            guard isPluginEnabled(manifest.id), !isInSafemode(manifest.id) else { return nil }
+            return runners[manifest.id]?.settingsPaneDescriptor
+        }
+    }
+
     /// Rebuilds cached plugin-owned strings after the app language setting changes. The
     /// language itself is injected at drain time, so this only asks active plugins to
     /// recalculate contributions they already own.

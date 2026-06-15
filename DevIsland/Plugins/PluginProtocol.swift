@@ -21,12 +21,24 @@ struct PluginManifest: Codable, Equatable {
     }
 }
 
+/// Metadata a plugin provides to contribute a dedicated pane in the host settings window.
+/// The host owns the actual view; the plugin only declares its identity and placement hint.
+struct PluginSettingsPaneDescriptor {
+    let pluginID: String
+    let label: PluginLocalizedString
+    let systemImage: String
+}
+
 protocol DevIslandPlugin: AnyObject {
     var manifest: PluginManifest { get }
 
     /// Declarative settings this plugin exposes. The host renders, validates, and persists
     /// them and injects the resolved values via `PluginContext.settings`. Defaults to none.
     var settingsSchema: [PluginSettingDescriptor] { get }
+
+    /// When non-nil the host adds a segment for this plugin in the Features settings pane.
+    /// The host owns the view; the descriptor only provides label and icon. Defaults to nil.
+    var settingsPaneDescriptor: PluginSettingsPaneDescriptor? { get }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect]
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution?
@@ -35,6 +47,7 @@ protocol DevIslandPlugin: AnyObject {
 
 extension DevIslandPlugin {
     var settingsSchema: [PluginSettingDescriptor] { [] }
+    var settingsPaneDescriptor: PluginSettingsPaneDescriptor? { nil }
 }
 
 struct PluginContext {

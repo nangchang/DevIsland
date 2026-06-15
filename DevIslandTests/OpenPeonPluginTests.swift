@@ -180,4 +180,12 @@ final class OpenPeonPluginTests: XCTestCase {
         )
         return (broker, client)
     }
+
+    func testSettingsPaneDescriptor() {
+        let plugin = makePlugin()
+        let descriptor = plugin.settingsPaneDescriptor
+        XCTAssertNotNil(descriptor)
+        XCTAssertEqual(descriptor?.pluginID, OpenPeonPlugin.pluginID)
+        XCTAssertFalse(descriptor?.systemImage.isEmpty ?? true)
+    }
 }

@@ -171,6 +171,14 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
+    var settingsPaneDescriptor: PluginSettingsPaneDescriptor? {
+        PluginSettingsPaneDescriptor(
+            pluginID: manifest.id,
+            label: PluginLocalizedString(english: "Caffeine", korean: "Caffeine"),
+            systemImage: "cup.and.saucer"
+        )
+    }
+
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
         return false
     }

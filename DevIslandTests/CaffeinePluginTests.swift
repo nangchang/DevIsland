@@ -298,4 +298,12 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(fx3[0].payload["preventSleep"], "true")
         XCTAssertEqual(fx3[0].payload["reason"], "onAC")
     }
+
+    func testSettingsPaneDescriptor() {
+        let plugin = makePlugin()
+        let descriptor = plugin.settingsPaneDescriptor
+        XCTAssertNotNil(descriptor)
+        XCTAssertEqual(descriptor?.pluginID, "caffeine")
+        XCTAssertFalse(descriptor?.systemImage.isEmpty ?? true)
+    }
 }

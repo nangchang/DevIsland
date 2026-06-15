@@ -54,6 +54,14 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
         )
     }
 
+    var settingsPaneDescriptor: PluginSettingsPaneDescriptor? {
+        PluginSettingsPaneDescriptor(
+            pluginID: manifest.id,
+            label: PluginLocalizedString(english: "Sound", korean: "사운드"),
+            systemImage: "speaker.wave.2"
+        )
+    }
+
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
         return nil
     }
