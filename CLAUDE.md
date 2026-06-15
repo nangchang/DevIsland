@@ -133,6 +133,11 @@ xcodebuild build -scheme DevIsland -quiet -project "$(pwd)/DevIsland.xcodeproj"
 `@FocusState` + `onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focused = true } }`
 패턴으로 컨텍스트 메뉴 닫힌 뒤 포커스를 강제 설정한다.
 
+`.contextMenu`가 붙은 행 뷰(`SessionRowView`)가 매초 재렌더링되면 열린 메뉴·submenu가
+깜빡인다. 매초 바뀌는 요소("N초 전" `timeAgo`, plugin contribution badge)는 부모를
+관찰하지 않는 자식 뷰로 분리해 부모 본체가 재렌더링되지 않게 할 것
+(`SessionRowTimeAgo`, `SessionRowPluginBadges` 참고).
+
 ## 커밋 원자성
 
 각 커밋은 하나의 논리적 변경만 담을 것. 여러 파일에 걸쳐 있어도
@@ -161,3 +166,8 @@ host command의 부수효과는 observer로 우회될 수 있다. 터미널을 f
 `NotchWindowController`의 앱 활성화/클릭 observer가 `passIfTerminalFocused()`를 호출해
 표시 중인 approval을 terminal로 pass시킨다. 직접 호출하지 않아도 영향을 주므로,
 approval/notification 표시 중엔 동작을 거부할 것(`AppState.canPluginFocusTerminal` 참고).
+
+session-scoped 슬롯(`notch.session.row`, `session.message` 등)은 `PluginRunner.shouldEvaluate`가
+`event.session == nil`이면 건너뛴다. `plugin.tick`·`settings.changed`·`languageChanged` 같은
+session-less 이벤트로 이 슬롯을 갱신하려면 활성 세션마다 session을 실은 이벤트를 fan-out해야
+한다(`PluginHost.activeSessionsProvider` + `tickIfNeeded`/`pluginSettingChanged`/`pluginLanguageChanged` 참고).
