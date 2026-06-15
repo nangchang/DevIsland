@@ -377,7 +377,6 @@ extension L10n {
     // Sound tab
     var secOpenPeonSoundPacks:       String { s("Sound packs",                   "사운드팩") }
     var lblOpenPeonEnable:           String { s("Enable sounds",                 "사운드 활성화") }
-    var lblOpenPeonMuteAll:          String { s("Mute all sounds",               "모든 사운드 음소거") }
     var phOpenPeonPacksFolder:       String { s("Packs folder",                  "팩 폴더") }
     var btnReload:                   String { s("Reload",                        "다시 불러오기") }
     var btnOpen:                     String { s("Open",                          "열기") }
