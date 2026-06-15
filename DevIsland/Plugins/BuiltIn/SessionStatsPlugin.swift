@@ -30,7 +30,11 @@ final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginEventKind.approvalDecided.rawValue,
             PluginEventKind.languageChanged.rawValue
         ],
-        localizedName: PluginLocalizedString(english: "Session Stats", korean: "세션 통계")
+        localizedName: PluginLocalizedString(english: "Session Stats", korean: "세션 통계"),
+        localizedDescription: PluginLocalizedString(
+            english: "Displays a summary of active sessions, hook events per provider, and manual approval decisions.",
+            korean: "활성 세션 수, 프로바이더별 훅 이벤트 수, 수동 승인/거부 결정 요약을 표시합니다."
+        )
     )
 
     private var activeSessionIDs: Set<String> = []

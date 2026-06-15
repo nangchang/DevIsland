@@ -26,7 +26,11 @@ final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
             PluginEventKind.settingsChanged.rawValue,
             PluginEventKind.languageChanged.rawValue
         ],
-        localizedName: PluginLocalizedString(english: "Pomodoro", korean: "포모도로")
+        localizedName: PluginLocalizedString(english: "Pomodoro", korean: "포모도로"),
+        localizedDescription: PluginLocalizedString(
+            english: "A self-contained Pomodoro timer. Tracks focus blocks and sends a notification when each block completes.",
+            korean: "독립적인 포모도로 타이머입니다. 집중 블록을 추적하고 완료 시 알림을 전송합니다."
+        )
     )
 
     /// User-configurable settings (v1.3 demo): work length and whether to auto-restart a

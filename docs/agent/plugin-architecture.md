@@ -176,9 +176,13 @@ struct PluginManifest: Codable {
     let permissions: Set<PluginPermission>
     let surfaces: Set<PluginUISlot>        // 기여할 슬롯 목록 — PluginRunner가 필터링에 사용
     let activationEvents: Set<String>      // PluginEventKind.rawValue 문자열
-    var localizedName: PluginLocalizedString?
+    var localizedName: PluginLocalizedString? = nil
+    var localizedDescription: PluginLocalizedString? = nil
 }
 ```
+
+`localizedName`은 설정창 플러그인 목록에서 `name` 대신 표시할 현지화 이름이다.
+`localizedDescription`은 설정창에서 플러그인 역할을 설명하는 한두 줄 텍스트다. toggle 활성화 여부와 무관하게 항상 표시되므로, 사용자가 플러그인을 켜기 전에도 내용을 파악할 수 있다. nil이면 설명 행을 렌더하지 않는다.
 
 v1 manifest는 built-in plugin 검증을 위한 최소 필드만 가진다.
 VS Code식 `contribution point`와 세분화된 `capabilities` 필드는 v2 external runtime 또는 declarative preset에서 추가한다.

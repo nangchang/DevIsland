@@ -13,7 +13,11 @@ final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
         permissions: [.playScopedAudio, .readHookSummaries, .readScopedFiles],
         surfaces: [],
         activationEvents: ["hook.received"],
-        localizedName: PluginLocalizedString(english: "OpenPeon", korean: "OpenPeon")
+        localizedName: PluginLocalizedString(english: "OpenPeon", korean: "OpenPeon"),
+        localizedDescription: PluginLocalizedString(
+            english: "Plays audio cues for hook events using customizable sound packs.",
+            korean: "사용자 지정 사운드 팩을 사용해 훅 이벤트에 대한 오디오 신호를 재생합니다."
+        )
     )
 
     private let runtime = OpenPeonRuntime()
