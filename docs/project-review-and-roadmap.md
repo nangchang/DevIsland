@@ -122,7 +122,7 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 |---|---|---|
 | D1 | `CLAUDE.md` | "install-bridge.sh는 `/Volumes/data/Github/DevIsland/scripts`를 하드코딩" — 현재 코드는 `SCRIPT_DIR` 자동 탐지 + 앱 번들 폴백으로 동작하므로 설명이 낡았다 |
 | D2 | `docs/agent/approval-proxy.md` | "8-priority rule evaluation"이라고 적었으나 실제 엔진은 5단계(persistent deny > session deny > persistent allow > session allow > prompt)다 |
-| D3 | `docs/agent/plugin-architecture-implementation-plan.md` | "다음 단계: Migration Track M0"로 멈춰 있으나 OpenPeon(PR #263)·Caffeine(PR #264) 마이그레이션은 이미 머지됨. 진행 현황 갱신 필요 |
+| D3 | `docs/agent/plugin-architecture-implementation-plan.md` | 당시에는 "다음 단계: Migration Track M0"로 멈춰 있었으나 현재 문서는 OpenPeon, Caffeine, SessionStats, session surfaces, v1.3 settings schema/i18n 완료 상태로 갱신됨 |
 | D4 | `README.md` | showcase 이미지가 `main` 브랜치 `Assets/showcase.png`를 참조하지만 저장소에 해당 파일이 없다 → 이미지 깨짐 |
 
 추가로 `stability-standards.md`의 transport fallback 표는 모든 위험 등급이 "pass"라 표 형태의 의미가 없다 — 한 문장으로 줄이고 `approvalFallbackPolicy` opt-in만 설명하는 편이 명확하다.
@@ -179,7 +179,7 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 - IPC 입구 하드닝: 루프백 바인딩(S1), TCP raw JSON 차단(S2), grace mode 경고 UI(S3)
 - 로그 위생: 페이로드 전문 로깅 debug 게이트화, `~/Library/Logs` 이동, 로테이션(S4)
 - `discardInvalidPendingRequests` 응답을 `pass`로 변경(A5)
-- 문서 4건 동기화(D1~D4) + `stability-standards.md` fallback 표 정리
+- 남은 문서 불일치 동기화(D1, D4 등) + `stability-standards.md` fallback 표 정리. D3(플러그인 구현 계획)는 현재 완료 상태로 보정됨
 - CI: Python 브리지 테스트 + shellcheck 추가(T1, T3), main push 빌드(T4)
 
 ### 7.2 중기 — v0.13~v0.15 "Performance & Platform" (1~2개월)
@@ -189,7 +189,7 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 - **브리지 성능**: TTY별 터미널 메타데이터 캐시로 훅당 osascript 호출 제거(A3). 측정 지표: PostToolUse 훅 왕복 시간 p95
 - **메인 스레드 정리**: 정책 평가 읽기 큐 이동(A1), `AppState` `@MainActor` 선언 및 이벤트 라우터 추출(A2)
 - **관측성**: `os.Logger` 전환(Q1) + 노치/설정에 브리지 상태 진단 뷰(최근 이벤트, 토큰 모드, transport)
-- **플러그인 v1.1**: 설계 문서에 예정된 session surface 슬롯(`notch.session.row`, `session.context-menu`, `session.message`)과 exclusive region provider(선언형 교체) 구현
+- **플러그인 확장**: v1.1 session surface 슬롯(`notch.session.row`, `session.context-menu`, `session.message`)과 `approval.decided`는 완료됨. 남은 후보는 `notch.expanded.details`, session detail timeline/summary, collapsed notch exclusive region provider(선언형 교체)
 - **로컬라이제이션**: String Catalog 이전(Q2), 언어 추가 기반 마련
 
 ### 7.3 장기 — v1.0 "Trusted Release" 및 v2
@@ -197,7 +197,7 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 - **v1.0 조건**: Developer ID 서명·공증 릴리스, 업데이트 서명 검증(S5), grace mode 제거, raw JSON 레거시 경로 제거, 문서·코드 완전 동기화
 - **플러그인 v2** (설계 문서 로드맵 준수): declarative preset → 외부 plugin runtime(worker process 격리) → signed plugin distribution. v1 built-in에서 검증된 capability만 단계적으로 개방
 - **PTY 통합 강화**: raw mode/SIGWINCH 지원(A4), 또는 PTY 래퍼를 옵트인 실험 기능에서 정식 기능으로 승격할지 여부 결정
-- **확장 검토 항목** (수요 검증 후): 추가 터미널(WezTerm, Alacritty/kitty — AppleScript 미지원이라 별도 전략 필요), 추가 CLI 에이전트 어댑터, 승인 통계 대시보드(플러그인 `approval.decided` 이벤트 활용)
+- **확장 검토 항목** (수요 검증 후): 추가 터미널(WezTerm, Alacritty/kitty — AppleScript 미지원이라 별도 전략 필요), 추가 CLI 에이전트 어댑터, 승인 통계 대시보드(`approval.decided` + `SessionStatsPlugin` 기반 확장)
 
 ### 7.4 로드맵 운영 원칙
 

@@ -36,7 +36,7 @@
 2. **[보안] 훅 페이로드 전문이 world-readable `/tmp` 로그에 평문 기록**되고 로테이션이 없다 (`devisland_bridge.py:352` 외). 명령 인자 속 시크릿이 노출될 수 있다.
 3. **[테스트] 커버리지 밀도가 위험도와 역전.** 플러그인 시스템은 90~100%인데, `HookSocketServer` 2.4%, `BridgeTokenManager` 0%, 정책 엔진의 glob/regex 매칭은 테스트 0개다. 보안 수정의 회귀 방어가 없는 상태.
 4. **[구조] AppState god object와 취약한 스레딩 모델.** 2,591줄에 이벤트 분류·큐·결정·표시 상태가 혼재하고, `MainActor.assumeIsolated` 18곳이 런타임 크래시 가정을 분산시켜 놓았다. 정책 평가 SQLite 읽기는 메인 스레드에서 동기 실행된다(최대 5초 블록 가능).
-5. **[기회] 반쯤 구현된 기능이 가치로 전환되지 못하고 있다.** PTY 주입(`injection`), 새 세션 실행(`openNewWindow`), 승인 통계 데이터(`approval_decisions`), `approval.decided` 플러그인 이벤트(설계 완료)가 모두 코드에 있지만 사용자 기능으로 연결되지 않았다.
+5. **[기회] 반쯤 구현된 기능이 가치로 전환되지 못하고 있다.** PTY 주입(`injection`), 새 세션 실행(`openNewWindow`), 승인 통계 데이터(`approval_decisions`)가 코드에 있지만 사용자 기능으로 충분히 연결되지 않았다. `approval.decided` 플러그인 이벤트는 이후 구현되어 `SessionStatsPlugin`의 manual approve/deny 누계에 연결됐다.
 
 ## 4. 통합 실행 순서
 
