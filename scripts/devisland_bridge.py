@@ -81,18 +81,21 @@ _CONFIG_PATH = _APP_SUPPORT / "bridge-config.json"
 # ---------------------------------------------------------------------------
 
 def log(message: str) -> None:
-    _LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = Path(LOG_PATH)
-    if log_path.exists() and log_path.stat().st_size > _LOG_MAX_BYTES:
-        rotated = log_path.with_suffix(".1.log")
-        log_path.replace(rotated)
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    fd = os.open(LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    # Best-effort: logging must never raise and must never affect hook output.
     try:
-        with os.fdopen(fd, "a", encoding="utf-8") as handle:
-            handle.write(f"[{timestamp}] {message}\n")
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_path = Path(LOG_PATH)
+        if log_path.exists() and log_path.stat().st_size > _LOG_MAX_BYTES:
+            rotated = log_path.with_suffix(".1.log")
+            log_path.replace(rotated)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        fd = os.open(LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            with os.fdopen(fd, "a", encoding="utf-8") as handle:
+                handle.write(f"[{timestamp}] {message}\n")
+        except Exception:
+            pass
     except Exception:
-        # fdopen took ownership; fd already closed on exception
         pass
 
 
