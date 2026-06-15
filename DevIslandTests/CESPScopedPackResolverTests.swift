@@ -74,6 +74,21 @@ final class CESPScopedPackResolverTests: XCTestCase {
         XCTAssertNil(pack)
     }
 
+    func testPackDirectoryAboveRuntimeEntryCapIsNotResolved() async throws {
+        try writePack(
+            dir: "sample",
+            name: "sample",
+            soundPath: "sounds/done.wav",
+            extraFileCount: CESPScopedPackResolver.maxRuntimeDirectoryEntries + 1
+        )
+
+        let pack = await CESPScopedPackResolver.resolveActivePack(
+            scoped: client(), scopeID: scopeID, activePackName: "sample"
+        )
+
+        XCTAssertNil(pack)
+    }
+
     func testActiveNameSelectsMatchingPack() async throws {
         try writePack(dir: "a", name: "alpha", soundPath: "sounds/done.wav")
         try writePack(dir: "b", name: "beta", soundPath: "sounds/done.wav")
@@ -113,7 +128,8 @@ final class CESPScopedPackResolverTests: XCTestCase {
         soundPath: String,
         cespVersion: String = "1.0",
         createSound: Bool = true,
-        extraFileSize: Int64? = nil
+        extraFileSize: Int64? = nil,
+        extraFileCount: Int = 0
     ) throws {
         let packURL = root.appendingPathComponent(dir, isDirectory: true)
         try FileManager.default.createDirectory(at: packURL, withIntermediateDirectories: true)
@@ -129,6 +145,9 @@ final class CESPScopedPackResolverTests: XCTestCase {
                 at: packURL.appendingPathComponent("oversize.bin"),
                 byteCount: extraFileSize
             )
+        }
+        for index in 0..<extraFileCount {
+            try Data([0]).write(to: packURL.appendingPathComponent("extra-\(index).bin"))
         }
         let manifest = """
         {

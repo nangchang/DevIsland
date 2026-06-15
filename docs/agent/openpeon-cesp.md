@@ -96,6 +96,7 @@ MVP validation requires:
 - Extensions are `.wav`, `.mp3`, or `.ogg`.
 - Individual audio files are 1 MB or less.
 - Pack total size is 50 MB or less.
+- Runtime scoped-broker scans cap each listed directory at 1,024 entries. Exceeding that cap makes the runtime treat the pack as invalid, preventing hook playback from materializing very large directories.
 
 Use `Int64` for file size checks. Stop pack-size enumeration once the limit is exceeded.
 
@@ -107,7 +108,7 @@ Use `Int64` for file size checks. Stop pack-size enumeration once the limit is e
 - Debounce applies per category.
 - Sound selection avoids immediate repeat when possible.
 - Master volume applies to each player.
-- Runtime hook playback is requested by `OpenPeonPlugin` through generic `audio.playFile` with a plugin-scoped relative path. The plugin owns pack scan, validation, active-pack selection, and sound selection (via `CESPScopedPackResolver`/`OpenPeonRuntime`), reading files only through the scoped broker. The host validates only the scope/path/audio constraints before playback.
+- Runtime hook playback is requested by `OpenPeonPlugin` through generic `audio.playFile` with a plugin-scoped relative path. The plugin owns pack scan, validation, active-pack selection, and sound selection (via `CESPScopedPackResolver`/`OpenPeonRuntime`), reading files only through the scoped broker. The host validates only the scope/path/audio constraints before playback. Runtime directory listing uses the broker entry cap; Settings tab pack scans still use the host-side FileManager path.
 - Cheap gates (enabled, global/category mute, debounce) run before any broker file access, so the runtime scan frequency is bounded by the debounce interval. There is no scan cache: each debounce-passed category event re-scans the active pack, so packs added at runtime are picked up immediately.
 - Playback failure is logged only and must not affect hook responses.
 - `.ogg` is recognized by validation but currently warned as not playable. MVP playback promises `.wav` and `.mp3` only because `AVAudioPlayer` does not reliably support OGG on stock macOS.

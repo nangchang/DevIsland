@@ -63,6 +63,27 @@ final class PluginScopedResourcesTests: XCTestCase {
         XCTAssertEqual(files.map(\.byteCount), [1, 1])
     }
 
+    func testListDirectoryCanRejectDirectoriesAboveEntryCap() async throws {
+        let root = try makeTempDirectory()
+        try Data("a".utf8).write(to: root.appendingPathComponent("a.wav"))
+        try Data("b".utf8).write(to: root.appendingPathComponent("b.wav"))
+        try Data("c".utf8).write(to: root.appendingPathComponent("c.wav"))
+        let broker = PluginScopedFileBroker(scopesByPluginID: [
+            "openpeon": [PluginScopedFileScope(id: "packs", baseDirectory: root)]
+        ])
+
+        await XCTAssertThrowsErrorAsync(
+            try await broker.listDirectory(
+                pluginID: "openpeon",
+                permissions: [.readScopedFiles],
+                scopeID: "packs",
+                maxEntries: 2
+            )
+        ) { error in
+            XCTAssertEqual(error as? PluginScopedFileError, .directoryTooLarge(maxEntries: 2))
+        }
+    }
+
     func testPlayableFileRejectsUnsupportedExtensionAndOversizeFile() async throws {
         let root = try makeTempDirectory()
         try Data("audio".utf8).write(to: root.appendingPathComponent("done.wav"))

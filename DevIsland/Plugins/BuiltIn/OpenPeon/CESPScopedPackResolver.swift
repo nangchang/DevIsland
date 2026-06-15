@@ -17,6 +17,8 @@ struct CESPResolvedPack: Equatable {
 /// relative-path requests, so the plugin owns CESP parsing/validation without touching
 /// absolute paths or `FileManager`.
 enum CESPScopedPackResolver {
+    static let maxRuntimeDirectoryEntries = 1_024
+
     /// Resolves the active, valid pack the same way `CESPPackStore.activePack` does:
     /// among valid packs (sorted by display name), pick the one whose manifest name matches
     /// `activePackName`, otherwise the first valid pack. Returns `nil` when no valid pack exists.
@@ -83,7 +85,20 @@ enum CESPScopedPackResolver {
 
         while let directory = pending.popLast() {
             guard visited.insert(directory).inserted else { continue }
-            let entries = (try? await scoped.listDirectory(scopeID: scopeID, relativePath: directory)) ?? []
+            let entries: [PluginScopedFileInfo]
+            do {
+                entries = try await scoped.listDirectory(
+                    scopeID: scopeID,
+                    relativePath: directory,
+                    maxEntries: maxRuntimeDirectoryEntries
+                )
+            } catch PluginScopedFileError.directoryTooLarge {
+                total = CESPPackValidator.maxPackSize + 1
+                pending.removeAll()
+                break
+            } catch {
+                continue
+            }
             for entry in entries {
                 if entry.isDirectory {
                     pending.append(entry.relativePath)

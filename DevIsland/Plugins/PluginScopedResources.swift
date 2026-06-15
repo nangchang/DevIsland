@@ -48,12 +48,17 @@ struct PluginScopedFileClient: Sendable {
         self.broker = broker
     }
 
-    func listDirectory(scopeID: String, relativePath: String = "") async throws -> [PluginScopedFileInfo] {
+    func listDirectory(
+        scopeID: String,
+        relativePath: String = "",
+        maxEntries: Int? = nil
+    ) async throws -> [PluginScopedFileInfo] {
         try await broker.listDirectory(
             pluginID: pluginID,
             permissions: permissions,
             scopeID: scopeID,
-            relativePath: relativePath
+            relativePath: relativePath,
+            maxEntries: maxEntries
         )
     }
 
@@ -93,6 +98,7 @@ enum PluginScopedFileError: Error, Equatable {
     case fileTooLarge(maxBytes: Int64)
     case unsupportedExtension
     case unreadable
+    case directoryTooLarge(maxEntries: Int)
 }
 
 actor PluginScopedFileBroker {
@@ -117,7 +123,8 @@ actor PluginScopedFileBroker {
         pluginID: String,
         permissions: Set<PluginPermission>,
         scopeID: String,
-        relativePath: String = ""
+        relativePath: String = "",
+        maxEntries: Int? = nil
     ) throws -> [PluginScopedFileInfo] {
         guard permissions.contains(.readScopedFiles) else { throw PluginScopedFileError.missingPermission }
         let scope = try scope(forPluginID: pluginID, scopeID: scopeID)
@@ -125,6 +132,14 @@ actor PluginScopedFileBroker {
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
             throw PluginScopedFileError.notDirectory
+        }
+
+        if let maxEntries {
+            return try cappedDirectoryContents(
+                at: directoryURL,
+                scope: scope,
+                maxEntries: maxEntries
+            )
         }
 
         return try fileManager.contentsOfDirectory(
@@ -141,6 +156,37 @@ actor PluginScopedFileBroker {
             )
         }
         .sorted { $0.relativePath < $1.relativePath }
+    }
+
+    private func cappedDirectoryContents(
+        at directoryURL: URL,
+        scope: PluginScopedFileScope,
+        maxEntries: Int
+    ) throws -> [PluginScopedFileInfo] {
+        guard maxEntries > 0 else {
+            throw PluginScopedFileError.directoryTooLarge(maxEntries: maxEntries)
+        }
+        guard let enumerator = fileManager.enumerator(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        ) else {
+            throw PluginScopedFileError.notDirectory
+        }
+
+        var entries: [PluginScopedFileInfo] = []
+        for case let url as URL in enumerator {
+            guard entries.count < maxEntries else {
+                throw PluginScopedFileError.directoryTooLarge(maxEntries: maxEntries)
+            }
+            let values = try url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+            entries.append(PluginScopedFileInfo(
+                relativePath: relativePathFromScope(url, baseDirectory: scope.baseDirectory),
+                isDirectory: values.isDirectory == true,
+                byteCount: values.isDirectory == true ? nil : values.fileSize.map(Int64.init)
+            ))
+        }
+        return entries.sorted { $0.relativePath < $1.relativePath }
     }
 
     func readText(
