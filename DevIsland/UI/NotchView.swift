@@ -192,7 +192,6 @@ struct NotchView: View {
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var settingsStore = SettingsStore.shared
     @ObservedObject private var l10n = L10n.shared
-    @ObservedObject private var pluginHost = AppState.shared.pluginHost
     @State private var buddyPulse = false
     @State private var isExpanded = false
     @State private var liveHeight: Double? = nil
@@ -695,11 +694,7 @@ struct NotchView: View {
                 .foregroundColor(.white.opacity(0.3))
                 .padding(.horizontal, 20)
 
-            let activityContributions = pluginHost.contributions[.notchExpandedActivity] ?? []
-            if !activityContributions.isEmpty {
-                PluginSlotView(contributions: activityContributions)
-                    .padding(.horizontal, 20)
-            }
+            NotchActivityContributionsView()
 
             if sessionStore.activeSessions.isEmpty {
                 VStack(spacing: 12) {
@@ -1058,4 +1053,20 @@ final class CornerResizeHandleNSView: NSView {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+/// `notch.expanded.activity` slot contributions in an isolated child so that
+/// `pluginHost.contributions` changes do not re-render `NotchView` — which would
+/// rebuild open context menus on every SessionActionsPlugin update.
+/// Same isolation pattern as `SessionRowPluginBadges` and `SessionRowTimeAgo`.
+private struct NotchActivityContributionsView: View {
+    @ObservedObject private var pluginHost = AppState.shared.pluginHost
+
+    var body: some View {
+        let contributions = pluginHost.contributions[.notchExpandedActivity] ?? []
+        if !contributions.isEmpty {
+            PluginSlotView(contributions: contributions)
+                .padding(.horizontal, 20)
+        }
+    }
 }
