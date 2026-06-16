@@ -13,10 +13,10 @@ final class LockIsolated<Value>: @unchecked Sendable {
     }
 
     @discardableResult
-    func withValue<Result>(_ body: (inout Value) -> Result) -> Result {
+    func withValue<Result>(_ body: (inout Value) throws -> Result) rethrows -> Result {
         lock.lock()
         defer { lock.unlock() }
-        return body(&storage)
+        return try body(&storage)
     }
 }
 
@@ -32,6 +32,7 @@ actor AsyncGate {
         enteredWaiters.removeAll()
 
         guard !didResume else { return }
+        precondition(resumeWaiter == nil, "AsyncGate does not support multiple concurrent waiters for resume.")
         await withCheckedContinuation { continuation in
             resumeWaiter = continuation
         }
