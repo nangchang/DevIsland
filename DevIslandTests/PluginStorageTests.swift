@@ -158,4 +158,20 @@ final class PluginStorageTests: XCTestCase {
             )
         )
     }
+
+    func testResetRemovesUnmigratedLegacyBuiltInDirectory() async throws {
+        let legacyDirectory = tempDir.appendingPathComponent("com.devisland.timer", isDirectory: true)
+        let legacyStorage = try SQLitePluginStorage(
+            databaseURL: legacyDirectory.appendingPathComponent("storage.sqlite")
+        )
+        try legacyStorage.set("elapsed", value: "42")
+        legacyStorage.close()
+
+        let provider = PluginStorageProvider(baseDirectory: tempDir)
+        await provider.reset(pluginID: BuiltInPluginID.sessionTimer)
+        let snapshot = await provider.snapshot(forPluginID: BuiltInPluginID.sessionTimer)
+
+        XCTAssertTrue(snapshot.isEmpty, "reset must not allow legacy data to migrate back on next access")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyDirectory.path))
+    }
 }

@@ -229,7 +229,10 @@ actor PluginStorageProvider {
     func reset(pluginID: String) {
         let pluginID = BuiltInPluginID.currentID(for: pluginID)
         stores.removeValue(forKey: pluginID)?.close()
-        try? FileManager.default.removeItem(at: directory(for: pluginID))
+        let directories = [directory(for: pluginID)] + BuiltInPluginID.legacyIDs(for: pluginID).map { directory(for: $0) }
+        for directory in directories {
+            try? FileManager.default.removeItem(at: directory)
+        }
     }
 
     private func store(for pluginID: String) throws -> SQLitePluginStorage {
