@@ -902,14 +902,12 @@ final class PluginHostDispatchTests: XCTestCase {
 
     func testDisableDuringDrainDiscardsInFlightContribution() async {
         let id = "com.devisland.test.disable.during.drain"
-        let entered = DispatchSemaphore(value: 0)
-        let resume = DispatchSemaphore(value: 0)
+        let gate = AsyncGate()
         let plugin = GatedPlugin(
             id: id,
             contribution: makeContribution(pluginID: id),
             gateOn: [.pluginStarted],
-            entered: entered,
-            resume: resume
+            gate: gate
         )
         let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.disable.during.drain")!
         defaults.removePersistentDomain(forName: "PluginHostDispatchTests.disable.during.drain")
@@ -921,9 +919,9 @@ final class PluginHostDispatchTests: XCTestCase {
         // in-flight snapshot must be discarded rather than re-added after the user turned
         // it off.
         host.enqueue(makeEvent(kind: .pluginStarted))
-        await awaitSignal(entered)
+        await gate.waitUntilEntered()
         host.setPluginEnabled(false, pluginID: id)
-        resume.signal()
+        await gate.resume()
 
         await host.waitUntilIdle()
 
@@ -933,8 +931,7 @@ final class PluginHostDispatchTests: XCTestCase {
 
     func testSafemodeExcludesEventAlreadyQueued() async {
         let id = "com.devisland.test.safemode.queued"
-        let entered = DispatchSemaphore(value: 0)
-        let resume = DispatchSemaphore(value: 0)
+        let gate = AsyncGate()
         // The first event parks the drain, leaving the second event pending in the queue.
         // That pending event's eligible-runner list was captured at enqueue time, before
         // safemode — the gap the drain-time `isActive` re-filter closes.
@@ -942,8 +939,7 @@ final class PluginHostDispatchTests: XCTestCase {
             id: id,
             contribution: makeContribution(pluginID: id),
             gateOn: [.pluginStarted],
-            entered: entered,
-            resume: resume,
+            gate: gate,
             activationEvents: [.pluginStarted, .pluginTick]
         )
         let defaults = UserDefaults(suiteName: "PluginHostDispatchTests.safemode.queued")!
@@ -953,29 +949,15 @@ final class PluginHostDispatchTests: XCTestCase {
 
         host.enqueue(makeEvent(kind: .pluginStarted)) // parks the drain inside onEvent
         host.enqueue(makeEvent(kind: .pluginTick))     // queued behind it, not yet processed
-        await awaitSignal(entered)
+        await gate.waitUntilEntered()
         host.enterSafemode(pluginID: id)
-        resume.signal()
+        await gate.resume()
 
         await host.waitUntilIdle()
 
         XCTAssertFalse(plugin.receivedKinds.contains(.pluginTick),
                        "an event still queued when the plugin entered safemode must not run")
         XCTAssertTrue(host.isInSafemode(id))
-    }
-
-    /// Awaits a `DispatchSemaphore` without blocking the Swift cooperative pool: the plugin
-    /// signals it from a synchronous `onEvent`, so the test bridges through a Dispatch global
-    /// queue and a continuation. Waiting on the MainActor thread directly would deadlock the
-    /// @MainActor-isolated drain loop; blocking a cooperative thread is unavailable in async
-    /// code (an error under Swift 6).
-    private func awaitSignal(_ semaphore: DispatchSemaphore) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            DispatchQueue.global().async {
-                semaphore.wait()
-                continuation.resume()
-            }
-        }
     }
 
     private func makeTempStorageDirectory() -> URL {
@@ -1071,17 +1053,12 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
     let throwOnKinds: Set<PluginEventKind>
     let delay: TimeInterval
     let delayOnKinds: Set<PluginEventKind>?
-    private let lock = NSLock()
-    private var _receivedEvents: [PluginEvent] = []
+    private let events = LockIsolated<[PluginEvent]>([])
     var receivedEvents: [PluginEvent] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _receivedEvents
+        events.value
     }
     var receivedKinds: [PluginEventKind] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _receivedEvents.map(\.kind)
+        events.value.map(\.kind)
     }
 
     init(
@@ -1115,14 +1092,12 @@ private final class RecordingPlugin: DevIslandPlugin, @unchecked Sendable {
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         let shouldDelay = delayOnKinds?.contains(event.kind) ?? true
         if shouldDelay && delay > 0 {
-            Thread.sleep(forTimeInterval: delay)
+            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         }
         if throwOnKinds.contains(event.kind) {
             throw TestError()
         }
-        lock.lock()
-        _receivedEvents.append(event)
-        lock.unlock()
+        events.withValue { $0.append(event) }
         return []
     }
 
@@ -1146,28 +1121,22 @@ private final class GatedPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
     private let contribution: PluginUIContribution
     private let gateOn: Set<PluginEventKind>
-    private let entered: DispatchSemaphore
-    private let resume: DispatchSemaphore
-    private let lock = NSLock()
-    private var _receivedKinds: [PluginEventKind] = []
+    private let gate: AsyncGate
+    private let kinds = LockIsolated<[PluginEventKind]>([])
     var receivedKinds: [PluginEventKind] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _receivedKinds
+        kinds.value
     }
 
     init(
         id: String,
         contribution: PluginUIContribution,
         gateOn: Set<PluginEventKind>,
-        entered: DispatchSemaphore,
-        resume: DispatchSemaphore,
+        gate: AsyncGate,
         activationEvents: Set<PluginEventKind> = [.pluginStarted]
     ) {
         self.contribution = contribution
         self.gateOn = gateOn
-        self.entered = entered
-        self.resume = resume
+        self.gate = gate
         self.manifest = PluginManifest(
             id: id,
             name: id,
@@ -1181,12 +1150,9 @@ private final class GatedPlugin: DevIslandPlugin, @unchecked Sendable {
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
-        lock.lock()
-        _receivedKinds.append(event.kind)
-        lock.unlock()
+        kinds.withValue { $0.append(event.kind) }
         if gateOn.contains(event.kind) {
-            entered.signal()
-            resume.wait()
+            await gate.enterAndWaitForResume()
         }
         return []
     }
@@ -1202,20 +1168,15 @@ private final class GatedPlugin: DevIslandPlugin, @unchecked Sendable {
 
 private final class ScopedReaderPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
-    private let lock = NSLock()
-    private var _readText: String?
-    private var _sawMissingClient = false
+    private let readTextStorage = LockIsolated<String?>(nil)
+    private let sawMissingClientStorage = LockIsolated(false)
 
     var readText: String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _readText
+        readTextStorage.value
     }
 
     var sawMissingClient: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return _sawMissingClient
+        sawMissingClientStorage.value
     }
 
     init(id: String, permissions: Set<PluginPermission>) {
@@ -1233,15 +1194,11 @@ private final class ScopedReaderPlugin: DevIslandPlugin, @unchecked Sendable {
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         guard let scopedFiles = context.scopedFiles else {
-            lock.lock()
-            _sawMissingClient = true
-            lock.unlock()
+            sawMissingClientStorage.withValue { $0 = true }
             return []
         }
         let text = try await scopedFiles.readText(scopeID: "packs", relativePath: "manifest.txt")
-        lock.lock()
-        _readText = text
-        lock.unlock()
+        readTextStorage.withValue { $0 = text }
         return []
     }
 
@@ -1257,12 +1214,9 @@ private final class ScopedReaderPlugin: DevIslandPlugin, @unchecked Sendable {
 private final class VisibilityTickingPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
     private let tickSurface: PluginUISlot
-    private let lock = NSLock()
-    private var _receivedKinds: [PluginEventKind] = []
+    private let kinds = LockIsolated<[PluginEventKind]>([])
     var receivedKinds: [PluginEventKind] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _receivedKinds
+        kinds.value
     }
 
     init(id: String, tickSurface: PluginUISlot = .notchExpandedActivity) {
@@ -1280,9 +1234,7 @@ private final class VisibilityTickingPlugin: DevIslandPlugin, @unchecked Sendabl
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
-        lock.lock()
-        _receivedKinds.append(event.kind)
-        lock.unlock()
+        kinds.withValue { $0.append(event.kind) }
         return []
     }
 
@@ -1300,9 +1252,7 @@ private final class VisibilityTickingPlugin: DevIslandPlugin, @unchecked Sendabl
 /// `session.started` and ticks while the row surface is visible.
 private final class SessionRowTickPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
-    private let lock = NSLock()
-    private var trackedSessionIDs: Set<String> = []
-    private var rowEvalCount = 0
+    private let state = LockIsolated((trackedSessionIDs: Set<String>(), rowEvalCount: 0))
 
     init(id: String) {
         manifest = PluginManifest(
@@ -1318,18 +1268,18 @@ private final class SessionRowTickPlugin: DevIslandPlugin, @unchecked Sendable {
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .sessionStarted, let session = event.session {
-            lock.lock(); trackedSessionIDs.insert(session.id); lock.unlock()
+            state.withValue { $0.trackedSessionIDs.insert(session.id) }
         }
         return []
     }
 
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
         guard slot == .notchSessionRow, let session = context.session else { return nil }
-        lock.lock()
-        guard trackedSessionIDs.contains(session.id) else { lock.unlock(); return nil }
-        rowEvalCount += 1
-        let count = rowEvalCount
-        lock.unlock()
+        guard let count = state.withValue({ state -> Int? in
+            guard state.trackedSessionIDs.contains(session.id) else { return nil }
+            state.rowEvalCount += 1
+            return state.rowEvalCount
+        }) else { return nil }
         return PluginUIContribution(
             pluginID: manifest.id, slot: slot, targetSessionID: session.id,
             priority: 10, expiresAt: nil,
@@ -1413,8 +1363,7 @@ private final class RotatingContributionPlugin: DevIslandPlugin, @unchecked Send
 
 private final class ToggleContributionPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
-    private let lock = NSLock()
-    private var shouldRender = true
+    private let shouldRender = LockIsolated(true)
 
     init(id: String, permissions: Set<PluginPermission>) {
         self.manifest = PluginManifest(
@@ -1434,18 +1383,13 @@ private final class ToggleContributionPlugin: DevIslandPlugin, @unchecked Sendab
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginTick {
-            lock.lock()
-            shouldRender = false
-            lock.unlock()
+            shouldRender.withValue { $0 = false }
         }
         return []
     }
 
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
-        lock.lock()
-        let render = shouldRender
-        lock.unlock()
-        guard render else { return nil }
+        guard shouldRender.value else { return nil }
 
         return PluginUIContribution(
             pluginID: manifest.id,
@@ -1567,8 +1511,7 @@ private final class SessionScopedContributionPlugin: DevIslandPlugin, @unchecked
 
 private final class ToggleSessionScopedContributionPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
-    private let lock = NSLock()
-    private var hiddenSessionIDs: Set<String> = []
+    private let hiddenSessionIDs = LockIsolated<Set<String>>([])
 
     init(id: String) {
         self.manifest = PluginManifest(
@@ -1588,19 +1531,14 @@ private final class ToggleSessionScopedContributionPlugin: DevIslandPlugin, @unc
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginTick, let sessionID = event.session?.id {
-            lock.lock()
-            hiddenSessionIDs.insert(sessionID)
-            lock.unlock()
+            hiddenSessionIDs.withValue { $0.insert(sessionID) }
         }
         return []
     }
 
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
         guard let sessionID = context.session?.id else { return nil }
-        lock.lock()
-        let shouldHide = hiddenSessionIDs.contains(sessionID)
-        lock.unlock()
-        guard !shouldHide else { return nil }
+        guard !hiddenSessionIDs.value.contains(sessionID) else { return nil }
 
         return PluginUIContribution(
             pluginID: manifest.id,
@@ -1629,8 +1567,7 @@ private final class ToggleSessionScopedContributionPlugin: DevIslandPlugin, @unc
 
 private final class GlobalToggleSessionScopedContributionPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
-    private let lock = NSLock()
-    private var hideAll = false
+    private let hideAll = LockIsolated(false)
 
     init(id: String) {
         self.manifest = PluginManifest(
@@ -1650,18 +1587,13 @@ private final class GlobalToggleSessionScopedContributionPlugin: DevIslandPlugin
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         if event.kind == .pluginTick {
-            lock.lock()
-            hideAll = true
-            lock.unlock()
+            hideAll.withValue { $0 = true }
         }
         return []
     }
 
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution? {
-        lock.lock()
-        let shouldHide = hideAll
-        lock.unlock()
-        guard !shouldHide, let sessionID = context.session?.id else { return nil }
+        guard !hideAll.value, let sessionID = context.session?.id else { return nil }
 
         return PluginUIContribution(
             pluginID: manifest.id,
@@ -1690,18 +1622,13 @@ private final class GlobalToggleSessionScopedContributionPlugin: DevIslandPlugin
 
 private final class ProbationTestPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
-    private let lock = NSLock()
-    private var _shouldThrow = false
+    private let shouldThrowStorage = LockIsolated(false)
     var shouldThrow: Bool {
         get {
-            lock.lock()
-            defer { lock.unlock() }
-            return _shouldThrow
+            shouldThrowStorage.value
         }
         set {
-            lock.lock()
-            _shouldThrow = newValue
-            lock.unlock()
+            shouldThrowStorage.withValue { $0 = newValue }
         }
     }
 
@@ -1734,26 +1661,5 @@ private final class ProbationTestPlugin: DevIslandPlugin, @unchecked Sendable {
 
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
         false
-    }
-}
-
-private final class LockIsolated<Value>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: Value
-
-    init(_ value: Value) {
-        self.storage = value
-    }
-
-    var value: Value {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage
-    }
-
-    func withValue(_ body: (inout Value) -> Void) {
-        lock.lock()
-        defer { lock.unlock() }
-        body(&storage)
     }
 }
