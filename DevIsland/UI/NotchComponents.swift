@@ -238,14 +238,17 @@ private struct ClaudeQuestionOptionRow: View {
             .zIndex(1)
 
             if isSelected, let preview, !preview.isEmpty {
-                MarkdownView(
-                    text: preview,
-                    foregroundColor: .white.opacity(0.75),
-                    font: .system(size: 11, weight: .regular)
-                )
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, maxHeight: 180, alignment: .topLeading)
+                ScrollView {
+                    MarkdownView(
+                        text: preview,
+                        foregroundColor: .white.opacity(0.75),
+                        font: .system(size: 11, weight: .regular)
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .frame(maxWidth: .infinity, maxHeight: 200)
                 .background(Color.green.opacity(0.07))
                 .clipShape(
                     UnevenRoundedRectangle(
