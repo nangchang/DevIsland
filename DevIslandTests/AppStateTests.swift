@@ -2299,12 +2299,9 @@ final class AppStateTests: XCTestCase {
 
 private final class LifecycleRecordingPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
-    private let lock = NSLock()
-    private var _receivedKinds: [PluginEventKind] = []
+    private let receivedKindsStorage = LockIsolated<[PluginEventKind]>([])
     var receivedKinds: [PluginEventKind] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _receivedKinds
+        receivedKindsStorage.value
     }
 
     init(id: String) {
@@ -2324,9 +2321,7 @@ private final class LifecycleRecordingPlugin: DevIslandPlugin, @unchecked Sendab
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
-        lock.lock()
-        _receivedKinds.append(event.kind)
-        lock.unlock()
+        receivedKindsStorage.withValue { $0.append(event.kind) }
         return []
     }
 

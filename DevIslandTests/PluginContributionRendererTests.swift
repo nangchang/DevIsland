@@ -290,15 +290,12 @@ final class PluginContributionRendererTests: XCTestCase {
 
 private final class ActionCapturingPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
-    private let lock = NSLock()
-    private var _receivedEvents: [PluginEvent] = []
+    private let events = LockIsolated<[PluginEvent]>([])
     var receivedKinds: [PluginEventKind] {
-        lock.lock(); defer { lock.unlock() }
-        return _receivedEvents.map(\.kind)
+        events.value.map(\.kind)
     }
     var receivedEvents: [PluginEvent] {
-        lock.lock(); defer { lock.unlock() }
-        return _receivedEvents
+        events.value
     }
 
     init(id: String, permissions: Set<PluginPermission> = []) {
@@ -315,8 +312,7 @@ private final class ActionCapturingPlugin: DevIslandPlugin, @unchecked Sendable 
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
-        lock.lock(); defer { lock.unlock() }
-        _receivedEvents.append(event)
+        events.withValue { $0.append(event) }
         return []
     }
 

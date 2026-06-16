@@ -298,11 +298,9 @@ final class PomodoroPluginTests: XCTestCase {
 
 private final class ActionRecordingPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
-    private let lock = NSLock()
-    private var _received: [PluginEventKind] = []
+    private let receivedStorage = LockIsolated<[PluginEventKind]>([])
     var received: [PluginEventKind] {
-        lock.lock(); defer { lock.unlock() }
-        return _received
+        receivedStorage.value
     }
 
     init(id: String) {
@@ -319,9 +317,7 @@ private final class ActionRecordingPlugin: DevIslandPlugin, @unchecked Sendable 
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
-        lock.lock()
-        _received.append(event.kind)
-        lock.unlock()
+        receivedStorage.withValue { $0.append(event.kind) }
         return []
     }
 

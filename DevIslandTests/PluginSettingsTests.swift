@@ -331,13 +331,10 @@ private final class SettingsTestPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
     private let needsTickValue: Bool
     private let throwOnStart: Bool
-    private let lock = NSLock()
-    private var _receivedKinds: [PluginEventKind] = []
+    private let receivedKindsStorage = LockIsolated<[PluginEventKind]>([])
 
     var receivedKinds: [PluginEventKind] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _receivedKinds
+        receivedKindsStorage.value
     }
 
     init(
@@ -365,9 +362,7 @@ private final class SettingsTestPlugin: DevIslandPlugin, @unchecked Sendable {
         if throwOnStart, event.kind == .pluginStarted {
             throw StartError()
         }
-        lock.lock()
-        _receivedKinds.append(event.kind)
-        lock.unlock()
+        receivedKindsStorage.withValue { $0.append(event.kind) }
         return []
     }
 
