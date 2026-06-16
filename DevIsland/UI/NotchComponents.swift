@@ -359,6 +359,7 @@ struct SessionRowView: View {
         switch app {
         case "VSCode":        return AppBadge(label: "VS Code", color: Color(red: 0.0, green: 0.6, blue: 1.0))
         case "ClaudeDesktop": return AppBadge(label: "Claude",  color: Color(red: 0.8, green: 0.5, blue: 1.0))
+        case "CodexDesktop":  return AppBadge(label: "Codex",   color: Color(red: 0.2, green: 0.6, blue: 0.9))
         default:              return nil
         }
     }
