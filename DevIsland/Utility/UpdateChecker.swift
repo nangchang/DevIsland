@@ -59,8 +59,9 @@ final class UpdateChecker: ObservableObject {
     }
 
     /// nightly tag (nightly-0.11.1-20260614-16) 의 run number가 현재 빌드보다 크면 업데이트 있음.
-    /// CFBundleVersion = github run number
+    /// stable 빌드가 nightly 채널을 선택한 경우 run number 비교가 무의미하므로 항상 업데이트로 간주.
     private func hasNightlyUpdate(latestTag: String) -> Bool {
+        guard currentVersion.contains("nightly") else { return true }
         guard let latestRun = nightlyRunNumber(from: latestTag),
               let currentRun = Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") else {
             return false
@@ -76,9 +77,8 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: Public entry points
 
-    /// 앱 시작 시 호출 — nightly 빌드면 채널 자동 설정, 1시간 이내 체크했으면 스킵, 이후 매일 반복
+    /// 앱 시작 시 호출 — 1시간 이내 체크했으면 스킵, 이후 매일 반복
     func schedulePeriodicCheck() {
-        autoDetectChannel()
         if SettingsStore.shared.settings.checkForUpdatesOnStartup {
             let last = UserDefaults.standard.object(forKey: lastCheckKey) as? Date ?? .distantPast
             if Date().timeIntervalSince(last) > 3600 {
@@ -91,16 +91,6 @@ final class UpdateChecker: ObservableObject {
                 guard SettingsStore.shared.settings.checkForUpdatesOnStartup else { return }
                 await self.fetchLatestRelease(silent: true)
             }
-        }
-    }
-
-    /// nightly 빌드를 처음 실행할 때 채널을 자동으로 nightly로 설정
-    private func autoDetectChannel() {
-        let store = SettingsStore.shared
-        let channelKey = SettingsStore.DefaultsKey.releaseChannel
-        guard UserDefaults.standard.object(forKey: channelKey) == nil else { return }
-        if currentVersion.contains("nightly") {
-            store.settings.releaseChannel = .nightly
         }
     }
 
@@ -145,8 +135,7 @@ final class UpdateChecker: ObservableObject {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tagName = json["tag_name"] as? String,
               let assets = json["assets"] as? [[String: Any]] else {
-            if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateInvalidResponseMsg) }
-            return
+            throw UpdateError.invalidResponse
         }
 
         let version = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
@@ -154,8 +143,7 @@ final class UpdateChecker: ObservableObject {
         guard let asset = assets.first(where: { ($0["name"] as? String ?? "").hasSuffix(".dmg") }),
               let urlStr = asset["browser_download_url"] as? String,
               let downloadURL = URL(string: urlStr) else {
-            if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateNoAssetMsg) }
-            return
+            throw UpdateError.noAsset
         }
 
         UserDefaults.standard.set(Date(), forKey: lastCheckKey)
@@ -180,19 +168,21 @@ final class UpdateChecker: ObservableObject {
         }
 
         guard let releases = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateInvalidResponseMsg) }
-            return
+            throw UpdateError.invalidResponse
         }
 
-        // prerelease: true이고 DMG 에셋이 있는 첫 번째 릴리스 = 최신 nightly
-        guard let nightlyRelease = releases.first(where: { ($0["prerelease"] as? Bool) == true }),
+        // prerelease: true이면서 DMG 에셋을 포함한 첫 번째 릴리스 = 최신 유효 nightly
+        guard let nightlyRelease = releases.first(where: { release in
+                  guard (release["prerelease"] as? Bool) == true,
+                        let assets = release["assets"] as? [[String: Any]] else { return false }
+                  return assets.contains { ($0["name"] as? String ?? "").hasSuffix(".dmg") }
+              }),
               let tagName = nightlyRelease["tag_name"] as? String,
               let assets = nightlyRelease["assets"] as? [[String: Any]],
               let asset = assets.first(where: { ($0["name"] as? String ?? "").hasSuffix(".dmg") }),
               let urlStr = asset["browser_download_url"] as? String,
               let downloadURL = URL(string: urlStr) else {
-            if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateNoAssetMsg) }
-            return
+            throw UpdateError.noAsset
         }
 
         UserDefaults.standard.set(Date(), forKey: lastCheckKey)

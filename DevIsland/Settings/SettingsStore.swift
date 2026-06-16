@@ -843,7 +843,7 @@ final class SettingsStore: ObservableObject {
                 ReleaseChannel.self,
                 key: DefaultsKey.releaseChannel,
                 from: userDefaults,
-                default: defaults.releaseChannel
+                default: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").contains("nightly") ? .nightly : defaults.releaseChannel
             )
         )
     }
