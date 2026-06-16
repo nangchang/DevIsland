@@ -244,6 +244,7 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set("bad-mode", forKey: SettingsStore.DefaultsKey.notchRightCharacterMode)
         defaults.set("bad-kind", forKey: SettingsStore.DefaultsKey.notchRightCharacterKind)
         defaults.set([], forKey: SettingsStore.DefaultsKey.notchRightRandomCharacterKinds)
+        defaults.set("bad-release-channel", forKey: SettingsStore.DefaultsKey.releaseChannel)
 
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 

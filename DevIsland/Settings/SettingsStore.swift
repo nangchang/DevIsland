@@ -435,7 +435,15 @@ final class SettingsStore: ObservableObject {
     ) {
         self.userDefaults = userDefaults
         self.bridgeConfigURL = bridgeConfigURL
-        self.settings = Self.load(from: userDefaults)
+        var loaded = Self.load(from: userDefaults)
+        // 최초 실행(키 미설정)일 때만 번들 버전으로 릴리즈 채널을 자동 감지한다.
+        if userDefaults.object(forKey: DefaultsKey.releaseChannel) == nil {
+            let versionStr = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+            if versionStr.contains("nightly") {
+                loaded.releaseChannel = .nightly
+            }
+        }
+        self.settings = loaded
         writeBridgeConfig(settings)
     }
 
@@ -852,7 +860,7 @@ final class SettingsStore: ObservableObject {
                 ReleaseChannel.self,
                 key: DefaultsKey.releaseChannel,
                 from: userDefaults,
-                default: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").contains("nightly") ? .nightly : defaults.releaseChannel
+                default: defaults.releaseChannel
             )
         )
     }
