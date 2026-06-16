@@ -15,7 +15,7 @@ import Foundation
 /// `PluginRunner` actor, which serializes every call (architecture doc §6.4).
 final class SessionStatsPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest = PluginManifest(
-        id: "com.devisland.stats",
+        id: BuiltInPluginID.sessionStats,
         name: "Session Stats",
         version: "1.0.0",
         apiVersion: 1,

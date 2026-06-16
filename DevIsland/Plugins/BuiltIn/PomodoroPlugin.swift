@@ -12,7 +12,7 @@ import Foundation
 /// `PluginRunner` actor, which serializes every call (architecture doc §6.4).
 final class PomodoroPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest = PluginManifest(
-        id: "com.devisland.pomodoro",
+        id: BuiltInPluginID.pomodoro,
         name: "Pomodoro",
         version: "1.0.0",
         apiVersion: 1,

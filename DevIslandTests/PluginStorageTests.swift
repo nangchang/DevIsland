@@ -138,4 +138,24 @@ final class PluginStorageTests: XCTestCase {
         let snapshot = await provider.snapshot(forPluginID: "com.devisland.a")
         XCTAssertTrue(snapshot.isEmpty)
     }
+
+    func testProviderMigratesLegacyBuiltInDirectory() async throws {
+        let legacyDirectory = tempDir.appendingPathComponent("com.devisland.timer", isDirectory: true)
+        let legacyStorage = try SQLitePluginStorage(
+            databaseURL: legacyDirectory.appendingPathComponent("storage.sqlite")
+        )
+        try legacyStorage.set("elapsed", value: "42")
+        legacyStorage.close()
+
+        let provider = PluginStorageProvider(baseDirectory: tempDir)
+        let snapshot = await provider.snapshot(forPluginID: BuiltInPluginID.sessionTimer)
+
+        XCTAssertEqual(snapshot["elapsed"], "42")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyDirectory.path))
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: tempDir.appendingPathComponent(BuiltInPluginID.sessionTimer, isDirectory: true).path
+            )
+        )
+    }
 }

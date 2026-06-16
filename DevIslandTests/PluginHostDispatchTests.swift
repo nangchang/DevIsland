@@ -368,7 +368,7 @@ final class PluginHostDispatchTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data("sound".utf8).write(to: root.appendingPathComponent("done.wav"))
         let broker = PluginScopedFileBroker(scopesByPluginID: [
-            "openpeon": [
+            OpenPeonPlugin.pluginID: [
                 PluginScopedFileScope(id: "packs", baseDirectory: root)
             ]
         ])
@@ -387,7 +387,7 @@ final class PluginHostDispatchTests: XCTestCase {
 
         await executor.enqueue(
             [effect],
-            pluginID: "openpeon",
+            pluginID: OpenPeonPlugin.pluginID,
             kind: .utility,
             permissions: Set<PluginPermission>([.playScopedAudio])
         )
@@ -401,7 +401,7 @@ final class PluginHostDispatchTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data("sound".utf8).write(to: root.appendingPathComponent("done.wav"))
         let broker = PluginScopedFileBroker(scopesByPluginID: [
-            "openpeon": [
+            OpenPeonPlugin.pluginID: [
                 PluginScopedFileScope(id: "packs", baseDirectory: root)
             ]
         ])
@@ -416,7 +416,7 @@ final class PluginHostDispatchTests: XCTestCase {
 
         await executor.enqueue(
             [PluginEffect(capability: "audio.playFile", payload: ["scope": "packs", "path": "done.wav"])],
-            pluginID: "openpeon",
+            pluginID: OpenPeonPlugin.pluginID,
             kind: .utility,
             permissions: Set<PluginPermission>([.showNotification])
         )

@@ -1266,7 +1266,7 @@ private struct FeaturesSettingsPane: View {
                 Divider()
             }
             switch pluginID {
-            case "caffeine":
+            case CaffeinePlugin.pluginID:
                 CaffeineSettingsPane(store: store, coordinator: appState.caffeineCoordinator)
             case OpenPeonPlugin.pluginID:
                 OpenPeonSettingsPane(store: store)

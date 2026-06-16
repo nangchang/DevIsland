@@ -105,7 +105,11 @@ final class PluginHost: ObservableObject {
         pluginDisplayNames = Dictionary(uniqueKeysWithValues: runners.map { id, runner in
             (id, runner.manifest.displayName(language: L10n.shared.language))
         })
-        self.disabledPluginIDs = disabledPluginIDs.filter { runners[$0] != nil }
+        self.disabledPluginIDs = Set(
+            disabledPluginIDs
+                .map { BuiltInPluginID.currentID(for: $0) }
+                .filter { runners[$0] != nil }
+        )
 
         // Startup probation recovery:
         let storedSafemode = store.safemodePluginIDs
@@ -124,7 +128,8 @@ final class PluginHost: ObservableObject {
     /// The declarative settings schema a plugin exposes, for the host-owned settings UI.
     /// Empty when the plugin declares none or is not registered.
     func settingsSchema(forPluginID pluginID: String) -> [PluginSettingDescriptor] {
-        runners[pluginID]?.settingsSchema ?? []
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
+        return runners[pluginID]?.settingsSchema ?? []
     }
 
     /// Ordered list of settings pane descriptors for enabled plugins (including safemoded ones).
@@ -171,6 +176,7 @@ final class PluginHost: ObservableObject {
     /// per-session contributions with the new settings instead of waiting for the next
     /// session event.
     func pluginSettingChanged(pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         guard isEnabled, let runner = runners[pluginID] else { return }
         enqueue(eventFactory.makeLifecycleEvent(kind: .settingsChanged), restrictedTo: pluginID)
         guard runner.manifest.surfaces.contains(where: { Self.isSessionScoped($0) }) else { return }
@@ -201,11 +207,13 @@ final class PluginHost: ObservableObject {
     }
 
     func isPluginEnabled(_ pluginID: String) -> Bool {
-        !disabledPluginIDs.contains(pluginID)
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
+        return !disabledPluginIDs.contains(pluginID)
     }
 
     func isInSafemode(_ pluginID: String) -> Bool {
-        safemodePluginIDs.contains(pluginID)
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
+        return safemodePluginIDs.contains(pluginID)
     }
 
     /// A plugin receives events and ticks only when it is neither user-disabled nor
@@ -218,6 +226,7 @@ final class PluginHost: ObservableObject {
     /// contributions; enabling re-emits `plugin.started` to that plugin only so it can
     /// rebuild without disturbing other plugins.
     func setPluginEnabled(_ enabled: Bool, pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         guard isEnabled, runners[pluginID] != nil else { return }
         if enabled {
             guard disabledPluginIDs.contains(pluginID) else { return }
@@ -234,6 +243,7 @@ final class PluginHost: ObservableObject {
     /// failure-threshold detector calls; entering safemode without the dispatch exclusion
     /// would let the next event re-run the plugin and undo the clear.
     func enterSafemode(pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         guard runners[pluginID] != nil, !safemodePluginIDs.contains(pluginID) else { return }
         safemodePluginIDs.insert(pluginID)
         settingsStore?.setSafemode(true, pluginID: pluginID)
@@ -261,6 +271,7 @@ final class PluginHost: ObservableObject {
     /// reset re-enters safemode immediately, preventing a safemode↔reset loop on a
     /// persistently failing plugin.
     func resetPlugin(pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         guard runners[pluginID] != nil else { return }
         safemodePluginIDs.remove(pluginID)
         settingsStore?.setSafemode(false, pluginID: pluginID)
@@ -275,6 +286,7 @@ final class PluginHost: ObservableObject {
     /// Clears a plugin's durable storage. Fire-and-forget so the settings UI never blocks
     /// on storage I/O.
     func resetStorage(forPluginID pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         Task { [storageProvider] in
             await storageProvider.reset(pluginID: pluginID)
         }
@@ -284,6 +296,7 @@ final class PluginHost: ObservableObject {
     /// `.pluginEvent` routing enqueues a pluginActionInvoked event back to that plugin.
     /// `.hostExecuted` routing runs a host command (session catalog) or effect.
     func handleAction(_ action: PluginUIActionDTO, from pluginID: String, componentID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         guard let runner = runners[pluginID], isActive(pluginID) else { return }
 
         switch action.routing {
@@ -579,7 +592,8 @@ final class PluginHost: ObservableObject {
     /// Read-only view of a plugin's durable storage (used by tests; later by the
     /// settings UI). Reading never blocks the hook/approval path.
     func pluginStorageSnapshot(forPluginID pluginID: String) async -> [String: String] {
-        await storageProvider.snapshot(forPluginID: pluginID)
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
+        return await storageProvider.snapshot(forPluginID: pluginID)
     }
 
     private func evictSessionContributions(sessionID: String) {

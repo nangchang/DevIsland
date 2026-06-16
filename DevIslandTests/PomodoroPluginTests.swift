@@ -221,7 +221,7 @@ final class PomodoroPluginTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
         let store = PluginSettingsStore(userDefaults: defaults)
-        store.setValue(.int(10), forKey: "workMinutes", pluginID: "com.devisland.pomodoro")
+        store.setValue(.int(10), forKey: "workMinutes", pluginID: BuiltInPluginID.pomodoro)
 
         let plugin = PomodoroPlugin()
         let host = PluginHost()
@@ -245,7 +245,7 @@ final class PomodoroPluginTests: XCTestCase {
         language: AppLanguage = .english
     ) -> PluginContext {
         PluginContext(
-            pluginID: "com.devisland.pomodoro",
+            pluginID: BuiltInPluginID.pomodoro,
             permissions: [],
             storageSnapshot: [:],
             settings: settings,
@@ -267,7 +267,7 @@ final class PomodoroPluginTests: XCTestCase {
             session: nil,
             hook: nil,
             action: PluginActionEvent(
-                pluginID: "com.devisland.pomodoro",
+                pluginID: BuiltInPluginID.pomodoro,
                 actionID: "pomodoro.toggle",
                 componentID: "toggle",
                 capability: "timer.startStop",

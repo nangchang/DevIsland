@@ -252,7 +252,7 @@ final class SessionTimerPluginTests: XCTestCase {
         await host.waitUntilIdle()
         XCTAssertEqual(host.contributions[.notchSessionRow]?.count, 1)
 
-        host.setPluginEnabled(false, pluginID: "com.devisland.timer")
+        host.setPluginEnabled(false, pluginID: BuiltInPluginID.sessionTimer)
         XCTAssertEqual(
             host.contributions,
             [:],
@@ -330,7 +330,7 @@ final class SessionTimerPluginTests: XCTestCase {
         let start = Date(timeIntervalSince1970: 1_000)
         let snapshot = makeSnapshot(id: "s1", startTime: start, lastActiveAt: start)
         let ctx = PluginContext(
-            pluginID: "com.devisland.timer",
+            pluginID: BuiltInPluginID.sessionTimer,
             permissions: [.readSessionEvents, .showNotchCard, .showSessionSurface],
             storageSnapshot: [:],
             settings: ["showSeconds": .bool(false)]
@@ -365,8 +365,8 @@ final class SessionTimerPluginTests: XCTestCase {
         let before = host.contributions[.notchSessionRow]?.first?.components.first?.value
         XCTAssertEqual(before?.contains(":"), true, "default (showSeconds=true) badge uses MM:SS")
 
-        store.setValue(.bool(false), forKey: "showSeconds", pluginID: "com.devisland.timer")
-        host.pluginSettingChanged(pluginID: "com.devisland.timer")
+        store.setValue(.bool(false), forKey: "showSeconds", pluginID: BuiltInPluginID.sessionTimer)
+        host.pluginSettingChanged(pluginID: BuiltInPluginID.sessionTimer)
         await host.waitUntilIdle()
 
         let after = host.contributions[.notchSessionRow]?.first?.components.first?.value
@@ -407,7 +407,7 @@ final class SessionTimerPluginTests: XCTestCase {
 
     private func context() -> PluginContext {
         PluginContext(
-            pluginID: "com.devisland.timer",
+            pluginID: BuiltInPluginID.sessionTimer,
             permissions: [.readSessionEvents, .showNotchCard],
             storageSnapshot: [:]
         )
