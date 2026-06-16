@@ -14,6 +14,7 @@ class TerminalFocuser {
         ("com.apple.Terminal",              "Terminal"),
         ("com.microsoft.VSCode",            "VSCode"),
         ("com.anthropic.claudefordesktop",  "ClaudeDesktop"),
+        ("com.openai.codex",               "CodexDesktop"),
     ]
 
     static func isSessionFrontmost(
@@ -443,6 +444,8 @@ class TerminalFocuser {
             return "VSCode"
         case "claudedesktop", "claude desktop":
             return "ClaudeDesktop"
+        case "codexdesktop", "codex desktop":
+            return "CodexDesktop"
         default:
             return nil
         }
@@ -576,16 +579,19 @@ class TerminalFocuser {
             return "tell application id \"com.microsoft.VSCode\" to activate"
         case "ClaudeDesktop":
             return "tell application id \"com.anthropic.claudefordesktop\" to activate"
+        case "CodexDesktop":
+            return "tell application id \"com.openai.codex\" to activate"
         default:
             return "tell application \"\(appName)\" to activate"
         }
     }
 
     /// 세션을 새로 열 수 있는 터미널 앱 목록 (Launch Services는 느리므로 최초 1회만 계산)
-    /// VSCode·ClaudeDesktop은 세션 포커스용으로만 쓰이므로 제외
+    /// VSCode·ClaudeDesktop·CodexDesktop은 세션 포커스용으로만 쓰이므로 제외
     private static let nonTerminalBundleIds: Set<String> = [
         "com.microsoft.VSCode",
         "com.anthropic.claudefordesktop",
+        "com.openai.codex",
     ]
     static let installedTerminals: [(name: String, bundleId: String)] = {
         candidates.filter {

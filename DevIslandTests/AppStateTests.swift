@@ -1011,6 +1011,27 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "claude-desktop-session" }))
     }
 
+    func testCodexDesktopHookPassesWhenSettingIsDisabled() {
+        mockDefaults.set(false, forKey: "processCodexDesktopEnabled")
+        let expectation = XCTestExpectation(description: "Codex Desktop hook auto-approved")
+        let message = """
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "codex-desktop-session",
+            "terminal_app": "CodexDesktop",
+            "tool_name": "write_to_file"
+        }
+        """
+        appState.handleMessage(message) { response in
+            let json = self.parseResponse(response)
+            XCTAssertEqual(json?["response"] as? String, "pass")
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.sessionStore.activeSessions.contains(where: { $0.id == "codex-desktop-session" }))
+    }
+
     func testClaudeToolLifecycleEventsAreStatusNotifications() {
         let preToolExpectation = XCTestExpectation(description: "Claude PreToolUse is notification")
         let postToolExpectation = XCTestExpectation(description: "Claude PostToolUse is notification")

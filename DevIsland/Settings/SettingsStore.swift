@@ -232,6 +232,7 @@ struct AppSettings: Equatable {
     var checkForUpdatesOnStartup: Bool
     var processVSCodeEnabled: Bool
     var processClaudeDesktopEnabled: Bool
+    var processCodexDesktopEnabled: Bool
     var notchAnimationEnabled: Bool
     var notchAnimationSpeed: Double
     var caffeineEnabled: Bool
@@ -323,6 +324,7 @@ struct AppSettings: Equatable {
         checkForUpdatesOnStartup: true,
         processVSCodeEnabled: false,
         processClaudeDesktopEnabled: false,
+        processCodexDesktopEnabled: false,
         notchAnimationEnabled: true,
         notchAnimationSpeed: 1.0,
         caffeineEnabled: false,
@@ -410,6 +412,7 @@ final class SettingsStore: ObservableObject {
         static let checkForUpdatesOnStartup = "checkForUpdatesOnStartup"
         static let processVSCodeEnabled = "processVSCodeEnabled"
         static let processClaudeDesktopEnabled = "processClaudeDesktopEnabled"
+        static let processCodexDesktopEnabled = "processCodexDesktopEnabled"
         static let notchAnimationEnabled = "notchAnimationEnabled"
         static let notchAnimationSpeed = "notchAnimationSpeed"
         static let caffeineEnabled = "caffeineEnabled"
@@ -494,6 +497,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.checkForUpdatesOnStartup, forKey: DefaultsKey.checkForUpdatesOnStartup)
         userDefaults.set(settings.processVSCodeEnabled, forKey: DefaultsKey.processVSCodeEnabled)
         userDefaults.set(settings.processClaudeDesktopEnabled, forKey: DefaultsKey.processClaudeDesktopEnabled)
+        userDefaults.set(settings.processCodexDesktopEnabled, forKey: DefaultsKey.processCodexDesktopEnabled)
         userDefaults.set(settings.notchAnimationEnabled, forKey: DefaultsKey.notchAnimationEnabled)
         userDefaults.set(settings.notchAnimationSpeed, forKey: DefaultsKey.notchAnimationSpeed)
         userDefaults.set(settings.caffeineEnabled, forKey: DefaultsKey.caffeineEnabled)
@@ -811,6 +815,11 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.processClaudeDesktopEnabled,
                 from: userDefaults,
                 default: defaults.processClaudeDesktopEnabled
+            ),
+            processCodexDesktopEnabled: bool(
+                key: DefaultsKey.processCodexDesktopEnabled,
+                from: userDefaults,
+                default: defaults.processCodexDesktopEnabled
             ),
             notchAnimationEnabled: bool(
                 key: DefaultsKey.notchAnimationEnabled,

@@ -1301,6 +1301,12 @@ private struct IntegrationsSettingsPane: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(l10n.lblProcessCodexDesktop, isOn: store.binding(\.processCodexDesktopEnabled))
+                    Text(l10n.descProcessCodexDesktop)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
