@@ -35,7 +35,8 @@ final class UpdateChecker: ObservableObject {
     static let shared = UpdateChecker()
     private init() {}
 
-    private let apiURL = URL(string: "https://api.github.com/repos/nangchang/DevIsland/releases/latest")!
+    private let stableAPIURL = URL(string: "https://api.github.com/repos/nangchang/DevIsland/releases/latest")!
+    private let nightlyAPIURL = URL(string: "https://api.github.com/repos/nangchang/DevIsland/releases?per_page=20")!
     private let lastCheckKey = "updateLastCheckDate"
 
     @Published var latestRelease: ReleaseInfo? = nil
@@ -50,13 +51,34 @@ final class UpdateChecker: ObservableObject {
 
     var hasUpdate: Bool {
         guard let release = latestRelease else { return false }
+        let channel = SettingsStore.shared.settings.releaseChannel
+        if channel == .nightly {
+            return hasNightlyUpdate(latestTag: release.version)
+        }
         return isNewer(release.version, than: currentVersion)
+    }
+
+    /// nightly tag (nightly-0.11.1-20260614-16) 의 run number가 현재 빌드보다 크면 업데이트 있음.
+    /// CFBundleVersion = github run number
+    private func hasNightlyUpdate(latestTag: String) -> Bool {
+        guard let latestRun = nightlyRunNumber(from: latestTag),
+              let currentRun = Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") else {
+            return false
+        }
+        return latestRun > currentRun
+    }
+
+    /// "nightly-0.11.1-20260614-16" → 16
+    private func nightlyRunNumber(from tag: String) -> Int? {
+        guard tag.hasPrefix("nightly-") else { return nil }
+        return tag.components(separatedBy: "-").last.flatMap { Int($0) }
     }
 
     // MARK: Public entry points
 
-    /// 앱 시작 시 호출 — 1시간 이내 체크했으면 스킵, 이후 매일 반복
+    /// 앱 시작 시 호출 — nightly 빌드면 채널 자동 설정, 1시간 이내 체크했으면 스킵, 이후 매일 반복
     func schedulePeriodicCheck() {
+        autoDetectChannel()
         if SettingsStore.shared.settings.checkForUpdatesOnStartup {
             let last = UserDefaults.standard.object(forKey: lastCheckKey) as? Date ?? .distantPast
             if Date().timeIntervalSince(last) > 3600 {
@@ -69,6 +91,16 @@ final class UpdateChecker: ObservableObject {
                 guard SettingsStore.shared.settings.checkForUpdatesOnStartup else { return }
                 await self.fetchLatestRelease(silent: true)
             }
+        }
+    }
+
+    /// nightly 빌드를 처음 실행할 때 채널을 자동으로 nightly로 설정
+    private func autoDetectChannel() {
+        let store = SettingsStore.shared
+        let channelKey = SettingsStore.DefaultsKey.releaseChannel
+        guard UserDefaults.standard.object(forKey: channelKey) == nil else { return }
+        if currentVersion.contains("nightly") {
+            store.settings.releaseChannel = .nightly
         }
     }
 
@@ -88,44 +120,91 @@ final class UpdateChecker: ObservableObject {
         isChecking = true
         defer { isChecking = false }
 
+        let channel = SettingsStore.shared.settings.releaseChannel
         do {
-            var req = URLRequest(url: apiURL)
-            req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            req.timeoutInterval = 10
-
-            let (data, response) = try await URLSession.shared.data(for: req)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                throw UpdateError.httpError(code)
-            }
-
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let tagName = json["tag_name"] as? String,
-                  let assets = json["assets"] as? [[String: Any]] else {
-                if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateInvalidResponseMsg) }
-                return
-            }
-
-            let version = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
-
-            guard let asset = assets.first(where: { ($0["name"] as? String ?? "").hasSuffix(".dmg") }),
-                  let urlStr = asset["browser_download_url"] as? String,
-                  let downloadURL = URL(string: urlStr) else {
-                if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateNoAssetMsg) }
-                return
-            }
-
-            UserDefaults.standard.set(Date(), forKey: lastCheckKey)
-            let changeLog = json["body"] as? String
-            latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog)
-
-            if hasUpdate {
-                promptInstall(version: version, downloadURL: downloadURL, changeLog: changeLog)
-            } else if !silent {
-                showAlert(title: L10n.shared.updateUpToDateTitle, message: L10n.shared.updateUpToDateMsg(currentVersion))
+            if channel == .nightly {
+                try await fetchLatestNightly(silent: silent)
+            } else {
+                try await fetchLatestStable(silent: silent)
             }
         } catch {
             if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: error.localizedDescription) }
+        }
+    }
+
+    private func fetchLatestStable(silent: Bool) async throws {
+        var req = URLRequest(url: stableAPIURL)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.timeoutInterval = 10
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw UpdateError.httpError((response as? HTTPURLResponse)?.statusCode ?? -1)
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tagName = json["tag_name"] as? String,
+              let assets = json["assets"] as? [[String: Any]] else {
+            if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateInvalidResponseMsg) }
+            return
+        }
+
+        let version = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+
+        guard let asset = assets.first(where: { ($0["name"] as? String ?? "").hasSuffix(".dmg") }),
+              let urlStr = asset["browser_download_url"] as? String,
+              let downloadURL = URL(string: urlStr) else {
+            if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateNoAssetMsg) }
+            return
+        }
+
+        UserDefaults.standard.set(Date(), forKey: lastCheckKey)
+        let changeLog = json["body"] as? String
+        latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog)
+
+        if hasUpdate {
+            promptInstall(version: version, downloadURL: downloadURL, changeLog: changeLog)
+        } else if !silent {
+            showAlert(title: L10n.shared.updateUpToDateTitle, message: L10n.shared.updateUpToDateMsg(currentVersion))
+        }
+    }
+
+    private func fetchLatestNightly(silent: Bool) async throws {
+        var req = URLRequest(url: nightlyAPIURL)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.timeoutInterval = 10
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw UpdateError.httpError((response as? HTTPURLResponse)?.statusCode ?? -1)
+        }
+
+        guard let releases = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateInvalidResponseMsg) }
+            return
+        }
+
+        // prerelease: true이고 DMG 에셋이 있는 첫 번째 릴리스 = 최신 nightly
+        guard let nightlyRelease = releases.first(where: { ($0["prerelease"] as? Bool) == true }),
+              let tagName = nightlyRelease["tag_name"] as? String,
+              let assets = nightlyRelease["assets"] as? [[String: Any]],
+              let asset = assets.first(where: { ($0["name"] as? String ?? "").hasSuffix(".dmg") }),
+              let urlStr = asset["browser_download_url"] as? String,
+              let downloadURL = URL(string: urlStr) else {
+            if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: L10n.shared.updateNoAssetMsg) }
+            return
+        }
+
+        UserDefaults.standard.set(Date(), forKey: lastCheckKey)
+        let changeLog = nightlyRelease["body"] as? String
+        // tag_name 형식: nightly-0.11.1-20260614-16 → run number = 마지막 컴포넌트
+        let version = tagName
+        latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog)
+
+        if hasNightlyUpdate(latestTag: tagName) {
+            promptInstall(version: tagName, downloadURL: downloadURL, changeLog: changeLog)
+        } else if !silent {
+            showAlert(title: L10n.shared.updateUpToDateTitle, message: L10n.shared.updateUpToDateMsg(currentVersion))
         }
     }
 
