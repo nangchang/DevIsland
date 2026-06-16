@@ -280,6 +280,9 @@ extension L10n {
     var alertLaunchAtLoginFailed:     String { s("Failed to change Launch at Login",        "자동 시작 설정 변경 실패") }
     var secUpdates:                   String { s("Updates",                                 "업데이트") }
     var lblCheckForUpdatesOnStartup:  String { s("Check for updates on startup",            "시작 시 업데이트 확인") }
+    var lblReleaseChannel:            String { s("Update channel",                          "업데이트 채널") }
+    var releaseChannelStable:         String { s("Stable",                                  "안정 버전") }
+    var releaseChannelNightly:        String { s("Nightly",                                 "나이틀리") }
     var secSounds:                    String { s("Sounds",                                  "사운드") }
     var lblMuteAllSounds:             String { s("Mute all sounds",                         "모든 사운드 음소거") }
 

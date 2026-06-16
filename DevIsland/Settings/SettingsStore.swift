@@ -134,6 +134,21 @@ enum NotchShapeStyle: String, CaseIterable, Identifiable {
     }
 }
 
+enum ReleaseChannel: String, CaseIterable, Identifiable {
+    case stable
+    case nightly
+
+    var id: String { rawValue }
+
+    var label: String {
+        let l = L10n.shared
+        switch self {
+        case .stable:  return l.releaseChannelStable
+        case .nightly: return l.releaseChannelNightly
+        }
+    }
+}
+
 enum NotchAutoCollapseDelay: String, CaseIterable, Identifiable {
     case off
     case seconds3
@@ -223,6 +238,7 @@ struct AppSettings: Equatable {
     var caffeineExcludedSSIDs: [String]
     var caffeineSessionTimeoutEnabled: Bool
     var caffeineSessionTimeoutMinutes: Int
+    var releaseChannel: ReleaseChannel
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -312,7 +328,8 @@ struct AppSettings: Equatable {
         caffeineEnabled: false,
         caffeineExcludedSSIDs: [],
         caffeineSessionTimeoutEnabled: false,
-        caffeineSessionTimeoutMinutes: 5
+        caffeineSessionTimeoutMinutes: 5,
+        releaseChannel: .stable
     )
 }
 
@@ -399,6 +416,7 @@ final class SettingsStore: ObservableObject {
         static let caffeineExcludedSSIDs = "caffeineExcludedSSIDs"
         static let caffeineSessionTimeoutEnabled = "caffeineSessionTimeoutEnabled"
         static let caffeineSessionTimeoutMinutes = "caffeineSessionTimeoutMinutes"
+        static let releaseChannel = "releaseChannel"
     }
 
     private let userDefaults: UserDefaults
@@ -482,6 +500,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.caffeineExcludedSSIDs, forKey: DefaultsKey.caffeineExcludedSSIDs)
         userDefaults.set(settings.caffeineSessionTimeoutEnabled, forKey: DefaultsKey.caffeineSessionTimeoutEnabled)
         userDefaults.set(settings.caffeineSessionTimeoutMinutes, forKey: DefaultsKey.caffeineSessionTimeoutMinutes)
+        userDefaults.set(settings.releaseChannel.rawValue, forKey: DefaultsKey.releaseChannel)
         // 브리지 관련 필드가 변경된 경우에만 파일 쓰기 (드래그 리사이즈 등 빈번한 UI 변경 시 파일 I/O 방지)
         let bridgeChanged = previous.map { BridgeRuntimeConfig(settings: settings) != BridgeRuntimeConfig(settings: $0) } ?? true
         if bridgeChanged {
@@ -819,6 +838,12 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.caffeineSessionTimeoutMinutes,
                 from: userDefaults,
                 default: defaults.caffeineSessionTimeoutMinutes
+            ),
+            releaseChannel: enumValue(
+                ReleaseChannel.self,
+                key: DefaultsKey.releaseChannel,
+                from: userDefaults,
+                default: defaults.releaseChannel
             )
         )
     }
