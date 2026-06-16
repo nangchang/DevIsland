@@ -100,6 +100,24 @@ final class ClaudeQuestionRequestTests: XCTestCase {
         XCTAssertEqual(answers?["Anything else?"] as? String, "Run actionlint if available.")
     }
 
+    func testParsesOptionPreviewField() {
+        let input: [String: Any] = [
+            "questions": [[
+                "question": "Which approach?",
+                "options": [
+                    ["label": "Option A", "description": "Simple", "preview": "```swift\nlet x = 1\n```"],
+                    ["label": "Option B"]
+                ]
+            ]]
+        ]
+
+        let request = ClaudeQuestionRequest.parse(toolInput: input)
+        let options = request?.questions.first?.options
+        XCTAssertEqual(options?.count, 2)
+        XCTAssertEqual(options?.first?.preview, "```swift\nlet x = 1\n```")
+        XCTAssertNil(options?.last?.preview)
+    }
+
     func testRequiresAllAnswersBeforeBuildingUpdatedInput() {
         let input: [String: Any] = [
             "questions": [

@@ -124,6 +124,8 @@ struct ClaudeQuestionFormView: View {
                                 ClaudeQuestionOptionRow(
                                     title: option.label,
                                     detail: option.detail,
+                                    preview: option.preview,
+                                    previewFormat: question.previewFormat,
                                     isSelected: isSelected(option.id, for: question.id),
                                     allowsMultipleSelection: question.allowsMultipleSelection
                                 ) {
@@ -135,6 +137,8 @@ struct ClaudeQuestionFormView: View {
                                 ClaudeQuestionOptionRow(
                                     title: "Other",
                                     detail: "Type a custom answer",
+                                    preview: nil,
+                                    previewFormat: question.previewFormat,
                                     isSelected: usesCustomText(for: question.id),
                                     allowsMultipleSelection: question.allowsMultipleSelection
                                 ) {
@@ -184,45 +188,99 @@ struct ClaudeQuestionFormView: View {
 private struct ClaudeQuestionOptionRow: View {
     let title: String
     let detail: String?
+    let preview: String?
+    let previewFormat: ClaudeQuestionRequest.Question.PreviewFormat
     let isSelected: Bool
     let allowsMultipleSelection: Bool
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: selectedIcon)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(isSelected ? .green : .white.opacity(0.35))
-                    .frame(width: 18, height: 18)
+        let hasPreview = isSelected && preview?.isEmpty == false
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: action) {
+                HStack(spacing: 10) {
+                    Image(systemName: selectedIcon)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(isSelected ? .green : .white.opacity(0.35))
+                        .frame(width: 18, height: 18)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white.opacity(0.9))
-                        .lineLimit(2)
-
-                    if let detail, !detail.isEmpty {
-                        Text(detail)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white.opacity(0.48))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white.opacity(0.9))
                             .lineLimit(2)
-                    }
-                }
 
-                Spacer(minLength: 0)
+                        if let detail, !detail.isEmpty {
+                            Text(detail)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.white.opacity(0.48))
+                                .lineLimit(2)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(isSelected ? Color.green.opacity(0.13) : Color.white.opacity(0.055))
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 8,
+                        bottomLeadingRadius: hasPreview ? 0 : 8,
+                        bottomTrailingRadius: hasPreview ? 0 : 8,
+                        topTrailingRadius: 8
+                    )
+                )
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? Color.green.opacity(0.13) : Color.white.opacity(0.055))
+            .buttonStyle(.plain)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(isSelected ? Color.green.opacity(0.45) : Color.white.opacity(0.07), lineWidth: 1)
+                    .padding(.bottom, hasPreview ? -8 : 0)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .zIndex(1)
+
+            if hasPreview, let preview {
+                Group {
+                    if previewFormat == .html {
+                        HTMLPreviewView(html: preview)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                    } else {
+                        ScrollView {
+                            MarkdownView(
+                                text: preview,
+                                foregroundColor: .white.opacity(0.75),
+                                font: .system(size: 11, weight: .regular)
+                            )
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: 200)
+                .background(Color.green.opacity(0.07))
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 0,
+                        bottomLeadingRadius: 8,
+                        bottomTrailingRadius: 8,
+                        topTrailingRadius: 0
+                    )
+                )
+                .overlay(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 0,
+                        bottomLeadingRadius: 8,
+                        bottomTrailingRadius: 8,
+                        topTrailingRadius: 0
+                    )
+                    .stroke(Color.green.opacity(0.45), lineWidth: 1)
+                )
+            }
         }
-        .buttonStyle(.plain)
     }
 
     private var selectedIcon: String {
@@ -230,6 +288,38 @@ private struct ClaudeQuestionOptionRow: View {
             return isSelected ? "checkmark.square.fill" : "square"
         }
         return isSelected ? "largecircle.fill.circle" : "circle"
+    }
+}
+
+// MARK: - HTML Preview View
+
+import WebKit
+
+private struct HTMLPreviewView: NSViewRepresentable {
+    let html: String
+
+    func makeNSView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.preferences.javaScriptEnabled = false
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.setValue(false, forKey: "drawsBackground")
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        let wrapped = """
+        <html><head><meta charset="utf-8"><style>
+        * { box-sizing: border-box; }
+        body { background: transparent; color: rgba(255,255,255,0.75);
+               font-family: -apple-system, sans-serif; font-size: 11px;
+               margin: 0; padding: 0; word-break: break-word; }
+        pre { background: rgba(255,255,255,0.08); border-radius: 4px;
+              padding: 6px 8px; overflow-x: auto; margin: 4px 0; }
+        code { font-family: monospace; font-size: 10px; }
+        a { color: rgba(100,200,255,0.8); }
+        </style></head><body>\(html)</body></html>
+        """
+        webView.loadHTMLString(wrapped, baseURL: nil)
     }
 }
 

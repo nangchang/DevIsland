@@ -156,6 +156,14 @@ soft reset 후 Edit으로 하나씩 적용하고 커밋하면 된다.
 `git add ... && git commit`, `git commit ... && git push` 같은 `&&` git 명령 체인도
 PreToolUse hook에 막힐 수 있다 — git 명령은 단독으로 실행할 것.
 
+## Hook UI 테스트
+
+hook 발화 결과를 직접 확인하려면 Claude Code 대화 내에서 해당 tool을 직접 호출할 것.
+`claude -p` 등 headless 실행은 `TERM_PROGRAM`/`TERM_TTY`가 없어 bridge가 모든 hook을 무시함.
+
+`previewFormat` 필드는 AskUserQuestion의 Question 레벨 (option 레벨 아님). "html" 값이면
+preview가 HTML 마크업 — `strings $(which claude) | grep previewFormat`으로 스키마 확인 가능.
+
 ## 플러그인 작업 주의점 (host command·UI 기여)
 
 플러그인이 보는 session/hook 데이터는 `PluginEventFactory.redactedSession`을 거친다:
