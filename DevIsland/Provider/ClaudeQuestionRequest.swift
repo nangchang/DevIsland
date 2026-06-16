@@ -6,6 +6,7 @@ struct ClaudeQuestionRequest: Equatable {
         let label: String
         let value: String
         let detail: String?
+        let preview: String?
     }
 
     struct Question: Identifiable, Equatable {
@@ -131,7 +132,8 @@ extension ClaudeQuestionRequest.Question {
                     id: stableOptionId(raw: option, label: label, index: index),
                     label: label,
                     value: value,
-                    detail: firstString(in: option, keys: ["description", "detail", "help"])
+                    detail: firstString(in: option, keys: ["description", "detail", "help"]),
+                    preview: firstString(in: option, keys: ["preview"])
                 )
             }
         }
@@ -142,7 +144,8 @@ extension ClaudeQuestionRequest.Question {
                     id: "option-\(index)-\(option)",
                     label: option,
                     value: option,
-                    detail: nil
+                    detail: nil,
+                    preview: nil
                 )
             }
         }
@@ -154,7 +157,8 @@ extension ClaudeQuestionRequest.Question {
                     id: "option-\(index)-\(label)",
                     label: label,
                     value: label,
-                    detail: nil
+                    detail: nil,
+                    preview: nil
                 )
             }
         }
