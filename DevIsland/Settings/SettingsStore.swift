@@ -267,9 +267,7 @@ struct AppSettings: Equatable {
             .path
     }()
 
-    static let defaults: AppSettings = {
-        let isNightly = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").contains("nightly")
-        return AppSettings(
+    static let defaults = AppSettings(
         claudeSessionApprovalMode: .nativePermissions,
         claudePersistentApprovalDestination: .userSettings,
         bridgeTransportKind: .tcpLoopback,
@@ -333,9 +331,8 @@ struct AppSettings: Equatable {
         caffeineExcludedSSIDs: [],
         caffeineSessionTimeoutEnabled: false,
         caffeineSessionTimeoutMinutes: 5,
-        releaseChannel: isNightly ? .nightly : .stable
-        )
-    }()
+        releaseChannel: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").contains("nightly") ? .nightly : .stable
+    )
 }
 
 struct BridgeRuntimeConfig: Codable, Equatable {
