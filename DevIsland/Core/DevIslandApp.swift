@@ -860,6 +860,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var notchWindowController: NotchWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1" else { return }
         let myPID = ProcessInfo.processInfo.processIdentifier
         let managedBundleIds: Set<String> = [
             "kr.or.nes.DevIsland",
