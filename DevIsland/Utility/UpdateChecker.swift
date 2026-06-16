@@ -8,6 +8,7 @@ struct ReleaseInfo {
     let version: String
     let downloadURL: URL
     let changeLog: String?
+    let channel: ReleaseChannel
 }
 
 enum UpdateError: LocalizedError {
@@ -51,8 +52,7 @@ final class UpdateChecker: ObservableObject {
 
     var hasUpdate: Bool {
         guard let release = latestRelease else { return false }
-        let channel = SettingsStore.shared.settings.releaseChannel
-        if channel == .nightly {
+        if release.channel == .nightly {
             return hasNightlyUpdate(latestTag: release.version)
         }
         return isNewer(release.version, than: currentVersion)
@@ -78,24 +78,24 @@ final class UpdateChecker: ObservableObject {
     // MARK: Public entry points
 
     /// 앱 시작 시 호출 — 1시간 이내 체크했으면 스킵, 이후 매일 반복
-    func schedulePeriodicCheck() {
-        if SettingsStore.shared.settings.checkForUpdatesOnStartup {
+    func schedulePeriodicCheck(checkOnStartup: Bool, channel: ReleaseChannel) {
+        if checkOnStartup {
             let last = UserDefaults.standard.object(forKey: lastCheckKey) as? Date ?? .distantPast
             if Date().timeIntervalSince(last) > 3600 {
-                Task { await fetchLatestRelease(silent: true) }
+                Task { await fetchLatestRelease(silent: true, channel: channel) }
             }
         }
         Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                guard SettingsStore.shared.settings.checkForUpdatesOnStartup else { return }
-                await self.fetchLatestRelease(silent: true)
+                guard checkOnStartup else { return }
+                await self.fetchLatestRelease(silent: true, channel: channel)
             }
         }
     }
 
-    func checkManually() {
-        Task { await fetchLatestRelease(silent: false) }
+    func checkManually(channel: ReleaseChannel) {
+        Task { await fetchLatestRelease(silent: false, channel: channel) }
     }
 
     func installUpdate() {
@@ -105,24 +105,23 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: Check
 
-    private func fetchLatestRelease(silent: Bool) async {
+    private func fetchLatestRelease(silent: Bool, channel: ReleaseChannel) async {
         guard !isChecking && !isUpdating else { return }
         isChecking = true
         defer { isChecking = false }
 
-        let channel = SettingsStore.shared.settings.releaseChannel
         do {
             if channel == .nightly {
-                try await fetchLatestNightly(silent: silent)
+                try await fetchLatestNightly(silent: silent, channel: channel)
             } else {
-                try await fetchLatestStable(silent: silent)
+                try await fetchLatestStable(silent: silent, channel: channel)
             }
         } catch {
             if !silent { showAlert(title: L10n.shared.updateCheckFailedTitle, message: error.localizedDescription) }
         }
     }
 
-    private func fetchLatestStable(silent: Bool) async throws {
+    private func fetchLatestStable(silent: Bool, channel: ReleaseChannel) async throws {
         var req = URLRequest(url: stableAPIURL)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.timeoutInterval = 10
@@ -148,7 +147,7 @@ final class UpdateChecker: ObservableObject {
 
         UserDefaults.standard.set(Date(), forKey: lastCheckKey)
         let changeLog = json["body"] as? String
-        latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog)
+        latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog, channel: channel)
 
         if hasUpdate {
             promptInstall(version: version, downloadURL: downloadURL, changeLog: changeLog)
@@ -157,7 +156,7 @@ final class UpdateChecker: ObservableObject {
         }
     }
 
-    private func fetchLatestNightly(silent: Bool) async throws {
+    private func fetchLatestNightly(silent: Bool, channel: ReleaseChannel) async throws {
         var req = URLRequest(url: nightlyAPIURL)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.timeoutInterval = 10
@@ -189,7 +188,7 @@ final class UpdateChecker: ObservableObject {
         let changeLog = nightlyRelease["body"] as? String
         // tag_name 형식: nightly-0.11.1-20260614-16 → run number = 마지막 컴포넌트
         let version = tagName
-        latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog)
+        latestRelease = ReleaseInfo(version: version, downloadURL: downloadURL, changeLog: changeLog, channel: channel)
 
         if hasNightlyUpdate(latestTag: tagName) {
             promptInstall(version: tagName, downloadURL: downloadURL, changeLog: changeLog)

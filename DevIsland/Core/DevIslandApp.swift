@@ -176,7 +176,7 @@ struct MenuBarMenu: View {
             }
         } else {
             Button(updateChecker.isChecking ? "…" : l.menuCheckForUpdates) {
-                updateChecker.checkManually()
+                updateChecker.checkManually(channel: SettingsStore.shared.settings.releaseChannel)
             }
             .disabled(updateChecker.isChecking || updateChecker.isUpdating)
         }
@@ -891,9 +891,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            if SettingsStore.shared.settings.checkForUpdatesOnStartup {
-                UpdateChecker.shared.schedulePeriodicCheck()
-            }
+            let settings = SettingsStore.shared.settings
+            UpdateChecker.shared.schedulePeriodicCheck(
+                checkOnStartup: settings.checkForUpdatesOnStartup,
+                channel: settings.releaseChannel
+            )
         }
     }
 
