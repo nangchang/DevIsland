@@ -194,7 +194,7 @@ final class SessionActionsPluginTests: XCTestCase {
         var received: (capability: String, sessionID: String)?
         host.sessionCommandHandler = { received = ($0, $1) }
 
-        host.handleAction(dismissAction(sessionID: "s1"), from: "com.devisland.session-actions", componentID: "dismiss")
+        host.handleAction(dismissAction(sessionID: "s1"), from: BuiltInPluginID.sessionActions, componentID: "dismiss")
 
         XCTAssertEqual(received?.capability, "session.dismiss")
         XCTAssertEqual(received?.sessionID, "s1")
@@ -206,7 +206,7 @@ final class SessionActionsPluginTests: XCTestCase {
         var received: (capability: String, sessionID: String)?
         host.sessionCommandHandler = { received = ($0, $1) }
 
-        host.handleAction(copyResumeAction(sessionID: "s1"), from: "com.devisland.session-actions", componentID: "copy-resume")
+        host.handleAction(copyResumeAction(sessionID: "s1"), from: BuiltInPluginID.sessionActions, componentID: "copy-resume")
 
         XCTAssertEqual(received?.capability, "session.copyResumeCommand")
         XCTAssertEqual(received?.sessionID, "s1")
@@ -229,7 +229,7 @@ final class SessionActionsPluginTests: XCTestCase {
         var received: (capability: String, sessionID: String)?
         host.sessionCommandHandler = { received = ($0, $1) }
 
-        host.handleAction(focusTerminalAction(sessionID: "s1"), from: "com.devisland.session-actions", componentID: "focus-terminal")
+        host.handleAction(focusTerminalAction(sessionID: "s1"), from: BuiltInPluginID.sessionActions, componentID: "focus-terminal")
 
         XCTAssertEqual(received?.capability, "session.focusTerminal")
         XCTAssertEqual(received?.sessionID, "s1")
@@ -252,7 +252,7 @@ final class SessionActionsPluginTests: XCTestCase {
         var received: (capability: String, sessionID: String)?
         host.sessionCommandHandler = { received = ($0, $1) }
 
-        host.handleAction(openWorkspaceAction(sessionID: "s1"), from: "com.devisland.session-actions", componentID: "open-workspace")
+        host.handleAction(openWorkspaceAction(sessionID: "s1"), from: BuiltInPluginID.sessionActions, componentID: "open-workspace")
 
         XCTAssertEqual(received?.capability, "session.openWorkspace")
         XCTAssertEqual(received?.sessionID, "s1")
@@ -287,7 +287,7 @@ final class SessionActionsPluginTests: XCTestCase {
         host.sessionCommandHandler = { _, _ in called = true }
 
         let action = PluginUIActionDTO(id: "session.dismiss", capability: "session.dismiss", routing: .hostExecuted, payload: [:])
-        host.handleAction(action, from: "com.devisland.session-actions", componentID: "dismiss")
+        host.handleAction(action, from: BuiltInPluginID.sessionActions, componentID: "dismiss")
 
         XCTAssertFalse(called, "a session command with no target id must not run")
     }
@@ -295,11 +295,11 @@ final class SessionActionsPluginTests: XCTestCase {
     func testDisabledPluginCannotInvokeSessionCommand() async {
         let host = PluginHost()
         host.register([SessionActionsPlugin()])
-        host.setPluginEnabled(false, pluginID: "com.devisland.session-actions")
+        host.setPluginEnabled(false, pluginID: BuiltInPluginID.sessionActions)
         var called = false
         host.sessionCommandHandler = { _, _ in called = true }
 
-        host.handleAction(dismissAction(sessionID: "s1"), from: "com.devisland.session-actions", componentID: "dismiss")
+        host.handleAction(dismissAction(sessionID: "s1"), from: BuiltInPluginID.sessionActions, componentID: "dismiss")
 
         XCTAssertFalse(called, "a disabled plugin must not reach the host command catalog")
     }
@@ -349,7 +349,7 @@ final class SessionActionsPluginTests: XCTestCase {
 
     private func context() -> PluginContext {
         PluginContext(
-            pluginID: "com.devisland.session-actions",
+            pluginID: BuiltInPluginID.sessionActions,
             permissions: [.readSessionEvents, .showSessionSurface],
             storageSnapshot: [:]
         )

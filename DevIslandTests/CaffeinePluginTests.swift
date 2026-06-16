@@ -8,12 +8,12 @@ final class CaffeinePluginTests: XCTestCase {
     }
 
     private func makeContext() -> PluginContext {
-        return PluginContext(pluginID: "caffeine", permissions: [.controlPowerSleep], storageSnapshot: [:])
+        return PluginContext(pluginID: CaffeinePlugin.pluginID, permissions: [.controlPowerSleep], storageSnapshot: [:])
     }
 
     func testPluginManifest() async {
         let plugin = makePlugin()
-        XCTAssertEqual(plugin.manifest.id, "caffeine")
+        XCTAssertEqual(plugin.manifest.id, CaffeinePlugin.pluginID)
         XCTAssertTrue(plugin.manifest.permissions.contains(.controlPowerSleep))
         XCTAssertTrue(plugin.manifest.permissions.contains(.showMenubarMenu))
     }
@@ -362,7 +362,7 @@ final class CaffeinePluginTests: XCTestCase {
         let plugin = makePlugin()
         let descriptor = plugin.settingsPaneDescriptor
         XCTAssertNotNil(descriptor)
-        XCTAssertEqual(descriptor?.pluginID, "caffeine")
+        XCTAssertEqual(descriptor?.pluginID, CaffeinePlugin.pluginID)
         XCTAssertFalse(descriptor?.systemImage.isEmpty ?? true)
     }
 }

@@ -2,11 +2,16 @@ import Combine
 import Foundation
 
 /// Persists per-plugin enable/disable state. Kept separate from `SettingsStore` so the
-/// plugin platform stays decoupled from core app settings (design §11): a disabled
-/// plugin is opt-out, so absence of an entry means enabled.
+/// plugin platform stays decoupled from core app settings (design §11). Most plugins are
+/// opt-out, but demo/development built-ins can be seeded disabled for fresh installs.
 @MainActor
 final class PluginSettingsStore: ObservableObject {
     static let shared = PluginSettingsStore()
+    private static let defaultDisabledPluginIDs: Set<String> = [
+        BuiltInPluginID.sessionStats,
+        BuiltInPluginID.sessionTimer,
+        BuiltInPluginID.pomodoro
+    ]
 
     private enum DefaultsKey {
         static let disabledPlugins = "pluginDisabledIDs"
@@ -26,17 +31,31 @@ final class PluginSettingsStore: ObservableObject {
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        let hasStoredDisabledPlugins = userDefaults.object(forKey: DefaultsKey.disabledPlugins) != nil
         let storedDisabled = userDefaults.stringArray(forKey: DefaultsKey.disabledPlugins) ?? []
-        self.disabledPluginIDs = Set(storedDisabled)
+        let disabledSource = hasStoredDisabledPlugins
+            ? storedDisabled
+            : Array(Self.defaultDisabledPluginIDs)
+        let migratedDisabled = Self.migratedPluginIDs(disabledSource)
+        self.disabledPluginIDs = Set(migratedDisabled)
+        if !hasStoredDisabledPlugins || migratedDisabled != storedDisabled {
+            userDefaults.set(migratedDisabled, forKey: DefaultsKey.disabledPlugins)
+        }
         let storedSafemode = userDefaults.stringArray(forKey: DefaultsKey.safemodePlugins) ?? []
-        self.safemodePluginIDs = Set(storedSafemode)
+        let migratedSafemode = Self.migratedPluginIDs(storedSafemode)
+        self.safemodePluginIDs = Set(migratedSafemode)
+        if migratedSafemode != storedSafemode {
+            userDefaults.set(migratedSafemode, forKey: DefaultsKey.safemodePlugins)
+        }
+        migrateLegacySettings()
     }
 
     func isEnabled(_ pluginID: String) -> Bool {
-        !disabledPluginIDs.contains(pluginID)
+        !disabledPluginIDs.contains(BuiltInPluginID.currentID(for: pluginID))
     }
 
     func setEnabled(_ enabled: Bool, pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         if enabled {
             disabledPluginIDs.remove(pluginID)
         } else {
@@ -46,6 +65,7 @@ final class PluginSettingsStore: ObservableObject {
     }
 
     func setSafemode(_ inSafemode: Bool, pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         if inSafemode {
             safemodePluginIDs.insert(pluginID)
         } else {
@@ -61,7 +81,8 @@ final class PluginSettingsStore: ObservableObject {
     /// SwiftUI view body (mutating `@Published` during view update triggers a runtime
     /// warning). The cache is populated only by `setValue`; until then reads hit defaults.
     func settings(forPluginID pluginID: String) -> [String: PluginSettingValue] {
-        settingsValues[pluginID] ?? loadSettings(pluginID: pluginID)
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
+        return settingsValues[pluginID] ?? loadSettings(pluginID: pluginID)
     }
 
     func value(forKey key: String, pluginID: String) -> PluginSettingValue? {
@@ -69,6 +90,7 @@ final class PluginSettingsStore: ObservableObject {
     }
 
     func setValue(_ value: PluginSettingValue, forKey key: String, pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         var current = settings(forPluginID: pluginID)
         current[key] = value
         settingsValues[pluginID] = current
@@ -76,6 +98,7 @@ final class PluginSettingsStore: ObservableObject {
     }
 
     func resetSettings(forPluginID pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         settingsValues[pluginID] = [:]
         userDefaults.removeObject(forKey: DefaultsKey.settings(pluginID))
     }
@@ -90,5 +113,22 @@ final class PluginSettingsStore: ObservableObject {
     private func persistSettings(_ values: [String: PluginSettingValue], pluginID: String) {
         guard let data = try? JSONEncoder().encode(values) else { return }
         userDefaults.set(data, forKey: DefaultsKey.settings(pluginID))
+    }
+
+    private func migrateLegacySettings() {
+        for (legacyID, currentID) in BuiltInPluginID.legacyMappings {
+            let legacyKey = DefaultsKey.settings(legacyID)
+            guard let legacyData = userDefaults.data(forKey: legacyKey) else { continue }
+
+            let currentKey = DefaultsKey.settings(currentID)
+            if userDefaults.data(forKey: currentKey) == nil {
+                userDefaults.set(legacyData, forKey: currentKey)
+            }
+            userDefaults.removeObject(forKey: legacyKey)
+        }
+    }
+
+    private static func migratedPluginIDs(_ pluginIDs: [String]) -> [String] {
+        Array(Set(pluginIDs.map { BuiltInPluginID.currentID(for: $0) })).sorted()
     }
 }

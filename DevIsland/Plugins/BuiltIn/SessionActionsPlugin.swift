@@ -16,7 +16,7 @@ import Foundation
 /// `Sendable`: no mutable state; the `PluginRunner` actor serializes calls anyway.
 final class SessionActionsPlugin: DevIslandPlugin, Sendable {
     let manifest = PluginManifest(
-        id: "com.devisland.session-actions",
+        id: BuiltInPluginID.sessionActions,
         name: "Session Actions",
         version: "1.0.0",
         apiVersion: 1,

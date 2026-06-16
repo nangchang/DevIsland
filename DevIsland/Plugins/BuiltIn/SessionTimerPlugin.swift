@@ -13,7 +13,7 @@ import Foundation
 /// the `PluginRunner` actor, which serializes every call (architecture doc §6.4).
 final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest = PluginManifest(
-        id: "com.devisland.timer",
+        id: BuiltInPluginID.sessionTimer,
         name: "Session Timer",
         version: "1.0.0",
         apiVersion: 1,

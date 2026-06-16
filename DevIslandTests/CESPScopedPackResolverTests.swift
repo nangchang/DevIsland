@@ -114,7 +114,7 @@ final class CESPScopedPackResolverTests: XCTestCase {
     // MARK: - Helpers
 
     private let scopeID = "packs"
-    private let pluginID = "openpeon"
+    private let pluginID = OpenPeonPlugin.pluginID
 
     private func client() -> PluginScopedFileClient {
         let scope = PluginScopedFileScope(id: scopeID, baseDirectory: root)

@@ -22,6 +22,63 @@ final class PluginSettingsTests: XCTestCase {
                        "disabled state must survive a fresh store reading the same defaults")
     }
 
+    func testFreshStoreSeedsDevelopmentPluginsDisabled() {
+        let suiteName = "PluginSettingsTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = PluginSettingsStore(userDefaults: defaults)
+
+        XCTAssertFalse(store.isEnabled(BuiltInPluginID.sessionStats))
+        XCTAssertFalse(store.isEnabled(BuiltInPluginID.sessionTimer))
+        XCTAssertFalse(store.isEnabled(BuiltInPluginID.pomodoro))
+        XCTAssertTrue(store.isEnabled(BuiltInPluginID.openPeon))
+        XCTAssertTrue(store.isEnabled(BuiltInPluginID.caffeine))
+        XCTAssertTrue(store.isEnabled(BuiltInPluginID.sessionActions))
+        XCTAssertEqual(
+            Set(defaults.stringArray(forKey: "pluginDisabledIDs") ?? []),
+            Set([BuiltInPluginID.sessionStats, BuiltInPluginID.sessionTimer, BuiltInPluginID.pomodoro])
+        )
+    }
+
+    func testExplicitEmptyDisabledListKeepsDevelopmentPluginsEnabled() {
+        let suiteName = "PluginSettingsTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set([], forKey: "pluginDisabledIDs")
+
+        let store = PluginSettingsStore(userDefaults: defaults)
+
+        XCTAssertTrue(store.isEnabled(BuiltInPluginID.sessionStats))
+        XCTAssertTrue(store.isEnabled(BuiltInPluginID.sessionTimer))
+        XCTAssertTrue(store.isEnabled(BuiltInPluginID.pomodoro))
+    }
+
+    func testLegacyBuiltInDisableAndSafemodeIDsMigrateOnLoad() {
+        let suiteName = "PluginSettingsTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(["openpeon", "com.devisland.timer"], forKey: "pluginDisabledIDs")
+        defaults.set(["caffeine", "com.devisland.pomodoro"], forKey: "pluginSafemodeIDs")
+
+        let store = PluginSettingsStore(userDefaults: defaults)
+
+        XCTAssertFalse(store.isEnabled(BuiltInPluginID.openPeon))
+        XCTAssertFalse(store.isEnabled(BuiltInPluginID.sessionTimer))
+        XCTAssertEqual(
+            Set(defaults.stringArray(forKey: "pluginDisabledIDs") ?? []),
+            Set([BuiltInPluginID.openPeon, BuiltInPluginID.sessionTimer])
+        )
+        XCTAssertEqual(
+            store.safemodePluginIDs,
+            Set([BuiltInPluginID.caffeine, BuiltInPluginID.pomodoro])
+        )
+        XCTAssertEqual(
+            Set(defaults.stringArray(forKey: "pluginSafemodeIDs") ?? []),
+            Set([BuiltInPluginID.caffeine, BuiltInPluginID.pomodoro])
+        )
+    }
+
     // MARK: - Disable removes contributions / excludes dispatch
 
     func testDisableRemovesContributions() async {
@@ -236,6 +293,21 @@ final class PluginSettingsTests: XCTestCase {
         XCTAssertEqual(reopened.value(forKey: "workMinutes", pluginID: "a"), .int(10),
                        "settings must survive a fresh store reading the same defaults")
         XCTAssertEqual(reopened.value(forKey: "flag", pluginID: "b"), .bool(true))
+    }
+
+    func testLegacyBuiltInSettingsMigrateOnLoad() throws {
+        let suiteName = "PluginSettingsTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        let data = try JSONEncoder().encode(["showSeconds": PluginSettingValue.bool(false)])
+        defaults.set(data, forKey: "pluginSettings.com.devisland.timer")
+
+        let store = PluginSettingsStore(userDefaults: defaults)
+
+        XCTAssertEqual(store.value(forKey: "showSeconds", pluginID: BuiltInPluginID.sessionTimer), .bool(false))
+        XCTAssertEqual(store.value(forKey: "showSeconds", pluginID: "com.devisland.timer"), .bool(false))
+        XCTAssertNil(defaults.data(forKey: "pluginSettings.com.devisland.timer"))
+        XCTAssertNotNil(defaults.data(forKey: "pluginSettings.\(BuiltInPluginID.sessionTimer)"))
     }
 
     func testResetSettingsClearsPluginValues() {

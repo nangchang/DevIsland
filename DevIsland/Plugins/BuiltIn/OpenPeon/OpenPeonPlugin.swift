@@ -1,7 +1,7 @@
 import Foundation
 
 final class OpenPeonPlugin: DevIslandPlugin, @unchecked Sendable {
-    static let pluginID = "openpeon"
+    static let pluginID = BuiltInPluginID.openPeon
     static let packScopeID = "packs"
 
     let manifest = PluginManifest(

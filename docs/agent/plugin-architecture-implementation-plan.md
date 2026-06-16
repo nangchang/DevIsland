@@ -51,7 +51,8 @@
   - PR 7. SessionTimerPlugin built-in — 완료 (`feat: add SessionTimerPlugin built-in (PR 7)`)
   - PR 8. PomodoroPlugin built-in and menubar.menu — 완료 (`feat: add PomodoroPlugin built-in (PR 8)`)
   - PR 9. PluginStorageProvider (plugin별 durable SQLite storage) — 완료 (`feat: implement durable SQLite plugin storage`)
-  - PR 10. PluginSettingsView (플러그인 목록·enable/disable·safemode 상태·storage reset) — 완료
+- PR 10. PluginSettingsView (플러그인 목록·enable/disable·safemode 상태·storage reset) — 완료
+  - 개발/검증용 built-in인 SessionTimer, SessionStats, Pomodoro는 fresh defaults에서 disabled로 seed한다. 사용자가 명시적으로 저장한 `pluginDisabledIDs`가 있으면 그 값을 우선한다.
   - PR 11. Safemode hardening (실패 임계값 자동 진입 트리거 + timeout 처리 + reset 후 1회 재시도) — 완료
   - Migration M1. `OpenPeonPlugin` — 완료 (`feat: Migrate OpenPeon to plugin-based architecture`)
   - Migration M2. CaffeinePlugin — 완료 (`feat: migrate Caffeine to plugin-based architecture`)
@@ -611,7 +612,7 @@ PR 0–11은 플러그인 플랫폼 자체를 안정화하는 범위다.
 
 구현 결정:
 
-- SessionStats와 ProviderStats를 분리하지 않고 단일 `system` 플러그인 `SessionStatsPlugin`(`com.devisland.stats`)으로 통합했다. 두 권한(`readSessionEvents`, `readHookSummaries`)을 한 플러그인이 선언해 중복 구현을 피한다.
+- SessionStats와 ProviderStats를 분리하지 않고 단일 `system` 플러그인 `SessionStatsPlugin`(`devisland.builtin.session-stats`)으로 통합했다. 두 권한(`readSessionEvents`, `readHookSummaries`)을 한 플러그인이 선언해 중복 구현을 피한다.
 - 통계는 앱 실행 동안 in-memory로만 유지하고 storage는 쓰지 않는다(durable 통계/대시보드는 별도 host-owned summary API가 필요할 때 검토).
 - tick은 불필요하다(이벤트 기반 갱신).
 

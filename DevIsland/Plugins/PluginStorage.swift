@@ -191,6 +191,7 @@ actor PluginStorageProvider {
     }
 
     func snapshot(forPluginID pluginID: String) -> [String: String] {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         do {
             return try store(for: pluginID).snapshot(limit: PluginStorageLimits.snapshotLimit)
         } catch {
@@ -200,6 +201,7 @@ actor PluginStorageProvider {
     }
 
     func applyStorageEffect(_ effect: PluginEffect, pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         do {
             let storage = try store(for: pluginID)
             switch effect.capability {
@@ -225,11 +227,16 @@ actor PluginStorageProvider {
     /// Clears a plugin's storage by closing its connection and deleting its
     /// directory (also removes WAL/SHM sidecar files). Re-created lazily on next use.
     func reset(pluginID: String) {
+        let pluginID = BuiltInPluginID.currentID(for: pluginID)
         stores.removeValue(forKey: pluginID)?.close()
-        try? FileManager.default.removeItem(at: directory(for: pluginID))
+        let directories = [directory(for: pluginID)] + BuiltInPluginID.legacyIDs(for: pluginID).map { directory(for: $0) }
+        for directory in directories {
+            try? FileManager.default.removeItem(at: directory)
+        }
     }
 
     private func store(for pluginID: String) throws -> SQLitePluginStorage {
+        migrateLegacyStorageIfNeeded(for: pluginID)
         if let existing = stores[pluginID] { return existing }
         let storage = try SQLitePluginStorage(
             databaseURL: directory(for: pluginID).appendingPathComponent("storage.sqlite")
@@ -240,6 +247,22 @@ actor PluginStorageProvider {
 
     private func directory(for pluginID: String) -> URL {
         baseDirectory.appendingPathComponent(Self.sanitize(pluginID), isDirectory: true)
+    }
+
+    private func migrateLegacyStorageIfNeeded(for currentID: String) {
+        let target = directory(for: currentID)
+        let fileManager = FileManager.default
+        for legacyID in BuiltInPluginID.legacyIDs(for: currentID) {
+            let source = directory(for: legacyID)
+            guard source != target, fileManager.fileExists(atPath: source.path) else { continue }
+            guard !fileManager.fileExists(atPath: target.path) else { continue }
+            do {
+                try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+                try fileManager.moveItem(at: source, to: target)
+            } catch {
+                print("[DevIsland] [PluginStorage] migration failed \(legacyID) -> \(currentID): \(error)")
+            }
+        }
     }
 
     private static func sanitize(_ pluginID: String) -> String {

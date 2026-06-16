@@ -233,7 +233,7 @@ final class SessionStatsPluginTests: XCTestCase {
 
     private func context() -> PluginContext {
         PluginContext(
-            pluginID: "com.devisland.stats",
+            pluginID: BuiltInPluginID.sessionStats,
             permissions: [.readSessionEvents, .readHookSummaries, .showNotchCard, .showMenubarMenu],
             storageSnapshot: [:]
         )

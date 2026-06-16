@@ -168,7 +168,7 @@ v1 제외 권한:
 
 ```swift
 struct PluginManifest: Codable {
-    let id: String                         // reverse-DNS, e.g. "com.devisland.timer"
+    let id: String                         // stable namespace, e.g. "devisland.builtin.session-timer"
     let name: String
     let version: String
     let apiVersion: Int                    // 현재 1
@@ -184,6 +184,8 @@ struct PluginManifest: Codable {
 `localizedName`은 설정창 플러그인 목록에서 `name` 대신 표시할 현지화 이름이다.
 `localizedDescription`은 설정창에서 플러그인 역할을 설명하는 한두 줄 텍스트다. toggle 활성화 여부와 무관하게 항상 표시되므로, 사용자가 플러그인을 켜기 전에도 내용을 파악할 수 있다. nil이면 설명 행을 렌더하지 않는다.
 
+Built-in plugin ID는 `devisland.builtin.<slug>` 형식을 사용한다. 기존 `openpeon`, `caffeine`, `com.devisland.*` ID는 settings/storage migration에서 새 ID로 정규화한다. 플러그인 개발 과정에서 검증용으로 추가된 `SessionTimerPlugin`, `SessionStatsPlugin`, `PomodoroPlugin`은 fresh defaults에서 disabled로 seed되며, 사용자가 명시적으로 켜거나 끈 `pluginDisabledIDs` 값은 그대로 우선한다.
+
 v1 manifest는 built-in plugin 검증을 위한 최소 필드만 가진다.
 VS Code식 `contribution point`와 세분화된 `capabilities` 필드는 v2 external runtime 또는 declarative preset에서 추가한다.
 v1에서는 `surfaces`가 정적 contribution point 역할을 하고, `permissions`가 사용할 수 있는 capability의 상한을 표현한다.
@@ -192,7 +194,7 @@ manifest 예시 (`system`):
 
 ```json
 {
-  "id": "com.devisland.timer",
+  "id": "devisland.builtin.session-timer",
   "name": "Session Timer",
   "version": "1.0.0",
   "apiVersion": 1,
@@ -207,7 +209,7 @@ manifest 예시 (`utility`):
 
 ```json
 {
-  "id": "com.devisland.pomodoro",
+  "id": "devisland.builtin.pomodoro",
   "name": "Pomodoro",
   "version": "1.0.0",
   "apiVersion": 1,
@@ -594,7 +596,7 @@ v1 허용 capability와 이를 허가하는 permission 매핑은 다음과 같�
 ```swift
 final class PomodoroPlugin: DevIslandPlugin {
     let manifest = PluginManifest(
-        id: "com.devisland.pomodoro",
+        id: "devisland.builtin.pomodoro",
         name: "Pomodoro",
         version: "1.0.0",
         apiVersion: 1,
@@ -703,9 +705,9 @@ final class PomodoroPlugin: DevIslandPlugin {
 
 ```text
 ~/Library/Application Support/DevIsland/PluginData/
-  com.devisland.timer/
+  devisland.builtin.session-timer/
     storage.sqlite
-  com.devisland.pomodoro/
+  devisland.builtin.pomodoro/
     storage.sqlite
 ```
 

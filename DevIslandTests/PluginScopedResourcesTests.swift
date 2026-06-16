@@ -6,12 +6,12 @@ final class PluginScopedResourcesTests: XCTestCase {
         let root = try makeTempDirectory()
         try Data("hello".utf8).write(to: root.appendingPathComponent("manifest.json"))
         let broker = PluginScopedFileBroker(scopesByPluginID: [
-            "openpeon": [PluginScopedFileScope(id: "packs", baseDirectory: root)]
+            OpenPeonPlugin.pluginID: [PluginScopedFileScope(id: "packs", baseDirectory: root)]
         ])
 
         await XCTAssertThrowsErrorAsync(
             try await broker.readText(
-                pluginID: "openpeon",
+                pluginID: OpenPeonPlugin.pluginID,
                 permissions: [],
                 scopeID: "packs",
                 relativePath: "manifest.json"
@@ -21,7 +21,7 @@ final class PluginScopedResourcesTests: XCTestCase {
         }
 
         let text = try await broker.readText(
-            pluginID: "openpeon",
+            pluginID: OpenPeonPlugin.pluginID,
             permissions: [.readScopedFiles],
             scopeID: "packs",
             relativePath: "manifest.json"
@@ -30,7 +30,7 @@ final class PluginScopedResourcesTests: XCTestCase {
 
         await XCTAssertThrowsErrorAsync(
             try await broker.readText(
-                pluginID: "openpeon",
+                pluginID: OpenPeonPlugin.pluginID,
                 permissions: [.readScopedFiles],
                 scopeID: "packs",
                 relativePath: "../manifest.json"
@@ -49,11 +49,11 @@ final class PluginScopedResourcesTests: XCTestCase {
         try Data("a".utf8).write(to: root.appendingPathComponent("sounds/a.wav"))
         try Data("b".utf8).write(to: root.appendingPathComponent("sounds/b.wav"))
         let broker = PluginScopedFileBroker(scopesByPluginID: [
-            "openpeon": [PluginScopedFileScope(id: "packs", baseDirectory: root)]
+            OpenPeonPlugin.pluginID: [PluginScopedFileScope(id: "packs", baseDirectory: root)]
         ])
 
         let files = try await broker.listDirectory(
-            pluginID: "openpeon",
+            pluginID: OpenPeonPlugin.pluginID,
             permissions: [.readScopedFiles],
             scopeID: "packs",
             relativePath: "sounds"
@@ -69,12 +69,12 @@ final class PluginScopedResourcesTests: XCTestCase {
         try Data("b".utf8).write(to: root.appendingPathComponent("b.wav"))
         try Data("c".utf8).write(to: root.appendingPathComponent("c.wav"))
         let broker = PluginScopedFileBroker(scopesByPluginID: [
-            "openpeon": [PluginScopedFileScope(id: "packs", baseDirectory: root)]
+            OpenPeonPlugin.pluginID: [PluginScopedFileScope(id: "packs", baseDirectory: root)]
         ])
 
         await XCTAssertThrowsErrorAsync(
             try await broker.listDirectory(
-                pluginID: "openpeon",
+                pluginID: OpenPeonPlugin.pluginID,
                 permissions: [.readScopedFiles],
                 scopeID: "packs",
                 maxEntries: 2
@@ -89,7 +89,7 @@ final class PluginScopedResourcesTests: XCTestCase {
         try Data("audio".utf8).write(to: root.appendingPathComponent("done.wav"))
         try Data("text".utf8).write(to: root.appendingPathComponent("done.txt"))
         let broker = PluginScopedFileBroker(scopesByPluginID: [
-            "openpeon": [
+            OpenPeonPlugin.pluginID: [
                 PluginScopedFileScope(
                     id: "packs",
                     baseDirectory: root,
@@ -101,7 +101,7 @@ final class PluginScopedResourcesTests: XCTestCase {
 
         await XCTAssertThrowsErrorAsync(
             try await broker.resolvePlayableFile(
-                pluginID: "openpeon",
+                pluginID: OpenPeonPlugin.pluginID,
                 scopeID: "packs",
                 relativePath: "done.txt"
             )
@@ -111,7 +111,7 @@ final class PluginScopedResourcesTests: XCTestCase {
 
         await XCTAssertThrowsErrorAsync(
             try await broker.resolvePlayableFile(
-                pluginID: "openpeon",
+                pluginID: OpenPeonPlugin.pluginID,
                 scopeID: "packs",
                 relativePath: "done.wav"
             )
@@ -129,12 +129,12 @@ final class PluginScopedResourcesTests: XCTestCase {
             withDestinationURL: outside
         )
         let broker = PluginScopedFileBroker(scopesByPluginID: [
-            "openpeon": [PluginScopedFileScope(id: "packs", baseDirectory: root)]
+            OpenPeonPlugin.pluginID: [PluginScopedFileScope(id: "packs", baseDirectory: root)]
         ])
 
         await XCTAssertThrowsErrorAsync(
             try await broker.readText(
-                pluginID: "openpeon",
+                pluginID: OpenPeonPlugin.pluginID,
                 permissions: [.readScopedFiles],
                 scopeID: "packs",
                 relativePath: "escape/secret.txt"
