@@ -243,7 +243,7 @@ if [ -z "$TERM_APP" ]; then
       _ppid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ')
       [ -z "$_ppid" ] || [ "$_ppid" = "0" ] && break
       _pname=$(ps -p "$_ppid" -o comm= 2>/dev/null | tr -d ' ')
-      if echo "$_pname" | grep -q "Codex\.app/Contents/MacOS/Codex$"; then
+      if echo "$_pname" | grep -q "Codex.*\.app/Contents/MacOS/Codex$"; then
         _is_codex_desktop=1
         break
       fi
