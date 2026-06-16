@@ -59,7 +59,11 @@ final class BridgeTokenManager: @unchecked Sendable {
 
     /// True when the token file is absent and any incoming token is accepted.
     /// Callers can use this to surface a security warning in the UI.
-    var isGraceMode: Bool { !tokenFileExists }
+    var isGraceMode: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !_tokenFileExists
+    }
 
     /// Returns true if the incoming token is acceptable.
     ///
