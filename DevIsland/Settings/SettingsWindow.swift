@@ -211,6 +211,11 @@ private struct GeneralSettingsPane: View {
 
             Section(l10n.secUpdates) {
                 Toggle(l10n.lblCheckForUpdatesOnStartup, isOn: store.binding(\.checkForUpdatesOnStartup))
+                Picker(l10n.lblReleaseChannel, selection: store.binding(\.releaseChannel)) {
+                    ForEach(ReleaseChannel.allCases) { channel in
+                        Text(channel.label).tag(channel)
+                    }
+                }
             }
 
             Section(l10n.secSounds) {
