@@ -232,6 +232,31 @@ if [ -z "$TERM_APP" ]; then
   fi
 fi
 
+# Codex Desktop app: CODEX_SHELL 환경변수 또는 부모 프로세스 체인에서 "Codex" 앱 탐지
+if [ -z "$TERM_APP" ]; then
+  _is_codex_desktop=0
+  if [ -n "${CODEX_SHELL:-}" ]; then
+    _is_codex_desktop=1
+  else
+    _pid=$$
+    for _i in 1 2 3 4 5; do
+      _ppid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ')
+      [ -z "$_ppid" ] || [ "$_ppid" = "0" ] && break
+      _pname=$(ps -p "$_ppid" -o comm= 2>/dev/null | tr -d ' ')
+      if echo "$_pname" | grep -q "Codex\.app/Contents/MacOS/Codex$"; then
+        _is_codex_desktop=1
+        break
+      fi
+      _pid="$_ppid"
+    done
+  fi
+  if [ "$_is_codex_desktop" = "1" ]; then
+    TERM_APP="CodexDesktop"
+    _dir=$(basename "$PWD" 2>/dev/null)
+    TERM_TITLE="${_dir:-Codex}"
+  fi
+fi
+
 # 만약 터미널 앱 감지에 실패했고 페이로드에 이미 터미널 정보가 있다면 추출하여 사용
 if [ -z "$TERM_APP" ]; then
   _payload_term_app=$(echo "$PAYLOAD" | grep -o '"terminal_app"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
