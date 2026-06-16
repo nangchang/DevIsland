@@ -26,6 +26,7 @@ final class CaffeineCoordinator: ObservableObject {
     private let assertion: SleepAssertion
     private var cancellables = Set<AnyCancellable>()
     private var sessionTimeoutTimer: AnyCancellable?
+    private var sessionTimeoutGeneration = UUID()
     private var sessionIdleTimedOut: Bool = false
 
     init(assertion: SleepAssertion = SleepAssertion()) {
@@ -112,6 +113,8 @@ final class CaffeineCoordinator: ObservableObject {
     private func rescheduleSessionTimeout(activityAt: Date, enabled: Bool, minutes: Int) {
         sessionTimeoutTimer?.cancel()
         sessionTimeoutTimer = nil
+        sessionTimeoutGeneration = UUID()
+        let generation = sessionTimeoutGeneration
 
         guard enabled else {
             if sessionIdleTimedOut {
@@ -142,7 +145,7 @@ final class CaffeineCoordinator: ObservableObject {
             .autoconnect()
             .prefix(1)
             .sink { [weak self] _ in
-                guard let self else { return }
+                guard let self, self.sessionTimeoutGeneration == generation else { return }
                 self.sessionIdleTimedOut = true
                 self.evaluate()
             }
