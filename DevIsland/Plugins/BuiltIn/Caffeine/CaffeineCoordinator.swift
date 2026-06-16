@@ -139,7 +139,7 @@ final class CaffeineCoordinator: ObservableObject {
 
         let delay = deadline.timeIntervalSince(now)
         sessionTimeoutTimer = Just(())
-            .delay(for: .seconds(delay), scheduler: RunLoop.main)
+            .delay(for: .seconds(delay), scheduler: RunLoop.main, options: RunLoop.SchedulerOptions(mode: .common))
             .sink { [weak self] in
                 guard let self else { return }
                 self.sessionIdleTimedOut = true
