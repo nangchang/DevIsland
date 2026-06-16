@@ -192,6 +192,7 @@ private struct ClaudeQuestionOptionRow: View {
     let action: () -> Void
 
     var body: some View {
+        let hasPreview = isSelected && preview?.isEmpty == false
         VStack(alignment: .leading, spacing: 0) {
             Button(action: action) {
                 HStack(spacing: 10) {
@@ -223,8 +224,8 @@ private struct ClaudeQuestionOptionRow: View {
                 .clipShape(
                     UnevenRoundedRectangle(
                         topLeadingRadius: 8,
-                        bottomLeadingRadius: isSelected && preview != nil ? 0 : 8,
-                        bottomTrailingRadius: isSelected && preview != nil ? 0 : 8,
+                        bottomLeadingRadius: hasPreview ? 0 : 8,
+                        bottomTrailingRadius: hasPreview ? 0 : 8,
                         topTrailingRadius: 8
                     )
                 )
@@ -233,11 +234,11 @@ private struct ClaudeQuestionOptionRow: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(isSelected ? Color.green.opacity(0.45) : Color.white.opacity(0.07), lineWidth: 1)
-                    .padding(.bottom, isSelected && preview != nil ? -8 : 0)
+                    .padding(.bottom, hasPreview ? -8 : 0)
             )
             .zIndex(1)
 
-            if isSelected, let preview, !preview.isEmpty {
+            if hasPreview, let preview {
                 ScrollView {
                     MarkdownView(
                         text: preview,
