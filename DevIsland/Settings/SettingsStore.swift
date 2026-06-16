@@ -331,7 +331,7 @@ struct AppSettings: Equatable {
         caffeineExcludedSSIDs: [],
         caffeineSessionTimeoutEnabled: false,
         caffeineSessionTimeoutMinutes: 5,
-        releaseChannel: .stable
+        releaseChannel: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").contains("nightly") ? .nightly : .stable
     )
 }
 
