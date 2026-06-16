@@ -17,6 +17,12 @@ struct ClaudeQuestionRequest: Equatable {
         let options: [Option]
         let allowsMultipleSelection: Bool
         let allowsTextInput: Bool
+        let previewFormat: PreviewFormat
+
+        enum PreviewFormat: String, Equatable {
+            case markdown
+            case html
+        }
     }
 
     let originalInput: [String: AnyJSON]
@@ -110,6 +116,8 @@ extension ClaudeQuestionRequest.Question {
             ?? boolValue(raw["allowCustom"])
             ?? boolValue(raw["allow_custom"])
         let allowsTextInput = explicitTextInput ?? true
+        let rawFormat = firstString(in: raw, keys: ["previewFormat", "preview_format"])
+        let previewFormat = ClaudeQuestionRequest.Question.PreviewFormat(rawValue: rawFormat ?? "") ?? .markdown
 
         return ClaudeQuestionRequest.Question(
             id: stableQuestionId(raw: raw, prompt: prompt, index: index),
@@ -118,7 +126,8 @@ extension ClaudeQuestionRequest.Question {
             prompt: prompt,
             options: options,
             allowsMultipleSelection: allowsMultipleSelection,
-            allowsTextInput: allowsTextInput
+            allowsTextInput: allowsTextInput,
+            previewFormat: previewFormat
         )
     }
 
