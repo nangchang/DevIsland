@@ -239,6 +239,12 @@ extension L10n {
     }
     var btnOpenLocationSettings:      String { s("Open System Settings",                      "시스템 설정 열기") }
     var hintCaffeineRule:             String { s("When enabled, sleep is prevented while on AC power; always off on excluded Wi-Fi or when battery is ≤ 20%.", "켰을 때만 동작합니다. 전원 연결 시 슬립이 차단되며, 예외 Wi-Fi 또는 배터리 20% 이하에서는 항상 비활성화됩니다.") }
+    var secCaffeineSessionTimeout:    String { s("Session Idle Timeout",                "세션 유휴 타임아웃") }
+    var lblCaffeineSessionTimeoutEnabled: String { s("Deactivate when sessions are idle", "세션 유휴 시 비활성화") }
+    func lblCaffeineSessionTimeoutMinutes(_ n: Int) -> String {
+        s("Timeout: \(n) min", "타임아웃: \(n)분")
+    }
+    var hintCaffeineSessionTimeout:   String { s("Caffeine turns off automatically after all sessions have been idle or terminated for the configured duration.", "설정한 시간 동안 모든 세션이 유휴 또는 종료 상태이면 Caffeine이 자동으로 꺼집니다.") }
     var menuCaffeineToggle:           String { s("Caffeine",                                  "Caffeine") }
     var menuCaffeineOnAC:             String { s("Preventing sleep — AC power",               "슬립 차단 중 — AC 전원") }
     var menuCaffeineOff:              String { s("Off",                                       "비활성") }

@@ -299,6 +299,65 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(fx3[0].payload["reason"], "onAC")
     }
 
+    func testSessionIdleTimeoutReleasesOnAC() async throws {
+        let plugin = makePlugin()
+        let status = PluginPowerStatus(
+            featureEnabled: true,
+            excludedSSIDs: [],
+            isOnACPower: true,
+            batteryLevel: 0.9,
+            currentSSID: "Home",
+            sessionIdleTimedOut: true
+        )
+        let event = PluginEvent(
+            id: UUID(),
+            kind: .powerStatusChanged,
+            timestamp: Date(),
+            powerStatus: status
+        )
+
+        let effects = try await plugin.onEvent(event, context: makeContext())
+        XCTAssertEqual(effects.count, 1)
+        XCTAssertEqual(effects[0].payload["preventSleep"], "false")
+        XCTAssertEqual(effects[0].payload["reason"], "sessionIdleTimeout")
+    }
+
+    func testSessionIdleTimeoutMenuStatusText() async throws {
+        let plugin = makePlugin()
+        let status = PluginPowerStatus(
+            featureEnabled: true,
+            excludedSSIDs: [],
+            isOnACPower: true,
+            batteryLevel: 0.9,
+            currentSSID: "Home",
+            sessionIdleTimedOut: true
+        )
+        let event = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status)
+        _ = try await plugin.onEvent(event, context: makeContext())
+
+        let contribution = try plugin.makeUIContribution(
+            for: .menubarMenu,
+            context: PluginUIContext(slot: .menubarMenu, timestamp: Date(), session: nil)
+        )
+        let statusComponent = contribution?.components.first(where: { $0.id == "caffeine-status" })
+        XCTAssertEqual(statusComponent?.value, "Session Idle")
+    }
+
+    func testSessionIdleTimeoutDoesNotOverrideDisabledFeature() async throws {
+        let plugin = makePlugin()
+        let status = PluginPowerStatus(
+            featureEnabled: false,
+            excludedSSIDs: [],
+            isOnACPower: true,
+            batteryLevel: 0.9,
+            currentSSID: "Home",
+            sessionIdleTimedOut: true
+        )
+        let event = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status)
+        let effects = try await plugin.onEvent(event, context: makeContext())
+        XCTAssertEqual(effects[0].payload["reason"], "off")
+    }
+
     func testSettingsPaneDescriptor() {
         let plugin = makePlugin()
         let descriptor = plugin.settingsPaneDescriptor

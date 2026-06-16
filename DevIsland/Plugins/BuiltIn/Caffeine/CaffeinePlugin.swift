@@ -84,6 +84,9 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         case .excludedSSID(let ssid):
             preventSleep = false
             reasonString = "excludedSSID:\(ssid)"
+        case .sessionIdleTimeout:
+            preventSleep = false
+            reasonString = "sessionIdleTimeout"
         case .off:
             preventSleep = false
             reasonString = "off"
@@ -129,6 +132,8 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
                 statusText = language.s("Excluded Wi-Fi (\(ssid))", "예외 Wi-Fi (\(ssid))")
             } else if lastReason == "lowBattery" {
                 statusText = language.s("Low Battery", "배터리 부족")
+            } else if lastReason == "sessionIdleTimeout" {
+                statusText = language.s("Session Idle", "세션 유휴")
             } else if lastReason == "onBattery" {
                 statusText = language.s("Battery Mode", "배터리 모드")
             } else if lastReason.hasPrefix("failure:") {
@@ -194,6 +199,7 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         case excludedSSID(String)
         case onBattery
         case lowBattery
+        case sessionIdleTimeout
         case failure(Int32)
     }
 
@@ -213,6 +219,10 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         }
 
         guard status.featureEnabled else { return (nextLow, .off) }
+
+        if status.sessionIdleTimedOut {
+            return (nextLow, .sessionIdleTimeout)
+        }
 
         if let ssid = status.currentSSID, status.excludedSSIDs.contains(ssid) {
             return (nextLow, .excludedSSID(ssid))

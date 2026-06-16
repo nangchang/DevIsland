@@ -221,6 +221,8 @@ struct AppSettings: Equatable {
     var notchAnimationSpeed: Double
     var caffeineEnabled: Bool
     var caffeineExcludedSSIDs: [String]
+    var caffeineSessionTimeoutEnabled: Bool
+    var caffeineSessionTimeoutMinutes: Int
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -308,7 +310,9 @@ struct AppSettings: Equatable {
         notchAnimationEnabled: true,
         notchAnimationSpeed: 1.0,
         caffeineEnabled: false,
-        caffeineExcludedSSIDs: []
+        caffeineExcludedSSIDs: [],
+        caffeineSessionTimeoutEnabled: false,
+        caffeineSessionTimeoutMinutes: 5
     )
 }
 
@@ -393,6 +397,8 @@ final class SettingsStore: ObservableObject {
         static let notchAnimationSpeed = "notchAnimationSpeed"
         static let caffeineEnabled = "caffeineEnabled"
         static let caffeineExcludedSSIDs = "caffeineExcludedSSIDs"
+        static let caffeineSessionTimeoutEnabled = "caffeineSessionTimeoutEnabled"
+        static let caffeineSessionTimeoutMinutes = "caffeineSessionTimeoutMinutes"
     }
 
     private let userDefaults: UserDefaults
@@ -474,6 +480,8 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.notchAnimationSpeed, forKey: DefaultsKey.notchAnimationSpeed)
         userDefaults.set(settings.caffeineEnabled, forKey: DefaultsKey.caffeineEnabled)
         userDefaults.set(settings.caffeineExcludedSSIDs, forKey: DefaultsKey.caffeineExcludedSSIDs)
+        userDefaults.set(settings.caffeineSessionTimeoutEnabled, forKey: DefaultsKey.caffeineSessionTimeoutEnabled)
+        userDefaults.set(settings.caffeineSessionTimeoutMinutes, forKey: DefaultsKey.caffeineSessionTimeoutMinutes)
         // 브리지 관련 필드가 변경된 경우에만 파일 쓰기 (드래그 리사이즈 등 빈번한 UI 변경 시 파일 I/O 방지)
         let bridgeChanged = previous.map { BridgeRuntimeConfig(settings: settings) != BridgeRuntimeConfig(settings: $0) } ?? true
         if bridgeChanged {
@@ -801,7 +809,17 @@ final class SettingsStore: ObservableObject {
                 from: userDefaults,
                 default: defaults.caffeineEnabled
             ),
-            caffeineExcludedSSIDs: (userDefaults.stringArray(forKey: DefaultsKey.caffeineExcludedSSIDs) ?? defaults.caffeineExcludedSSIDs)
+            caffeineExcludedSSIDs: (userDefaults.stringArray(forKey: DefaultsKey.caffeineExcludedSSIDs) ?? defaults.caffeineExcludedSSIDs),
+            caffeineSessionTimeoutEnabled: bool(
+                key: DefaultsKey.caffeineSessionTimeoutEnabled,
+                from: userDefaults,
+                default: defaults.caffeineSessionTimeoutEnabled
+            ),
+            caffeineSessionTimeoutMinutes: positiveInt(
+                key: DefaultsKey.caffeineSessionTimeoutMinutes,
+                from: userDefaults,
+                default: defaults.caffeineSessionTimeoutMinutes
+            )
         )
     }
 

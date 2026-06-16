@@ -2685,7 +2685,32 @@ class AppState: ObservableObject {
                 .receive(on: DispatchQueue.main)
                 .assign(to: &caffeineCoordinator.$excludedSSIDs)
 
+            caffeineCoordinator.sessionTimeoutEnabled = store.settings.caffeineSessionTimeoutEnabled
+            caffeineCoordinator.sessionTimeoutMinutes = store.settings.caffeineSessionTimeoutMinutes
+
+            store.$settings
+                .map(\.caffeineSessionTimeoutEnabled)
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .assign(to: &caffeineCoordinator.$sessionTimeoutEnabled)
+
+            store.$settings
+                .map(\.caffeineSessionTimeoutMinutes)
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .assign(to: &caffeineCoordinator.$sessionTimeoutMinutes)
+
             caffeineCoordinator.bind()
         }
+
+        // 세션 활동이 있을 때마다 lastSessionActivityAt을 최신 lastActiveAt으로 갱신.
+        // activeSessions가 비어지면 compactMap이 nil을 반환해 값이 유지되므로
+        // 타임아웃은 마지막 세션이 활동한 시각부터 카운트된다.
+        sessionStore.$activeSessions
+            .receive(on: DispatchQueue.main)
+            .compactMap { sessions -> Date? in
+                sessions.map(\.lastActiveAt).max()
+            }
+            .assign(to: &caffeineCoordinator.$lastSessionActivityAt)
     }
 }

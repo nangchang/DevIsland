@@ -16,10 +16,17 @@ final class CaffeineCoordinator: ObservableObject {
     @Published var batteryLevel: Double? = nil
     @Published var currentSSID: String? = nil
 
+    // Session idle timeout inputs (set from AppState)
+    @Published var sessionTimeoutEnabled: Bool = false
+    @Published var sessionTimeoutMinutes: Int = 5
+    @Published var lastSessionActivityAt: Date = Date()
+
     var onStatusChanged: ((PluginPowerStatus) -> Void)?
 
     private let assertion: SleepAssertion
     private var cancellables = Set<AnyCancellable>()
+    private var sessionTimeoutTimer: AnyCancellable?
+    private var sessionIdleTimedOut: Bool = false
 
     init(assertion: SleepAssertion = SleepAssertion()) {
         self.assertion = assertion
@@ -32,6 +39,14 @@ final class CaffeineCoordinator: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.evaluate() }
             .store(in: &cancellables)
+
+        Publishers.CombineLatest3($lastSessionActivityAt, $sessionTimeoutEnabled, $sessionTimeoutMinutes)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] activityAt, enabled, minutes in
+                self?.rescheduleSessionTimeout(activityAt: activityAt, enabled: enabled, minutes: minutes)
+            }
+            .store(in: &cancellables)
+
         evaluate()
     }
 
@@ -43,7 +58,8 @@ final class CaffeineCoordinator: ObservableObject {
             excludedSSIDs: excludedSSIDs,
             isOnACPower: isOnACPower,
             batteryLevel: batteryLevel,
-            currentSSID: currentSSID
+            currentSSID: currentSSID,
+            sessionIdleTimedOut: sessionIdleTimedOut
         ))
     }
 
@@ -78,14 +94,56 @@ final class CaffeineCoordinator: ObservableObject {
                 isPreventingSleep: shouldHold,
                 effectReason: reasonString,
                 effectFailureCode: failureCode,
-                isEffectResult: true
+                isEffectResult: true,
+                sessionIdleTimedOut: self.sessionIdleTimedOut
             ))
         }
     }
 
     func shutdown() {
+        sessionTimeoutTimer?.cancel()
         cancellables.removeAll()
         assertion.release()
         isHoldingAssertion = false
+    }
+
+    // MARK: - Session Idle Timeout
+
+    private func rescheduleSessionTimeout(activityAt: Date, enabled: Bool, minutes: Int) {
+        sessionTimeoutTimer?.cancel()
+        sessionTimeoutTimer = nil
+
+        guard enabled else {
+            if sessionIdleTimedOut {
+                sessionIdleTimedOut = false
+                evaluate()
+            }
+            return
+        }
+
+        let deadline = activityAt.addingTimeInterval(Double(minutes) * 60)
+        let now = Date()
+
+        if deadline <= now {
+            if !sessionIdleTimedOut {
+                sessionIdleTimedOut = true
+                evaluate()
+            }
+            return
+        }
+
+        if sessionIdleTimedOut {
+            sessionIdleTimedOut = false
+            evaluate()
+        }
+
+        let delay = deadline.timeIntervalSince(now)
+        sessionTimeoutTimer = Just(())
+            .delay(for: .seconds(delay), scheduler: RunLoop.main, options: RunLoop.SchedulerOptions(mode: .common))
+            .sink { [weak self] in
+                guard let self else { return }
+                self.sessionIdleTimedOut = true
+                self.evaluate()
+            }
     }
 }

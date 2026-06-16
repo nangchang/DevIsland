@@ -102,6 +102,8 @@ struct PluginPowerStatus: Codable, Equatable {
     let effectFailureCode: Int32?
     /// True when this event reports an effect result rather than a fresh input signal.
     let isEffectResult: Bool
+    /// True when all sessions have been idle or terminated for the configured timeout duration.
+    let sessionIdleTimedOut: Bool
 
     init(
         featureEnabled: Bool,
@@ -112,7 +114,8 @@ struct PluginPowerStatus: Codable, Equatable {
         isPreventingSleep: Bool? = nil,
         effectReason: String? = nil,
         effectFailureCode: Int32? = nil,
-        isEffectResult: Bool = false
+        isEffectResult: Bool = false,
+        sessionIdleTimedOut: Bool = false
     ) {
         self.featureEnabled = featureEnabled
         self.excludedSSIDs = excludedSSIDs
@@ -123,5 +126,6 @@ struct PluginPowerStatus: Codable, Equatable {
         self.effectReason = effectReason
         self.effectFailureCode = effectFailureCode
         self.isEffectResult = isEffectResult
+        self.sessionIdleTimedOut = sessionIdleTimedOut
     }
 }

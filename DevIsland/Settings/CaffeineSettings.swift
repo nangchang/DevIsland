@@ -29,6 +29,26 @@ struct CaffeineSettingsPane: View {
                     .foregroundColor(.secondary)
             }
 
+            Section(l10n.secCaffeineSessionTimeout) {
+                Toggle(l10n.lblCaffeineSessionTimeoutEnabled, isOn: Binding(
+                    get: { store.settings.caffeineSessionTimeoutEnabled },
+                    set: { store.settings.caffeineSessionTimeoutEnabled = $0 }
+                ))
+                if store.settings.caffeineSessionTimeoutEnabled {
+                    Stepper(
+                        l10n.lblCaffeineSessionTimeoutMinutes(store.settings.caffeineSessionTimeoutMinutes),
+                        value: Binding(
+                            get: { store.settings.caffeineSessionTimeoutMinutes },
+                            set: { store.settings.caffeineSessionTimeoutMinutes = $0 }
+                        ),
+                        in: 1...120
+                    )
+                    Text(l10n.hintCaffeineSessionTimeout)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
             Section(l10n.secCaffeineExcludedSSIDs) {
                 if store.settings.caffeineExcludedSSIDs.isEmpty {
                     Text("—")
