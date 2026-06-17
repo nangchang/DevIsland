@@ -88,7 +88,7 @@ send_event() {
     local event="${3:-}"
 
     # 재실행 로그에서 실제 에이전트 이벤트와 구분하기 위한 테스트 마커
-    payload=$(python3 -c "import json, sys; d = json.loads(sys.argv[1]); d['_is_test'] = True; print(json.dumps(d))" "$payload")
+    payload=$(python3 -c 'import json, sys; d = json.loads(sys.argv[1]); d["_is_test"] = True; print(json.dumps(d))' "$payload")
 
     if [ "$DELAY" -eq 1 ]; then
         printf "⏳ 5초 후 실행합니다... "
@@ -192,7 +192,7 @@ send_claude_posttool_fail() {
 
 send_claude_elicitation() {
     local server="${1:-test-server}"
-    send_event "$(make_json hook_event_name Elicitation session_id "$SESSION_ID" mcp_server_name "$server" cwd "$(pwd)")" claude
+    send_event "$(make_json hook_event_name Elicitation session_id "$SESSION_ID" mcp_server_name "$server" message "MCP 서버가 추가 정보를 요청합니다." cwd "$(pwd)")" claude
 }
 
 send_claude_userprompt() {
