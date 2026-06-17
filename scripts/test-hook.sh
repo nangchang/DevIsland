@@ -21,6 +21,7 @@ usage() {
     echo "  $0                          # 대화형 모드 (기본: Claude Code)"
     echo "  $0 --cli codex              # 대화형 모드 (Codex CLI)"
     echo "  $0 --cli gemini             # 대화형 모드 (Gemini CLI)"
+    echo "  $0 --cli antigravity        # 대화형 모드 (Antigravity)"
     echo ""
     echo "단일 이벤트 전송:"
     echo "  $0 [옵션] start             # 세션 시작 (Claude Code)"
@@ -31,7 +32,10 @@ usage() {
     echo "  $0 [옵션] claude-posttool   # Claude PostToolUse 상태 이벤트"
     echo "  $0 [옵션] claude-smoke      # Claude 주요 훅 세트 재생
   $0 [옵션] claude-subagent [parent_id]  # 서브에이전트 세션 시작 (parent_session_id 포함)
-  $0 [옵션] claude-subagent-smoke        # 부모→서브에이전트 그룹핑 시나리오 재생"
+  $0 [옵션] claude-subagent-smoke        # 부모→서브에이전트 그룹핑 시나리오 재생
+  $0 [옵션] claude-elicitation [server]  # Elicitation 승인 요청 (MCP 서버명 선택)
+  $0 [옵션] claude-userprompt [text]     # UserPromptSubmit (PromptPolicy 차단 테스트)
+  $0 [옵션] claude-posttool-fail [tool]  # PostToolUseFailure (도구 실행 실패)"
     echo "  $0 [옵션] idle              # 입력 대기 알림"
     echo "  $0 [옵션] finish            # 작업 완료 알림"
     echo "  $0 [옵션] stop              # 세션 종료"
@@ -53,7 +57,7 @@ usage() {
     echo "  $0 [옵션] antigravity-smoke      # Antigravity 주요 훅 세트 재생"
     echo ""
     echo "옵션:"
-    echo "  --cli claude|codex|gemini   # CLI 종류 선택 (기본: claude)"
+    echo "  --cli claude|codex|gemini|antigravity  # CLI 종류 선택 (기본: claude)"
     echo "  -n, --no-delay              # 5초 대기 없이 즉시 실행"
     echo "  SESSION_ID=abc $0 ...       # 커스텀 세션 ID 지정"
     exit 1
@@ -82,6 +86,9 @@ send_event() {
     local payload="$1"
     local cli="${2:-$CLI}"
     local event="${3:-}"
+
+    # 재실행 로그에서 실제 에이전트 이벤트와 구분하기 위한 테스트 마커
+    payload=$(python3 -c 'import json, sys; d = json.loads(sys.argv[1]); d["_is_test"] = True; print(json.dumps(d))' "$payload")
 
     if [ "$DELAY" -eq 1 ]; then
         printf "⏳ 5초 후 실행합니다... "
@@ -175,10 +182,29 @@ send_claude_posttool() {
     send_event "$(make_json hook_event_name PostToolUse session_id "$SESSION_ID" tool_name "$tool" tool_input "$input" tool_response "completed" cwd "$(pwd)")" claude
 }
 
+send_claude_posttool_fail() {
+    local tool="${1:-Bash}"
+    local command="${2:-ls -la}"
+    local input
+    input=$(make_json command "$command")
+    send_event "$(make_json hook_event_name PostToolUseFailure session_id "$SESSION_ID" tool_name "$tool" tool_input "$input" error "Command failed: exit code 1" cwd "$(pwd)")" claude
+}
+
+send_claude_elicitation() {
+    local server="${1:-test-server}"
+    send_event "$(make_json hook_event_name Elicitation session_id "$SESSION_ID" mcp_server_name "$server" message "MCP 서버가 추가 정보를 요청합니다." cwd "$(pwd)")" claude
+}
+
+send_claude_userprompt() {
+    local prompt="${1:-ls -la 실행해줘}"
+    send_event "$(make_json hook_event_name UserPromptSubmit session_id "$SESSION_ID" prompt "$prompt" cwd "$(pwd)")" claude
+}
+
 send_claude_smoke() {
     send_event "$(make_json hook_event_name SessionStart session_id "$SESSION_ID" source startup cwd "$(pwd)")" claude
     send_claude_pretool Bash "ls -la"
     send_claude_posttool Bash "ls -la"
+    send_claude_posttool_fail Bash "cat /nonexistent"
     send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" notification_type idle_prompt message "클로드가 다음 입력을 기다리고 있습니다.")" claude
     send_event "$(make_json hook_event_name Stop session_id "$SESSION_ID" last_assistant_message "작업이 완료되었습니다.")" claude
 }
@@ -279,8 +305,14 @@ payload = {
     "workspacePaths": [cwd],
 }
 if event == "PreInvocation":
+    # invocationNum: 0 = 세션 내 첫 번째 호출 (실제 Antigravity 형식)
     payload["initialNumSteps"] = 0
-if event in ("PreToolUse", "PostToolUse"):
+    payload["invocationNum"] = 0
+elif event == "PostInvocation":
+    # invocationNum: 1 이상 = 완료된 호출 (PreInvocation과 구분)
+    payload["initialNumSteps"] = 10
+    payload["invocationNum"] = 1
+elif event == "PreToolUse":
     payload["toolCall"] = {
         "name": tool,
         "args": {
@@ -288,8 +320,10 @@ if event in ("PreToolUse", "PostToolUse"):
             "Cwd": cwd,
         },
     }
-if event == "PostToolUse":
-    payload["tool_response"] = "completed"
+elif event == "PostToolUse":
+    # 실제 Antigravity PostToolUse 형식: toolCall은 null, error: "" (tool_response 없음)
+    payload["toolCall"] = None
+    payload["error"] = ""
 print(json.dumps(payload))
 PY
 }
@@ -322,6 +356,9 @@ interactive_claude() {
         echo "8) 세션 종료 (SessionEnd)"
         echo "9) Claude 주요 훅 세트 재생"
         echo "a) AskUserQuestion 표시 테스트"
+        echo "e) Elicitation (MCP 서버 승인 요청)"
+        echo "u) UserPromptSubmit (사용자 입력 제출)"
+        echo "f) PostToolUseFailure (도구 실행 실패)"
         echo "s) 서브에이전트 시나리오 (부모→자식 그룹핑)"
         echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
         echo "q) 그냥 종료"
@@ -353,6 +390,13 @@ interactive_claude() {
                 send_claude_smoke ;;
             a|A)
                 send_claude_question ;;
+            e|E)
+                send_claude_elicitation ;;
+            u|U)
+                read -p "프롬프트 내용: " prompt_text
+                send_claude_userprompt "$prompt_text" ;;
+            f|F)
+                send_claude_posttool_fail ;;
             s|S)
                 send_claude_subagent_smoke ;;
             d|D)
@@ -423,6 +467,46 @@ interactive_codex() {
     done
 }
 
+interactive_antigravity() {
+    echo "🌀 Antigravity 훅 테스트"
+    echo "Session ID: $SESSION_ID"
+    echo "----------------------------"
+    send_event "$(make_antigravity_event PreInvocation)" antigravity PreInvocation
+
+    while true; do
+        echo "무엇을 테스트하시겠습니까?"
+        echo "1) PreToolUse (run_shell_command ls -la)"
+        echo "2) PreToolUse (위험한 명령 rm -rf /)"
+        echo "3) PostToolUse (도구 완료)"
+        echo "4) PostInvocation (호출 완료)"
+        echo "5) Stop"
+        echo "6) Antigravity 주요 훅 세트 재생"
+        echo "d) 5초 지연 모드 토글 (현재: $([ "$DELAY" -eq 1 ] && echo "ON" || echo "OFF"))"
+        echo "q) 종료"
+        read -p "선택: " choice
+        case "$choice" in
+            1)
+                send_event "$(make_antigravity_event PreToolUse run_shell_command "ls -la")" antigravity PreToolUse ;;
+            2)
+                send_event "$(make_antigravity_event PreToolUse run_shell_command "rm -rf /")" antigravity PreToolUse ;;
+            3)
+                send_event "$(make_antigravity_event PostToolUse run_shell_command "ls -la")" antigravity PostToolUse ;;
+            4)
+                send_event "$(make_antigravity_event PostInvocation)" antigravity PostInvocation ;;
+            5)
+                send_event "$(make_antigravity_event Stop)" antigravity Stop
+                break ;;
+            6)
+                send_antigravity_smoke ;;
+            d|D)
+                if [ "$DELAY" -eq 1 ]; then DELAY=0; else DELAY=1; fi
+                echo "지연 모드가 $([ "$DELAY" -eq 1 ] && echo "켜졌습니다" || echo "꺼졌습니다")." ;;
+            q|Q) echo "Bye!"; exit 0 ;;
+            *) echo "잘못된 선택입니다." ;;
+        esac
+    done
+}
+
 interactive_gemini() {
     echo "✨ Gemini CLI 훅 테스트"
     echo "Session ID: $SESSION_ID"
@@ -481,8 +565,8 @@ while [[ "$1" =~ ^- ]]; do
         --cli)
             shift
             case "$1" in
-                claude|codex|gemini) CLI="$1" ;;
-                *) echo "Error: --cli 값은 claude, codex, gemini 중 하나여야 합니다."; exit 1 ;;
+                claude|codex|gemini|antigravity) CLI="$1" ;;
+                *) echo "Error: --cli 값은 claude, codex, gemini, antigravity 중 하나여야 합니다."; exit 1 ;;
             esac
             shift ;;
         -n|--no-delay)
@@ -500,9 +584,10 @@ shift || true
 
 if [ -z "$COMMAND" ]; then
     case "$CLI" in
-        codex)  interactive_codex ;;
-        gemini) interactive_gemini ;;
-        *)      interactive_claude ;;
+        codex)       interactive_codex ;;
+        gemini)      interactive_gemini ;;
+        antigravity) interactive_antigravity ;;
+        *)           interactive_claude ;;
     esac
     exit 0
 fi
@@ -535,6 +620,12 @@ case "$COMMAND" in
         send_event "$(make_json hook_event_name SessionStart session_id "$CHILD_ID" parent_session_id "$PARENT_ID" cwd "$(pwd)")" claude ;;
     claude-subagent-smoke)
         send_claude_subagent_smoke ;;
+    claude-elicitation)
+        send_claude_elicitation "${1:-test-server}" ;;
+    claude-userprompt)
+        send_claude_userprompt "${1:-ls -la 실행해줘}" ;;
+    claude-posttool-fail)
+        send_claude_posttool_fail "${1:-Bash}" "${2:-ls -la}" ;;
     notification)
         MSG=${1:-"Hello from CLI"}
         send_event "$(make_json hook_event_name Notification session_id "$SESSION_ID" message "$MSG")" claude ;;
