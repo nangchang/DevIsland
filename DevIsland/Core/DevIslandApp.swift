@@ -891,11 +891,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            let settings = SettingsStore.shared.settings
-            UpdateChecker.shared.schedulePeriodicCheck(
-                checkOnStartup: settings.checkForUpdatesOnStartup,
-                channel: settings.releaseChannel
-            )
+            UpdateChecker.shared.schedulePeriodicCheck {
+                let s = SettingsStore.shared.settings
+                return (checkOnStartup: s.checkForUpdatesOnStartup, channel: s.releaseChannel)
+            }
         }
     }
 

@@ -78,20 +78,24 @@ final class UpdateChecker: ObservableObject {
     // MARK: Public entry points
 
     /// 앱 시작 시 호출 — 1시간 이내 체크했으면 스킵, 이후 매일 반복
-    func schedulePeriodicCheck(checkOnStartup: Bool, channel: ReleaseChannel) {
-        if checkOnStartup {
+    /// settingsProvider는 매 tick마다 호출되어 최신 설정을 반영한다.
+    func schedulePeriodicCheck(settingsProvider: @escaping () -> (checkOnStartup: Bool, channel: ReleaseChannel)) {
+        let initial = settingsProvider()
+        if initial.checkOnStartup {
             let last = UserDefaults.standard.object(forKey: lastCheckKey) as? Date ?? .distantPast
             if Date().timeIntervalSince(last) > 3600 {
-                Task { await fetchLatestRelease(silent: true, channel: channel) }
+                Task { await fetchLatestRelease(silent: true, channel: initial.channel) }
             }
         }
-        Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 86400, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                guard checkOnStartup else { return }
-                await self.fetchLatestRelease(silent: true, channel: channel)
+                let current = settingsProvider()
+                guard current.checkOnStartup else { return }
+                await self.fetchLatestRelease(silent: true, channel: current.channel)
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     func checkManually(channel: ReleaseChannel) {
