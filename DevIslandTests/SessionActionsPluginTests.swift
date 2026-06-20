@@ -416,12 +416,12 @@ final class SessionActionsPluginTests: XCTestCase {
 
     func testResumeCommandClaudeCodeWithWorkspace() async {
         let session = makeActiveSession(id: "abc123", agentKind: .claudeCode, workspaceRoot: "/Users/me/proj")
-        XCTAssertEqual(session.resumeCommand, "cd '/Users/me/proj' && claude --resume abc123")
+        XCTAssertEqual(session.resumeCommand, "cd '/Users/me/proj' && claude --resume 'abc123'")
     }
 
     func testResumeCommandCodexWithoutWorkspace() async {
         let session = makeActiveSession(id: "abc123", agentKind: .codex, workspaceRoot: nil)
-        XCTAssertEqual(session.resumeCommand, "codex --resume abc123")
+        XCTAssertEqual(session.resumeCommand, "codex --resume 'abc123'")
     }
 
     func testResumeCommandGeminiIgnoresSessionID() async {
@@ -436,14 +436,38 @@ final class SessionActionsPluginTests: XCTestCase {
 
     func testResumeCommandEscapesSingleQuotesInPath() async {
         let session = makeActiveSession(agentKind: .codex, workspaceRoot: "/tmp/a'b")
-        XCTAssertEqual(session.resumeCommand, "cd '/tmp/a'\\''b' && codex --resume s1")
+        XCTAssertEqual(session.resumeCommand, "cd '/tmp/a'\\''b' && codex --resume 's1'")
     }
 
     /// Command-injection guard: shell metacharacters in the path must survive as literals
     /// inside the single quotes, never as command substitution or variable expansion.
     func testResumeCommandPreservesShellMetacharactersLiterally() async {
         let session = makeActiveSession(agentKind: .codex, workspaceRoot: "/tmp/$(whoami)`id`$HOME")
-        XCTAssertEqual(session.resumeCommand, "cd '/tmp/$(whoami)`id`$HOME' && codex --resume s1")
+        XCTAssertEqual(session.resumeCommand, "cd '/tmp/$(whoami)`id`$HOME' && codex --resume 's1'")
+    }
+
+    func testResumeCommandQuotesShellMetacharactersInSessionID() async {
+        let session = makeActiveSession(id: "abc; touch /tmp/pwned", agentKind: .claudeCode)
+        XCTAssertEqual(session.resumeCommand, "claude --resume 'abc; touch /tmp/pwned'")
+    }
+
+    func testClosedSessionResumeCommandUsesSameEscaping() async {
+        let record = ClosedSessionRecord(
+            sessionId: "id; touch /tmp/pwned",
+            provider: .codex,
+            lastPayloadJSON: "{}",
+            lastEventName: "SessionEnd",
+            lastToolName: "",
+            startAt: Date(timeIntervalSince1970: 0),
+            endedAt: Date(timeIntervalSince1970: 1),
+            workspaceRoot: "/tmp/$(whoami)$HOME",
+            terminalApp: nil,
+            terminalTitle: nil
+        )
+        XCTAssertEqual(
+            record.resumeCommand,
+            "cd '/tmp/$(whoami)$HOME' && codex --resume 'id; touch /tmp/pwned'"
+        )
     }
 }
 

@@ -77,22 +77,49 @@ extension ActiveSession {
     /// shell strings itself (the host owns sanitization). Empty string means "nothing to copy"
     /// (e.g. an `island` session with no workspace root).
     var resumeCommand: String {
-        let cd = workspaceRoot.map { Self.shellCdPrefix($0) } ?? ""
         switch agentKind {
-        case .claudeCode:  return "\(cd)claude --resume \(id)"
-        case .codex:       return "\(cd)codex --resume \(id)"
-        case .gemini:      return "\(cd)gemini"
-        case .antigravity: return "\(cd)agy"
-        case .island:      return cd.isEmpty ? "" : String(cd.dropLast(4)) // cd only
+        case .claudeCode:  return Self.makeResumeCommand(executable: "claude", sessionID: id, workspaceRoot: workspaceRoot)
+        case .codex:       return Self.makeResumeCommand(executable: "codex", sessionID: id, workspaceRoot: workspaceRoot)
+        case .gemini:      return Self.makeResumeCommand(executable: "gemini", workspaceRoot: workspaceRoot)
+        case .antigravity: return Self.makeResumeCommand(executable: "agy", workspaceRoot: workspaceRoot)
+        case .island:      return Self.makeResumeCommand(workspaceRoot: workspaceRoot)
         }
     }
 
-    private static func shellCdPrefix(_ path: String) -> String {
+    static func makeResumeCommand(
+        executable: String? = nil,
+        sessionID: String? = nil,
+        workspaceRoot: String?
+    ) -> String {
+        var commands: [String] = []
+        if let workspaceRoot {
+            commands.append("cd \(shellQuote(workspaceRoot))")
+        }
+        if let executable {
+            let resumeArgument = sessionID.map { " --resume \(shellQuote($0))" } ?? ""
+            commands.append(executable + resumeArgument)
+        }
+        return commands.joined(separator: " && ")
+    }
+
+    private static func shellQuote(_ value: String) -> String {
         // POSIX single-quote escaping: wrap in single quotes and rewrite any embedded single
         // quote as '\''. Inside single quotes every character is literal, so command
         // substitution (`$(...)`, backticks) and variable expansion can't execute when the
         // copied command is pasted into a shell. Double quotes would still evaluate $/`/$().
-        let escaped = path.replacingOccurrences(of: "'", with: "'\\''")
-        return "cd '\(escaped)' && "
+        let escaped = value.replacingOccurrences(of: "'", with: "'\\''")
+        return "'\(escaped)'"
+    }
+}
+
+extension ClosedSessionRecord {
+    var resumeCommand: String {
+        switch provider {
+        case .claude:      return ActiveSession.makeResumeCommand(executable: "claude", sessionID: sessionId, workspaceRoot: workspaceRoot)
+        case .codex:       return ActiveSession.makeResumeCommand(executable: "codex", sessionID: sessionId, workspaceRoot: workspaceRoot)
+        case .gemini:      return ActiveSession.makeResumeCommand(executable: "gemini", workspaceRoot: workspaceRoot)
+        case .antigravity: return ActiveSession.makeResumeCommand(executable: "agy", workspaceRoot: workspaceRoot)
+        case .any:         return ActiveSession.makeResumeCommand(workspaceRoot: workspaceRoot)
+        }
     }
 }
