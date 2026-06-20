@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.12.0 - 2026-06-20
+
+이번 릴리즈는 DevIsland의 기능 확장 기반을 플러그인 아키텍처로 전환하고, 세션 타이머·통계·Pomodoro·세션 액션을 기본 플러그인으로 제공하는 대규모 업데이트입니다. Codex Desktop과 Antigravity 연동, 승인 IPC와 로그 보안 강화, 질문 미리보기와 세션 목록 개선도 함께 담았습니다.
+
+### Highlights
+
+- 플러그인 호스트, 권한, 이벤트, 저장소, 설정 스키마, UI contribution과 host command 기반을 추가했습니다.
+- 세션 타이머, 세션 통계, Pomodoro, 세션 액션을 기본 플러그인으로 제공하고 Caffeine과 OpenPeon을 플러그인 구조로 이전했습니다.
+- Codex Desktop과 Antigravity 세션을 감지하고 캐릭터, 터미널 포커스, hook 이벤트를 해당 환경에 맞게 처리합니다.
+- Stable/Nightly 릴리즈 채널을 설정에서 선택할 수 있게 하고 채널별 업데이트 확인을 지원합니다.
+
+### UI/UX
+
+- 플러그인 활성화, safemode 복구와 플러그인별 옵션을 관리하는 설정 화면을 추가했습니다.
+- Claude `AskUserQuestion` 선택지의 Markdown/HTML 미리보기를 스크롤 가능한 안전한 패널로 표시합니다.
+- 세션 목록의 compact 행 레이아웃과 액션 배치를 다듬어 좁은 노치에서도 상태와 작업 경로를 더 안정적으로 확인할 수 있습니다.
+- Caffeine 세션 유휴 타임아웃과 Session Timer 초 표시 옵션을 추가했습니다.
+
+### Approval & Hooks
+
+- TCP IPC를 loopback으로 제한하고 인증 envelope를 적용해 로컬 hook 요청의 출처 검증을 강화했습니다.
+- 승인 규칙의 정규식 전체 일치와 deny 동작을 보강해 alternation 패턴에서도 의도한 정책 범위를 유지합니다.
+- Antigravity의 Elicitation, UserPromptSubmit, PostToolUseFailure 등 provider 이벤트 처리를 보강했습니다.
+- Gemini 통합이 비활성화된 경우 승인으로 간주하지 않고 provider 흐름에 맞는 pass 응답을 반환합니다.
+
+### Stability & Security
+
+- bridge 로그 권한을 소유자 전용으로 제한하고 민감한 payload 기록을 줄였으며 크기 기반 로그 순환을 추가했습니다.
+- 세션 재개 명령과 작업 경로 인수를 안전하게 인용하고, 비어 있는 workspace root에는 복사 액션을 표시하지 않도록 했습니다.
+- Caffeine 유휴 타이머의 오래된 callback을 무시하고 공통 RunLoop 모드와 실제 assertion 결과를 사용해 상태 표시를 안정화했습니다.
+- 플러그인 dispatch, 저장소, scoped 파일 접근과 CESP pack scan에 권한·용량·경로 검증을 추가했습니다.
+
+### Internal & CI
+
+- hook 이벤트 분류, 승인 큐 정책과 countdown timer를 독립 컴포넌트로 분리하고 관련 회귀 테스트를 확충했습니다.
+- 플러그인 아키텍처, Caffeine, hook provider와 보안 경계 문서를 현재 구현에 맞게 갱신했습니다.
+- nightly 설정 기본값과 릴리즈 채널 판정을 실행 시점에 다시 읽도록 정리했습니다.
+
+**Full Changelog**: https://github.com/nangchang/DevIsland/compare/v0.11.0...v0.12.0
+
 ## v0.11.0 - 2026-06-04
 
 이번 릴리즈는 DevIsland가 작업 중 맥이 잠들지 않도록 돕는 Caffeine 기능을 추가하고, 설정 화면 구조와 애니메이션 제어를 정리한 기능 업데이트입니다. 릴리스/야간 빌드 안정성, 플러그인 아키텍처 문서, Claude Code용 에이전트 스킬도 함께 보강했습니다.
