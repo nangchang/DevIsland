@@ -678,7 +678,7 @@ struct NotchView: View {
                     .frame(width: 1)
                     .padding(.vertical, 20)
 
-                sessionList
+                sessionList(compact: true)
                     .frame(maxWidth: .infinity)
             }
         }
@@ -707,7 +707,7 @@ struct NotchView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                sessionList
+                sessionList(compact: false)
             }
         }
         .padding(.top, 18)
@@ -747,14 +747,15 @@ struct NotchView: View {
         return result
     }
 
-    private var sessionList: some View {
+    private func sessionList(compact: Bool) -> some View {
         ScrollView {
             VStack(spacing: 8) {
                 ForEach(groupedSessions, id: \.session.id) { item in
                     SessionRowView(
                         session: item.session,
                         isCurrent: item.session.id == displayedSessionId,
-                        isSubAgent: item.isSubAgent
+                        isSubAgent: item.isSubAgent,
+                        compact: compact
                     )
                 }
             }
