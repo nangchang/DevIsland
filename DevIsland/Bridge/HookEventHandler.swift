@@ -34,21 +34,38 @@ enum HookParseResult {
     case invalid   // unreadable bytes or JSON
 }
 
+enum HookMessageAuthentication: Equatable {
+    case legacyAllowed
+    case authenticatedEnvelopeRequired
+}
+
 enum HookEventHandler {
-    static func parse(_ message: String) -> HookParseResult {
+    static func parse(
+        _ message: String,
+        authentication: HookMessageAuthentication = .legacyAllowed,
+        validateToken: (String?) -> Bool = { BridgeTokenManager.shared.validate($0) }
+    ) -> HookParseResult {
         guard let rawData = message.data(using: .utf8) else { return .invalid }
 
         let parsedJSON: [String: Any]
         let requestId: String?
-        if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData),
-           envelope.protocol == IPCEnvelope.protocolName {
-            guard BridgeTokenManager.shared.validate(envelope.token) else {
+        if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData) {
+            guard envelope.protocol == IPCEnvelope.protocolName,
+                  envelope.version == IPCEnvelope.currentVersion else {
+                print("[DevIsland] Invalid IPC envelope protocol or version – denying request")
+                return .denied
+            }
+            guard validateToken(envelope.token) else {
                 print("[DevIsland] IPC token validation failed – denying request")
                 return .denied
             }
             parsedJSON = envelope.payload.mapValues { $0.rawValue } as [String: Any]
             requestId = envelope.requestId
         } else {
+            guard authentication == .legacyAllowed else {
+                print("[DevIsland] Authenticated IPC envelope required – denying request")
+                return .denied
+            }
             guard let json = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any] else {
                 return .invalid
             }

@@ -32,8 +32,9 @@ final class HookSocketServerTests: XCTestCase {
 
         let messageExpectation = expectation(description: "framed message received")
         var receivedMessage: String?
-        server.onMessageReceived = { message, _, respond in
+        server.onMessageReceived = { message, _, authentication, respond in
             receivedMessage = message
+            XCTAssertEqual(authentication, .authenticatedEnvelopeRequired)
             respond(#"{"response":"approved"}"#)
             messageExpectation.fulfill()
         }
@@ -86,7 +87,8 @@ final class HookSocketServerTests: XCTestCase {
         server.rejectsRawJSONOnTCP = { false }
 
         let messageExpectation = expectation(description: "raw JSON received in grace mode")
-        server.onMessageReceived = { _, _, respond in
+        server.onMessageReceived = { _, _, authentication, respond in
+            XCTAssertEqual(authentication, .legacyAllowed)
             respond(#"{"response":"approved"}"#)
             messageExpectation.fulfill()
         }
@@ -132,7 +134,7 @@ final class HookSocketServerTests: XCTestCase {
 
         let noCallExpectation = expectation(description: "onMessageReceived must NOT be called")
         noCallExpectation.isInverted = true
-        server.onMessageReceived = { _, _, _ in
+        server.onMessageReceived = { _, _, _, _ in
             noCallExpectation.fulfill()
         }
         server.start(transport: .tcp(port: port))
