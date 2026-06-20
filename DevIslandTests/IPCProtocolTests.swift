@@ -376,7 +376,7 @@ final class AppStateEnvelopeTests: XCTestCase {
         XCTAssertEqual(context.toolInput?["command"]?.rawValue as? String, "npm test")
     }
 
-    func testEnvelopeWithInvalidProtocolFallsBackToRaw() {
+    func testEnvelopeWithInvalidProtocolIsDenied() {
         // A JSON object that looks like an envelope but has wrong protocol.
         let raw = """
         {
@@ -388,10 +388,9 @@ final class AppStateEnvelopeTests: XCTestCase {
             "payload": {"hook_event_name": "SessionStart", "session_id": "s2"}
         }
         """
-        // Should NOT crash; falls back to raw JSON path and auto-approve SessionStart.
         let response = sendAndReceive(raw)
         let obj = try? JSONSerialization.jsonObject(with: Data(response.utf8)) as? [String: Any]
-        XCTAssertEqual(obj?["response"] as? String, "approved",
-                       "Invalid-protocol envelope should fall back to raw JSON and auto-approve SessionStart")
+        XCTAssertEqual(obj?["response"] as? String, "denied",
+                       "Envelope-shaped input with an invalid protocol must not reach legacy parsing")
     }
 }

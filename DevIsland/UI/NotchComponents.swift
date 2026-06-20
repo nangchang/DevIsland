@@ -298,17 +298,73 @@ import WebKit
 private struct HTMLPreviewView: NSViewRepresentable {
     let html: String
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.preferences.javaScriptEnabled = false
+        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        config.websiteDataStore = .nonPersistent()
         let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        let wrapped = """
-        <html><head><meta charset="utf-8"><style>
+        let limitedHTML = HTMLPreviewContentPolicy.limit(html)
+        guard context.coordinator.renderedHTML != limitedHTML else { return }
+        context.coordinator.prepareToLoad(limitedHTML)
+        webView.loadHTMLString(HTMLPreviewContentPolicy.document(containing: limitedHTML), baseURL: nil)
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var renderedHTML: String?
+        private var allowsInitialDocumentNavigation = false
+
+        func prepareToLoad(_ html: String) {
+            renderedHTML = html
+            allowsInitialDocumentNavigation = true
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            let isInitialDocument = allowsInitialDocumentNavigation
+                && HTMLPreviewContentPolicy.isInitialDocumentNavigation(
+                    url: navigationAction.request.url,
+                    isMainFrame: navigationAction.targetFrame?.isMainFrame == true
+                )
+            if isInitialDocument {
+                allowsInitialDocumentNavigation = false
+            }
+            decisionHandler(isInitialDocument ? .allow : .cancel)
+        }
+    }
+}
+
+enum HTMLPreviewContentPolicy {
+    static let maximumInputLength = 100_000
+
+    static func limit(_ html: String) -> String {
+        String(html.prefix(maximumInputLength))
+    }
+
+    static func isInitialDocumentNavigation(url: URL?, isMainFrame: Bool) -> Bool {
+        isMainFrame && (url == nil || url?.scheme == "about")
+    }
+
+    static func document(containing html: String) -> String {
+        """
+        <html><head><meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy"
+              content="default-src 'none'; img-src data:; style-src 'unsafe-inline';
+                       font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none';
+                       connect-src 'none'; form-action 'none'; base-uri 'none'">
+        <style>
         * { box-sizing: border-box; }
         body { background: transparent; color: rgba(255,255,255,0.75);
                font-family: -apple-system, sans-serif; font-size: 11px;
@@ -319,7 +375,6 @@ private struct HTMLPreviewView: NSViewRepresentable {
         a { color: rgba(100,200,255,0.8); }
         </style></head><body>\(html)</body></html>
         """
-        webView.loadHTMLString(wrapped, baseURL: nil)
     }
 }
 

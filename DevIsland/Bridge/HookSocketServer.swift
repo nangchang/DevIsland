@@ -24,7 +24,7 @@ class HookSocketServer {
     ///   - requestId: UUID from the IPC envelope, or nil for raw JSON requests.
     ///   - responseHandler: Call with the response string. The server automatically
     ///     frames the response if the request was framed.
-    var onMessageReceived: ((String, String?, @escaping (String) -> Void) -> Void)?
+    var onMessageReceived: ((String, String?, HookMessageAuthentication, @escaping (String) -> Void) -> Void)?
     var onServerFailed: ((Error) -> Void)?
 
     /// Returns true when raw JSON on TCP should be rejected (token file present).
@@ -241,7 +241,7 @@ class HookSocketServer {
                 responseQueue.async { close(fd) }
                 return
             }
-            onMessageReceived(message, requestId) { response in
+            onMessageReceived(message, requestId, .legacyAllowed) { response in
                 let responseData = Self.unixResponseData(response, framed: framed)
                 responseQueue.async {
                     Self.sendAll(responseData, to: fd)
@@ -336,7 +336,7 @@ class HookSocketServer {
 
             if isComplete, let message = String(data: payload, encoding: .utf8) {
                 DispatchQueue.main.async {
-                    self?.onMessageReceived?(message, nil) { response in
+                    self?.onMessageReceived?(message, nil, .legacyAllowed) { response in
                         // Raw request → raw response, no framing.
                         let responseData = Data(response.utf8)
                         connection.send(content: responseData, completion: .contentProcessed({ _ in
@@ -407,7 +407,7 @@ class HookSocketServer {
         let requestId = extractRequestId(from: data)
 
         DispatchQueue.main.async { [weak self] in
-            self?.onMessageReceived?(message, requestId) { response in
+            self?.onMessageReceived?(message, requestId, .authenticatedEnvelopeRequired) { response in
                 // Framed request → length-prefixed response.
                 let responseBytes = Data(response.utf8)
                 let length = UInt32(responseBytes.count).bigEndian

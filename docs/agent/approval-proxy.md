@@ -29,6 +29,8 @@ Bridge must not touch the DB, render UI, compute policy, load packs, or run long
 
 Bridge to app communication uses length-prefixed JSON framing over TCP `127.0.0.1:9090` or Unix domain socket `~/Library/Application Support/DevIsland/dev-island.sock`.
 
+TCP framed requests must use the current IPC envelope version and present the shared bridge token. Plain JSON, malformed envelopes, unsupported versions, and invalid tokens are denied. The `0600` Unix domain socket retains legacy plain-JSON compatibility for local clients; an envelope sent over either transport is still validated.
+
 ```text
 [4-byte big-endian length][UTF-8 JSON body]
 ```

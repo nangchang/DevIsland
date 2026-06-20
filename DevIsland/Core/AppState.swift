@@ -295,7 +295,7 @@ class AppState: ObservableObject {
         if startServer {
             BridgeTokenManager.shared.generateIfNeeded()
 
-            server.onMessageReceived = { [weak self] message, requestId, responseHandler in
+            server.onMessageReceived = { [weak self] message, requestId, authentication, responseHandler in
                 // Wrap responseHandler to produce a rich response for framed (v1 envelope) requests.
                 let effectiveHandler: (String) -> Void
                 if let rid = requestId {
@@ -316,7 +316,7 @@ class AppState: ObservableObject {
                 } else {
                     effectiveHandler = responseHandler
                 }
-                self?.handleMessage(message, responseHandler: effectiveHandler)
+                self?.handleMessage(message, authentication: authentication, responseHandler: effectiveHandler)
             }
             server.onServerFailed = { [weak self] error in
                 print("[DevIsland] [ERROR] Socket server failed: \(error.localizedDescription)")
@@ -575,8 +575,12 @@ class AppState: ObservableObject {
         }
     }
 
-    func handleMessage(_ message: String, responseHandler: @escaping (String) -> Void) {
-        switch HookEventHandler.parse(message) {
+    func handleMessage(
+        _ message: String,
+        authentication: HookMessageAuthentication = .legacyAllowed,
+        responseHandler: @escaping (String) -> Void
+    ) {
+        switch HookEventHandler.parse(message, authentication: authentication) {
         case .invalid:
             responseHandler("{\"response\": \"approved\"}")
             return

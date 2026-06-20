@@ -43,14 +43,7 @@ final class SessionHistoryViewModel: ObservableObject {
     }
 
     func resumeCommand(for record: ClosedSessionRecord) -> String {
-        let cd = record.workspaceRoot.map { shellCdPrefix($0) } ?? ""
-        switch record.provider {
-        case .claude: return "\(cd)claude --resume \(record.sessionId)"
-        case .codex:  return "\(cd)codex --resume \(record.sessionId)"
-        case .gemini: return "\(cd)gemini"
-        case .antigravity: return "\(cd)agy"
-        case .any:    return cd.isEmpty ? "" : String(cd.dropLast(4))
-        }
+        record.resumeCommand
     }
 
     func autoTerminalName(for record: ClosedSessionRecord) -> String {
@@ -63,12 +56,6 @@ final class SessionHistoryViewModel: ObservableObject {
     func openInTerminal(_ record: ClosedSessionRecord, appName: String? = nil) {
         let name = appName ?? autoTerminalName(for: record)
         TerminalFocuser.openNewWindow(appName: name, command: resumeCommand(for: record))
-    }
-
-    private func shellCdPrefix(_ path: String) -> String {
-        let escaped = path.replacingOccurrences(of: "\\", with: "\\\\")
-                          .replacingOccurrences(of: "\"", with: "\\\"")
-        return "cd \"\(escaped)\" && "
     }
 }
 
