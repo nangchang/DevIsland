@@ -690,7 +690,7 @@ struct SessionRowView: View {
 
         Divider()
 
-        if let path = session.workspaceRoot {
+        if let path = session.workspaceRoot, !path.isEmpty {
             // "Open in Finder" is contributed by SessionActionsPlugin via the
             // session.openWorkspace host command (rendered below), so the core item was
             // removed to avoid a duplicate entry. Disabling the plugin removes this action.
