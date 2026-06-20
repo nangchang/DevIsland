@@ -635,7 +635,7 @@ struct SessionRowView: View {
                         .clipShape(RoundedRectangle(cornerRadius: isSubAgent ? 6 : 8))
                 }
                 .buttonStyle(.plain)
-                .help("Focus terminal")
+                .help(l10n.helpFocusTerminal)
 
                 Button(action: { AppState.shared.dismissSession(session.id) }) {
                     Image(systemName: "xmark")
@@ -664,6 +664,7 @@ struct SessionRowView: View {
                 Rectangle()
                     .fill(Color.white.opacity(0.12))
                     .frame(width: 2)
+                    .padding(.leading, 8)
                     .padding(.vertical, 6)
             }
         }
