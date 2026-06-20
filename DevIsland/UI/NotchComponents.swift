@@ -384,6 +384,7 @@ struct SessionRowView: View {
     let session: ActiveSession
     let isCurrent: Bool
     var isSubAgent: Bool = false
+    var compact: Bool = false
 
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var appState = AppState.shared
@@ -468,8 +469,12 @@ struct SessionRowView: View {
     private var vertPadding: CGFloat  { isSubAgent ? 6 : 10 }
 
     var body: some View {
-        HStack(spacing: 8) {
-            if isSubAgent {
+        let layout = compact
+            ? AnyLayout(VStackLayout(alignment: .trailing, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+
+        return layout {
+            if isSubAgent && !compact {
                 Rectangle()
                     .fill(Color.white.opacity(0.12))
                     .frame(width: 2)
@@ -596,7 +601,7 @@ struct SessionRowView: View {
                             }
                         }
 
-                        if !session.lastMessage.isEmpty {
+                        if !compact, !session.lastMessage.isEmpty {
                             Text(session.lastMessage)
                                 .font(.system(size: messageFont, weight: .regular, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.45))
@@ -604,7 +609,7 @@ struct SessionRowView: View {
                                 .truncationMode(.tail)
                         }
 
-                        if !isSubAgent, let root = session.workspaceRoot {
+                        if !compact, !isSubAgent, let root = session.workspaceRoot {
                             Text((root as NSString).abbreviatingWithTildeInPath)
                                 .font(.system(size: metaFont, weight: .regular, design: .monospaced))
                                 .foregroundColor(.white.opacity(0.25))
@@ -618,31 +623,33 @@ struct SessionRowView: View {
             }
             .buttonStyle(.plain)
 
-            SessionRowPluginBadges(sessionID: session.id)
+            HStack(spacing: 8) {
+                SessionRowPluginBadges(sessionID: session.id)
 
-            Button(action: { AppState.shared.focusTerminal(for: session.id) }) {
-                Image(systemName: "arrow.up.forward.app.fill")
-                    .font(.system(size: isSubAgent ? 10 : 12, weight: .bold))
-                    .foregroundColor(.white.opacity(0.75))
-                    .frame(width: buttonSize, height: buttonSize)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: isSubAgent ? 6 : 8))
-            }
-            .buttonStyle(.plain)
-            .help("Focus terminal")
+                Button(action: { AppState.shared.focusTerminal(for: session.id) }) {
+                    Image(systemName: "arrow.up.forward.app.fill")
+                        .font(.system(size: isSubAgent ? 10 : 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.75))
+                        .frame(width: buttonSize, height: buttonSize)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: isSubAgent ? 6 : 8))
+                }
+                .buttonStyle(.plain)
+                .help(l10n.helpFocusTerminal)
 
-            Button(action: { AppState.shared.dismissSession(session.id) }) {
-                Image(systemName: "xmark")
-                    .font(.system(size: isSubAgent ? 10 : 12, weight: .bold))
-                    .foregroundColor(.white.opacity(0.65))
-                    .frame(width: buttonSize, height: buttonSize)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: isSubAgent ? 6 : 8))
+                Button(action: { AppState.shared.dismissSession(session.id) }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: isSubAgent ? 10 : 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.65))
+                        .frame(width: buttonSize, height: buttonSize)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: isSubAgent ? 6 : 8))
+                }
+                .buttonStyle(.plain)
+                .help(session.isPending ? l10n.helpDismissPending : l10n.helpDismissSession)
             }
-            .buttonStyle(.plain)
-            .help(session.isPending ? l10n.helpDismissPending : l10n.helpDismissSession)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, compact ? 10 : 12)
         .padding(.vertical, vertPadding)
         .background(
             RoundedRectangle(cornerRadius: 12)
@@ -652,45 +659,57 @@ struct SessionRowView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isCurrent ? tool.color.opacity(0.5) : Color.clear, lineWidth: 1)
         )
-        .contextMenu {
-            Button {
-                SessionMessageWindowManager.shared.openWindow(for: session.id)
-            } label: {
-                Label(l10n.popOutWindow, systemImage: "macwindow.on.rectangle")
+        .overlay(alignment: .leading) {
+            if isSubAgent && compact {
+                Rectangle()
+                    .fill(Color.white.opacity(0.12))
+                    .frame(width: 2)
+                    .padding(.leading, 8)
+                    .padding(.vertical, 6)
             }
-
-            Divider()
-
-            Button {
-                renameText = appState.sessionLabels[session.id] ?? ""
-                isRenaming = true
-            } label: {
-                Label(l10n.menuRenameSession, systemImage: "pencil")
-            }
-
-            Divider()
-
-            if let path = session.workspaceRoot {
-                // "Open in Finder" is contributed by SessionActionsPlugin via the
-                // session.openWorkspace host command (rendered below), so the core item was
-                // removed to avoid a duplicate entry. Disabling the plugin removes this action.
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(path, forType: .string)
-                } label: {
-                    Label(l10n.menuCopyPath, systemImage: "doc.on.clipboard")
-                }
-
-                Divider()
-            }
-
-            openInTerminalMenu
-
-            // "Copy Resume Command" is contributed by SessionActionsPlugin via the
-            // session.copyResumeCommand host command (rendered below), so the core item was
-            // removed to avoid a duplicate entry. Disabling the plugin removes this action.
-            PluginSessionMenuItemsView(contributions: contextMenuContributions)
         }
+        .contextMenu { sessionContextMenu }
+    }
+
+    @ViewBuilder
+    private var sessionContextMenu: some View {
+        Button {
+            SessionMessageWindowManager.shared.openWindow(for: session.id)
+        } label: {
+            Label(l10n.popOutWindow, systemImage: "macwindow.on.rectangle")
+        }
+
+        Divider()
+
+        Button {
+            renameText = appState.sessionLabels[session.id] ?? ""
+            isRenaming = true
+        } label: {
+            Label(l10n.menuRenameSession, systemImage: "pencil")
+        }
+
+        Divider()
+
+        if let path = session.workspaceRoot {
+            // "Open in Finder" is contributed by SessionActionsPlugin via the
+            // session.openWorkspace host command (rendered below), so the core item was
+            // removed to avoid a duplicate entry. Disabling the plugin removes this action.
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(path, forType: .string)
+            } label: {
+                Label(l10n.menuCopyPath, systemImage: "doc.on.clipboard")
+            }
+
+            Divider()
+        }
+
+        openInTerminalMenu
+
+        // "Copy Resume Command" is contributed by SessionActionsPlugin via the
+        // session.copyResumeCommand host command (rendered below), so the core item was
+        // removed to avoid a duplicate entry. Disabling the plugin removes this action.
+        PluginSessionMenuItemsView(contributions: contextMenuContributions)
     }
 
     @ViewBuilder
