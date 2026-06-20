@@ -52,6 +52,10 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
 
     private var sessions: [String: PluginSessionSnapshot] = [:]
     private var showSeconds = true
+    private static let liveSurfaces: Set<PluginUISlot> = [
+        .notchExpandedActivity,
+        .sessionMessage
+    ]
 
     private var currentSession: PluginSessionSnapshot? {
         sessions.values.max { $0.lastActiveAt < $1.lastActiveAt }
@@ -79,8 +83,7 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
     /// Ticking only matters to refresh the elapsed value, so request it only when
     /// a session is active and a surface with a live elapsed value is visible.
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
-        let liveSurfaces: Set<PluginUISlot> = [.notchExpandedActivity, .sessionMessage]
-        return !sessions.isEmpty && !surfaceState.visibleSurfaces.isDisjoint(with: liveSurfaces)
+        !sessions.isEmpty && !surfaceState.visibleSurfaces.isDisjoint(with: Self.liveSurfaces)
     }
 
     func makeUIContribution(

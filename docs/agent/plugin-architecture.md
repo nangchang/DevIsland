@@ -1057,7 +1057,7 @@ actor PluginRunner {
 @MainActor
 extension PluginHost {
     /// 독립된 UI source가 surface 표시 상태 변경 시 호출한다.
-    func setVisibleSurfaces(_ surfaces: Set<PluginUISlot>, source: String) {
+    func setVisibleSurfaces(_ surfaces: Set<PluginUISlot>, source: String = "default") {
         if surfaces.isEmpty {
             visibleSurfacesBySource.removeValue(forKey: source)
         } else {
