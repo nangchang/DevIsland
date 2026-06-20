@@ -193,19 +193,21 @@ final class SessionTimerPluginTests: XCTestCase {
         XCTAssertEqual(contribution?.components.first?.value, "01:00")
     }
 
-    func testNeedsTickOnlyWhenSessionActiveAndNotchVisible() async throws {
+    func testNeedsTickOnlyWhenSessionActiveAndLiveSurfaceVisible() async throws {
         let plugin = SessionTimerPlugin()
-        let visible = PluginSurfaceState(visibleSurfaces: [.notchExpandedActivity])
+        let notchVisible = PluginSurfaceState(visibleSurfaces: [.notchExpandedActivity])
+        let messageVisible = PluginSurfaceState(visibleSurfaces: [.sessionMessage])
         let hidden = PluginSurfaceState(visibleSurfaces: [])
 
-        XCTAssertFalse(plugin.needsTick(surfaceState: visible), "no session means no tick")
+        XCTAssertFalse(plugin.needsTick(surfaceState: notchVisible), "no session means no tick")
 
         _ = try await plugin.onEvent(
             sessionEvent(kind: .sessionStarted, session: makeSnapshot(id: "s1")),
             context: context()
         )
-        XCTAssertFalse(plugin.needsTick(surfaceState: hidden), "hidden notch means no tick")
-        XCTAssertTrue(plugin.needsTick(surfaceState: visible), "active session + visible notch needs tick")
+        XCTAssertFalse(plugin.needsTick(surfaceState: hidden), "no visible timer surface means no tick")
+        XCTAssertTrue(plugin.needsTick(surfaceState: notchVisible))
+        XCTAssertTrue(plugin.needsTick(surfaceState: messageVisible))
     }
 
     // MARK: - Host integration

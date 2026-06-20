@@ -395,7 +395,10 @@ class NotchWindowController: NSWindowController {
         let expandedVisible = AppState.shared.isNotchExpanded
             && !isShowingModal
             && !isHiddenForFullScreen
-        AppState.shared.pluginHost.setVisibleSurfaces(expandedVisible ? [.notchExpandedActivity] : [])
+        AppState.shared.pluginHost.setVisibleSurfaces(
+            expandedVisible ? [.notchExpandedActivity] : [],
+            source: "notch"
+        )
     }
 
     func updateWindowFrame(animate: Bool = true, sizeOverride: NSSize? = nil, targetScreenOverride: NSScreen? = nil) {

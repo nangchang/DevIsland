@@ -46,6 +46,7 @@ final class PluginHost: ObservableObject {
     private var expirationTimer: Timer?
     private var tickTask: Task<Void, Never>?
     private var visibleSurfaces: Set<PluginUISlot> = []
+    private var visibleSurfacesBySource: [String: Set<PluginUISlot>] = [:]
     /// Incremented only after the start guard passes, so tests can assert the
     /// tick loop starts at most once without observing the live timer.
     private(set) var tickStartCount = 0
@@ -381,11 +382,17 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    /// Reports which UI surfaces are currently visible so `needsTick` can decide
-    /// whether a plugin should keep updating. v1 has a single reporter (the notch),
-    /// so a full replace is correct; per-source merging waits until menubar reports too.
-    func setVisibleSurfaces(_ surfaces: Set<PluginUISlot>) {
-        visibleSurfaces = surfaces
+    /// Reports which UI surfaces one source currently displays so `needsTick` can decide
+    /// whether a plugin should keep updating. Reports are merged across independent windows.
+    func setVisibleSurfaces(_ surfaces: Set<PluginUISlot>, source: String = "default") {
+        if surfaces.isEmpty {
+            visibleSurfacesBySource.removeValue(forKey: source)
+        } else {
+            visibleSurfacesBySource[source] = surfaces
+        }
+        visibleSurfaces = visibleSurfacesBySource.values.reduce(into: []) {
+            $0.formUnion($1)
+        }
     }
 
     /// Starts the central 1Hz tick loop. Idempotent so the delayed app-start path

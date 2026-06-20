@@ -1051,14 +1051,21 @@ actor PluginRunner {
 
 `PluginHost`가 1Hz 타이머를 소유하고, 매 tick마다 활성 runner에게 `needsTick(surfaceState:)`을 물어 하나라도 `true`이면 `plugin.tick` 이벤트를 `enqueue`한다. 아무도 tick이 필요 없으면 이벤트를 발행하지 않아 idle 비용을 낮춘다.
 
-`PluginSurfaceState.visibleSurfaces`는 UI 레이어(Notch/MenuBar)가 표시 상태가 바뀔 때 `PluginHost`에 보고한다. 플러그인은 이 정보로 "보이는 동안만 갱신" 같은 판단을 한다.
+`PluginSurfaceState.visibleSurfaces`는 UI 레이어가 표시 상태가 바뀔 때 `PluginHost`에 보고한다. Notch와 각 Session Message 창은 독립된 source로 보고하며, host는 source별 집합의 합집합을 플러그인에 전달한다. 따라서 한 창이 닫혀도 다른 창의 visibility가 지워지지 않는다.
 
 ```swift
 @MainActor
 extension PluginHost {
-    /// UI 레이어가 surface 표시 상태 변경 시 호출한다.
-    func setVisibleSurfaces(_ surfaces: Set<PluginUISlot>) {
-        self.visibleSurfaces = surfaces
+    /// 독립된 UI source가 surface 표시 상태 변경 시 호출한다.
+    func setVisibleSurfaces(_ surfaces: Set<PluginUISlot>, source: String = "default") {
+        if surfaces.isEmpty {
+            visibleSurfacesBySource.removeValue(forKey: source)
+        } else {
+            visibleSurfacesBySource[source] = surfaces
+        }
+        visibleSurfaces = visibleSurfacesBySource.values.reduce(into: []) {
+            $0.formUnion($1)
+        }
     }
 
     /// 앱 시작 시 1회 시작. Timer는 MainActor에서 동작한다.
