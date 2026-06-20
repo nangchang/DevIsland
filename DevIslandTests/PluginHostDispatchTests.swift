@@ -607,6 +607,32 @@ final class PluginHostDispatchTests: XCTestCase {
         XCTAssertEqual(plugin.receivedKinds, [.pluginTick])
     }
 
+    func testVisibleSurfacesAreMergedAcrossReporters() async {
+        let plugin = VisibilityTickingPlugin(
+            id: "com.devisland.test.tick-merged",
+            tickSurface: .sessionMessage
+        )
+        let host = PluginHost()
+        host.register([plugin])
+
+        host.setVisibleSurfaces([.notchExpandedActivity], source: "notch")
+        host.setVisibleSurfaces([.sessionMessage], source: "message-a")
+        host.setVisibleSurfaces([.sessionMessage], source: "message-b")
+        host.setVisibleSurfaces([], source: "notch")
+        host.setVisibleSurfaces([], source: "message-a")
+
+        await host.tickIfNeeded()
+        await host.waitUntilIdle()
+        XCTAssertEqual(plugin.receivedKinds, [.pluginTick],
+                       "clearing other reporters must preserve the remaining message window")
+
+        host.setVisibleSurfaces([], source: "message-b")
+        await host.tickIfNeeded()
+        await host.waitUntilIdle()
+        XCTAssertEqual(plugin.receivedKinds, [.pluginTick],
+                       "tick must stop after the last reporter clears the surface")
+    }
+
     func testStartTickingStartsOnlyOnce() {
         let host = PluginHost()
 

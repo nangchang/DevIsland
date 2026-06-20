@@ -77,9 +77,10 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
     }
 
     /// Ticking only matters to refresh the elapsed value, so request it only when
-    /// a session is active and the notch activity surface is actually visible.
+    /// a session is active and a surface with a live elapsed value is visible.
     func needsTick(surfaceState: PluginSurfaceState) -> Bool {
-        !sessions.isEmpty && surfaceState.visibleSurfaces.contains(.notchExpandedActivity)
+        let liveSurfaces: Set<PluginUISlot> = [.notchExpandedActivity, .sessionMessage]
+        return !sessions.isEmpty && !surfaceState.visibleSurfaces.isDisjoint(with: liveSurfaces)
     }
 
     func makeUIContribution(
@@ -103,11 +104,9 @@ final class SessionTimerPlugin: DevIslandPlugin, @unchecked Sendable {
             )
         case .notchSessionRow, .sessionMessage:
             // Per-session elapsed badge keyed to the triggering session, on the row and in
-            // the message-window header. Session-scoped slots are not re-evaluated on the
-            // global tick (a tick carries no session), so this refreshes on the session's
-            // own start/update events rather than each second; the global activity card
-            // keeps the per-second readout. Only still-tracked sessions contribute, so an
-            // ended session yields nil.
+            // the message-window header. PluginHost fans out session-bearing ticks while a
+            // live timer surface is visible, so these cached values advance each second.
+            // Only still-tracked sessions contribute, so an ended session yields nil.
             guard let target = context.session, let tracked = sessions[target.id] else { return nil }
             return elapsedContribution(
                 slot: slot,

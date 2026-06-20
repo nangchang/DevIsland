@@ -169,15 +169,36 @@ final class SessionMessageWindowController: NSWindowController, NSWindowDelegate
     func show() {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        reportSurfaceVisibility()
     }
 
     func windowWillClose(_ notification: Notification) {
+        setSurfaceVisible(false)
         // DispatchQueue.main.async: 현재 AppKit 런루프 사이클 완료 후 컨트롤러 참조 제거
         // → windowWillClose 콜백 실행 도중 self 해제로 인한 크래시 방지
         let sid = sessionId
         DispatchQueue.main.async {
             SessionMessageWindowManager.shared.windowClosed(for: sid)
         }
+    }
+
+    func windowDidMiniaturize(_ notification: Notification) {
+        reportSurfaceVisibility()
+    }
+
+    func windowDidDeminiaturize(_ notification: Notification) {
+        reportSurfaceVisibility()
+    }
+
+    private func reportSurfaceVisibility() {
+        setSurfaceVisible(window?.isVisible == true && window?.isMiniaturized == false)
+    }
+
+    private func setSurfaceVisible(_ visible: Bool) {
+        AppState.shared.pluginHost.setVisibleSurfaces(
+            visible ? [.sessionMessage] : [],
+            source: "session-message:\(sessionId)"
+        )
     }
 }
 
