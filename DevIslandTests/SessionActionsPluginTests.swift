@@ -420,8 +420,14 @@ final class SessionActionsPluginTests: XCTestCase {
     }
 
     func testResumeCommandCodexWithoutWorkspace() async {
-        let session = makeActiveSession(id: "abc123", agentKind: .codex, workspaceRoot: nil)
-        XCTAssertEqual(session.resumeCommand, "codex --resume 'abc123'")
+        XCTAssertEqual(
+            makeActiveSession(id: "abc123", agentKind: .codex, workspaceRoot: nil).resumeCommand,
+            "codex --resume 'abc123'"
+        )
+        XCTAssertEqual(
+            makeActiveSession(id: "abc123", agentKind: .codex, workspaceRoot: "").resumeCommand,
+            "codex --resume 'abc123'"
+        )
     }
 
     func testResumeCommandGeminiIgnoresSessionID() async {

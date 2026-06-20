@@ -92,7 +92,7 @@ extension ActiveSession {
         workspaceRoot: String?
     ) -> String {
         var commands: [String] = []
-        if let workspaceRoot {
+        if let workspaceRoot, !workspaceRoot.isEmpty {
             commands.append("cd \(shellQuote(workspaceRoot))")
         }
         if let executable {
