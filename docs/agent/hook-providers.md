@@ -32,6 +32,8 @@ DevIsland uses `PermissionRequest` for standard tool approval. `PostToolUse` is 
 
 `AskUserQuestion` is handled directly in the DevIsland notch UI when possible. The app supports single-choice questions, multi-select questions, multiple questions in one payload, and free-form text questions. Option questions also offer an "Other" path so users can submit a custom text answer. Submitted answers are returned through Claude `PreToolUse` output as `updatedInput`, preserving the original `questions` payload and adding an `answers` object. Follow-up `PermissionRequest` and `PostToolUse` events for the same user-question tools are passed through without a second notification.
 
+Question option previews may use Markdown or HTML. HTML previews run without JavaScript in a non-persistent web view, reject navigation, block external resources with Content Security Policy, and truncate oversized input before rendering.
+
 Approval output:
 
 ```json
