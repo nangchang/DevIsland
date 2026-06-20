@@ -217,7 +217,7 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 | 터미널 | `TerminalFocuser.swift`(전체) |
 | 플러그인 | `PluginHost.swift`(부분), 설계·구현계획 문서 전체 |
 | 기타 | `UpdateChecker.swift`, `Localizable.swift`, `AppRelocator.swift`, `project.yml` |
-| 문서 | `README.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `docs/agent/*` 7종, `docs/caffeine-plan.md` |
+| 문서 | `README.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `docs/agent/*` 8종 |
 | CI | `ci.yml`, `release.yml`, `nightly.yml`, `codeql.yml`, `bump.yml` |
 
 ## 부록 B. 검토에서 제외/보류한 영역

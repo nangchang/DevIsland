@@ -16,6 +16,14 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertEqual(plugin.manifest.id, CaffeinePlugin.pluginID)
         XCTAssertTrue(plugin.manifest.permissions.contains(.controlPowerSleep))
         XCTAssertTrue(plugin.manifest.permissions.contains(.showMenubarMenu))
+        XCTAssertEqual(
+            plugin.manifest.displayDescription(language: .english),
+            "Prevents Mac sleep on AC power. Turns off on battery, low battery, excluded Wi-Fi, or session idle timeout."
+        )
+        XCTAssertEqual(
+            plugin.manifest.displayDescription(language: .korean),
+            "AC 전원에서 Mac의 잠자기를 방지합니다. 배터리 사용, 저전력, 예외 Wi-Fi 또는 세션 유휴 시 해제됩니다."
+        )
     }
 
     func testDisabledReturnsFalse() async throws {

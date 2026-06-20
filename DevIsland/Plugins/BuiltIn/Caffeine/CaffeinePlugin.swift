@@ -22,8 +22,8 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         ],
         localizedName: PluginLocalizedString(english: "Caffeine", korean: "Caffeine"),
         localizedDescription: PluginLocalizedString(
-            english: "Prevents the Mac from sleeping while a session is active. Automatically turns off on low battery.",
-            korean: "세션 진행 중 Mac이 잠자기 상태로 전환되는 것을 방지합니다. 배터리 부족 시 자동으로 해제됩니다."
+            english: "Prevents Mac sleep on AC power. Turns off on battery, low battery, excluded Wi-Fi, or session idle timeout.",
+            korean: "AC 전원에서 Mac의 잠자기를 방지합니다. 배터리 사용, 저전력, 예외 Wi-Fi 또는 세션 유휴 시 해제됩니다."
         )
     )
 

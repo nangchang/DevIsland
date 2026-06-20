@@ -16,6 +16,7 @@ Read this file before editing. Open the referenced docs only when the task touch
 | Claude/Codex/Gemini hook setup and response shapes | [docs/agent/hook-providers.md](docs/agent/hook-providers.md) |
 | Approval Proxy, IPC, SQLite, PTY, known gaps | [docs/agent/approval-proxy.md](docs/agent/approval-proxy.md) |
 | UI Customization (Notch settings) | [docs/agent/ui-customization.md](docs/agent/ui-customization.md) |
+| Caffeine power and session-timeout behavior | [docs/agent/caffeine.md](docs/agent/caffeine.md) |
 | OpenPeon CESP sound packs | [docs/agent/openpeon-cesp.md](docs/agent/openpeon-cesp.md) |
 | Performance and stability rules | [docs/agent/stability-standards.md](docs/agent/stability-standards.md) |
 
