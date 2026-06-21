@@ -7,6 +7,7 @@ enum BuiltInPluginID {
     static let sessionTimer = "devisland.builtin.session-timer"
     static let sessionActions = "devisland.builtin.session-actions"
     static let pomodoro = "devisland.builtin.pomodoro"
+    static let compactAppearance = "devisland.builtin.compact-appearance"
 
     static let legacyMappings: [String: String] = [
         "openpeon": openPeon,

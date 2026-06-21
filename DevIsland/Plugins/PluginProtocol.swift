@@ -13,6 +13,7 @@ struct PluginManifest: Codable, Equatable {
     let kind: PluginKind
     let permissions: Set<PluginPermission>
     let surfaces: Set<PluginUISlot>
+    var regions: Set<PluginRegionID> = []
     let activationEvents: Set<String>
     var localizedName: PluginLocalizedString? = nil
     var localizedDescription: PluginLocalizedString? = nil
@@ -47,12 +48,23 @@ protocol DevIslandPlugin: AnyObject {
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect]
     func makeUIContribution(for slot: PluginUISlot, context: PluginUIContext) throws -> PluginUIContribution?
+    func makeCompactRegionContribution(
+        for region: PluginRegionID,
+        context: PluginCompactRegionContext
+    ) throws -> PluginCompactRegionContribution?
     func needsTick(surfaceState: PluginSurfaceState) -> Bool
 }
 
 extension DevIslandPlugin {
     var settingsSchema: [PluginSettingDescriptor] { [] }
     var settingsPaneDescriptor: PluginSettingsPaneDescriptor? { nil }
+
+    func makeCompactRegionContribution(
+        for region: PluginRegionID,
+        context: PluginCompactRegionContext
+    ) throws -> PluginCompactRegionContribution? {
+        nil
+    }
 }
 
 struct PluginContext {

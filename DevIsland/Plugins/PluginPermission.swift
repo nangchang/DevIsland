@@ -5,6 +5,7 @@ enum PluginPermission: String, Codable, CaseIterable, Hashable {
     case readHookSummaries
     case readTerminalMetadata
     case showNotchCard
+    case showCompactRegion
     case showMenubarMenu
     case showSessionSurface
     case writePluginStorage

@@ -8,6 +8,11 @@ final class PluginHost: ObservableObject {
             scheduleExpirationPrune()
         }
     }
+    @Published private(set) var compactRegionContributions: [PluginRegionID: [PluginCompactRegionContribution]] = [:] {
+        didSet {
+            scheduleExpirationPrune()
+        }
+    }
 
     nonisolated let isEnabled: Bool
 
@@ -47,6 +52,8 @@ final class PluginHost: ObservableObject {
     private var tickTask: Task<Void, Never>?
     private var visibleSurfaces: Set<PluginUISlot> = []
     private var visibleSurfacesBySource: [String: Set<PluginUISlot>] = [:]
+    private var visibleCompactRegions: Set<PluginRegionID> = []
+    private var visibleCompactRegionsBySource: [String: Set<PluginRegionID>] = [:]
     /// Incremented only after the start guard passes, so tests can assert the
     /// tick loop starts at most once without observing the live timer.
     private(set) var tickStartCount = 0
@@ -66,6 +73,9 @@ final class PluginHost: ObservableObject {
     /// drain time so contributions can render for the user's selection instead of a recency
     /// proxy. Injected by `AppState`; `nil` (e.g. in tests) means no selection signal.
     var selectedSessionProvider: (@MainActor () -> String?)?
+
+    /// Supplies the user-selected provider for each compact region. Missing entries are hidden.
+    var compactRegionSelectionProvider: (@MainActor () -> [PluginRegionID: String])?
 
     /// Supplies snapshots of the currently active sessions, used to fan out `settings.changed`
     /// to session-scoped slots (see `pluginSettingChanged`). Injected by `AppState`; `nil`
@@ -124,6 +134,12 @@ final class PluginHost: ObservableObject {
     /// Manifests of every registered plugin, sorted by display name for the settings list.
     var registeredPlugins: [PluginManifest] {
         runners.values.map(\.manifest).sorted { $0.name < $1.name }
+    }
+
+    func compactRegionProviders(for region: PluginRegionID) -> [PluginManifest] {
+        registeredPlugins.filter {
+            $0.regions.contains(region) && $0.permissions.contains(.showCompactRegion)
+        }
     }
 
     /// The declarative settings schema a plugin exposes, for the host-owned settings UI.
@@ -187,6 +203,24 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    /// Applies a changed exclusive-region selection and refreshes only selected providers.
+    func compactRegionSelectionChanged() {
+        guard isEnabled else { return }
+        let selected = compactRegionSelectionProvider?() ?? [:]
+        var updated = compactRegionContributions
+        for region in PluginRegionID.allCases {
+            updated[region]?.removeAll { selected[region] != $0.pluginID }
+            if updated[region]?.isEmpty == true {
+                updated.removeValue(forKey: region)
+            }
+        }
+        compactRegionContributions = updated
+
+        for pluginID in Set(selected.values) where runners[pluginID] != nil {
+            enqueue(eventFactory.makeLifecycleEvent(kind: .settingsChanged), restrictedTo: pluginID)
+        }
+    }
+
     /// Resolves persisted setting values against each plugin's schema on the MainActor before
     /// the async hop, mirroring how `selectedSessionID` is pulled. Every schema key is present
     /// in the result (stored value validated, or the descriptor default), so plugins read
@@ -236,6 +270,10 @@ final class PluginHost: ObservableObject {
         } else {
             disabledPluginIDs.insert(pluginID)
             contributions = removeContributions(pluginID: pluginID, from: contributions)
+            compactRegionContributions = removeCompactRegionContributions(
+                pluginID: pluginID,
+                from: compactRegionContributions
+            )
             releasePowerIfControlled(pluginID: pluginID)
         }
     }
@@ -249,6 +287,10 @@ final class PluginHost: ObservableObject {
         safemodePluginIDs.insert(pluginID)
         settingsStore?.setSafemode(true, pluginID: pluginID)
         contributions = removeContributions(pluginID: pluginID, from: contributions)
+        compactRegionContributions = removeCompactRegionContributions(
+            pluginID: pluginID,
+            from: compactRegionContributions
+        )
         releasePowerIfControlled(pluginID: pluginID)
     }
 
@@ -395,6 +437,17 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    func setVisibleCompactRegions(_ regions: Set<PluginRegionID>, source: String = "default") {
+        if regions.isEmpty {
+            visibleCompactRegionsBySource.removeValue(forKey: source)
+        } else {
+            visibleCompactRegionsBySource[source] = regions
+        }
+        visibleCompactRegions = visibleCompactRegionsBySource.values.reduce(into: []) {
+            $0.formUnion($1)
+        }
+    }
+
     /// Starts the central 1Hz tick loop. Idempotent so the delayed app-start path
     /// (after other DevIsland instances terminate) cannot spin up a second loop.
     func startTicking() {
@@ -431,9 +484,20 @@ final class PluginHost: ObservableObject {
     /// failure-threshold detector that *enters* safemode arrives in PR 11.
     func tickIfNeeded() async {
         guard isEnabled else { return }
-        let state = PluginSurfaceState(visibleSurfaces: visibleSurfaces)
+        let state = PluginSurfaceState(
+            visibleSurfaces: visibleSurfaces,
+            visibleRegions: visibleCompactRegions
+        )
+        let selectedCompactProviders = compactRegionSelectionProvider?() ?? [:]
         var tickingRunners: [PluginRunner] = []
         for runner in runners.values where isActive(runner.manifest.id) {
+            let ownsSelectedRegion = runner.manifest.regions.contains {
+                selectedCompactProviders[$0] == runner.manifest.id
+            }
+            if !runner.manifest.regions.isEmpty && !ownsSelectedRegion
+                && runner.manifest.surfaces.isEmpty {
+                continue
+            }
             if await runner.needsTick(surfaceState: state) {
                 tickingRunners.append(runner)
             }
@@ -503,12 +567,14 @@ final class PluginHost: ObservableObject {
             // Pull the user's current selection on the MainActor before the async hop, so
             // contributions render for the selected session rather than a recency proxy.
             let selectedSessionID = selectedSessionProvider?()
+            let selectedCompactRegionProviders = compactRegionSelectionProvider?()
             // Resolve persisted setting values against each plugin's schema here (MainActor)
             // too, so a plugin sees the latest settings on this event.
             let settingsByPlugin = resolveSettings(for: activeRunners)
             let snapshots = await eventProcessor.process(
                 activeQueued,
                 selectedSessionID: selectedSessionID,
+                selectedCompactRegionProviders: selectedCompactRegionProviders,
                 settingsByPlugin: settingsByPlugin,
                 language: L10n.shared.language
             )
@@ -553,10 +619,16 @@ final class PluginHost: ObservableObject {
                 recordFailure(failure)
                 if safemodePluginIDs.contains(snapshot.pluginID) {
                     updated = removeContributions(pluginID: snapshot.pluginID, from: updated)
+                    compactRegionContributions = removeCompactRegionContributions(
+                        pluginID: snapshot.pluginID,
+                        from: compactRegionContributions
+                    )
                     continue
                 }
                 if failure.clearsContribution {
                     updated = removeContributions(pluginID: snapshot.pluginID, from: updated)
+                    // Compact regions deliberately retain their last known good cache for
+                    // transient failures. Safemode/disable paths above clear it.
                     continue
                 }
             } else {
@@ -584,6 +656,24 @@ final class PluginHost: ObservableObject {
                         : $0.priority < $1.priority
                 }
             }
+
+
+            var updatedRegions = compactRegionContributions
+            let selectedRegionProviders = compactRegionSelectionProvider?()
+            for region in snapshot.evaluatedRegions {
+                updatedRegions[region]?.removeAll { $0.pluginID == snapshot.pluginID }
+                if updatedRegions[region]?.isEmpty == true {
+                    updatedRegions.removeValue(forKey: region)
+                }
+            }
+            for (region, contribution) in snapshot.regionContributions {
+                if let selectedRegionProviders,
+                   selectedRegionProviders[region] != snapshot.pluginID {
+                    continue
+                }
+                updatedRegions[region, default: []].append(contribution)
+            }
+            compactRegionContributions = updatedRegions
         }
 
         contributions = updated
@@ -592,8 +682,16 @@ final class PluginHost: ObservableObject {
 
     func pruneExpiredContributions(now: Date = Date()) {
         let updated = pruneExpiredContributions(from: contributions, now: now)
-        guard updated != contributions else { return }
-        contributions = updated
+        if updated != contributions {
+            contributions = updated
+        }
+        let updatedRegions = pruneExpiredCompactRegionContributions(
+            from: compactRegionContributions,
+            now: now
+        )
+        if updatedRegions != compactRegionContributions {
+            compactRegionContributions = updatedRegions
+        }
     }
 
     /// Read-only view of a plugin's durable storage (used by tests; later by the
@@ -637,6 +735,20 @@ final class PluginHost: ObservableObject {
             updated[slot]?.removeAll { $0.pluginID == pluginID }
             if updated[slot]?.isEmpty == true {
                 updated.removeValue(forKey: slot)
+            }
+        }
+        return updated
+    }
+
+    private func removeCompactRegionContributions(
+        pluginID: String,
+        from current: [PluginRegionID: [PluginCompactRegionContribution]]
+    ) -> [PluginRegionID: [PluginCompactRegionContribution]] {
+        var updated = current
+        for region in Array(current.keys) {
+            updated[region]?.removeAll { $0.pluginID == pluginID }
+            if updated[region]?.isEmpty == true {
+                updated.removeValue(forKey: region)
             }
         }
         return updated
@@ -692,15 +804,20 @@ final class PluginHost: ObservableObject {
 
         let now = Date()
         let updated = pruneExpiredContributions(from: contributions, now: now)
-        if updated != contributions {
+        let updatedRegions = pruneExpiredCompactRegionContributions(
+            from: compactRegionContributions,
+            now: now
+        )
+        if updated != contributions || updatedRegions != compactRegionContributions {
             contributions = updated
+            compactRegionContributions = updatedRegions
             return
         }
 
-        let nextExpiration = contributions.values
-            .flatMap { $0 }
-            .compactMap(\.expiresAt)
-            .min()
+        let nextExpiration = (
+            contributions.values.flatMap { $0 }.compactMap(\.expiresAt)
+            + compactRegionContributions.values.flatMap { $0 }.compactMap(\.expiresAt)
+        ).min()
         guard let nextExpiration else { return }
 
         expirationTimer = Timer.scheduledTimer(
@@ -727,6 +844,19 @@ final class PluginHost: ObservableObject {
         return updated
     }
 
+    private func pruneExpiredCompactRegionContributions(
+        from current: [PluginRegionID: [PluginCompactRegionContribution]],
+        now: Date
+    ) -> [PluginRegionID: [PluginCompactRegionContribution]] {
+        var updated: [PluginRegionID: [PluginCompactRegionContribution]] = [:]
+        for (region, contributions) in current {
+            let active = contributions.filter { isActiveCompactRegionContribution($0, now: now) }
+            if !active.isEmpty {
+                updated[region] = active
+            }
+        }
+        return updated
+    }
     private nonisolated static func isSessionScoped(_ slot: PluginUISlot) -> Bool {
         switch slot {
         case .notchSessionRow,

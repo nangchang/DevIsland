@@ -58,6 +58,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings.notchAutoCollapseDelay, .seconds5)
         XCTAssertEqual(store.settings.notchCharacterHorizontalInset, 24)
         XCTAssertEqual(store.settings.notchCharacterVerticalOffset, 4)
+        XCTAssertEqual(store.settings.notchCompactLeadingSelection, .provider(BuiltInPluginID.compactAppearance))
+        XCTAssertEqual(store.settings.notchCompactCenterSelection, .provider(BuiltInPluginID.compactAppearance))
+        XCTAssertEqual(store.settings.notchCompactTrailingSelection, .provider(BuiltInPluginID.compactAppearance))
         XCTAssertEqual(store.settings.notchLeftCharacterMode, .random)
         XCTAssertEqual(store.settings.notchLeftCharacterKind, .claudeCode)
         XCTAssertEqual(store.settings.notchLeftRandomCharacterKinds, Set(BuddyKind.defaultRandomCases))
@@ -129,6 +132,9 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.notchAutoCollapseDelay = .seconds10
         store.settings.notchCharacterHorizontalInset = 36
         store.settings.notchCharacterVerticalOffset = -2
+        store.settings.notchCompactLeadingSelection = .hidden
+        store.settings.notchCompactCenterSelection = .provider("test.center")
+        store.settings.notchCompactTrailingSelection = .provider("test.trailing")
         store.settings.notchLeftCharacterMode = .specific
         store.settings.notchLeftCharacterKind = .codex
         store.settings.notchLeftRandomCharacterKinds = [.codex, .island]
@@ -174,6 +180,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.settings.notchAutoCollapseDelay, .seconds10)
         XCTAssertEqual(reloaded.settings.notchCharacterHorizontalInset, 36)
         XCTAssertEqual(reloaded.settings.notchCharacterVerticalOffset, -2)
+        XCTAssertEqual(reloaded.settings.notchCompactLeadingSelection, .hidden)
+        XCTAssertEqual(reloaded.settings.notchCompactCenterSelection, .provider("test.center"))
+        XCTAssertEqual(reloaded.settings.notchCompactTrailingSelection, .provider("test.trailing"))
         XCTAssertEqual(reloaded.settings.notchLeftCharacterMode, .specific)
         XCTAssertEqual(reloaded.settings.notchLeftCharacterKind, .codex)
         XCTAssertEqual(reloaded.settings.notchLeftRandomCharacterKinds, [.codex, .island])
