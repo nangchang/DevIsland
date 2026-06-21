@@ -1,0 +1,105 @@
+name: 버그 리포트
+description: 재현 가능한 오류나 예기치 않은 동작을 보고합니다.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        문제를 재현하고 검증할 수 있도록 관찰한 사실을 중심으로 작성해 주세요.
+        확실하지 않은 내용은 추측임을 명시하면 AI 에이전트가 사실과 가정을 구분하는 데 도움이 됩니다.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 문제 요약
+      description: 무엇이 잘못되었고 누구에게 어떤 영향을 주는지 간결하게 설명해 주세요.
+      placeholder: "예: Codex 승인 요청을 허용해도 CLI가 대기 상태에서 벗어나지 않습니다."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 재현 절차
+      description: 깨끗한 상태에서 문제를 재현할 수 있는 최소 단계를 순서대로 적어 주세요.
+      placeholder: |
+        1. DevIsland를 실행합니다.
+        2. Codex CLI에서 승인이 필요한 명령을 실행합니다.
+        3. 패널에서 Allow를 선택합니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대한 동작
+      description: 정상이라면 관찰되어야 할 결과를 적어 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 동작
+      description: 실제로 관찰한 결과와 오류 메시지를 적어 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 환경
+      description: 재현에 영향을 줄 수 있는 버전과 설정을 적어 주세요.
+      placeholder: |
+        - DevIsland 버전 또는 commit:
+        - macOS 버전:
+        - Provider 및 CLI 버전 (Claude/Codex/Gemini):
+        - Terminal 앱:
+        - 관련 설정:
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 로그와 증거
+      description: 관련 로그, 스크린샷, hook payload를 첨부해 주세요. 비밀값과 개인정보는 제거해 주세요.
+      placeholder: 로그를 코드 블록으로 붙여 넣거나 파일을 첨부해 주세요.
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 확인한 범위
+      description: 항상 발생하는지, 특정 provider나 설정에서만 발생하는지 등 확인된 사실과 추측을 구분해 주세요.
+      placeholder: |
+        확인된 사실:
+        -
+
+        추측 또는 미확인 사항:
+        -
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 완료 조건
+      description: 이 버그가 해결되었다고 판단할 수 있는 검증 가능한 조건을 적어 주세요.
+      placeholder: "예: Allow 선택 후 Codex CLI가 1초 이내에 명령 실행을 계속합니다."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 제출 전 확인
+      options:
+        - label: 기존 이슈에서 같은 문제를 검색했습니다.
+          required: true
+        - label: 로그와 첨부 자료에서 비밀값 및 개인정보를 제거했습니다.
+          required: true
+
+  - type: textarea
+    id: ai_attribution
+    attributes:
+      label: AI attribution
+      description: AI 도구를 사용해 작성했다면 실제 도구명과, 확인 가능한 경우 모델 버전을 포함한 attribution footer를 입력해 주세요. 사용하지 않았다면 비워 두세요.
+      placeholder: "> 🤖 Generated with [실제 도구명 — 모델 버전](URL)"
