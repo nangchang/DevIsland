@@ -330,6 +330,26 @@ private struct IslandSettingsPane: View {
             }
 
             Section(l10n.secNotchCharacters) {
+                NotchCompactRegionControl(
+                    title: l10n.language.s("Left region", "왼쪽 영역"),
+                    region: .notchCompactLeading,
+                    selection: store.binding(\.notchCompactLeadingSelection)
+                )
+
+                NotchCompactRegionControl(
+                    title: l10n.language.s("Center region", "중앙 영역"),
+                    region: .notchCompactCenter,
+                    selection: store.binding(\.notchCompactCenterSelection)
+                )
+
+                NotchCompactRegionControl(
+                    title: l10n.language.s("Right region", "오른쪽 영역"),
+                    region: .notchCompactTrailing,
+                    selection: store.binding(\.notchCompactTrailingSelection)
+                )
+
+                Divider()
+
                 NotchCharacterControl(
                     title: l10n.lblLeftCharacter,
                     mode: store.binding(\.notchLeftCharacterMode),
@@ -499,6 +519,34 @@ private struct SettingsSliderRow: View {
         guard newValue.isFinite else { return value }
         let stepped = step > 0 ? (newValue / step).rounded() * step : newValue
         return min(max(stepped, range.lowerBound), range.upperBound)
+    }
+}
+
+private struct NotchCompactRegionControl: View {
+    let title: String
+    let region: PluginRegionID
+    @Binding var selection: NotchCompactRegionSelection
+    @ObservedObject private var pluginHost = AppState.shared.pluginHost
+    @ObservedObject private var l10n = L10n.shared
+
+    private var providers: [PluginManifest] {
+        pluginHost.compactRegionProviders(for: region)
+    }
+
+    var body: some View {
+        Picker(title, selection: $selection) {
+            Text(l10n.language.s("Hidden", "숨김"))
+                .tag(NotchCompactRegionSelection.hidden)
+            ForEach(providers, id: \.id) { manifest in
+                Text(manifest.displayName(language: l10n.language))
+                    .tag(NotchCompactRegionSelection.provider(manifest.id))
+            }
+            if let selectedID = selection.providerID,
+               !providers.contains(where: { $0.id == selectedID }) {
+                Text(l10n.language.s("Unavailable provider", "사용할 수 없는 제공자"))
+                    .tag(selection)
+            }
+        }
     }
 }
 

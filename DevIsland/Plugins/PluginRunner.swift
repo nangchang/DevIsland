@@ -27,12 +27,18 @@ actor PluginRunner {
         scopedFileBroker: PluginScopedFileBroker,
         settings: [String: PluginSettingValue] = [:],
         selectedSessionID: String? = nil,
+        selectedCompactRegionProviders: [PluginRegionID: String]? = nil,
         language: AppLanguage = .english
     ) async -> PluginContributionSnapshot {
         let startedAt = ContinuousClock.now
         let evaluatedSlots = manifest.surfaces.filter {
             Self.isSurfaceAllowed($0, permissions: manifest.permissions)
                 && Self.shouldEvaluate($0, for: event)
+        }
+        let evaluatedRegions = manifest.regions.filter { region in
+            guard manifest.permissions.contains(.showCompactRegion) else { return false }
+            guard let selectedCompactRegionProviders else { return true }
+            return selectedCompactRegionProviders[region] == manifest.id
         }
 
         do {
@@ -52,6 +58,7 @@ actor PluginRunner {
             )
             let effects = try await plugin.onEvent(event, context: context)
             var contributions: [PluginUISlot: PluginUIContribution] = [:]
+            var regionContributions: [PluginRegionID: PluginCompactRegionContribution] = [:]
 
             for slot in evaluatedSlots {
                 let context = PluginUIContext(
@@ -66,6 +73,20 @@ actor PluginRunner {
                 }
             }
 
+            for region in evaluatedRegions {
+                let context = PluginCompactRegionContext(
+                    region: region,
+                    timestamp: event.timestamp,
+                    language: language
+                )
+                if let contribution = try plugin.makeCompactRegionContribution(
+                    for: region,
+                    context: context
+                ), contribution.pluginID == manifest.id, contribution.region == region {
+                    regionContributions[region] = contribution
+                }
+            }
+
             // Built-in plugin execution is measured after completion in PR 3.
             // It is not interrupted; worker/process isolation is a later runtime concern.
             let elapsed = startedAt.duration(to: ContinuousClock.now)
@@ -74,6 +95,8 @@ actor PluginRunner {
                 sessionID: event.session?.id,
                 evaluatedSlots: Set(evaluatedSlots),
                 contributions: contributions,
+                evaluatedRegions: Set(evaluatedRegions),
+                regionContributions: regionContributions,
                 effects: effects,
                 failure: elapsed > .milliseconds(50)
                     ? PluginFailure(
@@ -91,6 +114,8 @@ actor PluginRunner {
                 sessionID: event.session?.id,
                 evaluatedSlots: Set(evaluatedSlots),
                 contributions: [:],
+                evaluatedRegions: Set(evaluatedRegions),
+                regionContributions: [:],
                 effects: [],
                 failure: PluginFailure(
                     pluginID: manifest.id,

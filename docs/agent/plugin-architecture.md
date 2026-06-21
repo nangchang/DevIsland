@@ -135,6 +135,7 @@ enum PluginPermission: String, Codable, Hashable {
 | `readHookSummaries` | raw payload가 아닌 hook 요약 DTO를 수신한다. |
 | `readTerminalMetadata` | 터미널 앱 이름, cwd 등 제한된 메타데이터를 수신한다. |
 | `showNotchCard` | notch expanded 영역에 선언형 card를 제공한다. |
+| `showCompactRegion` | 사용자가 선택한 collapsed notch 단일 영역에 선언형 콘텐츠를 제공한다. |
 | `showSessionSurface` | v1.1 이후 세션 행·세션 메시지·세션 context menu에 선언형 accessory를 제공한다. |
 | `showMenubarMenu` | menubar 메뉴(`menubar.menu`)에 선언형 menu item을 제공한다. |
 | `showNotification` | DevIsland가 렌더링하는 제한된 알림을 요청한다. |
@@ -148,6 +149,7 @@ surface permission 매핑:
 | Surface | 필요 permission |
 | :--- | :--- |
 | `notch.*` | `showNotchCard` |
+| `notch.compact.*` exclusive region | `showCompactRegion` |
 | `menubar.menu` | `showMenubarMenu` |
 | `session.*`, `notch.session.row` | `showSessionSurface` |
 
@@ -515,7 +517,7 @@ enum PluginUISlot: String, Codable, CaseIterable {
 
 `menubar.menu`는 메뉴 스타일 `MenuBarExtra`의 top-level `MenuBarMenu`에 플러그인별 하위 메뉴로 직접 렌더링한다. 별도 window popover(`.menuBarExtraStyle(.window)`)는 현재 구현과 다르므로 v2로 미룬다.
 
-현재 열린 슬롯은 `notch.expanded.activity`, `menubar.menu`, `notch.session.row`, `session.context-menu`, `session.message`다. 설정 화면은 플러그인 contribution slot이 아니라 DevIsland host가 manifest·enable 상태·safemode·storage 삭제 기능과 declarative `settingsSchema`를 렌더링하는 `PluginSettingsView`다. `notch.expanded.details`, `session.detail.timeline`, `session.detail.summary`는 enum에는 있지만 아직 렌더 surface가 열려 있지 않다. collapsed notch 3영역(`leading`/`center`/`trailing`)은 현재 좌·우 버디와 중앙 `notchCenterText`가 점유하고 unread dot까지 겹쳐 가산 contribution이 들어갈 공간이 없다. 따라서 `PluginUISlot`에 넣지 않고, §7.1의 exclusive region provider 모델로 별도 설계한다.
+현재 열린 슬롯은 `notch.expanded.activity`, `menubar.menu`, `notch.session.row`, `session.context-menu`, `session.message`다. 설정 화면은 플러그인 contribution slot이 아니라 DevIsland host가 manifest·enable 상태·safemode·storage 삭제 기능과 declarative `settingsSchema`를 렌더링하는 `PluginSettingsView`다. `notch.expanded.details`, `session.detail.timeline`, `session.detail.summary`는 enum에는 있지만 아직 렌더 surface가 열려 있지 않다. collapsed notch 3영역(`leading`/`center`/`trailing`)은 가산 슬롯이 아닌 §7.1의 exclusive region provider로 열려 있다.
 
 슬롯별 제약: 최대 contribution 수, 텍스트 최대 길이, 우선순위 정렬 기준은 각 슬롯 렌더러가 정의한다. 동일 priority는 pluginID 알파벳 순으로 deterministic ordering을 적용한다.
 
@@ -523,15 +525,15 @@ enum PluginUISlot: String, Codable, CaseIterable {
 
 **세션 제거 액션 경계**: 플러그인은 `session.context-menu`에서 `session.dismiss` action을 제안할 수 있지만, 실제 제거는 Host가 대상 세션 상태를 다시 확인한 뒤 실행한다. 허용 대상은 `isPending == false`, status가 idle, `hasMissedApproval == false`, `isUnread == false`인 세션으로 제한한다. pending approval, 현재 응답 대기 세션, missed approval 또는 unread 상태처럼 사용자 확인이 필요한 세션은 플러그인 action으로 제거하지 않는다. 기존 core-owned dismiss 버튼은 현재처럼 `AppState.dismissSession`을 호출할 수 있지만, plugin action은 provider response를 pass하거나 approval queue를 비우는 경로에 닿으면 안 된다.
 
-### 7.1. (v1.1+ 개념) Exclusive Region Provider — 노치 영역 교체
+### 7.1. (v1.x built-in) Exclusive Region Provider — 노치 영역 교체
 
-> 이 절은 **개념과 경계**만 정의한다. 구현 스펙이 아니며 v1 범위 밖이다. 좁은 collapsed 노치(아일랜드)의 영역을 다룰 때의 설계 방향을 기록한다.
+좁은 collapsed 노치(아일랜드)는 built-in plugin에 한해 exclusive region provider를 지원한다. 외부 플러그인과 리치 에셋은 v2 범위다.
 
 Collapsed 노치(아일랜드)는 좌(버디)·중앙(`notchCenterText`)·우(버디)의 **세 영역**으로 구성되며, 세 영역 모두 이미 core 요소가 점유한다. 공간이 극도로 좁아 가산(additive) contribution이 들어갈 자리가 없다.
 
-따라서 노치 영역에 한해 가산 슬롯과 **다른 의미론**을 검토한다.
+따라서 노치 영역은 가산 슬롯과 **다른 의미론**을 사용한다.
 
-`Exclusive region provider`는 `PluginUISlot`이 아니다. contribution cache에 여러 item을 쌓고 priority로 정렬하는 모델이 아니라, 사용자가 선택한 영역마다 단일 provider를 고르는 별도 v2 개념이다.
+`Exclusive region provider`는 `PluginUISlot`이 아니다. contribution cache에 여러 item을 쌓고 priority로 정렬하는 모델이 아니라, 사용자가 선택한 영역마다 단일 provider를 고르는 별도 모델이다.
 
 ```swift
 enum PluginRegionID: String, Codable, CaseIterable {
@@ -546,22 +548,22 @@ enum PluginRegionID: String, Codable, CaseIterable {
 | Additive contribution (기본) | 컴포넌트를 *더함*, priority로 누적, core chrome 유지 | expanded notch, menubar, session.* |
 | **Exclusive region provider** | 영역의 점유물을 *하나의 provider가 교체*, 단일 승자 | collapsed notch 3영역 |
 
-기존 `NotchCharacterMode`(`hidden`/`random`/`specific`)가 이미 영역별 점유물 선택자다. 여기에 `plugin` 선택지를 더하면, 버디는 "기본 built-in region provider"가 되고 플러그인은 대체 provider로 경쟁한다.
+`NotchCompactRegionSelection`은 영역별로 `hidden` 또는 provider ID를 저장한다. 기본값은 세 영역 모두 `CompactAppearancePlugin`이며, 이 built-in plugin이 기존 `NotchCharacterMode`와 `notchCenterText` 설정을 읽어 좌우 버디와 중앙 텍스트 contribution을 만든다.
 
 **비주얼 경계 (3단계)** — 무엇으로 교체할 수 있는가:
 
 | 단계 | 교체 내용 | 가능 여부 |
 | :--- | :--- | :--- |
-| 선언형 교체 (v1.1) | 버디 대신 `metric`/`badge`/`text`/SF Symbol `icon` 하나를 배타적으로 렌더 | ✅ Surface Host 유지 |
+| 선언형 교체 (v1.x) | `metric`/`badge`/`text`/SF Symbol 또는 Host-known `buddy(kind)` 하나를 배타적으로 렌더 | ✅ Surface Host 유지 |
 | 리치 비주얼 교체 (v2) | 버디 같은 커스텀 스프라이트·캔버스·애니메이션 | ❌ 임의 View 주입 = "Declarative UI"·"Surface Host" 원칙 위반 → v2 에셋 팩 / 외부 런타임 |
 
-핵심 비대칭: 버디 자체가 커스텀 픽셀아트라 core는 그릴 수 있으나, 선언형 모델의 플러그인은 동등하게 그릴 수 없다. "버디만큼 리치한 교체"는 비주얼 capability(에셋 팩)가 생기는 v2 영역이다.
+`buddy(kind)`는 built-in plugin이 Host에 이미 포함된 `BuddyKind`만 선택하는 좁은 선언값이다. 실제 `CLIBuddyView`와 애니메이션은 Host가 렌더링한다. 새 스프라이트나 임의 View를 제공하는 "버디만큼 리치한 교체"는 비주얼 capability(에셋 팩)가 생기는 v2 영역이다.
 
 **안전 규칙 (이 모델 도입 시 준수):**
 
-1. **영역별 사용자 opt-in** — `NotchCharacterMode`에 `plugin` 선택지를 추가하는 방식. 플러그인이 영역을 몰래 점유하지 않으며, 사용자가 좌/중앙/우마다 명시적으로 선택한다(개인화 > 플러그인 원칙).
+1. **영역별 사용자 opt-in** — 사용자가 좌/중앙/우마다 `hidden` 또는 provider를 명시적으로 선택한다. 플러그인이 영역을 몰래 점유하지 않는다.
 2. **단일 승자(exclusive)** — 가산 리스트 슬롯과 의미론이 다르다.
-3. **Fail-safe fallback** — provider 실패·safemode·만료 시 영역은 기본값(버디 또는 hidden)으로 복귀한다. 기존 `expiresAt`·safemode 기계를 재사용한다.
+3. **No implicit fallback** — 일시적 실패에는 마지막 정상 캐시를 유지한다. provider disable·safemode·contribution 만료 시에는 다른 provider로 바꾸지 않고 영역을 비운다.
 4. **Cached rendering 유지** — 영역은 plugin의 cached contribution만 읽고 렌더 경로에서 plugin을 호출하지 않는다.
 
 ## 8. Utility Plugin 모델
@@ -1314,9 +1316,9 @@ struct PluginSlotView: View {
 | `menubar.menu` | `MenuBarMenu` |
 | `session.message` | `SessionMessageView` (sessionID 전달) |
 | `session.context-menu` | `SessionRowView`/`SessionHistoryWindow`의 `.contextMenu` |
-| v2 `PluginRegionID.notchCompact*` | `NotchCollapsedView` exclusive region provider. `PluginSlotView`가 아니다. |
+| v1.x `PluginRegionID.notchCompact*` | `NotchCollapsedView` exclusive region provider. `PluginSlotView`가 아니다. |
 
-가산 슬롯의 기존 뷰는 `PluginSlotView(...)` 한 줄을 추가하는 수준으로만 바뀐다. contribution이 없으면 `PluginSlotView`는 빈 뷰라 레이아웃 영향이 없다. compact region provider는 v2 별도 모델이므로 이 규칙에 포함하지 않는다.
+가산 슬롯의 기존 뷰는 `PluginSlotView(...)` 한 줄을 추가하는 수준으로만 바뀐다. contribution이 없으면 `PluginSlotView`는 빈 뷰라 레이아웃 영향이 없다. compact region provider는 별도 exclusive cache와 renderer를 사용하므로 이 규칙에 포함하지 않는다.
 
 ### 12.7. 테스트 seam
 

@@ -263,6 +263,14 @@ class AppState: ObservableObject {
             pluginHost.selectedSessionProvider = { [weak self] in
                 self?.displayedSessionID
             }
+            pluginHost.compactRegionSelectionProvider = {
+                let settings = SettingsStore.shared.settings
+                return [
+                    .notchCompactLeading: settings.notchCompactLeadingSelection.providerID,
+                    .notchCompactCenter: settings.notchCompactCenterSelection.providerID,
+                    .notchCompactTrailing: settings.notchCompactTrailingSelection.providerID
+                ].compactMapValues { $0 }
+            }
             // Active sessions: lets the host fan out settings.changed to session-scoped
             // slots so per-session contributions refresh when a plugin's settings change.
             pluginHost.activeSessionsProvider = { [weak self] in
@@ -507,6 +515,7 @@ class AppState: ObservableObject {
         settingsProvider: @escaping @MainActor @Sendable () -> AppSettings
     ) -> [any DevIslandPlugin & Sendable] {
         [
+            CompactAppearancePlugin(settingsProvider: settingsProvider),
             SessionTimerPlugin(),
             PomodoroPlugin(),
             OpenPeonPlugin(settingsProvider: settingsProvider),

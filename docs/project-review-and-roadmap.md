@@ -189,7 +189,7 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 - **브리지 성능**: TTY별 터미널 메타데이터 캐시로 훅당 osascript 호출 제거(A3). 측정 지표: PostToolUse 훅 왕복 시간 p95
 - **메인 스레드 정리**: 정책 평가 읽기 큐 이동(A1), `AppState` `@MainActor` 선언 및 이벤트 라우터 추출(A2)
 - **관측성**: `os.Logger` 전환(Q1) + 노치/설정에 브리지 상태 진단 뷰(최근 이벤트, 토큰 모드, transport)
-- **플러그인 확장**: v1.1 session surface 슬롯(`notch.session.row`, `session.context-menu`, `session.message`)과 `approval.decided`는 완료됨. 남은 후보는 `notch.expanded.details`, session detail timeline/summary, collapsed notch exclusive region provider(선언형 교체)
+- **플러그인 확장**: v1.1 session surface 슬롯(`notch.session.row`, `session.context-menu`, `session.message`), `approval.decided`, collapsed notch exclusive region provider는 완료됨. 남은 후보는 `notch.expanded.details`, session detail timeline/summary
 - **로컬라이제이션**: String Catalog 이전(Q2), 언어 추가 기반 마련
 
 ### 7.3 장기 — v1.0 "Trusted Release" 및 v2

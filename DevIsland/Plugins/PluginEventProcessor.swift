@@ -23,6 +23,7 @@ actor PluginEventProcessor {
     func process(
         _ queued: QueuedPluginEvent,
         selectedSessionID: String? = nil,
+        selectedCompactRegionProviders: [PluginRegionID: String]? = nil,
         settingsByPlugin: [String: [String: PluginSettingValue]] = [:],
         language: AppLanguage = .english
     ) async -> [PluginContributionSnapshot] {
@@ -55,6 +56,7 @@ actor PluginEventProcessor {
                         scopedFileBroker: scopedFileBroker,
                         settings: settings,
                         selectedSessionID: allowedSelectedSessionID,
+                        selectedCompactRegionProviders: selectedCompactRegionProviders,
                         language: language
                     )
                 }

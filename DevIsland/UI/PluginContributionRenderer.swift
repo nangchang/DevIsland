@@ -25,6 +25,85 @@ func pluginMenuTitle(pluginID: String, displayNames: [String: String]) -> String
 let pluginLabelMaxLength = 40
 let pluginValueMaxLength = 60
 let pluginMenuMaxLength = 40
+let compactRegionTextMaxLength = 20
+
+// MARK: - Compact Notch Exclusive Regions
+
+struct CompactNotchRegionView: View {
+    @ObservedObject private var pluginHost = AppState.shared.pluginHost
+    @ObservedObject private var settingsStore = SettingsStore.shared
+
+    let region: PluginRegionID
+    let buddyPulse: Bool
+
+    private var selectedPluginID: String? {
+        switch region {
+        case .notchCompactLeading:
+            return settingsStore.settings.notchCompactLeadingSelection.providerID
+        case .notchCompactCenter:
+            return settingsStore.settings.notchCompactCenterSelection.providerID
+        case .notchCompactTrailing:
+            return settingsStore.settings.notchCompactTrailingSelection.providerID
+        }
+    }
+
+    private var contribution: PluginCompactRegionContribution? {
+        guard let selectedPluginID else { return nil }
+        return pluginHost.compactRegionContributions[region]?.first {
+            $0.pluginID == selectedPluginID && isActiveCompactRegionContribution($0)
+        }
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if let contribution {
+            switch contribution.content {
+            case .text(let text):
+                Text(String(text.prefix(compactRegionTextMaxLength)))
+                    .foregroundColor(.white.opacity(0.6))
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+            case .metric(let label, let value):
+                HStack(spacing: 3) {
+                    if let label, !label.isEmpty {
+                        Text(String(label.prefix(8))).foregroundColor(.white.opacity(0.45))
+                    }
+                    Text(String(value.prefix(12))).foregroundColor(.white.opacity(0.8))
+                }
+                .font(.system(size: 10, weight: .semibold))
+                .lineLimit(1)
+            case .badge(let text, let tone):
+                Text(String(text.prefix(12)))
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(compactToneColor(tone))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(compactToneColor(tone).opacity(0.15))
+                    .clipShape(Capsule())
+                    .lineLimit(1)
+            case .symbol(let name, let tone):
+                if let name = validatedIcon(name) {
+                    Image(systemName: name)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(compactToneColor(tone))
+                }
+            case .buddy(let kind):
+                if let kind = BuddyKind(rawValue: kind) {
+                    CLIBuddyView(isActive: buddyPulse, kind: kind)
+                }
+            }
+        }
+    }
+}
+
+private func compactToneColor(_ tone: PluginUITone) -> Color {
+    switch tone {
+    case .default: return .white.opacity(0.7)
+    case .success: return .green
+    case .warning: return .orange
+    case .error: return .red
+    }
+}
 
 // MARK: - Notch Plugin Slot View
 

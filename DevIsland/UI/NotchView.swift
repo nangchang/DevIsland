@@ -2,55 +2,10 @@ import AppKit
 import SwiftUI
 import Combine
 
-// MARK: - Mascot State
-
-class MascotState: ObservableObject {
-    static let shared = MascotState()
-
-    @Published var leftMascot: BuddyKind = .claudeCode
-    @Published var rightMascot: BuddyKind = .gemini
-
-    func refresh(settings: AppSettings, forceRandomize: Bool = false) {
-        leftMascot = resolvedMascot(
-            current: forceRandomize ? nil : leftMascot,
-            mode: settings.notchLeftCharacterMode,
-            specific: settings.notchLeftCharacterKind,
-            randomCandidates: settings.notchLeftRandomCharacterKinds
-        )
-        rightMascot = resolvedMascot(
-            current: forceRandomize ? nil : rightMascot,
-            mode: settings.notchRightCharacterMode,
-            specific: settings.notchRightCharacterKind,
-            randomCandidates: settings.notchRightRandomCharacterKinds
-        )
-    }
-
-    private func resolvedMascot(
-        current: BuddyKind?,
-        mode: NotchCharacterMode,
-        specific: BuddyKind,
-        randomCandidates: Set<BuddyKind>
-    ) -> BuddyKind {
-        switch mode {
-        case .hidden:
-            return current ?? specific
-        case .specific:
-            return specific
-        case .random:
-            let candidates = randomCandidates.isEmpty ? Set(BuddyKind.defaultRandomCases) : randomCandidates
-            if let current, candidates.contains(current) {
-                return current
-            }
-            return candidates.randomElement() ?? .claudeCode
-        }
-    }
-}
-
 // MARK: - Collapsed View (dedicated collapsed window)
 
 struct NotchCollapsedView: View {
     @ObservedObject private var settingsStore = SettingsStore.shared
-    @ObservedObject private var mascotState = MascotState.shared
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @State private var buddyPulse = false
     @State private var notifPulse = false
@@ -71,6 +26,14 @@ struct NotchCollapsedView: View {
         }
     }
 
+    private var sideRegionWidth: CGFloat {
+        min(64, characterHorizontalInset * 2)
+    }
+
+    private var centerRegionWidth: CGFloat {
+        max(0, notchSize.width - sideRegionWidth * 2)
+    }
+
     var body: some View {
         HStack {
             Spacer()
@@ -80,29 +43,26 @@ struct NotchCollapsedView: View {
                     collapsedBackground
 
                     ZStack {
-                        if !settingsStore.settings.notchCenterText.isEmpty {
-                            Text(settingsStore.settings.notchCenterText)
-                                .foregroundColor(.white.opacity(0.6))
-                                .font(.system(size: 11, weight: .semibold))
-                        }
+                        CompactNotchRegionView(
+                            region: .notchCompactCenter,
+                            buddyPulse: buddyPulse
+                        )
+                        .frame(width: centerRegionWidth)
+                        .position(x: notchSize.width / 2, y: notchSize.height / 2)
 
-                        if settingsStore.settings.notchLeftCharacterMode != .hidden {
-                            CLIBuddyView(
-                                isActive: buddyPulse,
-                                kind: mascotState.leftMascot
-                            )
-                            .frame(width: 24, height: 24)
+                        CompactNotchRegionView(
+                            region: .notchCompactLeading,
+                            buddyPulse: buddyPulse
+                        )
+                            .frame(width: sideRegionWidth, height: 24)
                             .position(x: characterHorizontalInset, y: characterCenterY)
-                        }
 
-                        if settingsStore.settings.notchRightCharacterMode != .hidden {
-                            CLIBuddyView(
-                                isActive: buddyPulse,
-                                kind: mascotState.rightMascot
-                            )
-                            .frame(width: 24, height: 24)
+                        CompactNotchRegionView(
+                            region: .notchCompactTrailing,
+                            buddyPulse: buddyPulse
+                        )
+                            .frame(width: sideRegionWidth, height: 24)
                             .position(x: notchSize.width - characterHorizontalInset, y: characterCenterY)
-                        }
 
                         ZStack {
                             Circle()
@@ -137,10 +97,18 @@ struct NotchCollapsedView: View {
             withAnimation(.easeOut(duration: 1.2).repeatForever(autoreverses: false)) {
                 notifPulse = true
             }
-            mascotState.refresh(settings: settingsStore.settings, forceRandomize: true)
+            AppState.shared.pluginHost.setVisibleCompactRegions(
+                Set(PluginRegionID.allCases),
+                source: "notch.compact"
+            )
+            AppState.shared.pluginHost.compactRegionSelectionChanged()
+            AppState.shared.pluginHost.compactRegionsBecameVisible()
         }
-        .onReceive(settingsStore.$settings) { settings in
-            mascotState.refresh(settings: settings)
+        .onDisappear {
+            AppState.shared.pluginHost.setVisibleCompactRegions([], source: "notch.compact")
+        }
+        .onReceive(settingsStore.$settings) { _ in
+            AppState.shared.pluginHost.compactRegionSelectionChanged()
         }
     }
 

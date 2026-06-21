@@ -102,6 +102,35 @@ enum NotchCharacterMode: String, CaseIterable, Identifiable {
     }
 }
 
+struct NotchCompactRegionSelection: Equatable, Hashable {
+    static let hiddenValue = "hidden"
+
+    let providerID: String?
+
+    static let hidden = NotchCompactRegionSelection(providerID: nil)
+
+    static func provider(_ pluginID: String) -> NotchCompactRegionSelection {
+        NotchCompactRegionSelection(providerID: pluginID)
+    }
+
+    init(providerID: String?) {
+        let normalized = providerID.map(BuiltInPluginID.currentID(for:))
+        self.providerID = normalized?.isEmpty == false ? normalized : nil
+    }
+
+    init(persistedValue: String, default defaultValue: NotchCompactRegionSelection) {
+        if persistedValue == Self.hiddenValue {
+            self = .hidden
+        } else if persistedValue.isEmpty {
+            self = defaultValue
+        } else {
+            self = .provider(persistedValue)
+        }
+    }
+
+    var persistedValue: String { providerID ?? Self.hiddenValue }
+}
+
 enum NotchUnreadDotPosition: String, CaseIterable, Identifiable {
     case left
     case center
@@ -214,6 +243,9 @@ struct AppSettings: Equatable {
     var notchAutoCollapseDelay: NotchAutoCollapseDelay
     var notchCharacterHorizontalInset: Double
     var notchCharacterVerticalOffset: Double
+    var notchCompactLeadingSelection: NotchCompactRegionSelection
+    var notchCompactCenterSelection: NotchCompactRegionSelection
+    var notchCompactTrailingSelection: NotchCompactRegionSelection
     var notchLeftCharacterMode: NotchCharacterMode
     var notchLeftCharacterKind: BuddyKind
     var notchLeftRandomCharacterKinds: Set<BuddyKind>
@@ -306,6 +338,9 @@ struct AppSettings: Equatable {
         notchAutoCollapseDelay: .seconds5,
         notchCharacterHorizontalInset: 24,
         notchCharacterVerticalOffset: 4,
+        notchCompactLeadingSelection: .provider(BuiltInPluginID.compactAppearance),
+        notchCompactCenterSelection: .provider(BuiltInPluginID.compactAppearance),
+        notchCompactTrailingSelection: .provider(BuiltInPluginID.compactAppearance),
         notchLeftCharacterMode: .random,
         notchLeftCharacterKind: .claudeCode,
         notchLeftRandomCharacterKinds: Set(BuddyKind.defaultRandomCases),
@@ -394,6 +429,9 @@ final class SettingsStore: ObservableObject {
         static let notchAutoCollapseDelay = "notchAutoCollapseDelay"
         static let notchCharacterHorizontalInset = "notchCharacterHorizontalInset"
         static let notchCharacterVerticalOffset = "notchCharacterVerticalOffset"
+        static let notchCompactLeadingSelection = "notchCompactLeadingSelection"
+        static let notchCompactCenterSelection = "notchCompactCenterSelection"
+        static let notchCompactTrailingSelection = "notchCompactTrailingSelection"
         static let notchLeftCharacterMode = "notchLeftCharacterMode"
         static let notchLeftCharacterKind = "notchLeftCharacterKind"
         static let notchLeftRandomCharacterKinds = "notchLeftRandomCharacterKinds"
@@ -479,6 +517,9 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.notchAutoCollapseDelay.rawValue, forKey: DefaultsKey.notchAutoCollapseDelay)
         userDefaults.set(settings.notchCharacterHorizontalInset, forKey: DefaultsKey.notchCharacterHorizontalInset)
         userDefaults.set(settings.notchCharacterVerticalOffset, forKey: DefaultsKey.notchCharacterVerticalOffset)
+        userDefaults.set(settings.notchCompactLeadingSelection.persistedValue, forKey: DefaultsKey.notchCompactLeadingSelection)
+        userDefaults.set(settings.notchCompactCenterSelection.persistedValue, forKey: DefaultsKey.notchCompactCenterSelection)
+        userDefaults.set(settings.notchCompactTrailingSelection.persistedValue, forKey: DefaultsKey.notchCompactTrailingSelection)
         userDefaults.set(settings.notchLeftCharacterMode.rawValue, forKey: DefaultsKey.notchLeftCharacterMode)
         userDefaults.set(settings.notchLeftCharacterKind.rawValue, forKey: DefaultsKey.notchLeftCharacterKind)
         userDefaults.set(settings.notchLeftRandomCharacterKinds.map(\.rawValue).sorted(), forKey: DefaultsKey.notchLeftRandomCharacterKinds)
@@ -728,6 +769,21 @@ final class SettingsStore: ObservableObject {
                 default: defaults.notchCharacterVerticalOffset,
                 range: -8...12
             ),
+            notchCompactLeadingSelection: compactRegionSelection(
+                key: DefaultsKey.notchCompactLeadingSelection,
+                from: userDefaults,
+                default: defaults.notchCompactLeadingSelection
+            ),
+            notchCompactCenterSelection: compactRegionSelection(
+                key: DefaultsKey.notchCompactCenterSelection,
+                from: userDefaults,
+                default: defaults.notchCompactCenterSelection
+            ),
+            notchCompactTrailingSelection: compactRegionSelection(
+                key: DefaultsKey.notchCompactTrailingSelection,
+                from: userDefaults,
+                default: defaults.notchCompactTrailingSelection
+            ),
             notchLeftCharacterMode: enumValue(
                 NotchCharacterMode.self,
                 key: DefaultsKey.notchLeftCharacterMode,
@@ -873,6 +929,15 @@ final class SettingsStore: ObservableObject {
     private static func nonEmptyString(key: String, from userDefaults: UserDefaults, default defaultValue: String) -> String {
         guard let value = userDefaults.string(forKey: key), !value.isEmpty else { return defaultValue }
         return value
+    }
+
+    private static func compactRegionSelection(
+        key: String,
+        from userDefaults: UserDefaults,
+        default defaultValue: NotchCompactRegionSelection
+    ) -> NotchCompactRegionSelection {
+        guard let value = userDefaults.string(forKey: key) else { return defaultValue }
+        return NotchCompactRegionSelection(persistedValue: value, default: defaultValue)
     }
 
     private static func positiveInt(key: String, from userDefaults: UserDefaults, default defaultValue: Int) -> Int {

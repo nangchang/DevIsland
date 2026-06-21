@@ -11,6 +11,42 @@ enum PluginUISlot: String, Codable, CaseIterable, Hashable {
     case sessionMessage = "session.message"
 }
 
+enum PluginRegionID: String, Codable, CaseIterable, Hashable {
+    case notchCompactLeading = "notch.compact.leading"
+    case notchCompactCenter = "notch.compact.center"
+    case notchCompactTrailing = "notch.compact.trailing"
+}
+
+struct PluginCompactRegionContext: Equatable {
+    let region: PluginRegionID
+    let timestamp: Date
+    let language: AppLanguage
+}
+
+struct PluginCompactRegionContribution: Codable, Equatable {
+    let pluginID: String
+    let region: PluginRegionID
+    let expiresAt: Date?
+    let content: PluginCompactRegionContent
+}
+
+enum PluginCompactRegionContent: Codable, Equatable {
+    case text(String)
+    case metric(label: String?, value: String)
+    case badge(String, tone: PluginUITone)
+    case symbol(name: String, tone: PluginUITone)
+    /// Host-known buddy identifier. The host owns sprite rendering and animation.
+    case buddy(kind: String)
+}
+
+func isActiveCompactRegionContribution(
+    _ contribution: PluginCompactRegionContribution,
+    now: Date = Date()
+) -> Bool {
+    guard let expiresAt = contribution.expiresAt else { return true }
+    return expiresAt > now
+}
+
 struct PluginUIContext: Equatable {
     let slot: PluginUISlot
     let timestamp: Date
@@ -42,6 +78,15 @@ struct PluginUIContext: Equatable {
 
 struct PluginSurfaceState: Codable, Equatable {
     let visibleSurfaces: Set<PluginUISlot>
+    let visibleRegions: Set<PluginRegionID>
+
+    init(
+        visibleSurfaces: Set<PluginUISlot>,
+        visibleRegions: Set<PluginRegionID> = []
+    ) {
+        self.visibleSurfaces = visibleSurfaces
+        self.visibleRegions = visibleRegions
+    }
 }
 
 struct PluginUIContribution: Codable, Equatable {
@@ -110,6 +155,8 @@ struct PluginContributionSnapshot: Equatable {
     let sessionID: String?
     let evaluatedSlots: Set<PluginUISlot>
     let contributions: [PluginUISlot: PluginUIContribution]
+    let evaluatedRegions: Set<PluginRegionID>
+    let regionContributions: [PluginRegionID: PluginCompactRegionContribution]
     let effects: [PluginEffect]
     let failure: PluginFailure?
     let timestamp: Date
