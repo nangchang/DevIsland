@@ -102,6 +102,7 @@ struct NotchCollapsedView: View {
                 source: "notch.compact"
             )
             AppState.shared.pluginHost.compactRegionSelectionChanged()
+            AppState.shared.pluginHost.compactRegionsBecameVisible()
         }
         .onDisappear {
             AppState.shared.pluginHost.setVisibleCompactRegions([], source: "notch.compact")

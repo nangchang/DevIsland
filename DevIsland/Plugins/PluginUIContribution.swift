@@ -43,7 +43,8 @@ func isActiveCompactRegionContribution(
     _ contribution: PluginCompactRegionContribution,
     now: Date = Date()
 ) -> Bool {
-    contribution.expiresAt == nil || contribution.expiresAt! > now
+    guard let expiresAt = contribution.expiresAt else { return true }
+    return expiresAt > now
 }
 
 struct PluginUIContext: Equatable {

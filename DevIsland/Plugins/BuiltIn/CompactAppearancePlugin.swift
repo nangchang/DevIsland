@@ -17,6 +17,7 @@ final class CompactAppearancePlugin: DevIslandPlugin, @unchecked Sendable {
         activationEvents: [
             PluginEventKind.pluginStarted.rawValue,
             PluginEventKind.appStarted.rawValue,
+            PluginEventKind.compactRegionShown.rawValue,
             PluginEventKind.settingsChanged.rawValue,
             PluginEventKind.languageChanged.rawValue
         ],
@@ -28,24 +29,30 @@ final class CompactAppearancePlugin: DevIslandPlugin, @unchecked Sendable {
     )
 
     private let settingsProvider: @MainActor @Sendable () -> AppSettings
+    private let randomBuddyProvider: (Set<BuddyKind>) -> BuddyKind?
     private var settings = AppSettings.defaults
     private var leftBuddy: BuddyKind?
     private var rightBuddy: BuddyKind?
 
-    init(settingsProvider: @escaping @MainActor @Sendable () -> AppSettings) {
+    init(
+        settingsProvider: @escaping @MainActor @Sendable () -> AppSettings,
+        randomBuddyProvider: @escaping (Set<BuddyKind>) -> BuddyKind? = { $0.randomElement() }
+    ) {
         self.settingsProvider = settingsProvider
+        self.randomBuddyProvider = randomBuddyProvider
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
         let nextSettings = await settingsProvider()
+        let forceRandomize = event.kind == .compactRegionShown
         leftBuddy = resolvedBuddy(
-            current: leftBuddy,
+            current: forceRandomize ? nil : leftBuddy,
             mode: nextSettings.notchLeftCharacterMode,
             specific: nextSettings.notchLeftCharacterKind,
             randomCandidates: nextSettings.notchLeftRandomCharacterKinds
         )
         rightBuddy = resolvedBuddy(
-            current: rightBuddy,
+            current: forceRandomize ? nil : rightBuddy,
             mode: nextSettings.notchRightCharacterMode,
             specific: nextSettings.notchRightCharacterKind,
             randomCandidates: nextSettings.notchRightRandomCharacterKinds
@@ -105,7 +112,7 @@ final class CompactAppearancePlugin: DevIslandPlugin, @unchecked Sendable {
             if let current, candidates.contains(current) {
                 return current
             }
-            return candidates.randomElement() ?? .claudeCode
+            return randomBuddyProvider(candidates) ?? .claudeCode
         }
     }
 }

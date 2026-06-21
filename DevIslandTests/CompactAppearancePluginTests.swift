@@ -49,6 +49,32 @@ final class CompactAppearancePluginTests: XCTestCase {
         }
     }
 
+    func testCompactRegionShownForcesRandomBuddyRefresh() async throws {
+        let settings = CompactSettingsBox(AppSettings.defaults)
+        settings.value.notchLeftCharacterMode = .specific
+        settings.value.notchLeftCharacterKind = .codex
+        let plugin = CompactAppearancePlugin(
+            settingsProvider: { settings.value },
+            randomBuddyProvider: { candidates in
+                candidates.contains(.gemini) ? .gemini : candidates.first
+            }
+        )
+        _ = try await plugin.onEvent(event(.pluginStarted), context: context(pluginID: plugin.manifest.id))
+
+        settings.value.notchLeftCharacterMode = .random
+        settings.value.notchLeftRandomCharacterKinds = [.codex, .gemini]
+        _ = try await plugin.onEvent(
+            event(.compactRegionShown),
+            context: context(pluginID: plugin.manifest.id)
+        )
+
+        let leading = try XCTUnwrap(try plugin.makeCompactRegionContribution(
+            for: .notchCompactLeading,
+            context: regionContext(.notchCompactLeading)
+        ))
+        XCTAssertEqual(leading.content, .buddy(kind: BuddyKind.gemini.rawValue))
+    }
+
     private func event(_ kind: PluginEventKind) -> PluginEvent {
         PluginEvent(id: UUID(), kind: kind, timestamp: Date())
     }
@@ -59,5 +85,14 @@ final class CompactAppearancePluginTests: XCTestCase {
 
     private func regionContext(_ region: PluginRegionID) -> PluginCompactRegionContext {
         PluginCompactRegionContext(region: region, timestamp: Date(), language: .english)
+    }
+}
+
+@MainActor
+private final class CompactSettingsBox {
+    var value: AppSettings
+
+    init(_ value: AppSettings) {
+        self.value = value
     }
 }

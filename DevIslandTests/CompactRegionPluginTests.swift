@@ -35,6 +35,20 @@ final class CompactRegionPluginTests: XCTestCase {
         XCTAssertTrue(host.compactRegionContributions.isEmpty)
     }
 
+    func testVisibilityEventIsSentOnlyToSelectedProvider() async {
+        let selected = RegionTestPlugin(id: "test.region.visible")
+        let other = RegionTestPlugin(id: "test.region.not-visible")
+        let host = PluginHost()
+        host.compactRegionSelectionProvider = { [.notchCompactCenter: selected.manifest.id] }
+        host.register([selected, other])
+
+        host.compactRegionsBecameVisible()
+        await host.waitUntilIdle()
+
+        XCTAssertEqual(selected.receivedKinds, [.compactRegionShown])
+        XCTAssertTrue(other.receivedKinds.isEmpty)
+    }
+
     func testTransientFailureKeepsLastKnownCompactRegionContribution() async {
         let plugin = RegionTestPlugin(id: "test.region.failure")
         let host = PluginHost()
@@ -75,6 +89,7 @@ final class CompactRegionPluginTests: XCTestCase {
 private final class RegionTestPlugin: DevIslandPlugin, @unchecked Sendable {
     let manifest: PluginManifest
     var shouldFail = false
+    private(set) var receivedKinds: [PluginEventKind] = []
 
     init(id: String, permissions: Set<PluginPermission> = [.showCompactRegion]) {
         manifest = PluginManifest(
@@ -88,12 +103,14 @@ private final class RegionTestPlugin: DevIslandPlugin, @unchecked Sendable {
             regions: [.notchCompactCenter],
             activationEvents: [
                 PluginEventKind.pluginStarted.rawValue,
+                PluginEventKind.compactRegionShown.rawValue,
                 PluginEventKind.settingsChanged.rawValue
             ]
         )
     }
 
     func onEvent(_ event: PluginEvent, context: PluginContext) async throws -> [PluginEffect] {
+        receivedKinds.append(event.kind)
         if shouldFail {
             throw NSError(domain: "RegionTestPlugin", code: 1)
         }

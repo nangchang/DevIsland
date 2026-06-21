@@ -221,6 +221,17 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    /// Notifies only the providers currently selected for visible compact regions. This is
+    /// separate from settings changes so appearance plugins can refresh on each presentation
+    /// without treating unrelated Island setting edits as a new appearance cycle.
+    func compactRegionsBecameVisible() {
+        guard isEnabled else { return }
+        let selectedPluginIDs = Set((compactRegionSelectionProvider?() ?? [:]).values)
+        for pluginID in selectedPluginIDs where runners[pluginID] != nil {
+            enqueue(eventFactory.makeLifecycleEvent(kind: .compactRegionShown), restrictedTo: pluginID)
+        }
+    }
+
     /// Resolves persisted setting values against each plugin's schema on the MainActor before
     /// the async hop, mirroring how `selectedSessionID` is pulled. Every schema key is present
     /// in the result (stored value validated, or the descriptor default), so plugins read
