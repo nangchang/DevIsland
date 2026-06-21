@@ -37,6 +37,9 @@ These settings are managed in `SettingsStore` and applied in `NotchView` / `Notc
 | `expandedNotchWidth` | Double | `692` | `610...1200` | Width of the expanded dashboard window. |
 | `expandedNotchHeight` | Double | `300` | `240...720` | Height of the expanded dashboard window. |
 | `notchCharacterVerticalOffset` | Double | `4` | `-8...12` | Vertical alignment of buddies in the compact Island. |
+| `notchCompactLeadingSelection` | Region selection | `Compact Appearance` | `hidden` or registered provider | Exclusive provider for the compact Island's left region. |
+| `notchCompactCenterSelection` | Region selection | `Compact Appearance` | `hidden` or registered provider | Exclusive provider for the compact Island's center region. |
+| `notchCompactTrailingSelection` | Region selection | `Compact Appearance` | `hidden` or registered provider | Exclusive provider for the compact Island's right region. |
 
 ## Behavior Settings
 
@@ -51,6 +54,9 @@ These settings are managed in `SettingsStore` and applied in `NotchView` / `Notc
 - `NotchView` uses `settings.notchPanelOpacity` to fill the background shape.
 - Shadows are implemented as a downward-offset SwiftUI blur layer behind the main shape to avoid native `NSPanel` shadow artifacts.
 - `NotchLayout` provides dynamic size calculations based on current settings for both window frames and hit testing.
+- Compact left/center/right content comes from one user-selected built-in provider per region. The default `CompactAppearancePlugin` owns the configured buddies and center text.
+- The Host keeps the compact chrome and unread/pending dot. Plugins return cached declarative content only; they never render during the SwiftUI body pass.
+- A transient provider failure keeps the last valid region cache. Disabling, safemode, expiration, or selecting `hidden` leaves the region empty rather than selecting an implicit fallback.
 
 ### Auto-Collapse Logic
 - Managed in `AppState` using a `notificationTimer`.

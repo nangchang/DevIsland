@@ -23,7 +23,7 @@
 - plugin network access, process execution, raw payload access
 - approval decision 변경, approval prompt interception
 - session row/context menu/message window contribution
-- collapsed notch contribution
+- collapsed notch additive contribution (exclusive built-in regions were added later in v1.x)
 - plugin-supplied arbitrary SwiftUI settings UI (v1.3의 declarative settings schema는 host-owned UI로 구현 완료)
 
 위 항목은 v1.1 또는 v2에서 별도 설계 후 진행한다.
@@ -73,10 +73,11 @@
   - v1.3 b. Scoped file/audio capability foundation — 완료. Host가 OpenPeon/CESP 도메인 포맷을 알지 않아도 built-in plugin이 제한된 로컬 파일을 읽고 오디오 재생을 요청할 수 있도록 `readScopedFiles`/`playScopedAudio`, `PluginScopedFileBroker`, generic `audio.playFile` effect를 추가했다. Broker는 plugin ID별 scope ID, 상대 경로 정규화, symlink 탈출 차단, 확장자/파일 크기 제한을 강제한다. `DevIslandPlugin.onEvent`를 async로 열고 `.readScopedFiles` 플러그인에 `PluginContext.scopedFiles`를 주입해 plugin이 broker에 host-mediated file read를 요청할 수 있게 했다. OpenPeon runtime hook playback은 `audio.playFile`로 이전했고, CESP pack scan/validation의 plugin-owned file read 전환은 v1.3 c에서 완료했다.
   - v1.3 a. Plugin Settings Schema — 완료. 플러그인이 선언형 설정 schema(`PluginSettingDescriptor`: toggle/picker/stepper/slider/text + `validated(_:)` 검증·clamp·truncate)를 `DevIslandPlugin.settingsSchema`로 노출하고, host가 렌더·검증·저장·주입을 모두 담당한다. 저장은 `PluginSettingsStore`가 `pluginSettings.<id>` UserDefaults namespace에 JSON으로 격리(core/bridge/approval defaults 불가침; plugin SQLite storage는 effect 경유 비동기라 동기 설정 UI에 부적합해 미사용). 주입은 `selectedSessionID` 패턴 재사용 — `PluginRunner`가 `manifest`처럼 `settingsSchema`를 `nonisolated`로 캐싱하고, `PluginHost.drainEvents`가 MainActor에서 `resolveSettings`(저장값을 schema에 `validated` 적용, 누락 키는 default)로 `[pluginID: [key: value]]`를 만들어 `PluginEventProcessor.process` → `PluginRunner.handle` → `PluginContext.settings`(읽기 전용)로 흘린다. 변경 통지는 `PluginHost.pluginSettingChanged(pluginID:)`가 `settings.changed`를 해당 plugin에만 `restrictedTo`로 발행(자기 설정에만 반응); drain 시 최신 값을 재해석하므로 같은 이벤트에서 새 값이 context로 들어가 contribution이 재계산된다. UI는 host-owned `PluginSettingsView`의 `PluginSettingControlView`가 schema를 SwiftUI 컨트롤로 렌더(plugin은 SwiftUI 미생성 — Declarative UI). 데모: `PomodoroPlugin`이 `workMinutes`(stepper)·`autoRestart`(toggle)를 노출하고 `onEvent`에서 `context.settings`로 작업 길이/자동재시작을 적용(running 중 변경은 다음 블록부터 반영).
   - v1.x Plugin Contribution i18n — 완료. `PluginContext.language`/`PluginUIContext.language`, `PluginLocalizedString`, `language.changed` 이벤트를 추가해 built-in plugin 표시 문자열과 manifest/settings label을 앱 언어 설정에 맞춰 재계산한다. SessionTimer, Pomodoro, Caffeine, SessionStats, SessionActions, OpenPeon 문자열이 plugin-owned i18n으로 전환됐다.
+  - v1.x Compact Notch Regions — 완료. collapsed notch 좌·중앙·우를 `PluginRegionID` 기반 exclusive region으로 열고, 별도 `showCompactRegion` 권한과 provider 선택 설정을 추가했다. 기존 버디·중앙 텍스트는 `CompactAppearancePlugin`으로 이전했으며 Host는 chrome·unread dot·제한된 선언형 renderer만 소유한다. 일시적 실패에는 마지막 정상 캐시를 유지하고 disable/safemode/만료 시 영역을 비운다.
 - 마지막 검증:
   - 플러그인 관련 테스트 스위트 통과 (2026-06-14, v1.3 a 기준 — 워크트리 빌드 성공, 전체 테스트 0 실패. `PluginSettingValue` Codable round-trip, `validated` kind별 fallback/clamp/truncate, store persistence/isolation/reset, `settings.changed` restrictedTo, Pomodoro workMinutes/autoRestart 및 host end-to-end 반영 테스트 추가)
 - 다음 단계 (v1.3 + i18n 완료):
-  - v1 built-in plugin surface는 현재 `notch.expanded.activity`, `menubar.menu`, `notch.session.row`, `session.context-menu`, `session.message`가 열려 있다. `notch.expanded.details`, session detail timeline/summary, collapsed notch exclusive region은 아직 보류다.
+  - v1 built-in plugin surface는 현재 `notch.expanded.activity`, `menubar.menu`, `notch.session.row`, `session.context-menu`, `session.message`와 collapsed notch exclusive regions가 열려 있다. `notch.expanded.details`, session detail timeline/summary는 아직 보류다.
   - Migration PR M5 (Update status contribution)는 낮은 우선순위 — v2 network/runtime 설계 후로 보류 가능
 
 
