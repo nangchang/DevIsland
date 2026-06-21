@@ -2316,6 +2316,28 @@ final class AppStateTests: XCTestCase {
 
         XCTAssertEqual(plugin.receivedKinds, [.pluginStarted, .appStarted])
     }
+
+    /// Mirrors AppDelegate launch ordering: compact visibility must be observed only after
+    /// plugins have restored state in `plugin.started` and handled `app.started`.
+    @MainActor
+    func testCompactVisibilityRefreshFollowsPluginLifecycle() async {
+        let plugin = LifecycleRecordingPlugin(id: "com.devisland.test.compact-launch-order")
+        appState.pluginHost.register([plugin])
+        appState.pluginHost.compactRegionSelectionProvider = {
+            [.notchCompactCenter: plugin.manifest.id]
+        }
+
+        appState.startPluginPlatform()
+        appState.pluginHost.compactRegionsBecameVisible()
+        await appState.pluginHost.waitUntilIdle()
+        appState.stopPluginPlatform()
+
+        XCTAssertEqual(plugin.receivedKinds, [
+            .pluginStarted,
+            .appStarted,
+            .compactRegionShown
+        ])
+    }
 }
 
 private final class LifecycleRecordingPlugin: DevIslandPlugin, @unchecked Sendable {
@@ -2332,11 +2354,13 @@ private final class LifecycleRecordingPlugin: DevIslandPlugin, @unchecked Sendab
             version: "1.0.0",
             apiVersion: 1,
             kind: .utility,
-            permissions: [],
+            permissions: [.showCompactRegion],
             surfaces: [],
+            regions: [.notchCompactCenter],
             activationEvents: [
                 PluginEventKind.pluginStarted.rawValue,
-                PluginEventKind.appStarted.rawValue
+                PluginEventKind.appStarted.rawValue,
+                PluginEventKind.compactRegionShown.rawValue
             ]
         )
     }

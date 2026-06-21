@@ -885,9 +885,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let delay: TimeInterval = others.isEmpty ? 0 : 0.3
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             _ = AppState.shared
+            AppState.shared.startPluginPlatform()
             self.notchWindowController = NotchWindowController()
             self.notchWindowController?.showWindow(nil)
-            AppState.shared.startPluginPlatform()
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
