@@ -53,6 +53,36 @@ current_tty() {
   done
 }
 
+process_chain_contains_wezterm() {
+  local pid="$1"
+  local pname parent depth
+  depth=0
+  while [ -n "$pid" ] && [ "$pid" != "0" ] && [ "$depth" -lt 8 ]; do
+    pname=$(ps -o comm= -p "$pid" 2>/dev/null | tr -d '\n')
+    case "$pname" in
+      *WezTerm.app/Contents/MacOS/*|*wezterm-gui*|*wezterm*)
+        return 0
+        ;;
+    esac
+    parent=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [ -z "$parent" ] || [ "$parent" = "$pid" ] && break
+    pid="$parent"
+    depth=$((depth + 1))
+  done
+  return 1
+}
+
+tmux_client_pid_for_tty() {
+  local target_tty="$1"
+  local client_tty client_pid
+  while IFS='|' read -r client_tty client_pid; do
+    if [ "$client_tty" = "$target_tty" ]; then
+      printf '%s\n' "$client_pid"
+      return
+    fi
+  done < <(tmux list-clients -F '#{client_tty}|#{client_pid}' 2>/dev/null)
+}
+
 CURRENT_TTY=$(current_tty)
 CURRENT_TTY_NAME="${CURRENT_TTY##*/}"
 
@@ -187,6 +217,22 @@ if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "WarpTermi
   if osascript -e 'return (application "Warp" is running)' 2>/dev/null | grep -q "true"; then
     TERM_APP="Warp"
     TERM_TITLE="Warp"
+  fi
+fi
+
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ "$TERM_PROGRAM" = "WezTerm" ] || [ -n "${WEZTERM_PANE:-}" ]; }; then
+  TERM_APP="WezTerm"
+  _dir=$(basename "$PWD" 2>/dev/null)
+  TERM_TITLE="${_dir:-WezTerm}"
+  TERM_WINDOW_ID="${WEZTERM_PANE:-}"
+fi
+
+if [ -z "$TERM_APP" ] && [ -n "$TMUX" ] && [ "$_TMUX_FALLBACK" = "1" ] && [ -n "$CURRENT_TTY" ]; then
+  _tmux_client_pid=$(tmux_client_pid_for_tty "$CURRENT_TTY")
+  if [ -n "$_tmux_client_pid" ] && process_chain_contains_wezterm "$_tmux_client_pid"; then
+    TERM_APP="WezTerm"
+    _dir=$(basename "$PWD" 2>/dev/null)
+    TERM_TITLE="${_dir:-WezTerm}"
   fi
 fi
 
