@@ -72,6 +72,20 @@ struct ActiveSession: Identifiable, Equatable {
 }
 
 extension ActiveSession {
+    /// Shell-escaped command to start a fresh session of the given provider kind in this
+    /// workspace. Unlike `resumeCommand`, no `--resume` flag is included.
+    func newSessionCommand(for provider: BuddyKind) -> String {
+        let executable: String?
+        switch provider {
+        case .claudeCode:  executable = "claude"
+        case .codex:       executable = "codex"
+        case .gemini:      executable = "gemini"
+        case .antigravity: executable = "agy"
+        case .island:      executable = nil
+        }
+        return Self.makeResumeCommand(executable: executable, workspaceRoot: workspaceRoot)
+    }
+
     /// Host-generated, shell-escaped command to resume this session. Shared by the notch UI
     /// and the plugin `session.copyResumeCommand` host command so the plugin never builds
     /// shell strings itself (the host owns sanitization). Empty string means "nothing to copy"
@@ -121,5 +135,18 @@ extension ClosedSessionRecord {
         case .antigravity: return ActiveSession.makeResumeCommand(executable: "agy", workspaceRoot: workspaceRoot)
         case .any:         return ActiveSession.makeResumeCommand(workspaceRoot: workspaceRoot)
         }
+    }
+
+    /// Shell-escaped command to start a fresh session of the given provider in this workspace.
+    func newSessionCommand(for provider: ProviderKind) -> String {
+        let executable: String?
+        switch provider {
+        case .claude:      executable = "claude"
+        case .codex:       executable = "codex"
+        case .gemini:      executable = "gemini"
+        case .antigravity: executable = "agy"
+        case .any:         executable = nil
+        }
+        return ActiveSession.makeResumeCommand(executable: executable, workspaceRoot: workspaceRoot)
     }
 }

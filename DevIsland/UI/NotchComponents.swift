@@ -433,6 +433,10 @@ struct SessionRowView: View {
         let name = appName ?? autoTerminalName
         TerminalFocuser.openNewWindow(appName: name, command: resumeCommand)
     }
+
+    private func openNewSession(provider: BuddyKind) {
+        TerminalFocuser.openNewWindow(appName: autoTerminalName, command: session.newSessionCommand(for: provider))
+    }
     private var statusLabel: String? {
         switch session.status {
         case .pending:       return l10n.statusPending
@@ -706,10 +710,27 @@ struct SessionRowView: View {
 
         openInTerminalMenu
 
+        if let root = session.workspaceRoot, !root.isEmpty {
+            newSessionMenu
+        }
+
         // "Copy Resume Command" is contributed by SessionActionsPlugin via the
         // session.copyResumeCommand host command (rendered below), so the core item was
         // removed to avoid a duplicate entry. Disabling the plugin removes this action.
         PluginSessionMenuItemsView(contributions: contextMenuContributions)
+    }
+
+    @ViewBuilder
+    private var newSessionMenu: some View {
+        Menu {
+            ForEach(BuddyKind.defaultRandomCases) { provider in
+                Button { openNewSession(provider: provider) } label: {
+                    Label(provider.label, systemImage: "terminal")
+                }
+            }
+        } label: {
+            Label(l10n.menuStartNewSession, systemImage: "plus.square.on.square")
+        }
     }
 
     @ViewBuilder
