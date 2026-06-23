@@ -98,6 +98,12 @@ VS Code and Claude Desktop sessions are opt-in (`processVSCodeEnabled`, `process
 - Integrated terminal: `TERM_PROGRAM=vscode` — this is the official VS Code standard and applies to all variants (Insiders, VSCodium). No app-running check needed.
 - Extension host (no TTY): `VSCODE_PID` / `VSCODE_IPC_HOOK` / `VSCODE_IPC_HOOK_CLI` present → verify with `osascript -e 'return application id "com.microsoft.VSCode" is running'`.
 
+### WezTerm detection (bridge)
+
+- Plain WezTerm sessions are detected from `TERM_PROGRAM=WezTerm` or `WEZTERM_PANE`.
+- Inside tmux, WezTerm may not preserve `TERM_PROGRAM` or `WEZTERM_PANE`; the bridge uses tmux `client_tty` and the tmux client process parent chain to identify WezTerm without relying on a global “WezTerm is running” check.
+- WezTerm detection is used only to decide whether the hook source is a terminal and to label the session. Exact WezTerm pane focusing is not part of this bridge detection path.
+
 ### Claude Desktop detection (bridge)
 
 Claude Desktop has no distinguishing environment variable. Detection walks the parent process chain (up to 5 levels) looking for a process whose `comm` path matches `Claude\.app/Contents/MacOS/Claude$`.

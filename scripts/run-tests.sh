@@ -15,6 +15,12 @@ echo "🏝️  Running DevIsland Unit Tests (Isolated Mode)..."
 
 cd "$ROOT_DIR"
 
+export PYTHONDONTWRITEBYTECODE=1
+
+echo "Running bridge script tests..."
+python3 scripts/test_devisland_bridge.py
+python3 scripts/test_devisland_bridge_shell.py
+
 # 1. Ensure project is generated
 xcodegen generate
 
