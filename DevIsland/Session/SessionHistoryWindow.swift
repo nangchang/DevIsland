@@ -235,7 +235,7 @@ struct SessionHistoryWindowView: View {
                     Label(l10n.menuOpenInTerminal, systemImage: "terminal")
                 }
 
-                if record.workspaceRoot != nil {
+                if let root = record.workspaceRoot, !root.isEmpty {
                     let providers: [(ProviderKind, String)] = [
                         (.claude, "Claude"), (.codex, "Codex"),
                         (.gemini, "Gemini"), (.antigravity, "Antigravity"),
