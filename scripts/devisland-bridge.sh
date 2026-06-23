@@ -65,7 +65,7 @@ process_chain_contains_wezterm() {
         ;;
     esac
     parent=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
-    [ -z "$parent" ] || [ "$parent" = "$pid" ] && break
+    if [ -z "$parent" ] || [ "$parent" = "$pid" ]; then break; fi
     pid="$parent"
     depth=$((depth + 1))
   done
@@ -233,6 +233,7 @@ if [ -z "$TERM_APP" ] && [ -n "$TMUX" ] && [ "$_TMUX_FALLBACK" = "1" ] && [ -n "
     TERM_APP="WezTerm"
     _dir=$(basename "$PWD" 2>/dev/null)
     TERM_TITLE="${_dir:-WezTerm}"
+    # TERM_WINDOW_ID: tmux 내부에서는 WEZTERM_PANE이 전달되지 않으므로 미설정
   fi
 fi
 

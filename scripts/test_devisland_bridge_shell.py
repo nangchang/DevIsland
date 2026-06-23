@@ -34,7 +34,7 @@ class BridgeShellTest(unittest.TestCase):
             #!/bin/sh
             cat > /dev/null
             printf '{{"TERM_APP":"%s","TERM_TITLE":"%s","TERM_TTY":"%s","TERM_WINDOW_ID":"%s","TERM_TMUX_PANE":"%s","TERM_TMUX_SOCKET":"%s","TERM_TMUX_CLIENT":"%s"}}\\n' \\
-              "$TERM_APP" "$TERM_TITLE" "$TERM_TTY" "$TERM_WINDOW_ID" "$TERM_TMUX_PANE" "$TERM_TMUX_SOCKET" "$TERM_TMUX_CLIENT" > {capture_path}
+              "$TERM_APP" "$TERM_TITLE" "$TERM_TTY" "$TERM_WINDOW_ID" "$TERM_TMUX_PANE" "$TERM_TMUX_SOCKET" "$TERM_TMUX_CLIENT" > "{capture_path}"
             printf '{{}}\\n'
             """
             fake_bins = {**fake_bins, "python3": textwrap.dedent(fake_python)}
