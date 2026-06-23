@@ -190,6 +190,23 @@ if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "WarpTermi
   fi
 fi
 
+# WezTerm: TERM_PROGRAM=WezTerm (직접) 또는 WEZTERM_PANE/WEZTERM_UNIX_SOCKET (plain shell)
+# tmux fallback: outer TTY 프로세스 목록에서 wezterm 프로세스 확인
+_is_wezterm=0
+if [ "$TERM_PROGRAM" = "WezTerm" ] || [ -n "${WEZTERM_PANE:-}" ] || [ -n "${WEZTERM_UNIX_SOCKET:-}" ]; then
+  _is_wezterm=1
+elif [ "$_TMUX_FALLBACK" = "1" ] && [ -n "$CURRENT_TTY_NAME" ]; then
+  if ps -o comm= -t "$CURRENT_TTY_NAME" 2>/dev/null | grep -qi "wezterm"; then
+    _is_wezterm=1
+  fi
+fi
+if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$_is_wezterm" = "1" ]; then
+  if osascript -e 'return (application "WezTerm" is running)' 2>/dev/null | grep -q "true"; then
+    TERM_APP="WezTerm"
+    TERM_TITLE="WezTerm"
+  fi
+fi
+
 # VS Code integrated terminal (TERM_PROGRAM=vscode, has TTY)
 # TERM_PROGRAM=vscode is set by all VS Code variants (Insiders, VSCodium, etc.) — no app check needed
 if [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "vscode" ]; then
