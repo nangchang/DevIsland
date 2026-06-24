@@ -525,7 +525,7 @@ struct NotchView: View {
                         .padding(.horizontal, 20)
                     }
 
-                    if let suggestedTool = state.alwaysAllowSuggestion, state.hasResponseHandler {
+                    if let suggestedTool = state.alwaysAllowSuggestion, state.hasResponseHandler, state.currentClaudeQuestion == nil {
                         Button(action: { state.approve(globalAlways: true) }) {
                             HStack(spacing: 6) {
                                 Image(systemName: "wand.and.stars")
