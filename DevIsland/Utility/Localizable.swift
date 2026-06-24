@@ -203,10 +203,26 @@ extension L10n {
     var tabProviders:        String { s("Providers",    "공급자") }
     var tabBridge:           String { s("Bridge / IPC", "브리지 / IPC") }
     var tabExperimental:     String { s("Experimental", "실험적") }
+    var tabDiagnostics:      String { s("Diagnostics",  "진단") }
     var tabIntegrations:     String { s("Integrations", "통합") }
     var tabExtras:           String { s("Extras",       "부가기능") }
     var tabAdvanced:         String { s("Advanced",     "고급") }
     var tabPlugins:          String { s("Plugins",      "플러그인") }
+
+    // Diagnostics pane
+    var secBridgeScript:     String { s("Bridge Script",              "브리지 스크립트") }
+    var lblBridgeInstallPath: String { s("Install path",             "설치 경로") }
+    var lblBridgeFileFound:  String { s("Installed",                  "설치됨") }
+    var lblBridgeFileNotFound: String { s("Not found",               "없음") }
+    var secHookStatus:       String { s("Hook install status",        "훅 설치 상태") }
+    var lblHookInstalled:    String { s("Installed",                  "설치됨") }
+    var lblHookNotInstalled: String { s("Not installed",              "설치 안 됨") }
+    var lblHookFileMissing:  String { s("File missing",               "파일 없음") }
+    var secLastEvent:        String { s("Last event received",        "마지막 이벤트 수신") }
+    var lblNoEventYet:       String { s("None",                       "없음") }
+    var secBridgeLog:        String { s("Bridge log (last 20 lines)", "브리지 로그 (최근 20줄)") }
+    var secBridgeLogEmpty:   String { s("Log file not found",         "로그 파일 없음") }
+    var btnDiagRefresh:      String { s("Refresh",                    "새로 고침") }
 
     // Plugins (settings tab)
     var pluginsEmpty:        String { s("No plugins registered.",        "등록된 플러그인이 없습니다.") }
