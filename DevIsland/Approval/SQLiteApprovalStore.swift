@@ -12,7 +12,7 @@ final class SQLiteApprovalStore {
         case unsupportedSchemaVersion(Int32)
     }
 
-    static let currentSchemaVersion: Int32 = 5
+    static let currentSchemaVersion: Int32 = 6
 
     static func deterministicRuleID(
         provider: ProviderKind,
@@ -602,6 +602,7 @@ final class SQLiteApprovalStore {
         if version < 3 { try migrateToVersion3() }
         if version < 4 { try migrateToVersion4() }
         if version < 5 { try migrateToVersion5() }
+        if version < 6 { try migrateToVersion6() }
         try execute("PRAGMA user_version = \(Self.currentSchemaVersion)")
     }
 
@@ -756,6 +757,14 @@ final class SQLiteApprovalStore {
         // 조회 시 leading column이 맞지 않아 풀스캔이 발생한다.
         try execute(
             "CREATE INDEX IF NOT EXISTS idx_hook_events_session_id ON hook_events(session_id, received_at DESC)"
+        )
+    }
+
+    private func migrateToVersion6() throws {
+        // manualAllowCount(toolName:)이 tool_name + action + source로 필터링하므로
+        // 복합 인덱스를 추가해 결정 로그 누적 시 풀스캔을 방지한다.
+        try execute(
+            "CREATE INDEX IF NOT EXISTS idx_decisions_tool_action_source ON approval_decisions(tool_name, action, source)"
         )
     }
 
