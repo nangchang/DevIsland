@@ -25,17 +25,3 @@ protocol ProviderHookHandler {
     func providerOutput(context: ProviderHookContext) -> [String: AnyJSON]?
 }
 
-// MARK: - Shared helpers
-
-/// Builds the PermissionRequest hookSpecificOutput used by Claude Code (and the default
-/// fallback path). Extracted here so ClaudeHookHandler and the default path share logic.
-func permissionRequestOutput(allow: Bool, denialMessage: String) -> [String: AnyJSON] {
-    var hookDecision: [String: AnyJSON] = ["behavior": .string(allow ? "allow" : "deny")]
-    if !allow { hookDecision["message"] = .string(denialMessage) }
-    return [
-        "hookSpecificOutput": .object([
-            "hookEventName": .string("PermissionRequest"),
-            "decision": .object(hookDecision)
-        ])
-    ]
-}

@@ -97,10 +97,25 @@ struct ProviderAdapter {
 
     private static func defaultOutput(context: ProviderHookContext) -> [String: AnyJSON]? {
         if context.decision == "pass" { return [:] }
-        if context.normalizedEvent == "permissionrequest",
-           context.decision == "approved" || context.decision == "denied" {
-            return permissionRequestOutput(allow: context.allow, denialMessage: context.denialMessage)
+        if context.normalizedEvent == "permissionrequest" {
+            if context.decision == "timeout" { return [:] }
+            if context.decision == "approved" || context.decision == "denied" {
+                return permissionRequestOutput(allow: context.allow, denialMessage: context.denialMessage)
+            }
         }
         return ["continue": .bool(true), "suppressOutput": .bool(true)]
+    }
+
+    // MARK: - Shared helper
+
+    static func permissionRequestOutput(allow: Bool, denialMessage: String) -> [String: AnyJSON] {
+        var hookDecision: [String: AnyJSON] = ["behavior": .string(allow ? "allow" : "deny")]
+        if !allow { hookDecision["message"] = .string(denialMessage) }
+        return [
+            "hookSpecificOutput": .object([
+                "hookEventName": .string("PermissionRequest"),
+                "decision": .object(hookDecision)
+            ])
+        ]
     }
 }

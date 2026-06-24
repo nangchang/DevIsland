@@ -16,8 +16,10 @@ struct CodexHookHandler: ProviderHookHandler {
                     "permissionDecisionReason": .string(context.denialMessage)
                 ])
             ]
-        case "permissionrequest" where context.decision == "approved" || context.decision == "denied":
-            return permissionRequestOutput(allow: context.allow, denialMessage: context.denialMessage)
+        case "permissionrequest":
+            if context.decision == "timeout" { return [:] }
+            guard context.decision == "approved" || context.decision == "denied" else { return ["continue": .bool(true)] }
+            return ProviderAdapter.permissionRequestOutput(allow: context.allow, denialMessage: context.denialMessage)
         default:
             return ["continue": .bool(true)]
         }
