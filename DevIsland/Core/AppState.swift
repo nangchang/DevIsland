@@ -2435,15 +2435,15 @@ class AppState: ObservableObject {
             return
         }
         alwaysAllowSuggestion = nil
-        Task.detached(priority: .background) { [weak self] in
+        approvalPersistenceQueue.async { [weak self] in
             guard let self else { return }
             let count = proxy.store.manualAllowCount(toolName: toolName)
             guard count >= Self.alwaysAllowThreshold else {
-                await MainActor.run { self.alwaysAllowSuggestion = nil }
+                Task { @MainActor in self.alwaysAllowSuggestion = nil }
                 return
             }
             let hasRule = proxy.store.hasPersistentAllowRule(toolName: toolName)
-            await MainActor.run {
+            Task { @MainActor in
                 self.alwaysAllowSuggestion = hasRule ? nil : toolName
             }
         }
