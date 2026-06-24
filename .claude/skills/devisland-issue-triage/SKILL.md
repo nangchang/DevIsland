@@ -10,8 +10,8 @@ Review open issues, leave a triage comment on each, and only implement those tha
 Run both commands:
 
 ```bash
-gh issue list --repo nangchang/DevIsland --state open --json number,title,body,labels,comments
-gh pr list --repo nangchang/DevIsland --state open --json number,title,headRefName,body
+gh issue list --repo nangchang/DevIsland --state open --limit 1000 --json number,title,body,labels,comments
+gh pr list --repo nangchang/DevIsland --state open --limit 1000 --json number,title,headRefName,body
 ```
 
 Build a set of **issue numbers already covered by an open PR** by scanning each PR's title, headRefName (e.g. `feat/123-slug`), and body for patterns like `#123`, `Closes #123`, `Fixes #123`. Use this set in Step 2.
