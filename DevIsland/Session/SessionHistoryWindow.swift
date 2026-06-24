@@ -10,9 +10,76 @@ enum SessionHistoryFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum SessionHistoryEntry: Identifiable {
+    case live(ActiveSession)
+    case closed(ClosedSessionRecord)
+
+    var id: String { "\(isLive ? "live" : "closed")-\(sessionId)" }
+    var isLive: Bool {
+        if case .live = self { return true }
+        return false
+    }
+
+    var sessionId: String {
+        switch self {
+        case .live(let session): return session.id
+        case .closed(let record): return record.sessionId
+        }
+    }
+
+    var provider: ProviderKind {
+        switch self {
+        case .live(let session): return session.agentKind.providerKind
+        case .closed(let record): return record.provider
+        }
+    }
+
+    var workspaceRoot: String? {
+        switch self {
+        case .live(let session): return session.workspaceRoot
+        case .closed(let record): return record.workspaceRoot
+        }
+    }
+
+    var terminalApp: String? {
+        switch self {
+        case .live(let session): return session.terminal.app.isEmpty ? nil : session.terminal.app
+        case .closed(let record): return record.terminalApp
+        }
+    }
+
+    var terminalTitle: String? {
+        switch self {
+        case .live(let session): return session.terminalTitle.isEmpty ? nil : session.terminalTitle
+        case .closed(let record): return record.terminalTitle
+        }
+    }
+
+    var endedAt: Date? {
+        if case .closed(let record) = self { return record.endedAt }
+        return nil
+    }
+
+    var resumeCommand: String {
+        switch self {
+        case .live(let session): return session.resumeCommand
+        case .closed(let record): return record.resumeCommand
+        }
+    }
+
+    func newSessionCommand(for provider: ProviderKind) -> String {
+        switch self {
+        case .live(let session):
+            return session.newSessionCommand(for: provider.buddyKind)
+        case .closed(let record):
+            return record.newSessionCommand(for: provider)
+        }
+    }
+}
+
 @MainActor
 final class SessionHistoryViewModel: ObservableObject {
-    @Published var records: [ClosedSessionRecord] = []
+    @Published var closedRecords: [ClosedSessionRecord] = []
     @Published var searchText: String = ""
     @Published var filter: SessionHistoryFilter = .all
     @Published var errorMessage: String?
@@ -24,16 +91,25 @@ final class SessionHistoryViewModel: ObservableObject {
         refresh()
     }
 
-    var filtered: [ClosedSessionRecord] {
-        records.filter { record in
-            let matchesFavorite = filter == .all || appState.isSessionFavorite(record.sessionId)
+    func entries(activeSessions: [ActiveSession]) -> [SessionHistoryEntry] {
+        let activeIds = Set(activeSessions.map(\.id))
+        let live = activeSessions.map(SessionHistoryEntry.live)
+        let closed = closedRecords
+            .filter { !activeIds.contains($0.sessionId) }
+            .map(SessionHistoryEntry.closed)
+        return live + closed
+    }
+
+    func filtered(activeSessions: [ActiveSession]) -> [SessionHistoryEntry] {
+        entries(activeSessions: activeSessions).filter { entry in
+            let matchesFavorite = filter == .all || appState.isSessionFavorite(entry.sessionId)
             let matchesSearch = searchText.isEmpty
-                || record.sessionId.localizedCaseInsensitiveContains(searchText)
-                || (record.workspaceRoot?.localizedCaseInsensitiveContains(searchText) ?? false)
-                || (record.terminalTitle?.localizedCaseInsensitiveContains(searchText) ?? false)
-                || record.provider.rawValue.localizedCaseInsensitiveContains(searchText)
-                || (appState.sessionLabels[record.sessionId]?.localizedCaseInsensitiveContains(searchText) ?? false)
-                || (appState.sessionDescriptions[record.sessionId]?.localizedCaseInsensitiveContains(searchText) ?? false)
+                || entry.sessionId.localizedCaseInsensitiveContains(searchText)
+                || (entry.workspaceRoot?.localizedCaseInsensitiveContains(searchText) ?? false)
+                || (entry.terminalTitle?.localizedCaseInsensitiveContains(searchText) ?? false)
+                || entry.provider.rawValue.localizedCaseInsensitiveContains(searchText)
+                || (appState.sessionLabels[entry.sessionId]?.localizedCaseInsensitiveContains(searchText) ?? false)
+                || (appState.sessionDescriptions[entry.sessionId]?.localizedCaseInsensitiveContains(searchText) ?? false)
             return matchesFavorite && matchesSearch
         }
     }
@@ -45,7 +121,7 @@ final class SessionHistoryViewModel: ObservableObject {
                 let fetched = try await Task.detached(priority: .userInitiated) { [appState] in
                     try appState.closedSessionRecords(retentionDays: days)
                 }.value
-                records = fetched
+                closedRecords = fetched
                 errorMessage = nil
             } catch {
                 errorMessage = error.localizedDescription
@@ -53,25 +129,25 @@ final class SessionHistoryViewModel: ObservableObject {
         }
     }
 
-    func resumeCommand(for record: ClosedSessionRecord) -> String {
-        record.resumeCommand
+    func resumeCommand(for entry: SessionHistoryEntry) -> String {
+        entry.resumeCommand
     }
 
-    func autoTerminalName(for record: ClosedSessionRecord) -> String {
+    func autoTerminalName(for entry: SessionHistoryEntry) -> String {
         TerminalFocuser.resolvedTerminalName(
             preferred: SettingsStore.shared.settings.preferredTerminal,
-            sessionTerminal: record.terminalApp
+            sessionTerminal: entry.terminalApp
         ) ?? "?"
     }
 
-    func openInTerminal(_ record: ClosedSessionRecord, appName: String? = nil) {
-        let name = appName ?? autoTerminalName(for: record)
-        TerminalFocuser.openNewWindow(appName: name, command: resumeCommand(for: record))
+    func openInTerminal(_ entry: SessionHistoryEntry, appName: String? = nil) {
+        let name = appName ?? autoTerminalName(for: entry)
+        TerminalFocuser.openNewWindow(appName: name, command: resumeCommand(for: entry))
     }
 
-    func startNewSession(_ record: ClosedSessionRecord, provider: ProviderKind) {
-        let name = autoTerminalName(for: record)
-        TerminalFocuser.openNewWindow(appName: name, command: record.newSessionCommand(for: provider))
+    func startNewSession(_ entry: SessionHistoryEntry, provider: ProviderKind) {
+        let name = autoTerminalName(for: entry)
+        TerminalFocuser.openNewWindow(appName: name, command: entry.newSessionCommand(for: provider))
     }
 }
 
@@ -81,6 +157,7 @@ struct SessionHistoryWindowView: View {
     @StateObject private var viewModel: SessionHistoryViewModel
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var appState = AppState.shared
+    @ObservedObject private var sessionStore = AppState.shared.sessionStore
 
     init(appState: AppState = .shared) {
         _viewModel = StateObject(wrappedValue: SessionHistoryViewModel(appState: appState))
@@ -95,7 +172,7 @@ struct SessionHistoryWindowView: View {
                     .foregroundStyle(.red)
                     .padding(12)
             }
-            if viewModel.filtered.isEmpty {
+            if viewModel.filtered(activeSessions: sessionStore.activeSessions).isEmpty {
                 ContentUnavailableView(
                     l10n.historyEmpty,
                     systemImage: "clock.arrow.circlepath"
@@ -105,7 +182,7 @@ struct SessionHistoryWindowView: View {
                 sessionList
             }
         }
-        .frame(minWidth: 700, minHeight: 400)
+        .frame(minWidth: 760, minHeight: 400)
     }
 
     private var toolbar: some View {
@@ -123,7 +200,7 @@ struct SessionHistoryWindowView: View {
 
             Spacer()
 
-            Text(l10n.historyCount(viewModel.filtered.count))
+            Text(l10n.historyCount(viewModel.filtered(activeSessions: sessionStore.activeSessions).count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -140,31 +217,42 @@ struct SessionHistoryWindowView: View {
     }
 
     private var sessionList: some View {
-        Table(viewModel.filtered) {
-            TableColumn(l10n.historyColFavorite) { record in
+        Table(viewModel.filtered(activeSessions: sessionStore.activeSessions)) {
+            TableColumn(l10n.historyColFavorite) { entry in
                 Button {
-                    appState.toggleSessionFavorite(record.sessionId)
+                    appState.toggleSessionFavorite(entry.sessionId)
                 } label: {
-                    Image(systemName: appState.isSessionFavorite(record.sessionId) ? "star.fill" : "star")
-                        .foregroundStyle(appState.isSessionFavorite(record.sessionId) ? .yellow : .secondary)
+                    Image(systemName: appState.isSessionFavorite(entry.sessionId) ? "star.fill" : "star")
+                        .foregroundStyle(appState.isSessionFavorite(entry.sessionId) ? .yellow : .secondary)
                 }
                 .buttonStyle(.borderless)
-                .help(appState.isSessionFavorite(record.sessionId) ? l10n.menuRemoveFavorite : l10n.menuAddFavorite)
+                .help(appState.isSessionFavorite(entry.sessionId) ? l10n.menuRemoveFavorite : l10n.menuAddFavorite)
             }
             .width(44)
 
-            TableColumn(l10n.historyColAgent) { record in
+            TableColumn(l10n.historyColStatus) { entry in
+                Text(entry.isLive ? l10n.historyStatusLive : l10n.historyStatusEnded)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(entry.isLive ? Color.green : Color.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background((entry.isLive ? Color.green : Color.secondary).opacity(0.14))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+            .width(72)
+
+            TableColumn(l10n.historyColAgent) { entry in
                 HStack(spacing: 4) {
-                    Image(systemName: providerIcon(record.provider))
-                        .foregroundStyle(providerColor(record.provider))
-                    Text(record.provider.rawValue)
+                    Image(systemName: providerIcon(entry.provider))
+                        .foregroundStyle(providerColor(entry.provider))
+                    Text(entry.provider.rawValue)
                         .font(.system(size: 12, weight: .medium))
                 }
             }
             .width(90)
 
-            TableColumn(l10n.historyColPath) { record in
-                if let path = record.workspaceRoot {
+            TableColumn(l10n.historyColPath) { entry in
+                if let path = entry.workspaceRoot {
                     Text(path)
                         .font(.system(size: 11, design: .monospaced))
                         .lineLimit(1)
@@ -176,8 +264,8 @@ struct SessionHistoryWindowView: View {
                 }
             }
 
-            TableColumn(l10n.historyColLabel) { record in
-                if let label = appState.sessionLabels[record.sessionId] {
+            TableColumn(l10n.historyColLabel) { entry in
+                if let label = appState.sessionLabels[entry.sessionId] {
                     HStack(spacing: 4) {
                         Image(systemName: "tag.fill")
                             .font(.system(size: 9))
@@ -194,8 +282,8 @@ struct SessionHistoryWindowView: View {
             }
             .width(120)
 
-            TableColumn(l10n.historyColDescription) { record in
-                if let description = appState.sessionDescriptions[record.sessionId], !description.isEmpty {
+            TableColumn(l10n.historyColDescription) { entry in
+                if let description = appState.sessionDescriptions[entry.sessionId], !description.isEmpty {
                     Text(description)
                         .font(.system(size: 11))
                         .lineLimit(1)
@@ -209,35 +297,41 @@ struct SessionHistoryWindowView: View {
             }
             .width(min: 160, ideal: 220)
 
-            TableColumn(l10n.historyColTitle) { record in
-                Text(record.terminalTitle ?? "—")
+            TableColumn(l10n.historyColTitle) { entry in
+                Text(entry.terminalTitle ?? "—")
                     .font(.system(size: 11))
                     .lineLimit(1)
-                    .foregroundStyle(record.terminalTitle == nil ? .secondary : .primary)
+                    .foregroundStyle(entry.terminalTitle == nil ? .secondary : .primary)
             }
             .width(120)
 
-            TableColumn(l10n.historyColEnded) { record in
-                Text(record.endedAt, style: .relative)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+            TableColumn(l10n.historyColEnded) { entry in
+                if let endedAt = entry.endedAt {
+                    Text(endedAt, style: .relative)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("—")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
             }
             .width(100)
 
-            TableColumn(l10n.historyColSession) { record in
-                Text(String(record.sessionId.prefix(8)))
+            TableColumn(l10n.historyColSession) { entry in
+                Text(String(entry.sessionId.prefix(8)))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
             .width(80)
         }
-        .contextMenu(forSelectionType: ClosedSessionRecord.ID.self) { ids in
+        .contextMenu(forSelectionType: SessionHistoryEntry.ID.self) { ids in
             if let id = ids.first,
-               let record = viewModel.records.first(where: { $0.id == id }) {
+               let entry = viewModel.entries(activeSessions: sessionStore.activeSessions).first(where: { $0.id == id }) {
                 Button {
                     AppState.shared.promptRenameSession(
-                        record.sessionId,
-                        currentLabel: appState.sessionLabels[record.sessionId]
+                        entry.sessionId,
+                        currentLabel: appState.sessionLabels[entry.sessionId]
                     )
                 } label: {
                     Label(l10n.menuRenameSession, systemImage: "pencil")
@@ -245,25 +339,25 @@ struct SessionHistoryWindowView: View {
 
                 Button {
                     AppState.shared.promptEditSessionDescription(
-                        record.sessionId,
-                        currentDescription: appState.sessionDescriptions[record.sessionId]
+                        entry.sessionId,
+                        currentDescription: appState.sessionDescriptions[entry.sessionId]
                     )
                 } label: {
                     Label(l10n.menuEditSessionDescription, systemImage: "text.bubble")
                 }
 
                 Button {
-                    AppState.shared.toggleSessionFavorite(record.sessionId)
+                    AppState.shared.toggleSessionFavorite(entry.sessionId)
                 } label: {
                     Label(
-                        appState.isSessionFavorite(record.sessionId) ? l10n.menuRemoveFavorite : l10n.menuAddFavorite,
-                        systemImage: appState.isSessionFavorite(record.sessionId) ? "star.slash" : "star"
+                        appState.isSessionFavorite(entry.sessionId) ? l10n.menuRemoveFavorite : l10n.menuAddFavorite,
+                        systemImage: appState.isSessionFavorite(entry.sessionId) ? "star.slash" : "star"
                     )
                 }
 
                 Divider()
 
-                if let path = record.workspaceRoot {
+                if let path = entry.workspaceRoot {
                     Button {
                         NSWorkspace.shared.open(URL(fileURLWithPath: path))
                     } label: {
@@ -281,15 +375,15 @@ struct SessionHistoryWindowView: View {
                 }
 
                 let installed = TerminalFocuser.installedTerminals
-                let auto = viewModel.autoTerminalName(for: record)
+                let auto = viewModel.autoTerminalName(for: entry)
                 Menu {
-                    Button { viewModel.openInTerminal(record) } label: {
+                    Button { viewModel.openInTerminal(entry) } label: {
                         Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
                     }
                     if !installed.isEmpty {
                         Divider()
                         ForEach(installed, id: \.name) { terminal in
-                            Button { viewModel.openInTerminal(record, appName: terminal.name) } label: {
+                            Button { viewModel.openInTerminal(entry, appName: terminal.name) } label: {
                                 Label(terminal.name, systemImage: terminal.name == auto ? "checkmark" : "terminal")
                             }
                         }
@@ -298,14 +392,14 @@ struct SessionHistoryWindowView: View {
                     Label(l10n.menuOpenInTerminal, systemImage: "terminal")
                 }
 
-                if let root = record.workspaceRoot, !root.isEmpty {
+                if let root = entry.workspaceRoot, !root.isEmpty {
                     let providers: [(ProviderKind, String)] = [
                         (.claude, "Claude"), (.codex, "Codex"),
                         (.gemini, "Gemini"), (.antigravity, "Antigravity"),
                     ]
                     Menu {
                         ForEach(providers, id: \.0) { provider, name in
-                            Button { viewModel.startNewSession(record, provider: provider) } label: {
+                            Button { viewModel.startNewSession(entry, provider: provider) } label: {
                                 Label(name, systemImage: "terminal")
                             }
                         }
@@ -317,7 +411,7 @@ struct SessionHistoryWindowView: View {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(
-                        viewModel.resumeCommand(for: record),
+                        viewModel.resumeCommand(for: entry),
                         forType: .string
                     )
                 } label: {
@@ -344,6 +438,30 @@ struct SessionHistoryWindowView: View {
         case .gemini: return Color(red: 0.2, green: 0.5, blue: 0.9)
         case .antigravity: return Color(red: 0.05, green: 0.70, blue: 0.60)
         case .any:    return .secondary
+        }
+    }
+}
+
+private extension BuddyKind {
+    var providerKind: ProviderKind {
+        switch self {
+        case .claudeCode: return .claude
+        case .codex: return .codex
+        case .gemini: return .gemini
+        case .antigravity: return .antigravity
+        case .island: return .any
+        }
+    }
+}
+
+private extension ProviderKind {
+    var buddyKind: BuddyKind {
+        switch self {
+        case .claude: return .claudeCode
+        case .codex: return .codex
+        case .gemini: return .gemini
+        case .antigravity: return .antigravity
+        case .any: return .island
         }
     }
 }

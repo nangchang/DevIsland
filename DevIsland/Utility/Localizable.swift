@@ -581,11 +581,12 @@ extension L10n {
 
     // Session History Window
     var historySearch:      String { s("Search sessions…",    "세션 검색…") }
-    var historyEmpty:       String { s("No closed sessions",  "종료된 세션 없음") }
+    var historyEmpty:       String { s("No sessions",         "세션 없음") }
     var historyFilterAll:    String { s("All",                 "전체") }
     var historyFilterFavorites: String { s("Favorites",         "즐겨찾기") }
     var historyRefresh:     String { s("Refresh",             "새로 고침") }
     var historyColFavorite: String { s("Favorite",            "즐겨찾기") }
+    var historyColStatus:   String { s("Status",              "상태") }
     var historyColAgent:    String { s("Agent",               "에이전트") }
     var historyColPath:     String { s("Path",                "경로") }
     var historyColLabel:    String { s("Name",                "이름") }
@@ -593,6 +594,8 @@ extension L10n {
     var historyColTitle:    String { s("Terminal",            "터미널") }
     var historyColEnded:    String { s("Ended",               "종료") }
     var historyColSession:  String { s("Session ID",          "세션 ID") }
+    var historyStatusLive:  String { s("Live",                "진행 중") }
+    var historyStatusEnded: String { s("Ended",               "종료됨") }
     func historyCount(_ n: Int) -> String { s("\(n) sessions", "\(n)개 세션") }
 
     // Session status labels
