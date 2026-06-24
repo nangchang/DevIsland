@@ -57,6 +57,11 @@ final class SessionHistoryViewModel: ObservableObject {
         let name = appName ?? autoTerminalName(for: record)
         TerminalFocuser.openNewWindow(appName: name, command: resumeCommand(for: record))
     }
+
+    func startNewSession(_ record: ClosedSessionRecord, provider: ProviderKind) {
+        let name = autoTerminalName(for: record)
+        TerminalFocuser.openNewWindow(appName: name, command: record.newSessionCommand(for: provider))
+    }
 }
 
 // MARK: - Window View
@@ -228,6 +233,22 @@ struct SessionHistoryWindowView: View {
                     }
                 } label: {
                     Label(l10n.menuOpenInTerminal, systemImage: "terminal")
+                }
+
+                if let root = record.workspaceRoot, !root.isEmpty {
+                    let providers: [(ProviderKind, String)] = [
+                        (.claude, "Claude"), (.codex, "Codex"),
+                        (.gemini, "Gemini"), (.antigravity, "Antigravity"),
+                    ]
+                    Menu {
+                        ForEach(providers, id: \.0) { provider, name in
+                            Button { viewModel.startNewSession(record, provider: provider) } label: {
+                                Label(name, systemImage: "terminal")
+                            }
+                        }
+                    } label: {
+                        Label(l10n.menuStartNewSession, systemImage: "plus.square.on.square")
+                    }
                 }
 
                 Button {
