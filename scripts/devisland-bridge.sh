@@ -239,22 +239,32 @@ detect_warp() {
   TERM_TITLE="Warp"
 }
 
-if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ "$TERM_PROGRAM" = "WezTerm" ] || [ -n "${WEZTERM_PANE:-}" ]; }; then
+# WezTerm: TERM_PROGRAM=WezTerm 또는 WEZTERM_PANE 환경변수로 감지
+detect_wezterm() {
+  [ -n "$CURRENT_TTY" ] || return 1
+  { [ "$TERM_PROGRAM" = "WezTerm" ] || [ -n "${WEZTERM_PANE:-}" ]; } || return 1
   TERM_APP="WezTerm"
+  local _dir
   _dir=$(basename "$PWD" 2>/dev/null)
   TERM_TITLE="${_dir:-WezTerm}"
   TERM_WINDOW_ID="${WEZTERM_PANE:-}"
-fi
+}
 
-if [ -z "$TERM_APP" ] && [ -n "$TMUX" ] && [ "$_TMUX_FALLBACK" = "1" ] && [ -n "$CURRENT_TTY" ]; then
+# WezTerm (tmux 내부): tmux client pid의 부모 프로세스 체인에서 WezTerm 탐지
+# TERM_WINDOW_ID: tmux 내부에서는 WEZTERM_PANE이 전달되지 않으므로 미설정
+detect_wezterm_tmux() {
+  [ -n "$CURRENT_TTY" ] || return 1
+  [ -n "$TMUX" ] || return 1
+  [ "$_TMUX_FALLBACK" = "1" ] || return 1
+  local _tmux_client_pid
   _tmux_client_pid=$(tmux_client_pid_for_tty "$CURRENT_TTY")
-  if [ -n "$_tmux_client_pid" ] && process_chain_contains_wezterm "$_tmux_client_pid"; then
-    TERM_APP="WezTerm"
-    _dir=$(basename "$PWD" 2>/dev/null)
-    TERM_TITLE="${_dir:-WezTerm}"
-    # TERM_WINDOW_ID: tmux 내부에서는 WEZTERM_PANE이 전달되지 않으므로 미설정
-  fi
-fi
+  [ -n "$_tmux_client_pid" ] || return 1
+  process_chain_contains_wezterm "$_tmux_client_pid" || return 1
+  TERM_APP="WezTerm"
+  local _dir
+  _dir=$(basename "$PWD" 2>/dev/null)
+  TERM_TITLE="${_dir:-WezTerm}"
+}
 
 # VS Code integrated terminal (TERM_PROGRAM=vscode, has TTY)
 # TERM_PROGRAM=vscode is set by all VS Code variants (Insiders, VSCodium, etc.) — no app check needed
@@ -336,6 +346,8 @@ _DETECTORS=(
   detect_cmux
   detect_ghostty
   detect_warp
+  detect_wezterm
+  detect_wezterm_tmux
   detect_vscode_integrated
   detect_vscode_extension_host
   detect_claude_desktop
