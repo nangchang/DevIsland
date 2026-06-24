@@ -12,7 +12,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 
 _LOG_DIR = Path.home() / "Library" / "Logs" / "DevIsland"
@@ -108,7 +108,7 @@ def log(message: str) -> None:
 #   normalize_payload  — mutates the raw payload into DevIsland's canonical form
 #   final_output       — formats the hook response JSON the CLI expects
 #
-# New CLIs: add a subclass, register it in _ADAPTERS. No other file changes needed.
+# New CLIs: add a subclass with a `sources` tuple. No other file changes needed.
 # ---------------------------------------------------------------------------
 
 def _permission_request_output(allow: bool) -> dict[str, Any]:
@@ -125,6 +125,13 @@ def _permission_request_output(allow: bool) -> dict[str, Any]:
 
 class ProviderAdapter:
     sources: tuple[str, ...] = ()
+    _registry: ClassVar[dict[str, ProviderAdapter]] = {}
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        instance = cls()
+        for source in cls.sources:
+            ProviderAdapter._registry[source] = instance
 
     def normalize_payload(self, payload: dict[str, Any], event_arg: str) -> None:
         pass
@@ -256,20 +263,11 @@ class _AntigravityAdapter(ProviderAdapter):
         return {}
 
 
-_ADAPTERS: list[ProviderAdapter] = [
-    _ClaudeAdapter(),
-    _CodexAdapter(),
-    _GeminiAdapter(),
-    _AntigravityAdapter(),
-]
 _DEFAULT_ADAPTER = ProviderAdapter()
 
 
 def _get_adapter(source: str) -> ProviderAdapter:
-    for adapter in _ADAPTERS:
-        if source in adapter.sources:
-            return adapter
-    return _DEFAULT_ADAPTER
+    return ProviderAdapter._registry.get(source, _DEFAULT_ADAPTER)
 
 
 # ---------------------------------------------------------------------------
