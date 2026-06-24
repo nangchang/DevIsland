@@ -36,6 +36,8 @@ class AppState: ObservableObject {
         static let globalAutoApproveTypes = "globalAutoApproveTypes"
         static let autoApproveSafeTools = "autoApproveSafeTools"
         static let sessionLabels = "sessionLabels"
+        static let sessionFavoriteIds = "sessionFavoriteIds"
+        static let sessionDescriptions = "sessionDescriptions"
     }
 
     typealias FrontmostCheck = (
@@ -75,6 +77,12 @@ class AppState: ObservableObject {
     @Published var globalAutoApproveTypes: Set<String> = []
     @Published var sessionLabels: [String: String] = [:] {
         didSet { userDefaults.set(sessionLabels, forKey: DefaultsKey.sessionLabels) }
+    }
+    @Published var sessionFavoriteIds: Set<String> = [] {
+        didSet { userDefaults.set(Array(sessionFavoriteIds).sorted(), forKey: DefaultsKey.sessionFavoriteIds) }
+    }
+    @Published var sessionDescriptions: [String: String] = [:] {
+        didSet { userDefaults.set(sessionDescriptions, forKey: DefaultsKey.sessionDescriptions) }
     }
 
     private static let bypassTools: Set<String> = ["update_topic", "activate_skill"]
@@ -225,6 +233,8 @@ class AppState: ObservableObject {
         }
         autoApproveSafeTools = userDefaults.bool(forKey: DefaultsKey.autoApproveSafeTools)
         sessionLabels = userDefaults.dictionary(forKey: DefaultsKey.sessionLabels) as? [String: String] ?? [:]
+        sessionFavoriteIds = Set(userDefaults.array(forKey: DefaultsKey.sessionFavoriteIds) as? [String] ?? [])
+        sessionDescriptions = userDefaults.dictionary(forKey: DefaultsKey.sessionDescriptions) as? [String: String] ?? [:]
 
         if let proxy = approvalProxy {
             let rawReplay = userDefaults.integer(forKey: SettingsStore.DefaultsKey.replayRetentionDays)
@@ -2507,6 +2517,55 @@ class AppState: ObservableObject {
                 } else {
                     self.sessionLabels[sessionId] = label
                 }
+            }
+        }
+    }
+
+    func isSessionFavorite(_ sessionId: String) -> Bool {
+        sessionFavoriteIds.contains(sessionId)
+    }
+
+    func toggleSessionFavorite(_ sessionId: String) {
+        if sessionFavoriteIds.contains(sessionId) {
+            sessionFavoriteIds.remove(sessionId)
+        } else {
+            sessionFavoriteIds.insert(sessionId)
+        }
+    }
+
+    func setSessionDescription(_ sessionId: String, description: String) {
+        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            sessionDescriptions.removeValue(forKey: sessionId)
+        } else {
+            sessionDescriptions[sessionId] = trimmed
+        }
+    }
+
+    func promptEditSessionDescription(_ sessionId: String, currentDescription: String?) {
+        DispatchQueue.main.async {
+            let l = L10n.shared
+            let alert = NSAlert()
+            alert.messageText = l.sessionDescriptionTitle
+            alert.informativeText = l.sessionDescriptionHint(sessionId.prefix(8).description)
+            alert.addButton(withTitle: l.sessionDescriptionConfirm)
+            alert.addButton(withTitle: l.btnCancel)
+
+            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 320, height: 90))
+            scrollView.hasVerticalScroller = true
+            scrollView.borderType = .bezelBorder
+
+            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 320, height: 90))
+            textView.string = currentDescription ?? ""
+            textView.isRichText = false
+            textView.font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+            scrollView.documentView = textView
+
+            alert.accessoryView = scrollView
+            alert.window.initialFirstResponder = textView
+
+            if ModalPresenter.run(alert) == .alertFirstButtonReturn {
+                self.setSessionDescription(sessionId, description: textView.string)
             }
         }
     }

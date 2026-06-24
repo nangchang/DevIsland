@@ -398,6 +398,10 @@ struct SessionRowView: View {
     private var hasCustomLabel: Bool {
         appState.sessionLabels[session.id] != nil
     }
+    private var sessionDescription: String? {
+        let description = appState.sessionDescriptions[session.id]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description?.isEmpty == false ? description : nil
+    }
 
     /// Plugin-contributed context-menu actions for this session (e.g. host-validated
     /// session.dismiss). Read without observing `pluginHost`: the row must NOT re-render on
@@ -672,6 +676,7 @@ struct SessionRowView: View {
                     .padding(.vertical, 6)
             }
         }
+        .help(sessionDescription ?? "")
         .contextMenu { sessionContextMenu }
     }
 
@@ -690,6 +695,15 @@ struct SessionRowView: View {
             isRenaming = true
         } label: {
             Label(l10n.menuRenameSession, systemImage: "pencil")
+        }
+
+        Button {
+            AppState.shared.promptEditSessionDescription(
+                session.id,
+                currentDescription: appState.sessionDescriptions[session.id]
+            )
+        } label: {
+            Label(l10n.menuEditSessionDescription, systemImage: "text.bubble")
         }
 
         Divider()

@@ -554,12 +554,20 @@ extension L10n {
     var menuCopyPath:          String { s("Copy Path",         "경로 복사") }
     var menuCopyResumeCommand: String { s("Copy Resume Command", "재시작 명령 복사") }
     var menuRenameSession:     String { s("Rename…",             "이름 변경…") }
+    var menuEditSessionDescription: String { s("Edit Description…", "설명 편집…") }
+    var menuAddFavorite:        String { s("Add to Favorites",      "즐겨찾기에 추가") }
+    var menuRemoveFavorite:     String { s("Remove from Favorites", "즐겨찾기에서 제거") }
     var renameSessionTitle:    String { s("Rename Session",      "세션 이름 변경") }
     var renameSessionConfirm:  String { s("Rename",              "변경") }
     var renameSessionPlaceholder: String { s("Session name",     "세션 이름") }
+    var sessionDescriptionTitle: String { s("Session Description", "세션 설명") }
+    var sessionDescriptionConfirm: String { s("Save",              "저장") }
     var btnCancel:             String { s("Cancel",              "취소") }
     func renameSessionHint(_ id: String) -> String {
         s("Enter a name for session \(id). Leave empty to reset.", "세션 \(id)의 이름을 입력하세요. 비워두면 초기화됩니다.")
+    }
+    func sessionDescriptionHint(_ id: String) -> String {
+        s("Add notes for session \(id). Leave empty to clear.", "세션 \(id)의 설명을 입력하세요. 비워두면 삭제됩니다.")
     }
     var menuOpenInTerminal:    String { s("Open in Terminal",  "터미널에서 열기") }
     func menuTerminalAuto(_ name: String) -> String { s("Auto (\(name))", "자동 (\(name))") }
@@ -574,10 +582,14 @@ extension L10n {
     // Session History Window
     var historySearch:      String { s("Search sessions…",    "세션 검색…") }
     var historyEmpty:       String { s("No closed sessions",  "종료된 세션 없음") }
+    var historyFilterAll:    String { s("All",                 "전체") }
+    var historyFilterFavorites: String { s("Favorites",         "즐겨찾기") }
     var historyRefresh:     String { s("Refresh",             "새로 고침") }
+    var historyColFavorite: String { s("Favorite",            "즐겨찾기") }
     var historyColAgent:    String { s("Agent",               "에이전트") }
     var historyColPath:     String { s("Path",                "경로") }
     var historyColLabel:    String { s("Name",                "이름") }
+    var historyColDescription: String { s("Description",       "설명") }
     var historyColTitle:    String { s("Terminal",            "터미널") }
     var historyColEnded:    String { s("Ended",               "종료") }
     var historyColSession:  String { s("Session ID",          "세션 ID") }

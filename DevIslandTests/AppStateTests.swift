@@ -103,6 +103,23 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(SessionStatus.pending.isTimeoutBypassed)
         XCTAssertFalse(SessionStatus.idle.isTimeoutBypassed)
     }
+
+    func testSessionHistoryMetadataPersists() {
+        appState.toggleSessionFavorite("session-a")
+        appState.setSessionDescription("session-a", description: "Needs follow-up")
+        appState.setSessionDescription("session-b", description: "  ")
+
+        let restored = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _, _, _, _, _, _, _ in false }
+        )
+
+        XCTAssertTrue(restored.isSessionFavorite("session-a"))
+        XCTAssertFalse(restored.isSessionFavorite("session-b"))
+        XCTAssertEqual(restored.sessionDescriptions["session-a"], "Needs follow-up")
+        XCTAssertNil(restored.sessionDescriptions["session-b"])
+    }
     
     func testHandleMessageNotification() {
         let expectation = XCTestExpectation(description: "Response handler called")
