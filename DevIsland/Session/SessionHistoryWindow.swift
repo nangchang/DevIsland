@@ -14,7 +14,7 @@ enum SessionHistoryEntry: Identifiable {
     case live(ActiveSession)
     case closed(ClosedSessionRecord)
 
-    var id: String { "\(isLive ? "live" : "closed")-\(sessionId)" }
+    var id: String { sessionId }
     var isLive: Bool {
         if case .live = self { return true }
         return false
@@ -164,28 +164,30 @@ struct SessionHistoryWindowView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
+        let entries = viewModel.filtered(activeSessions: sessionStore.activeSessions)
+
+        return VStack(spacing: 0) {
+            toolbar(entryCount: entries.count)
             Divider()
             if let err = viewModel.errorMessage {
                 Label(err, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .padding(12)
             }
-            if viewModel.filtered(activeSessions: sessionStore.activeSessions).isEmpty {
+            if entries.isEmpty {
                 ContentUnavailableView(
                     l10n.historyEmpty,
                     systemImage: "clock.arrow.circlepath"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                sessionList
+                sessionList(entries: entries)
             }
         }
         .frame(minWidth: 760, minHeight: 400)
     }
 
-    private var toolbar: some View {
+    private func toolbar(entryCount: Int) -> some View {
         HStack(spacing: 8) {
             TextField(l10n.historySearch, text: $viewModel.searchText)
                 .textFieldStyle(.roundedBorder)
@@ -200,7 +202,7 @@ struct SessionHistoryWindowView: View {
 
             Spacer()
 
-            Text(l10n.historyCount(viewModel.filtered(activeSessions: sessionStore.activeSessions).count))
+            Text(l10n.historyCount(entryCount))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -216,8 +218,8 @@ struct SessionHistoryWindowView: View {
         .padding(.vertical, 8)
     }
 
-    private var sessionList: some View {
-        Table(viewModel.filtered(activeSessions: sessionStore.activeSessions)) {
+    private func sessionList(entries: [SessionHistoryEntry]) -> some View {
+        Table(entries) {
             TableColumn(l10n.historyColFavorite) { entry in
                 Button {
                     appState.toggleSessionFavorite(entry.sessionId)
@@ -252,7 +254,7 @@ struct SessionHistoryWindowView: View {
             .width(90)
 
             TableColumn(l10n.historyColPath) { entry in
-                if let path = entry.workspaceRoot {
+                if let path = entry.workspaceRoot, !path.isEmpty {
                     Text(path)
                         .font(.system(size: 11, design: .monospaced))
                         .lineLimit(1)
@@ -327,7 +329,7 @@ struct SessionHistoryWindowView: View {
         }
         .contextMenu(forSelectionType: SessionHistoryEntry.ID.self) { ids in
             if let id = ids.first,
-               let entry = viewModel.entries(activeSessions: sessionStore.activeSessions).first(where: { $0.id == id }) {
+               let entry = entries.first(where: { $0.id == id }) {
                 Button {
                     AppState.shared.promptRenameSession(
                         entry.sessionId,
@@ -357,7 +359,7 @@ struct SessionHistoryWindowView: View {
 
                 Divider()
 
-                if let path = entry.workspaceRoot {
+                if let path = entry.workspaceRoot, !path.isEmpty {
                     Button {
                         NSWorkspace.shared.open(URL(fileURLWithPath: path))
                     } label: {
