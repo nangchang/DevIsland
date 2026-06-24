@@ -425,7 +425,7 @@ struct SessionRowView: View {
     private var autoTerminalName: String {
         TerminalFocuser.resolvedTerminalName(
             preferred: SettingsStore.shared.settings.preferredTerminal,
-            sessionTerminal: session.workspaceRoot != nil ? session.terminalApp : nil
+            sessionTerminal: session.workspaceRoot != nil ? session.terminal.app : nil
         ) ?? "?"
     }
 
@@ -505,7 +505,7 @@ struct SessionRowView: View {
                         }
                         .frame(width: badgeFrame, height: badgeFrame)
 
-                        if let appBadge = terminalAppBadge(session.terminalApp) {
+                        if let appBadge = terminalAppBadge(session.terminal.app) {
                             Text(appBadge.label)
                                 .font(.system(size: metaFont - 1, weight: .semibold))
                                 .foregroundColor(appBadge.color)
