@@ -2555,10 +2555,16 @@ class AppState: ObservableObject {
             scrollView.hasVerticalScroller = true
             scrollView.borderType = .bezelBorder
 
-            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 320, height: 90))
+            let contentSize = scrollView.contentSize
+            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: contentSize.width, height: contentSize.height))
             textView.string = currentDescription ?? ""
             textView.isRichText = false
             textView.font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+            textView.isVerticallyResizable = true
+            textView.isHorizontallyResizable = false
+            textView.autoresizingMask = .width
+            textView.textContainer?.containerSize = NSSize(width: contentSize.width, height: .greatestFiniteMagnitude)
+            textView.textContainer?.widthTracksTextView = true
             scrollView.documentView = textView
 
             alert.accessoryView = scrollView
