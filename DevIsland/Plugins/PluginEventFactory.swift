@@ -28,7 +28,7 @@ struct PluginEventFactory: Sendable {
                 eventType: HookEventNormalizer.normalizedName(hook.event),
                 commandSummary: commandSummary(from: hook),
                 cwd: hook.workspaceRoot,
-                terminalApp: emptyToNil(hook.terminalApp),
+                terminalApp: emptyToNil(hook.terminal.app),
                 rawEvent: hook.event,
                 toolName: emptyToNil(hook.toolName),
                 notificationType: emptyToNil(hook.notificationType),

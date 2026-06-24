@@ -68,13 +68,7 @@ final class SessionStore: ObservableObject {
         sessionId: String,
         terminalTitle: String,
         agentKind: BuddyKind,
-        terminalApp: String,
-        terminalTTY: String,
-        terminalWindowId: String,
-        terminalTabIndex: String,
-        terminalTmuxPane: String,
-        terminalTmuxSocket: String,
-        terminalTmuxClient: String,
+        terminal: TerminalContext,
         toolName: String,
         eventName: String,
         message: String,
@@ -95,13 +89,7 @@ final class SessionStore: ObservableObject {
                 activeSessions[index].terminalTitle = terminalTitle
             }
             activeSessions[index].agentKind = agentKind
-            if !terminalApp.isEmpty { activeSessions[index].terminalApp = terminalApp }
-            if !terminalTTY.isEmpty { activeSessions[index].terminalTTY = terminalTTY }
-            if !terminalWindowId.isEmpty { activeSessions[index].terminalWindowId = terminalWindowId }
-            if !terminalTabIndex.isEmpty { activeSessions[index].terminalTabIndex = terminalTabIndex }
-            if !terminalTmuxPane.isEmpty { activeSessions[index].terminalTmuxPane = terminalTmuxPane }
-            if !terminalTmuxSocket.isEmpty { activeSessions[index].terminalTmuxSocket = terminalTmuxSocket }
-            if !terminalTmuxClient.isEmpty { activeSessions[index].terminalTmuxClient = terminalTmuxClient }
+            activeSessions[index].terminal.merge(terminal)
             activeSessions[index].lastToolName = toolName
             activeSessions[index].lastEventName = eventName
             if !preserveMessage { activeSessions[index].lastMessage = message }
@@ -120,13 +108,7 @@ final class SessionStore: ObservableObject {
                 id: sessionId,
                 terminalTitle: terminalTitle,
                 agentKind: agentKind,
-                terminalApp: terminalApp,
-                terminalTTY: terminalTTY,
-                terminalWindowId: terminalWindowId,
-                terminalTabIndex: terminalTabIndex,
-                terminalTmuxPane: terminalTmuxPane,
-                terminalTmuxSocket: terminalTmuxSocket,
-                terminalTmuxClient: terminalTmuxClient,
+                terminal: terminal,
                 lastToolName: toolName,
                 lastEventName: eventName,
                 lastMessage: message,
@@ -152,29 +134,14 @@ final class SessionStore: ObservableObject {
     @discardableResult
     func removeSupersededCodexSessions(
         newSessionId: String,
-        terminalApp: String,
-        terminalTTY: String,
-        terminalWindowId: String,
-        terminalTabIndex: String,
-        terminalTmuxPane: String,
-        terminalTmuxSocket: String,
-        terminalTmuxClient: String
+        terminal: TerminalContext
     ) -> [String] {
         let ids = activeSessions
             .filter { session in
                 session.agentKind == .codex &&
                     session.id != newSessionId &&
                     !session.isSubAgentSession &&
-                    Self.sameTerminalIdentity(
-                        session,
-                        terminalApp: terminalApp,
-                        terminalTTY: terminalTTY,
-                        terminalWindowId: terminalWindowId,
-                        terminalTabIndex: terminalTabIndex,
-                        terminalTmuxPane: terminalTmuxPane,
-                        terminalTmuxSocket: terminalTmuxSocket,
-                        terminalTmuxClient: terminalTmuxClient
-                    )
+                    session.terminal.isSameIdentity(as: terminal)
             }
             .map(\.id)
 
@@ -184,47 +151,6 @@ final class SessionStore: ObservableObject {
         activeSessions.removeAll { ids.contains($0.id) }
         snapshots.forEach { onSessionChanged?(.ended($0)) }
         return ids
-    }
-
-    private static func sameTerminalIdentity(
-        _ session: ActiveSession,
-        terminalApp: String,
-        terminalTTY: String,
-        terminalWindowId: String,
-        terminalTabIndex: String,
-        terminalTmuxPane: String,
-        terminalTmuxSocket: String,
-        terminalTmuxClient: String
-    ) -> Bool {
-        if !session.terminalTmuxPane.isEmpty,
-           !terminalTmuxPane.isEmpty,
-           session.terminalTmuxPane == terminalTmuxPane,
-           session.terminalTmuxSocket == terminalTmuxSocket,
-           session.terminalTmuxClient == terminalTmuxClient {
-            return true
-        }
-
-        if !session.terminalTmuxPane.isEmpty || !terminalTmuxPane.isEmpty {
-            return false
-        }
-
-        if !session.terminalTTY.isEmpty,
-           !terminalTTY.isEmpty,
-           session.terminalTTY == terminalTTY {
-            return true
-        }
-
-        if !session.terminalApp.isEmpty,
-           !terminalApp.isEmpty,
-           !session.terminalWindowId.isEmpty,
-           !terminalWindowId.isEmpty,
-           session.terminalApp == terminalApp,
-           session.terminalWindowId == terminalWindowId,
-           session.terminalTabIndex == terminalTabIndex {
-            return true
-        }
-
-        return false
     }
 
     /// Prunes sessions that have been inactive beyond their threshold.

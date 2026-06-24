@@ -48,13 +48,7 @@ struct ActiveSession: Identifiable, Equatable {
     let id: String // full sessionId
     var terminalTitle: String
     var agentKind: BuddyKind
-    var terminalApp: String
-    var terminalTTY: String
-    var terminalWindowId: String
-    var terminalTabIndex: String
-    var terminalTmuxPane: String
-    var terminalTmuxSocket: String
-    var terminalTmuxClient: String
+    var terminal: TerminalContext
     var lastToolName: String
     var lastEventName: String
     var lastMessage: String

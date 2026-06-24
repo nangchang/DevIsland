@@ -80,13 +80,7 @@ final class SessionStoreCallbackTests: XCTestCase {
 
         _ = store.removeSupersededCodexSessions(
             newSessionId: "codex-3",
-            terminalApp: "iTerm",
-            terminalTTY: "/dev/ttys001",
-            terminalWindowId: "",
-            terminalTabIndex: "",
-            terminalTmuxPane: "",
-            terminalTmuxSocket: "",
-            terminalTmuxClient: ""
+            terminal: TerminalContext(app: "iTerm", tty: "/dev/ttys001")
         )
 
         XCTAssertEqual(changes.count, 2)
@@ -164,13 +158,7 @@ final class SessionStoreCallbackTests: XCTestCase {
             sessionId: id,
             terminalTitle: "Terminal",
             agentKind: agentKind,
-            terminalApp: "iTerm",
-            terminalTTY: terminalTTY,
-            terminalWindowId: "win1",
-            terminalTabIndex: "0",
-            terminalTmuxPane: "",
-            terminalTmuxSocket: "",
-            terminalTmuxClient: "",
+            terminal: TerminalContext(app: "iTerm", tty: terminalTTY, windowId: "win1", tabIndex: "0"),
             toolName: toolName,
             eventName: "PreToolUse",
             message: "msg",

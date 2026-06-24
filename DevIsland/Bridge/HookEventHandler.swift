@@ -11,13 +11,7 @@ struct ParsedHookEvent {
     let displayMsg: String
     let agentKind: BuddyKind
     let terminalTitle: String
-    let terminalApp: String
-    let terminalTTY: String
-    let terminalWindowId: String
-    let terminalTabIndex: String
-    let terminalTmuxPane: String
-    let terminalTmuxSocket: String
-    let terminalTmuxClient: String
+    let terminal: TerminalContext
     let workspaceRoot: String?
     let toolInput: [String: Any]?
     let isSubAgentSession: Bool
@@ -87,13 +81,7 @@ enum HookEventHandler {
         print("[DevIsland] [MSG] Parsed JSON from \(sessionId.prefix(8))")
 
         var terminalTitle = parsedJSON["terminal_title"] as? String ?? "Terminal"
-        let terminalApp     = parsedJSON["terminal_app"] as? String ?? ""
-        let terminalTTY     = parsedJSON["terminal_tty"] as? String ?? ""
-        let terminalWindowId  = parsedJSON["terminal_window_id"] as? String ?? ""
-        let terminalTabIndex  = parsedJSON["terminal_tab_index"] as? String ?? ""
-        let terminalTmuxPane  = parsedJSON["terminal_tmux_pane"] as? String ?? ""
-        let terminalTmuxSocket = parsedJSON["terminal_tmux_socket"] as? String ?? ""
-        let terminalTmuxClient = parsedJSON["terminal_tmux_client"] as? String ?? ""
+        let terminal = TerminalContext(from: parsedJSON)
         let workspaceRoot   = parsedJSON["cwd"] as? String
         let sessionStartSource = parsedJSON["source"] as? String ?? ""
         let notificationType   = parsedJSON["notification_type"] as? String ?? ""
@@ -137,13 +125,7 @@ enum HookEventHandler {
             displayMsg: displayMsg,
             agentKind: agentKind,
             terminalTitle: terminalTitle,
-            terminalApp: terminalApp,
-            terminalTTY: terminalTTY,
-            terminalWindowId: terminalWindowId,
-            terminalTabIndex: terminalTabIndex,
-            terminalTmuxPane: terminalTmuxPane,
-            terminalTmuxSocket: terminalTmuxSocket,
-            terminalTmuxClient: terminalTmuxClient,
+            terminal: terminal,
             workspaceRoot: workspaceRoot,
             toolInput: toolInput,
             isSubAgentSession: isSubAgentSession,

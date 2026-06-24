@@ -610,7 +610,7 @@ class AppState: ObservableObject {
         // For Claude/Codex, this delegates to their native terminal prompts.
         // For Gemini, BeforeTool hook returns {} which does not enforce auto-approval itself;
         // rather, Gemini CLI preserves its own configured approval behavior (interactive prompt or --auto-approve).
-        switch h.terminalApp {
+        switch h.terminal.app {
         case "VSCode" where !processVSCode:
             responseHandler("{\"response\": \"pass\"}")
             return
@@ -816,13 +816,13 @@ class AppState: ObservableObject {
 
         if isClaudeQuestionRequest {
             isTerminalFrontmostAsync(
-                appName: h.terminalApp,
-                tty: h.terminalTTY,
-                windowId: h.terminalWindowId,
-                tabIndex: h.terminalTabIndex,
-                tmuxPane: h.terminalTmuxPane,
-                tmuxSocket: h.terminalTmuxSocket,
-                tmuxClient: h.terminalTmuxClient
+                appName: h.terminal.app,
+                tty: h.terminal.tty,
+                windowId: h.terminal.windowId,
+                tabIndex: h.terminal.tabIndex,
+                tmuxPane: h.terminal.tmuxPane,
+                tmuxSocket: h.terminal.tmuxSocket,
+                tmuxClient: h.terminal.tmuxClient
             ) { [weak self] isFrontmost in
                 guard let self else { return }
                 if !h.isReplayPayload && isFrontmost {
@@ -888,13 +888,13 @@ class AppState: ObservableObject {
         // MARK: Phase 4: Evaluation Hierarchy
         // 우선순위: 터미널 포커스 pass → 영속 정책 → 휘발성 자동 승인 → 수동 승인 큐잉.
         isTerminalFrontmostAsync(
-            appName: h.terminalApp,
-            tty: h.terminalTTY,
-            windowId: h.terminalWindowId,
-            tabIndex: h.terminalTabIndex,
-            tmuxPane: h.terminalTmuxPane,
-            tmuxSocket: h.terminalTmuxSocket,
-            tmuxClient: h.terminalTmuxClient
+            appName: h.terminal.app,
+            tty: h.terminal.tty,
+            windowId: h.terminal.windowId,
+            tabIndex: h.terminal.tabIndex,
+            tmuxPane: h.terminal.tmuxPane,
+            tmuxSocket: h.terminal.tmuxSocket,
+            tmuxClient: h.terminal.tmuxClient
         ) { [weak self] isFrontmost in
             guard let self = self else { return }
 
@@ -1141,13 +1141,7 @@ class AppState: ObservableObject {
                 Self.shouldSupersedeCodexSessionsOnStart(source: h.sessionStartSource) {
                 let removedSessionIds = self.sessionStore.removeSupersededCodexSessions(
                     newSessionId: fullSessionId,
-                    terminalApp: h.terminalApp,
-                    terminalTTY: h.terminalTTY,
-                    terminalWindowId: h.terminalWindowId,
-                    terminalTabIndex: h.terminalTabIndex,
-                    terminalTmuxPane: h.terminalTmuxPane,
-                    terminalTmuxSocket: h.terminalTmuxSocket,
-                    terminalTmuxClient: h.terminalTmuxClient
+                    terminal: h.terminal
                 )
 
                 var removedCurrentRequest = false
@@ -1301,13 +1295,7 @@ class AppState: ObservableObject {
             sessionId: h.sessionId,
             terminalTitle: h.terminalTitle,
             agentKind: h.agentKind,
-            terminalApp: h.terminalApp,
-            terminalTTY: h.terminalTTY,
-            terminalWindowId: h.terminalWindowId,
-            terminalTabIndex: h.terminalTabIndex,
-            terminalTmuxPane: h.terminalTmuxPane,
-            terminalTmuxSocket: h.terminalTmuxSocket,
-            terminalTmuxClient: h.terminalTmuxClient,
+            terminal: h.terminal,
             toolName: toolName,
             eventName: eventName,
             message: message,
@@ -1452,11 +1440,11 @@ class AppState: ObservableObject {
             message: request.message,
             sessionId: request.sessionId,
             terminalTitle: h.terminalTitle,
-            terminalWindowId: h.terminalWindowId,
-            terminalTabIndex: h.terminalTabIndex,
-            terminalTmuxPane: h.terminalTmuxPane,
-            terminalTmuxSocket: h.terminalTmuxSocket,
-            terminalTmuxClient: h.terminalTmuxClient,
+            terminalWindowId: h.terminal.windowId,
+            terminalTabIndex: h.terminal.tabIndex,
+            terminalTmuxPane: h.terminal.tmuxPane,
+            terminalTmuxSocket: h.terminal.tmuxSocket,
+            terminalTmuxClient: h.terminal.tmuxClient,
             receivedAt: request.receivedAt
         )
         sessionStore.appendPending(request: request, item: newItem)
@@ -1585,14 +1573,14 @@ class AppState: ObservableObject {
             return
         }
         TerminalFocuser.focusTerminal(
-            appName: session.terminalApp,
+            appName: session.terminal.app,
             title: session.terminalTitle,
-            tty: session.terminalTTY,
-            windowId: session.terminalWindowId,
-            tabIndex: session.terminalTabIndex,
-            tmuxPane: session.terminalTmuxPane,
-            tmuxSocket: session.terminalTmuxSocket,
-            tmuxClient: session.terminalTmuxClient,
+            tty: session.terminal.tty,
+            windowId: session.terminal.windowId,
+            tabIndex: session.terminal.tabIndex,
+            tmuxPane: session.terminal.tmuxPane,
+            tmuxSocket: session.terminal.tmuxSocket,
+            tmuxClient: session.terminal.tmuxClient,
             workspaceRoot: session.workspaceRoot
         )
     }
@@ -1737,13 +1725,7 @@ class AppState: ObservableObject {
                             sessionId: next.sessionId,
                             terminalTitle: session?.terminalTitle ?? "",
                             agentKind: next.agentKind,
-                            terminalApp: session?.terminalApp ?? "",
-                            terminalTTY: session?.terminalTTY ?? "",
-                            terminalWindowId: session?.terminalWindowId ?? "",
-                            terminalTabIndex: session?.terminalTabIndex ?? "",
-                            terminalTmuxPane: session?.terminalTmuxPane ?? "",
-                            terminalTmuxSocket: session?.terminalTmuxSocket ?? "",
-                            terminalTmuxClient: session?.terminalTmuxClient ?? "",
+                            terminal: session?.terminal ?? TerminalContext(),
                             toolName: next.toolName,
                             eventName: next.eventName,
                             message: next.message,
@@ -1859,13 +1841,13 @@ class AppState: ObservableObject {
 
     private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
         isTerminalFrontmostAsync(
-            appName: session?.terminalApp,
-            tty: session?.terminalTTY,
-            windowId: session?.terminalWindowId,
-            tabIndex: session?.terminalTabIndex,
-            tmuxPane: session?.terminalTmuxPane,
-            tmuxSocket: session?.terminalTmuxSocket,
-            tmuxClient: session?.terminalTmuxClient,
+            appName: session?.terminal.app,
+            tty: session?.terminal.tty,
+            windowId: session?.terminal.windowId,
+            tabIndex: session?.terminal.tabIndex,
+            tmuxPane: session?.terminal.tmuxPane,
+            tmuxSocket: session?.terminal.tmuxSocket,
+            tmuxClient: session?.terminal.tmuxClient,
             completion: completion
         )
     }
@@ -2555,13 +2537,7 @@ class AppState: ObservableObject {
                 sessionId: record.sessionId,
                 terminalTitle: terminalTitle,
                 agentKind: agentKind,
-                terminalApp: json["terminal_app"] as? String ?? "",
-                terminalTTY: json["terminal_tty"] as? String ?? "",
-                terminalWindowId: json["terminal_window_id"] as? String ?? "",
-                terminalTabIndex: json["terminal_tab_index"] as? String ?? "",
-                terminalTmuxPane: json["terminal_tmux_pane"] as? String ?? "",
-                terminalTmuxSocket: json["terminal_tmux_socket"] as? String ?? "",
-                terminalTmuxClient: json["terminal_tmux_client"] as? String ?? "",
+                terminal: TerminalContext(from: json),
                 toolName: record.lastToolName,
                 eventName: record.lastEventName,
                 message: ToolMessageFormatter.displayMessage(
@@ -2640,14 +2616,14 @@ class AppState: ObservableObject {
             sessionStore.activeSessions.first { $0.id == id }
         }
         TerminalFocuser.focusTerminal(
-            appName: session?.terminalApp,
+            appName: session?.terminal.app,
             title: session?.terminalTitle,
-            tty: session?.terminalTTY,
-            windowId: session?.terminalWindowId,
-            tabIndex: session?.terminalTabIndex,
-            tmuxPane: session?.terminalTmuxPane,
-            tmuxSocket: session?.terminalTmuxSocket,
-            tmuxClient: session?.terminalTmuxClient,
+            tty: session?.terminal.tty,
+            windowId: session?.terminal.windowId,
+            tabIndex: session?.terminal.tabIndex,
+            tmuxPane: session?.terminal.tmuxPane,
+            tmuxSocket: session?.terminal.tmuxSocket,
+            tmuxClient: session?.terminal.tmuxClient,
             workspaceRoot: session?.workspaceRoot
         ) { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.terminalFocusRecheckDelay) {
