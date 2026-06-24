@@ -234,6 +234,8 @@ class _AntigravityAdapter(ProviderAdapter):
                     payload["cwd"] = str(workspace_paths[0])
 
     def _infer_event(self, payload: dict[str, Any]) -> str:
+        if "event" in payload:
+            return str(payload["event"])
         if "toolCall" in payload:
             return "PreToolUse"
         if "tool_response" in payload or "error" in payload:
