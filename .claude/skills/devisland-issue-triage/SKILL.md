@@ -84,8 +84,8 @@ For each issue marked `implement`, call the Agent tool with:
 - `isolation: "worktree"`
 - A self-contained prompt that includes:
   - The issue number, title, and full body
-  - The repo path: `/Volumes/data/Github/DevIsland`
-  - Instructions to: create a branch `feat/<issue-number>-<slug>` from `main`, implement the fix, run `xcodegen generate` then `xcodebuild build -scheme DevIsland -configuration Debug -quiet` and verify exit code 0, commit (Korean body, Why-focused, trailing `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`), push, open a PR linking the issue
+  - The repo path: the current repository root (resolve with `git rev-parse --show-toplevel`)
+  - Instructions to: create a branch `feat/<issue-number>-<slug>` from `main`, implement the fix, run `xcodegen generate` then `xcodebuild build -scheme DevIsland -configuration Debug -quiet` and verify exit code 0, commit (Korean body, Why-focused, trailing `Co-Authored-By: Claude <actual-model-version> <noreply@anthropic.com>` — use the model version actively running this task), push, open a PR linking the issue
   - Branch rule: never commit directly to main
 
 Launch all implement-agents in a **single message** so they run in parallel.
