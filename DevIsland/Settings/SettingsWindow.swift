@@ -218,6 +218,27 @@ private struct GeneralSettingsPane: View {
                 }
             }
 
+            Section(l10n.secNotifications) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(l10n.lblNotificationsEnabled, isOn: Binding(
+                        get: { store.settings.notificationsEnabled },
+                        set: { enabled in
+                            if enabled {
+                                store.settings.notificationsEnabled = true
+                                NotificationManager.shared.requestAuthorization { granted in
+                                    if !granted { store.settings.notificationsEnabled = false }
+                                }
+                            } else {
+                                store.settings.notificationsEnabled = false
+                            }
+                        }
+                    ))
+                    Text(l10n.descNotificationsEnabled)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section(l10n.secSounds) {
                 Toggle(l10n.lblMuteAllSounds, isOn: $store.settings.openPeonGlobalMuted)
             }

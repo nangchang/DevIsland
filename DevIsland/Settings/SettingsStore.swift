@@ -272,6 +272,7 @@ struct AppSettings: Equatable {
     var caffeineSessionTimeoutEnabled: Bool
     var caffeineSessionTimeoutMinutes: Int
     var releaseChannel: ReleaseChannel
+    var notificationsEnabled: Bool
 
     static let defaultBridgeSocketPath: String = {
         let fileManager = FileManager.default
@@ -366,7 +367,8 @@ struct AppSettings: Equatable {
         caffeineExcludedSSIDs: [],
         caffeineSessionTimeoutEnabled: false,
         caffeineSessionTimeoutMinutes: 5,
-        releaseChannel: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").contains("nightly") ? .nightly : .stable
+        releaseChannel: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").contains("nightly") ? .nightly : .stable,
+        notificationsEnabled: false
     )
 }
 
@@ -458,6 +460,7 @@ final class SettingsStore: ObservableObject {
         static let caffeineSessionTimeoutEnabled = "caffeineSessionTimeoutEnabled"
         static let caffeineSessionTimeoutMinutes = "caffeineSessionTimeoutMinutes"
         static let releaseChannel = "releaseChannel"
+        static let notificationsEnabled = "notificationsEnabled"
     }
 
     private let userDefaults: UserDefaults
@@ -546,6 +549,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.caffeineSessionTimeoutEnabled, forKey: DefaultsKey.caffeineSessionTimeoutEnabled)
         userDefaults.set(settings.caffeineSessionTimeoutMinutes, forKey: DefaultsKey.caffeineSessionTimeoutMinutes)
         userDefaults.set(settings.releaseChannel.rawValue, forKey: DefaultsKey.releaseChannel)
+        userDefaults.set(settings.notificationsEnabled, forKey: DefaultsKey.notificationsEnabled)
         // 브리지 관련 필드가 변경된 경우에만 파일 쓰기 (드래그 리사이즈 등 빈번한 UI 변경 시 파일 I/O 방지)
         let bridgeChanged = previous.map { BridgeRuntimeConfig(settings: settings) != BridgeRuntimeConfig(settings: $0) } ?? true
         if bridgeChanged {
@@ -909,6 +913,11 @@ final class SettingsStore: ObservableObject {
                 key: DefaultsKey.releaseChannel,
                 from: userDefaults,
                 default: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").contains("nightly") ? .nightly : defaults.releaseChannel
+            ),
+            notificationsEnabled: bool(
+                key: DefaultsKey.notificationsEnabled,
+                from: userDefaults,
+                default: defaults.notificationsEnabled
             )
         )
     }
