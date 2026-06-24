@@ -51,18 +51,18 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 | 노치에서 프롬프트 회신 (PTY 주입 정식화) | ★★★ | 중간 | `devisland_pty.py` + `injection` 응답 필드 (실험 기능) | H1 | 미완 |
 | 노치에서 새 세션 시작 (Quick Launch) | ★★ | 낮음 | `TerminalFocuser.openNewWindow` 이미 구현됨 | H1 | ✅ v0.12.1 |
 | 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | `approval.decided` 관찰 이벤트와 `SessionStatsPlugin` 기초 통계 구현 완료 | H1 | 기초 완료 |
-| Fleet 보드 (멀티 세션 관제 뷰) | ★★★ | 중간 | SessionStore, 서브에이전트 그룹화, 세션 히스토리 창 | H2 |
-| Git 컨텍스트 (브랜치·워크트리·PR 상태 표시) | ★★★ | 중간 | `workspaceRoot` 이미 전 세션에 전파됨 | H2 |
-| 승인 정책 프로파일 (워크스페이스별/시간제한 자동 승인) | ★★★ | 중간 | `workspaceRoot` 스코프 룰, `ToolKnowledge` 위험도 | H2 |
-| 외부 알림 채널 (Slack/Discord/webhook) | ★★ | 중간 | 플러그인 v2 `networkAccess` 설계 필요 | H2 |
-| 비용·토큰 추적 | ★★ | 중간 | 훅 페이로드 파싱 확장 필요 (provider별 가용성 상이) | H2 |
-| Provider SDK화 (신규 CLI 에이전트 어댑터) | ★★ | 중간 | `HookEventNormalizer`/`ProviderAdapter` 분리 구조 | H2 |
-| 원격 승인 (모바일/웹 컴패니언) | ★★★ | **높음** | IPC 토큰·envelope 구조 (보안 선결 조건 있음) | H3 |
-| 플러그인 v2 (외부 런타임·서명 배포) | ★★★ | 높음 | v1 완료, v2 설계 문서 존재 | H3 |
-| 커뮤니티 에셋 생태계 (버디·사운드·플러그인 팩) | ★★ | 중간 | OpenPeon 팩 로더, 버디 시스템, v2 에셋 팩 설계 | H3 |
-| 팀 정책 공유 (룰셋 export/import) | ★★ | 낮음~중간 | rules 테이블 → JSON 직렬화 | H3 |
-| 음성 요약 (TTS 상태 브리핑) | ★ | 중간 | CESP 오디오 경로 | 보류 |
-| 에이전트 자동 오케스트레이션 (큐·일괄 지시) | ★ | 높음 | — | 보류/안티골 경계 |
+| Fleet 보드 (멀티 세션 관제 뷰) | ★★★ | 중간 | SessionStore, 서브에이전트 그룹화, 세션 히스토리 창 | H2 | 미완 |
+| Git 컨텍스트 (브랜치·워크트리·PR 상태 표시) | ★★★ | 중간 | `workspaceRoot` 이미 전 세션에 전파됨 | H2 | 미완 |
+| 승인 정책 프로파일 (워크스페이스별/시간제한 자동 승인) | ★★★ | 중간 | `workspaceRoot` 스코프 룰, `ToolKnowledge` 위험도 | H2 | 미완 |
+| 외부 알림 채널 (Slack/Discord/webhook) | ★★ | 중간 | 플러그인 v2 `networkAccess` 설계 필요 | H2 | 미완 |
+| 비용·토큰 추적 | ★★ | 중간 | 훅 페이로드 파싱 확장 필요 (provider별 가용성 상이) | H2 | 미완 |
+| Provider SDK화 (신규 CLI 에이전트 어댑터) | ★★ | 중간 | `HookEventNormalizer`/`ProviderAdapter` 분리 구조 | H2 | 미완 |
+| 원격 승인 (모바일/웹 컴패니언) | ★★★ | **높음** | IPC 토큰·envelope 구조 (보안 선결 조건 있음) | H3 | 미완 |
+| 플러그인 v2 (외부 런타임·서명 배포) | ★★★ | 높음 | v1 완료, v2 설계 문서 존재 | H3 | 미완 |
+| 커뮤니티 에셋 생태계 (버디·사운드·플러그인 팩) | ★★ | 중간 | OpenPeon 팩 로더, 버디 시스템, v2 에셋 팩 설계 | H3 | 미완 |
+| 팀 정책 공유 (룰셋 export/import) | ★★ | 낮음~중간 | rules 테이블 → JSON 직렬화 | H3 | 미완 |
+| 음성 요약 (TTS 상태 브리핑) | ★ | 중간 | CESP 오디오 경로 | 보류 | 미완 |
+| 에이전트 자동 오케스트레이션 (큐·일괄 지시) | ★ | 높음 | — | 보류/안티골 경계 | 미완 |
 
 ---
 

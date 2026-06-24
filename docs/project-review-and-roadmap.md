@@ -159,9 +159,9 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 | 2 | S2 raw JSON 토큰 우회 차단 | 낮음 | 인증 우회 제거 | ✅ v0.12.0 |
 | 3 | S4 로그 민감정보 축소 + 로테이션 | 낮음 | 정보 노출 제거 | ✅ v0.12.0 |
 | 4 | A1 정책 평가 DB 읽기 비메인화 | 중간 | UI 멈춤 방지 | 미완 |
-| 5 | T1/T3 브리지 테스트 CI 연결 + shellcheck | 낮음 | 회귀 방지 | 미완 |
+| 5 | T1/T3 브리지 테스트 CI 연결 + shellcheck | 낮음 | 회귀 방지 | ✅ v0.12.1 |
 | 6 | D1~D4 문서 동기화 | 낮음 | 에이전트/기여자 혼선 제거 | ✅ v0.12.0 |
-| 7 | A5 invalid pending 응답을 pass로 변경 | 낮음 | 의도치 않은 승인 방지 | 미완 |
+| 7 | A5 invalid pending 응답을 pass로 변경 | 낮음 | 의도치 않은 승인 방지 | ✅ v0.12.1 |
 | 8 | Q1 os.Logger 전환 | 중간 | S4와 시너지 | 미완 |
 | 9 | S5 서명·공증 + 업데이트 검증 | 높음 (인증서 필요) | 배포 신뢰 | 미완 |
 | 10 | A2 AppState @MainActor화·분해 | 높음 | 장기 유지보수성 | 미완 |
@@ -180,9 +180,9 @@ DevIsland는 **설계 문서의 품질과 코드의 일치도가 높은 편**이
 
 - ✅ IPC 입구 하드닝: 루프백 바인딩(S1), TCP raw JSON 차단(S2), grace mode 경고 UI(S3)
 - ✅ 로그 위생: 페이로드 전문 로깅 debug 게이트화, `~/Library/Logs` 이동, 로테이션(S4)
-- ⬜ `discardInvalidPendingRequests` 응답을 `pass`로 변경(A5)
+- ✅ `discardInvalidPendingRequests` 응답을 `pass`로 변경(A5)
 - ✅ 남은 문서 불일치 동기화(D1, D4 등) + `stability-standards.md` fallback 표 정리
-- ⬜ CI: Python 브리지 테스트 + shellcheck 추가(T1, T3), main push 빌드(T4)
+- ✅ CI: Python 브리지 테스트 + shellcheck 추가(T1, T3), main push 빌드(T4)
 
 ### 7.2 중기 — v0.13~v0.15 "Performance & Platform" (1~2개월)
 
