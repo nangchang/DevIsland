@@ -43,26 +43,26 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 
 지금까지의 검토에서 도출한 후보를 가치/노력으로 평가했다. (가치: 비전 적합도 × 사용자 빈도, 노력: 구현+유지보수)
 
-| 기능 | 가치 | 노력 | 기존 기반 (이미 있는 것) | 배치 |
-|---|---|---|---|---|
-| 규칙 제안 (반복 승인 → 룰 승격 제안) | ★★★ | 낮음 | `approval_decisions` 테이블, deterministic rule ID | H1 |
-| 브리지 헬스 진단 뷰 | ★★★ | 낮음 | replay log, 토큰/transport 상태 | H1 |
-| macOS 알림 센터 연동 | ★★★ | 낮음 | `showNotification` capability 설계 존재 | H1 |
-| 노치에서 프롬프트 회신 (PTY 주입 정식화) | ★★★ | 중간 | `devisland_pty.py` + `injection` 응답 필드 (실험 기능) | H1 |
-| 노치에서 새 세션 시작 (Quick Launch) | ★★ | 낮음 | `TerminalFocuser.openNewWindow` 이미 구현됨 | H1 |
-| 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | `approval.decided` 관찰 이벤트와 `SessionStatsPlugin` 기초 통계 구현 완료 | H1 |
-| Fleet 보드 (멀티 세션 관제 뷰) | ★★★ | 중간 | SessionStore, 서브에이전트 그룹화, 세션 히스토리 창 | H2 |
-| Git 컨텍스트 (브랜치·워크트리·PR 상태 표시) | ★★★ | 중간 | `workspaceRoot` 이미 전 세션에 전파됨 | H2 |
-| 승인 정책 프로파일 (워크스페이스별/시간제한 자동 승인) | ★★★ | 중간 | `workspaceRoot` 스코프 룰, `ToolKnowledge` 위험도 | H2 |
-| 외부 알림 채널 (Slack/Discord/webhook) | ★★ | 중간 | 플러그인 v2 `networkAccess` 설계 필요 | H2 |
-| 비용·토큰 추적 | ★★ | 중간 | 훅 페이로드 파싱 확장 필요 (provider별 가용성 상이) | H2 |
-| Provider SDK화 (신규 CLI 에이전트 어댑터) | ★★ | 중간 | `HookEventNormalizer`/`ProviderAdapter` 분리 구조 | H2 |
-| 원격 승인 (모바일/웹 컴패니언) | ★★★ | **높음** | IPC 토큰·envelope 구조 (보안 선결 조건 있음) | H3 |
-| 플러그인 v2 (외부 런타임·서명 배포) | ★★★ | 높음 | v1 완료, v2 설계 문서 존재 | H3 |
-| 커뮤니티 에셋 생태계 (버디·사운드·플러그인 팩) | ★★ | 중간 | OpenPeon 팩 로더, 버디 시스템, v2 에셋 팩 설계 | H3 |
-| 팀 정책 공유 (룰셋 export/import) | ★★ | 낮음~중간 | rules 테이블 → JSON 직렬화 | H3 |
-| 음성 요약 (TTS 상태 브리핑) | ★ | 중간 | CESP 오디오 경로 | 보류 |
-| 에이전트 자동 오케스트레이션 (큐·일괄 지시) | ★ | 높음 | — | 보류/안티골 경계 |
+| 기능 | 가치 | 노력 | 기존 기반 (이미 있는 것) | 배치 | 상태 |
+|---|---|---|---|---|---|
+| 규칙 제안 (반복 승인 → 룰 승격 제안) | ★★★ | 낮음 | `approval_decisions` 테이블, deterministic rule ID | H1 | 미완 |
+| 브리지 헬스 진단 뷰 | ★★★ | 낮음 | replay log, 토큰/transport 상태 | H1 | 미완 |
+| macOS 알림 센터 연동 | ★★★ | 낮음 | `showNotification` capability 설계 존재 | H1 | 미완 |
+| 노치에서 프롬프트 회신 (PTY 주입 정식화) | ★★★ | 중간 | `devisland_pty.py` + `injection` 응답 필드 (실험 기능) | H1 | 미완 |
+| 노치에서 새 세션 시작 (Quick Launch) | ★★ | 낮음 | `TerminalFocuser.openNewWindow` 이미 구현됨 | H1 | ✅ v0.12.1 |
+| 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | `approval.decided` 관찰 이벤트와 `SessionStatsPlugin` 기초 통계 구현 완료 | H1 | 기초 완료 |
+| Fleet 보드 (멀티 세션 관제 뷰) | ★★★ | 중간 | SessionStore, 서브에이전트 그룹화, 세션 히스토리 창 | H2 | 미완 |
+| Git 컨텍스트 (브랜치·워크트리·PR 상태 표시) | ★★★ | 중간 | `workspaceRoot` 이미 전 세션에 전파됨 | H2 | 미완 |
+| 승인 정책 프로파일 (워크스페이스별/시간제한 자동 승인) | ★★★ | 중간 | `workspaceRoot` 스코프 룰, `ToolKnowledge` 위험도 | H2 | 미완 |
+| 외부 알림 채널 (Slack/Discord/webhook) | ★★ | 중간 | 플러그인 v2 `networkAccess` 설계 필요 | H2 | 미완 |
+| 비용·토큰 추적 | ★★ | 중간 | 훅 페이로드 파싱 확장 필요 (provider별 가용성 상이) | H2 | 미완 |
+| Provider SDK화 (신규 CLI 에이전트 어댑터) | ★★ | 중간 | `HookEventNormalizer`/`ProviderAdapter` 분리 구조 | H2 | 미완 |
+| 원격 승인 (모바일/웹 컴패니언) | ★★★ | **높음** | IPC 토큰·envelope 구조 (보안 선결 조건 있음) | H3 | 미완 |
+| 플러그인 v2 (외부 런타임·서명 배포) | ★★★ | 높음 | v1 완료, v2 설계 문서 존재 | H3 | 미완 |
+| 커뮤니티 에셋 생태계 (버디·사운드·플러그인 팩) | ★★ | 중간 | OpenPeon 팩 로더, 버디 시스템, v2 에셋 팩 설계 | H3 | 미완 |
+| 팀 정책 공유 (룰셋 export/import) | ★★ | 낮음~중간 | rules 테이블 → JSON 직렬화 | H3 | 미완 |
+| 음성 요약 (TTS 상태 브리핑) | ★ | 중간 | CESP 오디오 경로 | 보류 | 미완 |
+| 에이전트 자동 오케스트레이션 (큐·일괄 지시) | ★ | 높음 | — | 보류/안티골 경계 | 미완 |
 
 ---
 
@@ -98,7 +98,7 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 - 선결: PTY 래퍼의 raw mode/SIGWINCH 개선 (검토 보고서 A4).
 - 효과: "확인하러 터미널로 돌아간다"에서 "노치에서 끝낸다"로 — 제품의 인터랙션 상한을 올리는 기능.
 
-### H1-5. Quick Launch
+### H1-5. Quick Launch ✅ 완료 (v0.12.1, PR #320)
 
 세션 히스토리/노치에서 "이 워크스페이스에서 새 세션 시작" 액션. `TerminalFocuser.openNewWindow(appName:command:)`가 이미 있으므로, 워크스페이스 루트 + 선호 터미널 + provider 선택만 UI로 연결하면 된다.
 

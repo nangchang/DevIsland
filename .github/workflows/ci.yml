@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -41,6 +43,33 @@ jobs:
           path: /tmp/DevIsland-CI-DerivedData
           key: ${{ runner.os }}-deriveddata-${{ hashFiles('project.yml', 'DevIsland/**/*.swift') }}
           restore-keys: ${{ runner.os }}-deriveddata-
+
+      - name: Cache shellcheck
+        id: cache-shellcheck
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew/bin/shellcheck
+            /opt/homebrew/Cellar/shellcheck
+          key: ${{ runner.os }}-shellcheck-${{ hashFiles('.github/workflows/ci.yml') }}
+
+      - name: Install shellcheck
+        if: steps.cache-shellcheck.outputs.cache-hit != 'true'
+        run: brew install shellcheck
+
+      - name: Lint shell scripts (T3)
+        run: |
+          shellcheck --severity=warning \
+            scripts/devisland-bridge.sh \
+            scripts/install-bridge.sh \
+            scripts/install-launch-agent.sh \
+            scripts/build_and_run.sh \
+            scripts/run-tests.sh
+
+      - name: Python bridge tests (T1)
+        run: |
+          cd scripts
+          python3 -m unittest test_devisland_bridge test_devisland_bridge_shell -v
 
       - name: Generate Xcode project
         run: xcodegen generate
