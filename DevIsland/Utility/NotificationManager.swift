@@ -11,16 +11,17 @@ final class NotificationManager: NSObject {
     private override init() { super.init() }
 
     func setup() {
+        let l = L10n.shared
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         let approveAction = UNNotificationAction(
             identifier: Self.actionApprove,
-            title: "허용",
+            title: l.notifActionApprove,
             options: []
         )
         let denyAction = UNNotificationAction(
             identifier: Self.actionDeny,
-            title: "거부",
+            title: l.notifActionDeny,
             options: [.destructive]
         )
         let category = UNNotificationCategory(
@@ -40,7 +41,7 @@ final class NotificationManager: NSObject {
     func sendApprovalRequest(_ request: PendingRequest) {
         let content = UNMutableNotificationContent()
         content.title = request.toolName
-        content.body = request.message.isEmpty ? "승인이 필요합니다." : request.message
+        content.body = request.message.isEmpty ? L10n.shared.notifApprovalBody : request.message
         content.categoryIdentifier = Self.categoryApproval
         content.sound = .default
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
@@ -59,9 +60,10 @@ final class NotificationManager: NSObject {
     }
 
     func sendTaskCompletion(sessionTitle: String) {
+        let l = L10n.shared
         let content = UNMutableNotificationContent()
-        content.title = "작업 완료"
-        content.body = sessionTitle.isEmpty ? "에이전트가 작업을 완료했습니다." : "\(sessionTitle) 완료"
+        content.title = l.notifTaskCompleteTitle
+        content.body = l.notifTaskCompleteBody(sessionTitle)
         content.sound = .default
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)

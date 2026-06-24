@@ -224,8 +224,9 @@ private struct GeneralSettingsPane: View {
                         get: { store.settings.notificationsEnabled },
                         set: { enabled in
                             if enabled {
+                                store.settings.notificationsEnabled = true
                                 NotificationManager.shared.requestAuthorization { granted in
-                                    store.settings.notificationsEnabled = granted
+                                    if !granted { store.settings.notificationsEnabled = false }
                                 }
                             } else {
                                 store.settings.notificationsEnabled = false

@@ -2413,7 +2413,7 @@ class AppState: ObservableObject {
         sendDecision(approved: false)
     }
 
-    func respondFromNotification(requestId: UUID, approved: Bool) {
+    @MainActor func respondFromNotification(requestId: UUID, approved: Bool) {
         if showingRequestId == requestId {
             if approved { approve() } else { deny() }
             return

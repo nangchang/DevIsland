@@ -290,6 +290,13 @@ extension L10n {
     var secNotifications:             String { s("Notifications",                            "알림") }
     var lblNotificationsEnabled:      String { s("Notify me on approval requests",           "승인 요청 시 알림") }
     var descNotificationsEnabled:     String { s("Sends a macOS notification when a tool needs approval. Includes Approve and Deny buttons when app is in background.", "도구 승인이 필요할 때 macOS 알림을 보냅니다. 앱이 백그라운드에 있을 때 허용/거부 버튼이 표시됩니다.") }
+    var notifActionApprove:           String { s("Allow",                                    "허용") }
+    var notifActionDeny:              String { s("Deny",                                     "거부") }
+    var notifApprovalBody:            String { s("Approval required.",                       "승인이 필요합니다.") }
+    var notifTaskCompleteTitle:       String { s("Task complete",                            "작업 완료") }
+    func notifTaskCompleteBody(_ title: String) -> String {
+        title.isEmpty ? s("Agent finished.", "에이전트가 작업을 완료했습니다.") : s("\(title) complete", "\(title) 완료")
+    }
 
     // Island tab
     var secNotch:            String { s("Island",                        "아일랜드") }
