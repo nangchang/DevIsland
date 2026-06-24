@@ -18,7 +18,9 @@ done
 
 PAYLOAD=$(cat)
 
-# 현재 터미널 창/탭 타이틀 추출 (TTY로 정확한 창/탭 특정)
+# -------------------------------------------------------------------
+# TTY 탐지
+# -------------------------------------------------------------------
 TERM_TITLE="Terminal"
 TERM_APP=""
 TERM_WINDOW_ID=""
@@ -86,9 +88,11 @@ tmux_client_pid_for_tty() {
 CURRENT_TTY=$(current_tty)
 CURRENT_TTY_NAME="${CURRENT_TTY##*/}"
 
-# tmux 안에서는 inner PTY 대신 outer(client) TTY 사용
+# -------------------------------------------------------------------
+# tmux: inner PTY 대신 outer(client) TTY 사용
 # 터미널 앱(iTerm/Terminal)은 outer TTY만 알고 있기 때문에
 # inner PTY로는 올바른 창/탭을 찾을 수 없음
+# -------------------------------------------------------------------
 if [ -n "$TMUX" ]; then
   TERM_TMUX_SOCKET="${TMUX%%,*}"
   CLIENT_TTY=""
@@ -117,8 +121,20 @@ if [ -n "$TMUX" ] && { [ -z "$TERM_PROGRAM" ] || [ "$TERM_PROGRAM" = "tmux" ]; }
   _TMUX_FALLBACK=1
 fi
 
-if [ -n "$CURRENT_TTY" ] && { [ "$TERM_PROGRAM" = "iTerm.app" ] || { [ "$_TMUX_FALLBACK" = "1" ] && osascript -e 'return (application "iTerm2" is running) or (application "iTerm" is running)' 2>/dev/null | grep -q "true"; }; }; then
-  ITERM_INFO=$(osascript 2>> /tmp/DevIsland.bridge.log << ASEOF
+# -------------------------------------------------------------------
+# 터미널 앱 감지 함수들
+#
+# 규칙:
+#   - 성공 시 TERM_APP, TERM_TITLE, TERM_WINDOW_ID, TERM_TAB_INDEX 설정 후 return 0
+#   - 해당 없으면 return 1
+#   - 새 터미널 앱: 함수 추가 후 _DETECTORS 배열에 등록만 하면 됨
+# -------------------------------------------------------------------
+
+detect_iterm() {
+  [ -n "$CURRENT_TTY" ] || return 1
+  [ "$TERM_PROGRAM" = "iTerm.app" ] || { [ "$_TMUX_FALLBACK" = "1" ] && osascript -e 'return (application "iTerm2" is running) or (application "iTerm" is running)' 2>/dev/null | grep -q "true"; } || return 1
+  local info
+  info=$(osascript 2>> /tmp/DevIsland.bridge.log << ASEOF
 if not ((application "iTerm2" is running) or (application "iTerm" is running)) then return ""
 tell application "iTerm"
   set ttyPath to "$CURRENT_TTY"
@@ -144,16 +160,18 @@ tell application "iTerm"
 end tell
 ASEOF
 )
-  if [ -n "$ITERM_INFO" ]; then
-    TERM_APP="iTerm"
-    TERM_TITLE=$(printf '%s' "$ITERM_INFO" | awk -F ':::' '{print $1}')
-    TERM_WINDOW_ID=$(printf '%s' "$ITERM_INFO" | awk -F ':::' '{print $2}')
-    TERM_TAB_INDEX=$(printf '%s' "$ITERM_INFO" | awk -F ':::' '{print $3}')
-  fi
-fi
+  [ -n "$info" ] || return 1
+  TERM_APP="iTerm"
+  TERM_TITLE=$(printf '%s' "$info" | awk -F ':::' '{print $1}')
+  TERM_WINDOW_ID=$(printf '%s' "$info" | awk -F ':::' '{print $2}')
+  TERM_TAB_INDEX=$(printf '%s' "$info" | awk -F ':::' '{print $3}')
+}
 
-if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ "$TERM_PROGRAM" = "Apple_Terminal" ] || { [ "$_TMUX_FALLBACK" = "1" ] && osascript -e 'return (application "Terminal" is running)' 2>/dev/null | grep -q "true"; }; }; then
-  TERM_INFO=$(osascript 2>> /tmp/DevIsland.bridge.log << ASEOF
+detect_apple_terminal() {
+  [ -n "$CURRENT_TTY" ] || return 1
+  [ "$TERM_PROGRAM" = "Apple_Terminal" ] || { [ "$_TMUX_FALLBACK" = "1" ] && osascript -e 'return (application "Terminal" is running)' 2>/dev/null | grep -q "true"; } || return 1
+  local info
+  info=$(osascript 2>> /tmp/DevIsland.bridge.log << ASEOF
 if not (application "Terminal" is running) then return ""
 tell application "Terminal"
   set ttyPath to "$CURRENT_TTY"
@@ -174,20 +192,20 @@ tell application "Terminal"
 end tell
 ASEOF
 )
-  if [ -n "$TERM_INFO" ]; then
-    TERM_APP="Terminal"
-    TERM_TITLE=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $1}')
-    TERM_WINDOW_ID=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $2}')
-    TERM_TAB_INDEX=$(printf '%s' "$TERM_INFO" | awk -F ':::' '{print $3}')
-  fi
-fi
+  [ -n "$info" ] || return 1
+  TERM_APP="Terminal"
+  TERM_TITLE=$(printf '%s' "$info" | awk -F ':::' '{print $1}')
+  TERM_WINDOW_ID=$(printf '%s' "$info" | awk -F ':::' '{print $2}')
+  TERM_TAB_INDEX=$(printf '%s' "$info" | awk -F ':::' '{print $3}')
+}
 
-if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ -n "$CMUX_WORKSPACE_ID" ] || [ -n "$CMUX_SURFACE_ID" ]; }; then
-  if osascript -e 'return (application "cmux" is running)' 2>/dev/null | grep -q "true"; then
-    TERM_APP="cmux"
-    # ID로 워크스페이스 이름을 조회 — current-workspace는 포커스 상태에 따라 바뀌므로 사용 안 함
-    if [ -n "$CMUX_WORKSPACE_ID" ]; then
-      TERM_TITLE=$(osascript 2>/dev/null << ASEOF
+detect_cmux() {
+  [ -n "$CURRENT_TTY" ] || return 1
+  { [ -n "$CMUX_WORKSPACE_ID" ] || [ -n "$CMUX_SURFACE_ID" ]; } || return 1
+  osascript -e 'return (application "cmux" is running)' 2>/dev/null | grep -q "true" || return 1
+  TERM_APP="cmux"
+  if [ -n "$CMUX_WORKSPACE_ID" ]; then
+    TERM_TITLE=$(osascript 2>/dev/null << ASEOF
 tell application "cmux"
   repeat with aWindow in windows
     repeat with aTab in tabs of aWindow
@@ -200,25 +218,26 @@ tell application "cmux"
 end tell
 ASEOF
 )
-    fi
-    TERM_WINDOW_ID="${CMUX_WORKSPACE_ID:-}"
-    TERM_TAB_INDEX="${CMUX_SURFACE_ID:-}"
   fi
-fi
+  TERM_WINDOW_ID="${CMUX_WORKSPACE_ID:-}"
+  TERM_TAB_INDEX="${CMUX_SURFACE_ID:-}"
+}
 
-if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ -n "$GHOSTTY_BIN_DIR" ]; then
-  if osascript -e 'return (application "Ghostty" is running)' 2>/dev/null | grep -q "true"; then
-    TERM_APP="Ghostty"
-    TERM_TITLE=$(osascript -e 'tell application "Ghostty" to get name of front window' 2>/dev/null || echo "Ghostty")
-  fi
-fi
+detect_ghostty() {
+  [ -n "$CURRENT_TTY" ] || return 1
+  [ -n "$GHOSTTY_BIN_DIR" ] || return 1
+  osascript -e 'return (application "Ghostty" is running)' 2>/dev/null | grep -q "true" || return 1
+  TERM_APP="Ghostty"
+  TERM_TITLE=$(osascript -e 'tell application "Ghostty" to get name of front window' 2>/dev/null || echo "Ghostty")
+}
 
-if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
-  if osascript -e 'return (application "Warp" is running)' 2>/dev/null | grep -q "true"; then
-    TERM_APP="Warp"
-    TERM_TITLE="Warp"
-  fi
-fi
+detect_warp() {
+  [ -n "$CURRENT_TTY" ] || return 1
+  [ "$TERM_PROGRAM" = "WarpTerminal" ] || return 1
+  osascript -e 'return (application "Warp" is running)' 2>/dev/null | grep -q "true" || return 1
+  TERM_APP="Warp"
+  TERM_TITLE="Warp"
+}
 
 if [ -z "$TERM_APP" ] && [ -n "$CURRENT_TTY" ] && { [ "$TERM_PROGRAM" = "WezTerm" ] || [ -n "${WEZTERM_PANE:-}" ]; }; then
   TERM_APP="WezTerm"
@@ -239,72 +258,95 @@ fi
 
 # VS Code integrated terminal (TERM_PROGRAM=vscode, has TTY)
 # TERM_PROGRAM=vscode is set by all VS Code variants (Insiders, VSCodium, etc.) — no app check needed
-if [ -z "$TERM_APP" ] && [ "$TERM_PROGRAM" = "vscode" ]; then
+detect_vscode_integrated() {
+  [ "$TERM_PROGRAM" = "vscode" ] || return 1
   TERM_APP="VSCode"
+  local _dir
   _dir=$(basename "$PWD" 2>/dev/null)
   TERM_TITLE="${_dir:-VS Code}"
-fi
+}
 
 # VS Code extension host (no TTY, VSCODE_PID / VSCODE_IPC_HOOK / VSCODE_IPC_HOOK_CLI)
-if [ -z "$TERM_APP" ] && { [ -n "${VSCODE_PID:-}" ] || [ -n "${VSCODE_IPC_HOOK:-}" ] || [ -n "${VSCODE_IPC_HOOK_CLI:-}" ]; }; then
-  if osascript -e 'return application id "com.microsoft.VSCode" is running' 2>/dev/null | grep -q "true"; then
-    TERM_APP="VSCode"
-    _dir=$(basename "$PWD" 2>/dev/null)
-    TERM_TITLE="${_dir:-VS Code}"
-  fi
-fi
+detect_vscode_extension_host() {
+  { [ -n "${VSCODE_PID:-}" ] || [ -n "${VSCODE_IPC_HOOK:-}" ] || [ -n "${VSCODE_IPC_HOOK_CLI:-}" ]; } || return 1
+  osascript -e 'return application id "com.microsoft.VSCode" is running' 2>/dev/null | grep -q "true" || return 1
+  TERM_APP="VSCode"
+  local _dir
+  _dir=$(basename "$PWD" 2>/dev/null)
+  TERM_TITLE="${_dir:-VS Code}"
+}
 
 # Claude Desktop app: CLAUDE_CODE_DESKTOP 환경변수 또는 부모 프로세스 체인에서 "Claude" 앱 탐지
-if [ -z "$TERM_APP" ]; then
-  _is_claude_desktop=0
+detect_claude_desktop() {
+  local _is=0
   if [ -n "${CLAUDE_CODE_DESKTOP:-}" ]; then
-    _is_claude_desktop=1
+    _is=1
   else
-    _pid=$$
+    local _pid=$$
+    local _ppid _pname
     for _i in 1 2 3 4 5; do
       _ppid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ')
       [ -z "$_ppid" ] || [ "$_ppid" = "0" ] && break
       _pname=$(ps -p "$_ppid" -o comm= 2>/dev/null | tr -d ' ')
       if echo "$_pname" | grep -q "Claude\.app/Contents/MacOS/Claude$"; then
-        _is_claude_desktop=1
-        break
+        _is=1; break
       fi
       _pid="$_ppid"
     done
   fi
-  if [ "$_is_claude_desktop" = "1" ]; then
-    TERM_APP="ClaudeDesktop"
-    _dir=$(basename "$PWD" 2>/dev/null)
-    TERM_TITLE="${_dir:-Claude}"
-  fi
-fi
+  [ "$_is" = "1" ] || return 1
+  TERM_APP="ClaudeDesktop"
+  local _dir
+  _dir=$(basename "$PWD" 2>/dev/null)
+  TERM_TITLE="${_dir:-Claude}"
+}
 
 # Codex Desktop app: CODEX_SHELL 환경변수 또는 부모 프로세스 체인에서 "Codex" 앱 탐지
-if [ -z "$TERM_APP" ]; then
-  _is_codex_desktop=0
+detect_codex_desktop() {
+  local _is=0
   if [ -n "${CODEX_SHELL:-}" ]; then
-    _is_codex_desktop=1
+    _is=1
   else
-    _pid=$$
+    local _pid=$$
+    local _ppid _pname
     for _i in 1 2 3 4 5; do
       _ppid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ')
       [ -z "$_ppid" ] || [ "$_ppid" = "0" ] && break
       _pname=$(ps -p "$_ppid" -o comm= 2>/dev/null | tr -d ' ')
       if echo "$_pname" | grep -q "Codex.*\.app/Contents/MacOS/Codex$"; then
-        _is_codex_desktop=1
-        break
+        _is=1; break
       fi
       _pid="$_ppid"
     done
   fi
-  if [ "$_is_codex_desktop" = "1" ]; then
-    TERM_APP="CodexDesktop"
-    _dir=$(basename "$PWD" 2>/dev/null)
-    TERM_TITLE="${_dir:-Codex}"
-  fi
-fi
+  [ "$_is" = "1" ] || return 1
+  TERM_APP="CodexDesktop"
+  local _dir
+  _dir=$(basename "$PWD" 2>/dev/null)
+  TERM_TITLE="${_dir:-Codex}"
+}
 
-# 만약 터미널 앱 감지에 실패했고 페이로드에 이미 터미널 정보가 있다면 추출하여 사용
+# -------------------------------------------------------------------
+# 터미널 앱 감지 실행 — 첫 번째 성공한 detector에서 중단
+# 새 터미널 추가: detect_<name>() 함수를 위에 추가하고 여기에 이름만 등록
+# -------------------------------------------------------------------
+_DETECTORS=(
+  detect_iterm
+  detect_apple_terminal
+  detect_cmux
+  detect_ghostty
+  detect_warp
+  detect_vscode_integrated
+  detect_vscode_extension_host
+  detect_claude_desktop
+  detect_codex_desktop
+)
+
+for _fn in "${_DETECTORS[@]}"; do
+  "$_fn" && break
+done
+
+# 감지 실패 시 페이로드에 이미 터미널 정보가 있다면 재사용 (replay 등)
 if [ -z "$TERM_APP" ]; then
   _payload_term_app=$(echo "$PAYLOAD" | grep -o '"terminal_app"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | cut -d'"' -f4 2>/dev/null || echo "")
   if [ -n "$_payload_term_app" ]; then
@@ -316,6 +358,7 @@ if [ -z "$TERM_APP" ]; then
   fi
 fi
 
+# 터미널 감지 완전 실패 — CLI별 기본값으로 조기 종료
 if [ -z "$TERM_APP" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ignoring non-terminal hook source: TERM_PROGRAM=${TERM_PROGRAM:-} TERM_TTY=${CURRENT_TTY:-}" >> /tmp/DevIsland.bridge.log
   if [ "$CLI_SOURCE_ARG" = "antigravity" ] && [ "$HOOK_EVENT_ARG" = "PreToolUse" ]; then
@@ -342,7 +385,9 @@ if [ -z "$TERM_TITLE" ] || [ "$TERM_TITLE" = "Terminal" ]; then
   fi
 fi
 
+# -------------------------------------------------------------------
 # 페이로드 처리, TCP 송수신, CLI별 응답 변환은 Python helper가 담당한다.
+# -------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY_BRIDGE="$SCRIPT_DIR/devisland_bridge.py"
 
