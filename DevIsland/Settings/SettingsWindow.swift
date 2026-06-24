@@ -1466,15 +1466,12 @@ private struct BridgeDiagnosticsPane: View {
             let statuses = BridgeHealthDetector.allHookStatuses()
             let logTail = BridgeHealthDetector.logTail(maxLines: 20)
             let scriptInstalled = BridgeHealthDetector.isBridgeScriptInstalled
+            let lastEvent = try? AppState.shared.replayLogEntries(limit: 1).first
             await MainActor.run {
                 self.hookStatuses = statuses
                 self.logLines = logTail
                 self.bridgeScriptInstalled = scriptInstalled
-            }
-        }
-        Task {
-            if let entry = try? AppState.shared.replayLogEntries(limit: 1).first {
-                self.lastEventAt = entry.receivedAt
+                self.lastEventAt = lastEvent?.receivedAt
             }
         }
     }
