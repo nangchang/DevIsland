@@ -1891,8 +1891,9 @@ class AppState: ObservableObject {
     }
 
     private func discardInvalidPendingRequests() {
-        while let next = sessionStore.pendingQueue.first(where: { $0.claudeQuestion == nil && !ApprovalQueuePolicy.isValidApprovalRequest($0) }) {
-            if let removed = sessionStore.removePending(id: next.id) {
+        let invalid = sessionStore.pendingQueue.filter { $0.claudeQuestion == nil && !ApprovalQueuePolicy.isValidApprovalRequest($0) }
+        for request in invalid {
+            if let removed = sessionStore.removePending(id: request.id) {
                 removed.responseHandler("{\"response\": \"pass\"}")
             }
         }
