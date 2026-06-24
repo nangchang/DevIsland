@@ -680,6 +680,8 @@ private struct AdvancedSettingsPane: View {
                     ProviderSettingsPane(geminiState: geminiState, store: store)
                 case .bridge:
                     BridgeIPCSettingsPane(store: store)
+                case .diagnostics:
+                    BridgeDiagnosticsPane()
                 case .experimental:
                     ExperimentalPTYSettingsPane()
                         .environmentObject(store)
@@ -692,6 +694,7 @@ private struct AdvancedSettingsPane: View {
     private enum AdvancedSettingsSection: String, CaseIterable, Identifiable {
         case providers
         case bridge
+        case diagnostics
         case experimental
 
         var id: String { rawValue }
@@ -701,6 +704,7 @@ private struct AdvancedSettingsPane: View {
             switch self {
             case .providers:    return l.tabProviders
             case .bridge:       return l.tabBridge
+            case .diagnostics:  return l.tabDiagnostics
             case .experimental: return l.tabExperimental
             }
         }
@@ -709,6 +713,7 @@ private struct AdvancedSettingsPane: View {
             switch self {
             case .providers:    return "person.3.sequence"
             case .bridge:       return "cable.connector"
+            case .diagnostics:  return "stethoscope"
             case .experimental: return "testtube.2"
             }
         }
@@ -1401,5 +1406,112 @@ private struct PlaceholderToolWindowView: View {
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Bridge Diagnostics
+
+private struct BridgeDiagnosticsPane: View {
+    @ObservedObject private var l10n = L10n.shared
+    @State private var hookStatuses: [BridgeHookStatus] = []
+    @State private var lastEventAt: Date?
+    @State private var logLines: [String] = []
+    @State private var bridgeScriptInstalled = false
+
+    var body: some View {
+        Form {
+            Section(l10n.secBridgeScript) {
+                LabeledContent(l10n.lblBridgeInstallPath) {
+                    Text(BridgeHealthDetector.bridgeScriptURL.path)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                HStack(spacing: 6) {
+                    Image(systemName: bridgeScriptInstalled ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(bridgeScriptInstalled ? .green : .red)
+                    Text(bridgeScriptInstalled ? l10n.lblBridgeFileFound : l10n.lblBridgeFileNotFound)
+                }
+            }
+
+            Section(l10n.secHookStatus) {
+                ForEach(hookStatuses, id: \.provider.displayName) { status in
+                    HStack(spacing: 6) {
+                        Image(systemName: hookStatusIcon(status))
+                            .foregroundStyle(hookStatusColor(status))
+                        Text(status.provider.displayName)
+                        Spacer()
+                        Text(hookStatusLabel(status))
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                }
+            }
+
+            Section(l10n.secLastEvent) {
+                if let lastEventAt {
+                    Text(lastEventAt, style: .relative)
+                } else {
+                    Text(l10n.lblNoEventYet)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section {
+                Button(l10n.btnDiagRefresh) { refresh() }
+            }
+
+            if !logLines.isEmpty {
+                Section(l10n.secBridgeLog) {
+                    ScrollView {
+                        Text(logLines.joined(separator: "\n"))
+                            .font(.system(.caption2, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 160)
+                }
+            } else {
+                Section(l10n.secBridgeLog) {
+                    Text(l10n.secBridgeLogEmpty)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { refresh() }
+    }
+
+    private func refresh() {
+        Task.detached(priority: .utility) {
+            let statuses = BridgeHealthDetector.allHookStatuses()
+            let logTail = BridgeHealthDetector.logTail(maxLines: 20)
+            let scriptInstalled = BridgeHealthDetector.isBridgeScriptInstalled
+            let lastEvent = try? AppState.shared.replayLogEntries(limit: 1).first
+            await MainActor.run {
+                self.hookStatuses = statuses
+                self.logLines = logTail
+                self.bridgeScriptInstalled = scriptInstalled
+                self.lastEventAt = lastEvent?.receivedAt
+            }
+        }
+    }
+
+    private func hookStatusIcon(_ status: BridgeHookStatus) -> String {
+        if status.isInstalled { return "checkmark.circle.fill" }
+        if status.settingsFileExists { return "exclamationmark.circle.fill" }
+        return "minus.circle"
+    }
+
+    private func hookStatusColor(_ status: BridgeHookStatus) -> Color {
+        if status.isInstalled { return .green }
+        if status.settingsFileExists { return .orange }
+        return .secondary
+    }
+
+    private func hookStatusLabel(_ status: BridgeHookStatus) -> String {
+        if status.isInstalled { return l10n.lblHookInstalled }
+        if status.settingsFileExists { return l10n.lblHookNotInstalled }
+        return l10n.lblHookFileMissing
     }
 }
