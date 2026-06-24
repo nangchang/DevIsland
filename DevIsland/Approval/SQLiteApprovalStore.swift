@@ -12,7 +12,7 @@ final class SQLiteApprovalStore {
         case unsupportedSchemaVersion(Int32)
     }
 
-    static let currentSchemaVersion: Int32 = 5
+    static let currentSchemaVersion: Int32 = 6
 
     static func deterministicRuleID(
         provider: ProviderKind,
@@ -425,6 +425,27 @@ final class SQLiteApprovalStore {
         try execute("DELETE FROM rules WHERE id = ?", [id.uuidString])
     }
 
+    func manualAllowCount(toolName: String) -> Int {
+        var stmt: OpaquePointer?
+        let sql = "SELECT COUNT(*) FROM approval_decisions WHERE tool_name = ? AND action = 'allow' AND source = 'user'"
+        guard sqlite3_prepare_v2(database, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, toolName, -1, SQLITE_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
+        return Int(sqlite3_column_int(stmt, 0))
+    }
+
+    func hasPersistentAllowRule(toolName: String) -> Bool {
+        var stmt: OpaquePointer?
+        let sql = "SELECT COUNT(*) FROM rules WHERE enabled = 1 AND scope = 'persistent' AND action = 'allow' AND tool_name = ? AND (expires_at IS NULL OR expires_at > ?)"
+        guard sqlite3_prepare_v2(database, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, toolName, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_double(stmt, 2, Date().timeIntervalSince1970)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return false }
+        return sqlite3_column_int(stmt, 0) > 0
+    }
+
     func pruneOldLogs(replayRetentionDays: Int, ptyRetentionDays: Int) throws {
         guard replayRetentionDays > 0, ptyRetentionDays > 0 else { return }
         let replayCutoff = Date().timeIntervalSince1970 - Double(replayRetentionDays) * 86_400
@@ -581,6 +602,7 @@ final class SQLiteApprovalStore {
         if version < 3 { try migrateToVersion3() }
         if version < 4 { try migrateToVersion4() }
         if version < 5 { try migrateToVersion5() }
+        if version < 6 { try migrateToVersion6() }
         try execute("PRAGMA user_version = \(Self.currentSchemaVersion)")
     }
 
@@ -735,6 +757,14 @@ final class SQLiteApprovalStore {
         // 조회 시 leading column이 맞지 않아 풀스캔이 발생한다.
         try execute(
             "CREATE INDEX IF NOT EXISTS idx_hook_events_session_id ON hook_events(session_id, received_at DESC)"
+        )
+    }
+
+    private func migrateToVersion6() throws {
+        // manualAllowCount(toolName:)이 tool_name + action + source로 필터링하므로
+        // 복합 인덱스를 추가해 결정 로그 누적 시 풀스캔을 방지한다.
+        try execute(
+            "CREATE INDEX IF NOT EXISTS idx_decisions_tool_action_source ON approval_decisions(tool_name, action, source)"
         )
     }
 
