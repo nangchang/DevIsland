@@ -425,6 +425,27 @@ final class SQLiteApprovalStore {
         try execute("DELETE FROM rules WHERE id = ?", [id.uuidString])
     }
 
+    func manualAllowCount(toolName: String) -> Int {
+        var stmt: OpaquePointer?
+        let sql = "SELECT COUNT(*) FROM approval_decisions WHERE tool_name = ? AND action = 'allow' AND source = 'user'"
+        guard sqlite3_prepare_v2(database, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, toolName, -1, SQLITE_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
+        return Int(sqlite3_column_int(stmt, 0))
+    }
+
+    func hasPersistentAllowRule(toolName: String) -> Bool {
+        var stmt: OpaquePointer?
+        let sql = "SELECT COUNT(*) FROM rules WHERE enabled = 1 AND scope = 'persistent' AND action = 'allow' AND tool_name = ? AND (expires_at IS NULL OR expires_at > ?)"
+        guard sqlite3_prepare_v2(database, sql, -1, &stmt, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, toolName, -1, SQLITE_TRANSIENT)
+        sqlite3_bind_double(stmt, 2, Date().timeIntervalSince1970)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return false }
+        return sqlite3_column_int(stmt, 0) > 0
+    }
+
     func pruneOldLogs(replayRetentionDays: Int, ptyRetentionDays: Int) throws {
         guard replayRetentionDays > 0, ptyRetentionDays > 0 else { return }
         let replayCutoff = Date().timeIntervalSince1970 - Double(replayRetentionDays) * 86_400

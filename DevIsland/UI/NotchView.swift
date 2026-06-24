@@ -525,6 +525,23 @@ struct NotchView: View {
                         .padding(.horizontal, 20)
                     }
 
+                    if let suggestedTool = state.alwaysAllowSuggestion, state.hasResponseHandler {
+                        Button(action: { state.approve(globalAlways: true) }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "wand.and.stars")
+                                Text(l10n.notchAlwaysAllowSuggestion)
+                            }
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(maxWidth: .infinity, minHeight: 30)
+                            .background(Color.yellow.opacity(0.12))
+                            .foregroundColor(.yellow)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                        .help(l10n.notchAlwaysAllowSuggestionHelp(suggestedTool))
+                        .padding(.horizontal, 12)
+                    }
+
                     HStack(spacing: 12) {
                         if state.hasResponseHandler {
                             Button(action: { state.focusTerminal() }) {

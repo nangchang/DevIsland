@@ -75,6 +75,7 @@ class AppState: ObservableObject {
     // `globalAutoApproveTypes` serves as a fast-path in-memory cache for explicit
     // whole-tool approvals. Patterned SQLite rules stay in ApprovalPolicyEngine.
     @Published var globalAutoApproveTypes: Set<String> = []
+    @Published var alwaysAllowSuggestion: String? = nil
     @Published var sessionLabels: [String: String] = [:] {
         didSet { userDefaults.set(sessionLabels, forKey: DefaultsKey.sessionLabels) }
     }
@@ -1692,6 +1693,7 @@ class AppState: ObservableObject {
             currentWorkspaceRoot = nil
             currentHookEventId = nil
             currentMessage = ""
+            alwaysAllowSuggestion = nil
             claudeQuestionState.reset()
             currentSessionId = ""
             if let prev = previousSessionId {
@@ -1794,6 +1796,7 @@ class AppState: ObservableObject {
             if notifEnabled && next.claudeQuestion == nil {
                 NotificationManager.shared.sendApprovalRequest(next)
             }
+            self.checkAlwaysAllowSuggestion(toolName: next.toolName)
 
             self.isExpandingFromRequest = true
             let isQuestion = next.claudeQuestion != nil
@@ -2422,6 +2425,27 @@ class AppState: ObservableObject {
         guard let request = sessionStore.removePending(id: requestId) else { return }
         let response = approved ? "{\"response\": \"approved\"}" : "{\"response\": \"denied\"}"
         request.responseHandler(response)
+    }
+
+    private static let alwaysAllowThreshold = 3
+
+    private func checkAlwaysAllowSuggestion(toolName: String) {
+        guard !toolName.isEmpty, let proxy = approvalProxy else {
+            alwaysAllowSuggestion = nil
+            return
+        }
+        Task.detached(priority: .background) { [weak self] in
+            guard let self else { return }
+            let count = proxy.store.manualAllowCount(toolName: toolName)
+            guard count >= Self.alwaysAllowThreshold else {
+                await MainActor.run { self.alwaysAllowSuggestion = nil }
+                return
+            }
+            let hasRule = proxy.store.hasPersistentAllowRule(toolName: toolName)
+            await MainActor.run {
+                self.alwaysAllowSuggestion = hasRule ? nil : toolName
+            }
+        }
     }
 
     func insertGlobalPersistentRule(_ toolName: String) {

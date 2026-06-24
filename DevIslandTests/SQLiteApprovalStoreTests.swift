@@ -325,4 +325,58 @@ final class SQLiteApprovalStoreTests: XCTestCase {
         XCTAssertEqual(messages.count, 1)
         XCTAssertEqual(messages[0].content, "recent")
     }
+
+    // MARK: - manualAllowCount / hasPersistentAllowRule
+
+    func testManualAllowCountZeroWhenNoDecisions() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        XCTAssertEqual(store.manualAllowCount(toolName: "Bash"), 0)
+    }
+
+    func testManualAllowCountOnlyCountsUserSourceAllow() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let eventId = try store.insertHookEvent(requestId: nil, provider: .claude, sessionId: "s1",
+                                                eventName: "PreToolUse", toolName: "Bash", payloadJSON: "{}")
+        try store.insertDecision(hookEventId: eventId, provider: .claude, sessionId: "s1",
+                                 toolName: "Bash", action: .allow, source: .user, reason: nil)
+        try store.insertDecision(hookEventId: nil, provider: .claude, sessionId: "s1",
+                                 toolName: "Bash", action: .allow, source: .persistentRule, reason: nil)
+        try store.insertDecision(hookEventId: nil, provider: .claude, sessionId: "s1",
+                                 toolName: "Bash", action: .deny, source: .user, reason: nil)
+        XCTAssertEqual(store.manualAllowCount(toolName: "Bash"), 1)
+    }
+
+    func testManualAllowCountAggregatesAcrossSessions() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        for i in 1...3 {
+            try store.insertDecision(hookEventId: nil, provider: .claude, sessionId: "s\(i)",
+                                     toolName: "Edit", action: .allow, source: .user, reason: nil)
+        }
+        XCTAssertEqual(store.manualAllowCount(toolName: "Edit"), 3)
+    }
+
+    func testHasPersistentAllowRuleFalseWhenNoRule() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        XCTAssertFalse(store.hasPersistentAllowRule(toolName: "UnseededTool"))
+    }
+
+    func testHasPersistentAllowRuleTrueAfterInsert() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        try store.insertRule(ApprovalRule(
+            id: SQLiteApprovalStore.deterministicRuleID(provider: .any, toolName: "Edit",
+                                                        scope: .persistent, workspaceRoot: nil),
+            provider: .any, toolName: "Edit", action: .allow, scope: .persistent
+        ))
+        XCTAssertTrue(store.hasPersistentAllowRule(toolName: "Edit"))
+    }
+
+    func testHasPersistentAllowRuleFalseForDifferentTool() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        try store.insertRule(ApprovalRule(
+            id: SQLiteApprovalStore.deterministicRuleID(provider: .any, toolName: "Bash",
+                                                        scope: .persistent, workspaceRoot: nil),
+            provider: .any, toolName: "Bash", action: .allow, scope: .persistent
+        ))
+        XCTAssertFalse(store.hasPersistentAllowRule(toolName: "Edit"))
+    }
 }

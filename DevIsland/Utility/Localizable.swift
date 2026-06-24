@@ -570,6 +570,11 @@ extension L10n {
     var notchApprove:          String { s("Approve",           "승인") }
     var notchAutoApproveSession: String { s("Auto-Approve for this Session", "이 세션에서 자동 승인") }
     var notchAlwaysAutoApprove:  String { s("Always Auto-Approve (Global)",  "항상 자동 승인 (전역)") }
+    var notchAlwaysAllowSuggestion: String { s("Always allow this tool?", "이 도구를 항상 허용할까요?") }
+    func notchAlwaysAllowSuggestionHelp(_ tool: String) -> String {
+        s("You've approved '\(tool)' multiple times. Click to add a permanent allow rule.",
+          "'\(tool)'을(를) 여러 번 승인했습니다. 클릭하면 영구 허용 규칙이 추가됩니다.")
+    }
     var notchFocusTerminal:    String { s("Focus Terminal",    "터미널 포커스") }
     var notchDismiss:          String { s("Dismiss",           "닫기") }
     var notchUnknown:          String { s("Unknown",           "알 수 없음") }
