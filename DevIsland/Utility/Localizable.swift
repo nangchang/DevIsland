@@ -287,6 +287,9 @@ extension L10n {
     var releaseChannelNightly:        String { s("Nightly",                                 "나이틀리") }
     var secSounds:                    String { s("Sounds",                                  "사운드") }
     var lblMuteAllSounds:             String { s("Mute all sounds",                         "모든 사운드 음소거") }
+    var secNotifications:             String { s("Notifications",                            "알림") }
+    var lblNotificationsEnabled:      String { s("Notify me on approval requests",           "승인 요청 시 알림") }
+    var descNotificationsEnabled:     String { s("Sends a macOS notification when a tool needs approval. Includes Approve and Deny buttons when app is in background.", "도구 승인이 필요할 때 macOS 알림을 보냅니다. 앱이 백그라운드에 있을 때 허용/거부 버튼이 표시됩니다.") }
 
     // Island tab
     var secNotch:            String { s("Island",                        "아일랜드") }

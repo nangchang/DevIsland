@@ -1238,6 +1238,13 @@ class AppState: ObservableObject {
                             self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: s))
                         }
                     }
+                    if isTaskCompletion {
+                        let enabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notificationsEnabled }
+                        if enabled {
+                            let title = self.sessionStore.activeSessions.first { $0.id == fullSessionId }?.terminalTitle ?? ""
+                            MainActor.assumeIsolated { NotificationManager.shared.sendTaskCompletion(sessionTitle: title) }
+                        }
+                    }
                     guard expandEnabled else { return }
                     guard self.currentResponseHandler == nil else { return }
                     // 세션의 팝아웃 창이 열려있으면 노치 확장 억제 — 창이 알림을 표시함
@@ -1783,6 +1790,10 @@ class AppState: ObservableObject {
                 self.claudeQuestionState.reset()
             }
             self.currentSessionId  = next.sessionId
+            let notifEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notificationsEnabled }
+            if notifEnabled && next.claudeQuestion == nil {
+                NotificationManager.shared.sendApprovalRequest(next)
+            }
 
             self.isExpandingFromRequest = true
             let isQuestion = next.claudeQuestion != nil
@@ -1824,6 +1835,9 @@ class AppState: ObservableObject {
     /// superseded) so no stale request is left showing. Callers handle their own
     /// pre-clear response (e.g. pass-to-terminal) and post-clear `showNextRequest`.
     private func clearCurrentRequestDisplay() {
+        if let showingRequestId {
+            NotificationManager.shared.cancelNotification(id: showingRequestId)
+        }
         currentResponseHandler = nil
         isShowingRequest = false
         showingRequestId = nil
@@ -2397,6 +2411,16 @@ class AppState: ObservableObject {
     func deny() {
         print("[DevIsland] deny() called")
         sendDecision(approved: false)
+    }
+
+    func respondFromNotification(requestId: UUID, approved: Bool) {
+        if showingRequestId == requestId {
+            if approved { approve() } else { deny() }
+            return
+        }
+        guard let request = sessionStore.removePending(id: requestId) else { return }
+        let response = approved ? "{\"response\": \"approved\"}" : "{\"response\": \"denied\"}"
+        request.responseHandler(response)
     }
 
     func insertGlobalPersistentRule(_ toolName: String) {
