@@ -75,6 +75,8 @@ _APP_SUPPORT = Path("~/Library/Application Support/DevIsland").expanduser()
 _TOKEN_PATH = _APP_SUPPORT / "bridge-token"
 _CONFIG_PATH = _APP_SUPPORT / "bridge-config.json"
 
+_DENIAL_MESSAGE = "DevIsland에서 거절되었습니다."
+
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -97,6 +99,175 @@ def log(message: str) -> None:
             pass
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Provider adapters
+# ---------------------------------------------------------------------------
+# Each adapter owns the per-CLI logic for three concerns:
+#   normalize_payload  — mutates the raw payload into DevIsland's canonical form
+#   final_output       — formats the hook response JSON the CLI expects
+#
+# New CLIs: add a subclass, register it in _ADAPTERS. No other file changes needed.
+# ---------------------------------------------------------------------------
+
+def _permission_request_output(allow: bool) -> dict[str, Any]:
+    hook_decision: dict[str, Any] = {"behavior": "allow" if allow else "deny"}
+    if not allow:
+        hook_decision["message"] = _DENIAL_MESSAGE
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": hook_decision,
+        }
+    }
+
+
+class ProviderAdapter:
+    sources: tuple[str, ...] = ()
+
+    def normalize_payload(self, payload: dict[str, Any], event_arg: str) -> None:
+        pass
+
+    def final_output(self, event: str, decision: str) -> dict[str, Any]:
+        if decision == "pass":
+            return {}
+        if event == "permissionrequest" and decision in ("approved", "denied"):
+            return _permission_request_output(decision == "approved")
+        return {"continue": True, "suppressOutput": True}
+
+
+class _ClaudeAdapter(ProviderAdapter):
+    sources = ("claude",)
+
+    def final_output(self, event: str, decision: str) -> dict[str, Any]:
+        if decision == "pass":
+            return {"continue": True, "suppressOutput": True} if event != "permissionrequest" else {}
+        allow = decision == "approved"
+        if event == "userpromptsubmit":
+            return (
+                {"continue": True, "suppressOutput": True}
+                if allow
+                else {"decision": "block", "reason": _DENIAL_MESSAGE}
+            )
+        if event == "elicitation":
+            return (
+                {"continue": True, "suppressOutput": True}
+                if allow
+                else {"hookSpecificOutput": {"hookEventName": "Elicitation", "action": "decline"}}
+            )
+        if event == "permissionrequest" and decision in ("approved", "denied"):
+            return _permission_request_output(allow)
+        return {"continue": True, "suppressOutput": True}
+
+
+class _CodexAdapter(ProviderAdapter):
+    sources = ("codex",)
+
+    def final_output(self, event: str, decision: str) -> dict[str, Any]:
+        if decision == "pass":
+            return {}
+        allow = decision == "approved"
+        if event == "pretooluse":
+            if allow:
+                return {}
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": _DENIAL_MESSAGE,
+                }
+            }
+        if event != "permissionrequest":
+            return {"continue": True}
+        if decision in ("approved", "denied"):
+            return _permission_request_output(allow)
+        return {}
+
+
+class _GeminiAdapter(ProviderAdapter):
+    sources = ("gemini",)
+
+    def final_output(self, event: str, decision: str) -> dict[str, Any]:
+        if decision == "pass":
+            return {}
+        allow = decision == "approved"
+        if event == "beforetool":
+            out: dict[str, Any] = {"decision": "allow" if allow else "deny"}
+            if not allow:
+                out["reason"] = _DENIAL_MESSAGE
+            return out
+        return {}
+
+
+class _AntigravityAdapter(ProviderAdapter):
+    sources = ("antigravity",)
+
+    def normalize_payload(self, payload: dict[str, Any], event_arg: str) -> None:
+        if "hook_event_name" not in payload and event_arg:
+            payload["hook_event_name"] = event_arg
+        elif "hook_event_name" not in payload:
+            payload["hook_event_name"] = self._infer_event(payload)
+
+        if "session_id" not in payload:
+            conversation_id = payload.get("conversationId")
+            if conversation_id:
+                payload["session_id"] = str(conversation_id)
+
+        tool_call = payload.get("toolCall")
+        if isinstance(tool_call, dict):
+            if "tool_name" not in payload and tool_call.get("name"):
+                payload["tool_name"] = str(tool_call["name"])
+            if "tool_input" not in payload:
+                args = tool_call.get("args")
+                payload["tool_input"] = args if isinstance(args, dict) else {}
+
+        if "cwd" not in payload:
+            tool_input = payload.get("tool_input")
+            if isinstance(tool_input, dict):
+                cwd = tool_input.get("Cwd") or tool_input.get("cwd")
+                if cwd:
+                    payload["cwd"] = str(cwd)
+            if "cwd" not in payload:
+                workspace_paths = payload.get("workspacePaths")
+                if isinstance(workspace_paths, list) and workspace_paths:
+                    payload["cwd"] = str(workspace_paths[0])
+
+    def _infer_event(self, payload: dict[str, Any]) -> str:
+        if "toolCall" in payload:
+            return "PreToolUse"
+        if "tool_response" in payload or "error" in payload:
+            return "PostToolUse"
+        if "initialNumSteps" in payload:
+            return "PreInvocation"
+        return "PermissionRequest"
+
+    def final_output(self, event: str, decision: str) -> dict[str, Any]:
+        if decision == "pass":
+            return {"decision": "ask"} if event == "pretooluse" else {}
+        allow = decision == "approved"
+        if event == "pretooluse":
+            out: dict[str, Any] = {"decision": "allow" if allow else "deny"}
+            if not allow:
+                out["reason"] = _DENIAL_MESSAGE
+            return out
+        return {}
+
+
+_ADAPTERS: list[ProviderAdapter] = [
+    _ClaudeAdapter(),
+    _CodexAdapter(),
+    _GeminiAdapter(),
+    _AntigravityAdapter(),
+]
+_DEFAULT_ADAPTER = ProviderAdapter()
+
+
+def _get_adapter(source: str) -> ProviderAdapter:
+    for adapter in _ADAPTERS:
+        if source in adapter.sources:
+            return adapter
+    return _DEFAULT_ADAPTER
 
 
 # ---------------------------------------------------------------------------
@@ -131,40 +302,8 @@ def enrich_payload(payload: dict[str, Any], cli_source_arg: str, event_arg: str 
     set_if_present("terminal_tmux_socket", "TERM_TMUX_SOCKET", "")
     set_if_present("terminal_tmux_client", "TERM_TMUX_CLIENT", "")
     payload["cli_source"] = cli_source_arg
-    if cli_source_arg == "antigravity":
-        normalize_antigravity_payload(payload, event_arg)
+    _get_adapter(cli_source_arg).normalize_payload(payload, event_arg)
     return payload
-
-
-def normalize_antigravity_payload(payload: dict[str, Any], event_arg: str = "") -> None:
-    if "hook_event_name" not in payload and event_arg:
-        payload["hook_event_name"] = event_arg
-    elif "hook_event_name" not in payload:
-        payload["hook_event_name"] = event_name(payload)
-
-    if "session_id" not in payload:
-        conversation_id = payload.get("conversationId")
-        if conversation_id:
-            payload["session_id"] = str(conversation_id)
-
-    tool_call = payload.get("toolCall")
-    if isinstance(tool_call, dict):
-        if "tool_name" not in payload and tool_call.get("name"):
-            payload["tool_name"] = str(tool_call["name"])
-        if "tool_input" not in payload:
-            args = tool_call.get("args")
-            payload["tool_input"] = args if isinstance(args, dict) else {}
-
-    if "cwd" not in payload:
-        tool_input = payload.get("tool_input")
-        if isinstance(tool_input, dict):
-            cwd = tool_input.get("Cwd") or tool_input.get("cwd")
-            if cwd:
-                payload["cwd"] = str(cwd)
-        if "cwd" not in payload:
-            workspace_paths = payload.get("workspacePaths")
-            if isinstance(workspace_paths, list) and workspace_paths:
-                payload["cwd"] = str(workspace_paths[0])
 
 
 def event_name(payload: dict[str, Any]) -> str:
@@ -172,16 +311,6 @@ def event_name(payload: dict[str, Any]) -> str:
         return str(payload["hook_event_name"])
     if "event" in payload:
         return str(payload["event"])
-
-    cli_source = payload.get("cli_source", "")
-    if cli_source == "antigravity":
-        if "toolCall" in payload:
-            return "PreToolUse"
-        elif "tool_response" in payload or "error" in payload:
-            return "PostToolUse"
-        elif "initialNumSteps" in payload:
-            return "PreInvocation"
-
     return "PermissionRequest"
 
 
@@ -344,77 +473,9 @@ def fallback_decision() -> str:
 # ---------------------------------------------------------------------------
 
 def final_output(*, event: str, decision: str, provider_output: dict[str, Any] | None, cli_source: str) -> dict[str, Any]:
-    # If the app already provided formatted provider output, use it directly.
     if provider_output:
         return provider_output
-
-    message = "DevIsland에서 거절되었습니다."
-
-    if decision == "pass":
-        if cli_source == "claude" and event != "permissionrequest":
-            return {"continue": True, "suppressOutput": True}
-        if cli_source == "antigravity" and event == "pretooluse":
-            return {"decision": "ask"}
-        return {}
-
-    allow = decision == "approved"
-    if cli_source == "gemini":
-        if event == "beforetool":
-            output: dict[str, Any] = {"decision": "allow" if allow else "deny"}
-            if not allow:
-                output["reason"] = message
-            return output
-        return {}
-
-    if cli_source == "antigravity":
-        if event == "pretooluse":
-            output: dict[str, Any] = {"decision": "allow" if allow else "deny"}
-            if not allow:
-                output["reason"] = message
-            return output
-        return {}
-
-    if cli_source == "codex":
-        if event == "pretooluse":
-            if allow:
-                return {}
-            return {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": message,
-                }
-            }
-        if event != "permissionrequest":
-            return {"continue": True}
-
-    if cli_source == "claude":
-        if event == "userpromptsubmit":
-            if allow:
-                return {"continue": True, "suppressOutput": True}
-            return {"decision": "block", "reason": message}
-        if event == "elicitation":
-            if allow:
-                return {"continue": True, "suppressOutput": True}
-            return {
-                "hookSpecificOutput": {
-                    "hookEventName": "Elicitation",
-                    "action": "decline",
-                }
-            }
-
-    if event == "permissionrequest" and decision in ("approved", "denied"):
-        hook_decision: dict[str, Any] = {"behavior": "allow" if allow else "deny"}
-        if not allow:
-            hook_decision["message"] = message
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "PermissionRequest",
-                "decision": hook_decision,
-            }
-        }
-
-    return {"continue": True, "suppressOutput": True}
+    return _get_adapter(cli_source).final_output(event, decision)
 
 
 # ---------------------------------------------------------------------------
