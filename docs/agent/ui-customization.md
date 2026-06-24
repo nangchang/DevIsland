@@ -67,3 +67,8 @@ These settings are managed in `SettingsStore` and applied in `NotchView` / `Notc
 ### Buddy Management
 - `MascotState` handles the randomization logic for side buddies.
 - Vertical offset is applied during collapsed rendering to allow centering buddies within custom-height Islands.
+
+### Session Metadata
+- Session labels, descriptions, and history favorites are stored by session ID in `AppState` via `UserDefaults`.
+- Favorites are a Session History window filter and marker; they do not pin or reorder active sessions in the Island.
+- Active session rows keep descriptions out of the main row layout and expose them as hover help text.

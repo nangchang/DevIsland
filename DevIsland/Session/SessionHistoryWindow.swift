@@ -3,10 +3,18 @@ import AppKit
 
 // MARK: - ViewModel
 
+enum SessionHistoryFilter: String, CaseIterable, Identifiable {
+    case all
+    case favorites
+
+    var id: String { rawValue }
+}
+
 @MainActor
 final class SessionHistoryViewModel: ObservableObject {
     @Published var records: [ClosedSessionRecord] = []
     @Published var searchText: String = ""
+    @Published var filter: SessionHistoryFilter = .all
     @Published var errorMessage: String?
 
     private let appState: AppState
@@ -17,13 +25,16 @@ final class SessionHistoryViewModel: ObservableObject {
     }
 
     var filtered: [ClosedSessionRecord] {
-        guard !searchText.isEmpty else { return records }
-        return records.filter {
-            $0.sessionId.localizedCaseInsensitiveContains(searchText)
-            || ($0.workspaceRoot?.localizedCaseInsensitiveContains(searchText) ?? false)
-            || ($0.terminalTitle?.localizedCaseInsensitiveContains(searchText) ?? false)
-            || $0.provider.rawValue.localizedCaseInsensitiveContains(searchText)
-            || (appState.sessionLabels[$0.sessionId]?.localizedCaseInsensitiveContains(searchText) ?? false)
+        records.filter { record in
+            let matchesFavorite = filter == .all || appState.isSessionFavorite(record.sessionId)
+            let matchesSearch = searchText.isEmpty
+                || record.sessionId.localizedCaseInsensitiveContains(searchText)
+                || (record.workspaceRoot?.localizedCaseInsensitiveContains(searchText) ?? false)
+                || (record.terminalTitle?.localizedCaseInsensitiveContains(searchText) ?? false)
+                || record.provider.rawValue.localizedCaseInsensitiveContains(searchText)
+                || (appState.sessionLabels[record.sessionId]?.localizedCaseInsensitiveContains(searchText) ?? false)
+                || (appState.sessionDescriptions[record.sessionId]?.localizedCaseInsensitiveContains(searchText) ?? false)
+            return matchesFavorite && matchesSearch
         }
     }
 
@@ -103,6 +114,13 @@ struct SessionHistoryWindowView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 260)
 
+            Picker("", selection: $viewModel.filter) {
+                Text(l10n.historyFilterAll).tag(SessionHistoryFilter.all)
+                Text(l10n.historyFilterFavorites).tag(SessionHistoryFilter.favorites)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 180)
+
             Spacer()
 
             Text(l10n.historyCount(viewModel.filtered.count))
@@ -123,6 +141,18 @@ struct SessionHistoryWindowView: View {
 
     private var sessionList: some View {
         Table(viewModel.filtered) {
+            TableColumn(l10n.historyColFavorite) { record in
+                Button {
+                    appState.toggleSessionFavorite(record.sessionId)
+                } label: {
+                    Image(systemName: appState.isSessionFavorite(record.sessionId) ? "star.fill" : "star")
+                        .foregroundStyle(appState.isSessionFavorite(record.sessionId) ? .yellow : .secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(appState.isSessionFavorite(record.sessionId) ? l10n.menuRemoveFavorite : l10n.menuAddFavorite)
+            }
+            .width(44)
+
             TableColumn(l10n.historyColAgent) { record in
                 HStack(spacing: 4) {
                     Image(systemName: providerIcon(record.provider))
@@ -164,6 +194,21 @@ struct SessionHistoryWindowView: View {
             }
             .width(120)
 
+            TableColumn(l10n.historyColDescription) { record in
+                if let description = appState.sessionDescriptions[record.sessionId], !description.isEmpty {
+                    Text(description)
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(description)
+                } else {
+                    Text("—")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .width(min: 160, ideal: 220)
+
             TableColumn(l10n.historyColTitle) { record in
                 Text(record.terminalTitle ?? "—")
                     .font(.system(size: 11))
@@ -196,6 +241,24 @@ struct SessionHistoryWindowView: View {
                     )
                 } label: {
                     Label(l10n.menuRenameSession, systemImage: "pencil")
+                }
+
+                Button {
+                    AppState.shared.promptEditSessionDescription(
+                        record.sessionId,
+                        currentDescription: appState.sessionDescriptions[record.sessionId]
+                    )
+                } label: {
+                    Label(l10n.menuEditSessionDescription, systemImage: "text.bubble")
+                }
+
+                Button {
+                    AppState.shared.toggleSessionFavorite(record.sessionId)
+                } label: {
+                    Label(
+                        appState.isSessionFavorite(record.sessionId) ? l10n.menuRemoveFavorite : l10n.menuAddFavorite,
+                        systemImage: appState.isSessionFavorite(record.sessionId) ? "star.slash" : "star"
+                    )
                 }
 
                 Divider()
