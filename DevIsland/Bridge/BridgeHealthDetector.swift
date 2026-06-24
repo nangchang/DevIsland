@@ -63,8 +63,15 @@ enum BridgeHealthDetector {
     static func logTail(maxLines: Int = 20) -> [String] {
         let logURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/DevIsland/bridge.log")
-        guard let contents = try? String(contentsOf: logURL, encoding: .utf8) else { return [] }
-        let lines = contents.components(separatedBy: "\n").filter { !$0.isEmpty }
+        guard let fh = try? FileHandle(forReadingFrom: logURL) else { return [] }
+        defer { try? fh.close() }
+        let fileSize = (try? fh.seekToEnd()) ?? 0
+        let readSize: UInt64 = 32_768
+        let offset = fileSize > readSize ? fileSize - readSize : 0
+        try? fh.seek(toOffset: offset)
+        guard let data = try? fh.readToEnd(),
+              let tail = String(data: data, encoding: .utf8) else { return [] }
+        let lines = tail.components(separatedBy: "\n").filter { !$0.isEmpty }
         return Array(lines.suffix(maxLines))
     }
 }
