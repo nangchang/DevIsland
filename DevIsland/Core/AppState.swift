@@ -1796,7 +1796,7 @@ class AppState: ObservableObject {
             if notifEnabled && next.claudeQuestion == nil {
                 NotificationManager.shared.sendApprovalRequest(next)
             }
-            self.checkAlwaysAllowSuggestion(toolName: next.toolName)
+            self.checkAlwaysAllowSuggestion(toolName: next.rawToolName.isEmpty ? next.toolName : next.rawToolName)
 
             self.isExpandingFromRequest = true
             let isQuestion = next.claudeQuestion != nil
@@ -2434,6 +2434,7 @@ class AppState: ObservableObject {
             alwaysAllowSuggestion = nil
             return
         }
+        alwaysAllowSuggestion = nil
         Task.detached(priority: .background) { [weak self] in
             guard let self else { return }
             let count = proxy.store.manualAllowCount(toolName: toolName)
