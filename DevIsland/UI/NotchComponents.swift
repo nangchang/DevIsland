@@ -438,8 +438,9 @@ struct SessionRowView: View {
         TerminalFocuser.openNewWindow(appName: name, command: resumeCommand)
     }
 
-    private func openNewSession(provider: BuddyKind) {
-        TerminalFocuser.openNewWindow(appName: autoTerminalName, command: session.newSessionCommand(for: provider))
+    private func openNewSession(provider: BuddyKind, appName: String? = nil) {
+        let name = appName ?? autoTerminalName
+        TerminalFocuser.openNewWindow(appName: name, command: session.newSessionCommand(for: provider))
     }
     private var statusLabel: String? {
         switch session.status {
@@ -736,9 +737,23 @@ struct SessionRowView: View {
 
     @ViewBuilder
     private var newSessionMenu: some View {
+        let installed = TerminalFocuser.installedTerminals
+        let auto = autoTerminalName
         Menu {
             ForEach(BuddyKind.defaultRandomCases) { provider in
-                Button { openNewSession(provider: provider) } label: {
+                Menu {
+                    Button { openNewSession(provider: provider) } label: {
+                        Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
+                    }
+                    if !installed.isEmpty {
+                        Divider()
+                        ForEach(installed, id: \.name) { terminal in
+                            Button { openNewSession(provider: provider, appName: terminal.name) } label: {
+                                Label(terminal.name, systemImage: terminal.name == auto ? "checkmark" : "terminal")
+                            }
+                        }
+                    }
+                } label: {
                     Label(provider.label, systemImage: "terminal")
                 }
             }
