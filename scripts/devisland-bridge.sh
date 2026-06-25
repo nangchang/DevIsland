@@ -343,10 +343,10 @@ detect_codex_desktop() {
 _DETECTORS=(
   detect_iterm
   detect_apple_terminal
+  detect_wezterm
   detect_cmux
   detect_ghostty
   detect_warp
-  detect_wezterm
   detect_wezterm_tmux
   detect_vscode_integrated
   detect_vscode_extension_host
