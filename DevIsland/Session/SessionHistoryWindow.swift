@@ -145,8 +145,8 @@ final class SessionHistoryViewModel: ObservableObject {
         TerminalFocuser.openNewWindow(appName: name, command: resumeCommand(for: entry))
     }
 
-    func startNewSession(_ entry: SessionHistoryEntry, provider: ProviderKind) {
-        let name = autoTerminalName(for: entry)
+    func startNewSession(_ entry: SessionHistoryEntry, provider: ProviderKind, appName: String? = nil) {
+        let name = appName ?? autoTerminalName(for: entry)
         TerminalFocuser.openNewWindow(appName: name, command: entry.newSessionCommand(for: provider))
     }
 }
@@ -395,13 +395,29 @@ struct SessionHistoryWindowView: View {
                 }
 
                 if let root = entry.workspaceRoot, !root.isEmpty {
+                    let installed = TerminalFocuser.installedTerminals
+                    let auto = viewModel.autoTerminalName(for: entry)
                     let providers: [(ProviderKind, String)] = [
                         (.claude, "Claude"), (.codex, "Codex"),
                         (.gemini, "Gemini"), (.antigravity, "Antigravity"),
                     ]
                     Menu {
                         ForEach(providers, id: \.0) { provider, name in
-                            Button { viewModel.startNewSession(entry, provider: provider) } label: {
+                            Menu {
+                                Button { viewModel.startNewSession(entry, provider: provider) } label: {
+                                    Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
+                                }
+                                if !installed.isEmpty {
+                                    Divider()
+                                    ForEach(installed, id: \.name) { terminal in
+                                        Button {
+                                            viewModel.startNewSession(entry, provider: provider, appName: terminal.name)
+                                        } label: {
+                                            Label(terminal.name, systemImage: terminal.name == auto ? "checkmark" : "terminal")
+                                        }
+                                    }
+                                }
+                            } label: {
                                 Label(name, systemImage: "terminal")
                             }
                         }
