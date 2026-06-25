@@ -395,19 +395,18 @@ struct SessionHistoryWindowView: View {
                 }
 
                 if let root = entry.workspaceRoot, !root.isEmpty {
-                    let installed = TerminalFocuser.installedTerminals
-                    let auto = viewModel.autoTerminalName(for: entry)
+                    let hasTerminalChoices = installed.contains { $0.name != auto }
                     let providers: [(ProviderKind, String)] = [
                         (.claude, "Claude"), (.codex, "Codex"),
                         (.gemini, "Gemini"), (.antigravity, "Antigravity"),
                     ]
                     Menu {
                         ForEach(providers, id: \.0) { provider, name in
-                            Menu {
-                                Button { viewModel.startNewSession(entry, provider: provider) } label: {
-                                    Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
-                                }
-                                if !installed.isEmpty {
+                            if hasTerminalChoices {
+                                Menu {
+                                    Button { viewModel.startNewSession(entry, provider: provider) } label: {
+                                        Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
+                                    }
                                     Divider()
                                     ForEach(installed, id: \.name) { terminal in
                                         Button {
@@ -416,9 +415,13 @@ struct SessionHistoryWindowView: View {
                                             Label(terminal.name, systemImage: terminal.name == auto ? "checkmark" : "terminal")
                                         }
                                     }
+                                } label: {
+                                    Label(name, systemImage: "terminal")
                                 }
-                            } label: {
-                                Label(name, systemImage: "terminal")
+                            } else {
+                                Button { viewModel.startNewSession(entry, provider: provider) } label: {
+                                    Label(name, systemImage: "terminal")
+                                }
                             }
                         }
                     } label: {

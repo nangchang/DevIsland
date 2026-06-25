@@ -739,22 +739,27 @@ struct SessionRowView: View {
     private var newSessionMenu: some View {
         let installed = TerminalFocuser.installedTerminals
         let auto = autoTerminalName
+        let hasTerminalChoices = installed.contains { $0.name != auto }
         Menu {
             ForEach(BuddyKind.defaultRandomCases) { provider in
-                Menu {
-                    Button { openNewSession(provider: provider) } label: {
-                        Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
-                    }
-                    if !installed.isEmpty {
+                if hasTerminalChoices {
+                    Menu {
+                        Button { openNewSession(provider: provider) } label: {
+                            Label(l10n.menuTerminalAuto(auto), systemImage: "terminal")
+                        }
                         Divider()
                         ForEach(installed, id: \.name) { terminal in
                             Button { openNewSession(provider: provider, appName: terminal.name) } label: {
                                 Label(terminal.name, systemImage: terminal.name == auto ? "checkmark" : "terminal")
                             }
                         }
+                    } label: {
+                        Label(provider.label, systemImage: "terminal")
                     }
-                } label: {
-                    Label(provider.label, systemImage: "terminal")
+                } else {
+                    Button { openNewSession(provider: provider) } label: {
+                        Label(provider.label, systemImage: "terminal")
+                    }
                 }
             }
         } label: {
