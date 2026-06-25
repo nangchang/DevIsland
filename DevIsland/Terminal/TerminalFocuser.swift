@@ -11,6 +11,7 @@ class TerminalFocuser {
         ("com.mitchellh.ghostty",           "Ghostty"),
         ("com.googlecode.iterm2",           "iTerm"),
         ("dev.warp.Warp-Stable",            "Warp"),
+        ("com.github.wez.wezterm",          "WezTerm"),
         ("com.apple.Terminal",              "Terminal"),
         ("com.microsoft.VSCode",            "VSCode"),
         ("com.anthropic.claudefordesktop",  "ClaudeDesktop"),
@@ -232,11 +233,18 @@ class TerminalFocuser {
         }
     }
 
-    private static func getProcessOutput(executable: URL, arguments: [String]) -> String {
+    private static func getProcessOutput(
+        executable: URL,
+        arguments: [String],
+        environment: [String: String]? = nil
+    ) -> String {
         let process = Process()
         let pipe = Pipe()
         process.executableURL = executable
         process.arguments = arguments
+        if let environment {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        }
         process.standardOutput = pipe
         process.standardError = Pipe()
 
@@ -253,10 +261,17 @@ class TerminalFocuser {
         }
     }
 
-    private static func runProcess(executable: URL, arguments: [String]) -> Bool {
+    private static func runProcess(
+        executable: URL,
+        arguments: [String],
+        environment: [String: String]? = nil
+    ) -> Bool {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
+        if let environment {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        }
         process.standardOutput = Pipe()
         process.standardError = Pipe()
 
@@ -267,6 +282,29 @@ class TerminalFocuser {
             return process.terminationStatus == 0
         } catch {
             print("[DevIsland] Failed to run process: \(executable.path) \(arguments.joined(separator: " ")), error: \(error)")
+            return false
+        }
+    }
+
+    private static func launchProcess(
+        executable: URL,
+        arguments: [String],
+        environment: [String: String]? = nil
+    ) -> Bool {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
+        if let environment {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        }
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            return true
+        } catch {
+            print("[DevIsland] Failed to launch process: \(executable.path) \(arguments.joined(separator: " ")), error: \(error)")
             return false
         }
     }
@@ -372,6 +410,134 @@ class TerminalFocuser {
         return selectWindowSucceeded && selectPaneSucceeded && switchSucceeded
     }
 
+    static func wezTermCLIURL(for appURL: URL) -> URL {
+        appURL.appendingPathComponent("Contents/MacOS/wezterm")
+    }
+
+    static func wezTermActivatePaneArguments(paneId: Any) -> [String] {
+        ["cli", "activate-pane", "--pane-id", "\(paneId)"]
+    }
+
+    static func wezTermStartNewTabArguments(command: String) -> [String] {
+        if command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ["start", "--new-tab", "--", "/bin/zsh", "-l"]
+        }
+        return ["start", "--new-tab", "--", "/bin/zsh", "-lic", "\(command); exec /bin/zsh -l"]
+    }
+
+    static func wezTermSpawnTabArguments(command: String, windowId: Any) -> [String] {
+        let shellArguments = command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? ["/bin/zsh", "-l"]
+            : ["/bin/zsh", "-lic", "\(command); exec /bin/zsh -l"]
+        return ["cli", "spawn", "--window-id", "\(windowId)", "--"] + shellArguments
+    }
+
+    static func wezTermSocketEnvironment(socketURL: URL) -> [String: String] {
+        ["WEZTERM_UNIX_SOCKET": socketURL.path]
+    }
+
+    static func wezTermPreferredSocketEnvironment(in directory: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/share/wezterm")) -> [String: String]? {
+        wezTermSocketCandidates(in: directory).first.map(wezTermSocketEnvironment)
+    }
+
+    static func wezTermSocketCandidates(in directory: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/share/wezterm")) -> [URL] {
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return urls
+            .filter { $0.lastPathComponent.hasPrefix("gui-sock-") }
+            .sorted { lhs, rhs in
+                let lhsRunning = wezTermSocketPIDIsRunning(lhs)
+                let rhsRunning = wezTermSocketPIDIsRunning(rhs)
+                if lhsRunning != rhsRunning { return lhsRunning }
+
+                let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                if lhsDate != rhsDate { return lhsDate > rhsDate }
+
+                return lhs.path < rhs.path
+            }
+    }
+
+    private static func wezTermSocketPIDIsRunning(_ socketURL: URL) -> Bool {
+        let prefix = "gui-sock-"
+        let name = socketURL.lastPathComponent
+        guard name.hasPrefix(prefix),
+              let pid = Int32(name.dropFirst(prefix.count)) else {
+            return false
+        }
+        return kill(pid, 0) == 0 || errno == EPERM
+    }
+
+    static func wezTermPaneID(in panesJSON: String, matchingTTY tty: String) -> String? {
+        let ttyName = String(tty.split(separator: "/").last ?? Substring(tty))
+        guard let data = panesJSON.data(using: .utf8),
+              let panes = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return nil
+        }
+
+        for pane in panes {
+            guard let paneTty = pane["tty_name"] as? String else { continue }
+            let paneTtyName = String(paneTty.split(separator: "/").last ?? Substring(paneTty))
+            if paneTtyName == ttyName || paneTty == tty {
+                return pane["pane_id"].map { "\($0)" }
+            }
+        }
+
+        return nil
+    }
+
+    static func wezTermActiveWindowID(in panesJSON: String) -> String? {
+        guard let data = panesJSON.data(using: .utf8),
+              let panes = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return nil
+        }
+
+        let activePane = panes.first { ($0["is_active"] as? Bool) == true } ?? panes.first
+        return activePane?["window_id"].map { "\($0)" }
+    }
+
+    private static func wezTermPaneTarget(cli: URL, tty: String) -> (paneId: String, environment: [String: String]?)? {
+        let socketEnvironments = wezTermSocketCandidates().map(wezTermSocketEnvironment)
+        let environments: [[String: String]?] = socketEnvironments.isEmpty ? [nil] : socketEnvironments.map(Optional.some)
+
+        for environment in environments {
+            let json = getProcessOutput(
+                executable: cli,
+                arguments: ["cli", "list", "--format", "json"],
+                environment: environment
+            )
+            if let paneId = wezTermPaneID(in: json, matchingTTY: tty) {
+                return (paneId, environment)
+            }
+        }
+
+        return nil
+    }
+
+    private static func wezTermActiveWindowTarget(cli: URL) -> (windowId: String, environment: [String: String]?)? {
+        let socketEnvironments = wezTermSocketCandidates().map(wezTermSocketEnvironment)
+        let environments: [[String: String]?] = socketEnvironments.isEmpty ? [nil] : socketEnvironments.map(Optional.some)
+
+        for environment in environments {
+            let json = getProcessOutput(
+                executable: cli,
+                arguments: ["cli", "list", "--format", "json"],
+                environment: environment
+            )
+            if let windowId = wezTermActiveWindowID(in: json) {
+                return (windowId, environment)
+            }
+        }
+
+        return nil
+    }
+
     static func focusTerminal(
         appName: String? = nil,
         title: String? = nil,
@@ -408,6 +574,25 @@ class TerminalFocuser {
                 if !ok {
                     print("[DevIsland] open VS Code failed for path: \(path)")
                 }
+            } else if name == "WezTerm" {
+                // WezTerm doesn't support AppleScript — use the CLI to focus the exact pane by TTY.
+                // App activation always runs regardless of CLI success/failure.
+                let appUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: match.bundleId)
+                let cli = appUrl.map(wezTermCLIURL)
+                if let cli, let tty, !tty.isEmpty {
+                    if let target = wezTermPaneTarget(cli: cli, tty: tty) {
+                        _ = runProcess(
+                            executable: cli,
+                            arguments: wezTermActivatePaneArguments(paneId: target.paneId),
+                            environment: target.environment
+                        )
+                    }
+                }
+                DispatchQueue.main.async {
+                    if let appUrl {
+                        NSWorkspace.shared.openApplication(at: appUrl, configuration: NSWorkspace.OpenConfiguration())
+                    }
+                }
             } else {
                 let (_, error) = executeAppleScript(focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))
                 if let error {
@@ -440,6 +625,8 @@ class TerminalFocuser {
             return "Warp"
         case "cmux":
             return "cmux"
+        case "wezterm", "wez term", "wezterm.app":
+            return "WezTerm"
         case "vscode", "code", "visual studio code":
             return "VSCode"
         case "claudedesktop", "claude desktop":
@@ -681,6 +868,31 @@ class TerminalFocuser {
                 """
                 let (_, cmuxErr) = executeAppleScript(cmuxScript)
                 if let cmuxErr { print("[DevIsland] openNewWindow cmux error: \(cmuxErr)") }
+
+            case "WezTerm":
+                // NSWorkspace.openApplication ignores arguments when WezTerm is already running.
+                // Resolve the CLI from the app bundle and run it directly.
+                if let appUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleId) {
+                    let cli = wezTermCLIURL(for: appUrl)
+                    let target = wezTermActiveWindowTarget(cli: cli)
+                    let ok: Bool
+                    if let target {
+                        ok = launchProcess(
+                            executable: cli,
+                            arguments: wezTermSpawnTabArguments(command: command, windowId: target.windowId),
+                            environment: target.environment
+                        )
+                    } else {
+                        ok = launchProcess(
+                            executable: cli,
+                            arguments: wezTermStartNewTabArguments(command: command),
+                            environment: wezTermPreferredSocketEnvironment()
+                        )
+                    }
+                    if !ok {
+                        print("[DevIsland] openNewWindow WezTerm error: \(cli.path)")
+                    }
+                }
 
             default:
                 break

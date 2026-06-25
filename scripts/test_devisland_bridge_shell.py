@@ -80,6 +80,24 @@ class BridgeShellTest(unittest.TestCase):
         self.assertEqual(captured["TERM_WINDOW_ID"], "0")
         self.assertEqual(captured["TERM_TMUX_PANE"], "")
 
+    def test_plain_wezterm_takes_precedence_over_cmux_environment(self):
+        captured = self.run_bridge(
+            env={
+                "TERM_PROGRAM": "WezTerm",
+                "WEZTERM_PANE": "12",
+                "CMUX_WORKSPACE_ID": "workspace-1",
+                "CMUX_SURFACE_ID": "surface-1",
+            },
+            fake_bins={
+                "tty": "#!/bin/sh\nprintf '/dev/ttys011\\n'\n",
+                "osascript": "#!/bin/sh\nprintf 'true\\n'\n",
+            },
+        )
+
+        self.assertEqual(captured["TERM_APP"], "WezTerm")
+        self.assertEqual(captured["TERM_TTY"], "/dev/ttys011")
+        self.assertEqual(captured["TERM_WINDOW_ID"], "12")
+
     def test_wezterm_tmux_client_is_forwarded_as_terminal_source(self):
         captured = self.run_bridge(
             env={
