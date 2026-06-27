@@ -32,6 +32,13 @@ class BridgeShellTest(unittest.TestCase):
             capture_path = tmp_path / "capture.json"
             fake_python = f"""
             #!/bin/sh
+            for arg in "$@"; do
+              if [ "$arg" = "--prefilter-only" ]; then
+                cat > /dev/null
+                printf '__DEVISLAND_PREFILTER_CONTINUE__\\n'
+                exit 0
+              fi
+            done
             cat > /dev/null
             printf '{{"TERM_APP":"%s","TERM_TITLE":"%s","TERM_TTY":"%s","TERM_WINDOW_ID":"%s","TERM_TMUX_PANE":"%s","TERM_TMUX_SOCKET":"%s","TERM_TMUX_CLIENT":"%s"}}\\n' \\
               "$TERM_APP" "$TERM_TITLE" "$TERM_TTY" "$TERM_WINDOW_ID" "$TERM_TMUX_PANE" "$TERM_TMUX_SOCKET" "$TERM_TMUX_CLIENT" > "{capture_path}"
@@ -149,6 +156,60 @@ class BridgeShellTest(unittest.TestCase):
         self.assertEqual(captured["TERM_TTY"], "/dev/ttys008")
         self.assertEqual(captured["TERM_TMUX_PANE"], "%9")
         self.assertEqual(captured["TERM_TMUX_CLIENT"], "/dev/ttys008")
+
+    def test_prefilter_suppression_skips_terminal_detection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            script_dir = tmp_path / "bridge"
+            bin_dir.mkdir()
+            script_dir.mkdir()
+
+            shutil.copy(BRIDGE, script_dir / "devisland-bridge.sh")
+            (script_dir / "devisland_bridge.py").write_text("# fake helper placeholder\n", encoding="utf-8")
+            detection_marker = tmp_path / "detection-called"
+            helper_marker = tmp_path / "helper-called"
+
+            fake_python = f"""
+            #!/bin/sh
+            for arg in "$@"; do
+              if [ "$arg" = "--prefilter-only" ]; then
+                cat > /dev/null
+                printf '{{"continue":true,"suppressOutput":true}}\\n'
+                exit 0
+              fi
+            done
+            touch "{helper_marker}"
+            cat > /dev/null
+            printf '{{}}\\n'
+            """
+            fake_tty = f"""
+            #!/bin/sh
+            touch "{detection_marker}"
+            printf '/dev/ttys008\\n'
+            """
+            for name, body in {"python3": fake_python, "tty": fake_tty}.items():
+                path = bin_dir / name
+                path.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
+                path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+            run_env = os.environ.copy()
+            run_env["PATH"] = f"{bin_dir}:{run_env.get('PATH', '')}"
+            proc = subprocess.run(
+                [str(script_dir / "devisland-bridge.sh"), "--source", "claude", "--event", "UnknownEvent"],
+                input=json.dumps({"hook_event_name": "UnknownEvent", "session_id": "s1"}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(ROOT),
+                env=run_env,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(json.loads(proc.stdout), {"continue": True, "suppressOutput": True})
+            self.assertFalse(detection_marker.exists(), "terminal detection ran despite prefilter suppression")
+            self.assertFalse(helper_marker.exists(), "normal helper path ran despite prefilter suppression")
 
 
 if __name__ == "__main__":

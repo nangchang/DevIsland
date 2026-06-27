@@ -18,6 +18,20 @@ done
 
 PAYLOAD=$(cat)
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY_BRIDGE="$SCRIPT_DIR/devisland_bridge.py"
+
+# Cheap event prefilter: when the hook event is already available as an
+# argument, skip terminal detection for hooks the Python helper would suppress.
+if [ -f "$PY_BRIDGE" ] && [ -n "$HOOK_EVENT_ARG" ]; then
+  PREFILTER_OUTPUT=$(printf "%s" "$PAYLOAD" \
+    | python3 "$PY_BRIDGE" --source "$CLI_SOURCE_ARG" --event "$HOOK_EVENT_ARG" --prefilter-only 2>/dev/null || true)
+  if [ -n "$PREFILTER_OUTPUT" ] && [ "$PREFILTER_OUTPUT" != "__DEVISLAND_PREFILTER_CONTINUE__" ]; then
+    printf "%s\n" "$PREFILTER_OUTPUT"
+    exit 0
+  fi
+fi
+
 # -------------------------------------------------------------------
 # TTY 탐지
 # -------------------------------------------------------------------
@@ -453,8 +467,6 @@ fi
 # -------------------------------------------------------------------
 # 페이로드 처리, TCP 송수신, CLI별 응답 변환은 Python helper가 담당한다.
 # -------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PY_BRIDGE="$SCRIPT_DIR/devisland_bridge.py"
 
 if [ ! -f "$PY_BRIDGE" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Python bridge helper missing: $PY_BRIDGE" >> /tmp/DevIsland.bridge.log
