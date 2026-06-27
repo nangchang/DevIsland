@@ -129,7 +129,7 @@ if [ -n "$TMUX" ] && [ -z "$CLIENT_TTY" ]; then
   _session_name=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "")
   _tool_prefix="${_session_name%%_*}"
   if [ -n "$_tool_prefix" ] && [ "$_tool_prefix" != "$_session_name" ]; then
-    _mgr_pid=$(pgrep -x "$_tool_prefix" 2>/dev/null | head -1)
+    _mgr_pid=$(pgrep -nx "$_tool_prefix" 2>/dev/null)
     if [ -n "$_mgr_pid" ]; then
       _mgr_tty=$(ps -o tty= -p "$_mgr_pid" 2>/dev/null | awk '{print $1}')
       if [ -n "$_mgr_tty" ] && [ "$_mgr_tty" != "??" ] && [ "$_mgr_tty" != "?" ]; then
@@ -161,11 +161,16 @@ if [ -n "$TMUX" ] && [ -z "$CLIENT_TTY" ]; then
       done
     fi
     # 세션명 두 번째 컴포넌트가 TUI 세션 타이틀 (예: aoe_Bohemians_xxx → Bohemians)
-    _without_prefix="${_session_name#${_tool_prefix}_}"
-    _extracted_title="${_without_prefix%_*}"
-    if [ -n "$_extracted_title" ] && [ "$_extracted_title" != "$_without_prefix" ]; then
-      TERM_MANAGER_SESSION_TITLE="$_extracted_title"
-    fi
+    # 알려진 TUI 매니저만 허용 — 다른 도구의 detached 세션에 의도치 않은 키 입력 방지
+    case "$_tool_prefix" in
+      aoe)
+        _without_prefix="${_session_name#${_tool_prefix}_}"
+        _extracted_title="${_without_prefix%_*}"
+        if [ -n "$_extracted_title" ] && [ "$_extracted_title" != "$_without_prefix" ]; then
+          TERM_MANAGER_SESSION_TITLE="$_extracted_title"
+        fi
+        ;;
+    esac
   fi
 fi
 

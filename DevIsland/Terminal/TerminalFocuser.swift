@@ -498,7 +498,7 @@ class TerminalFocuser {
             return nil
         }
         for pane in panes {
-            if pane["pane_id"].map({ "\($0)" }) == paneId {
+            if let id = pane["pane_id"], "\(id)" == paneId {
                 return pane["tty_name"] as? String
             }
         }
