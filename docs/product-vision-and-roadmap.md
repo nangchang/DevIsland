@@ -50,7 +50,7 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 | macOS 알림 센터 연동 | ★★★ | 낮음 | `showNotification` capability 설계 존재 | H1 | 미완 |
 | 노치에서 프롬프트 회신 (PTY 주입 정식화) | ★★★ | 중간 | `devisland_pty.py` + `injection` 응답 필드 (실험 기능) | H1 | 미완 |
 | 노치에서 새 세션 시작 (Quick Launch) | ★★ | 낮음 | `TerminalFocuser.openNewWindow` 이미 구현됨 | H1 | ✅ v0.12.1 |
-| 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | `approval.decided` 관찰 이벤트와 `SessionStatsPlugin` 기초 통계 구현 완료 | H1 | 기초 완료 |
+| 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | `approval.decided` 관찰 이벤트와 `SessionStatsPlugin` 기초 통계 구현 완료 | H1 | ✅ 완료 |
 | Fleet 보드 (멀티 세션 관제 뷰) | ★★★ | 중간 | SessionStore, 서브에이전트 그룹화, 세션 히스토리 창 | H2 | 미완 |
 | Git 컨텍스트 (브랜치·워크트리·PR 상태 표시) | ★★★ | 중간 | `workspaceRoot` 이미 전 세션에 전파됨 | H2 | 미완 |
 | 승인 정책 프로파일 (워크스페이스별/시간제한 자동 승인) | ★★★ | 중간 | `workspaceRoot` 스코프 룰, `ToolKnowledge` 위험도 | H2 | 미완 |
