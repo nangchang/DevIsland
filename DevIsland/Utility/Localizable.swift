@@ -610,6 +610,23 @@ extension L10n {
     func timeSecsAgo(_ n: Int) -> String  { s("\(n)s ago",  "\(n)초 전") }
     func timeMinsAgo(_ n: Int) -> String  { s("\(n)m ago",  "\(n)분 전") }
 
+    // Session History Window tabs
+    var historyTabSessions: String { s("Sessions",  "세션") }
+    var historyTabInsights: String { s("Insights",  "인사이트") }
+
+    // Session Insights View
+    var insightsTodaySessions:     String { s("Today",               "오늘") }
+    var insightsTotalSessions:     String { s("Total (retention)",   "전체 (보존 기간)") }
+    var insightsAvgDuration:       String { s("Avg. Duration",       "평균 소요 시간") }
+    var insightsApprovals:         String { s("Approval Breakdown",  "승인 현황") }
+    var insightsManualApproved:    String { s("Approved",            "수동 승인") }
+    var insightsManualDenied:      String { s("Denied",              "수동 거부") }
+    var insightsAutoApproved:      String { s("Auto",                "자동 승인") }
+    var insightsTopTools:          String { s("Most Approved Tools", "자주 승인된 도구") }
+    var insightsNoData:            String { s("No data yet",         "데이터 없음") }
+    var insightsRetentionNote:     String { s("Based on replay log retention window", "리플레이 로그 보존 기간 기준") }
+    func insightsDuration(_ s: String) -> String { self.s("avg \(s)", "평균 \(s)") }
+
     // Session History Window
     var historySearch:      String { s("Search sessions…",    "세션 검색…") }
     var historyEmpty:       String { s("No sessions",         "세션 없음") }

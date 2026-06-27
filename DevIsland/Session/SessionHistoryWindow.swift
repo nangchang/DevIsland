@@ -164,6 +164,16 @@ struct SessionHistoryWindowView: View {
     }
 
     var body: some View {
+        TabView {
+            sessionsTab
+                .tabItem { Label(l10n.historyTabSessions, systemImage: "list.bullet") }
+            SessionInsightsView()
+                .tabItem { Label(l10n.historyTabInsights, systemImage: "chart.bar") }
+        }
+        .frame(minWidth: 760, minHeight: 440)
+    }
+
+    private var sessionsTab: some View {
         let entries = viewModel.filtered(activeSessions: sessionStore.activeSessions)
 
         return VStack(spacing: 0) {
@@ -184,7 +194,6 @@ struct SessionHistoryWindowView: View {
                 sessionList(entries: entries)
             }
         }
-        .frame(minWidth: 760, minHeight: 400)
     }
 
     private func toolbar(entryCount: Int) -> some View {
