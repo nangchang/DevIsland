@@ -121,6 +121,34 @@ if [ -n "$TMUX" ] && { [ -z "$TERM_PROGRAM" ] || [ "$TERM_PROGRAM" = "tmux" ]; }
   _TMUX_FALLBACK=1
 fi
 
+# detached tmux 세션 (클라이언트 없음) 에서 세션을 관리하는 외부 프로세스(예: aoe)를
+# 세션명 prefix로 찾아 outer TTY를 복원한다.
+# 예) 세션명 "aoe_Bohemians_xxx" → prefix "aoe" → pgrep aoe → ps -o tty= → /dev/ttys002
+TERM_MANAGER_SESSION_TITLE=""
+if [ -n "$TMUX" ] && [ -z "$CLIENT_TTY" ]; then
+  _session_name=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "")
+  _tool_prefix="${_session_name%%_*}"
+  if [ -n "$_tool_prefix" ] && [ "$_tool_prefix" != "$_session_name" ]; then
+    _mgr_pid=$(pgrep -x "$_tool_prefix" 2>/dev/null | head -1)
+    if [ -n "$_mgr_pid" ]; then
+      _mgr_tty=$(ps -o tty= -p "$_mgr_pid" 2>/dev/null | awk '{print $1}')
+      if [ -n "$_mgr_tty" ] && [ "$_mgr_tty" != "??" ] && [ "$_mgr_tty" != "?" ]; then
+        case "$_mgr_tty" in
+          /dev/*) CURRENT_TTY="$_mgr_tty" ;;
+          *) CURRENT_TTY="/dev/$_mgr_tty" ;;
+        esac
+        CURRENT_TTY_NAME="${CURRENT_TTY##*/}"
+      fi
+    fi
+    # 세션명 두 번째 컴포넌트가 TUI 세션 타이틀 (예: aoe_Bohemians_xxx → Bohemians)
+    _without_prefix="${_session_name#${_tool_prefix}_}"
+    _extracted_title="${_without_prefix%_*}"
+    if [ -n "$_extracted_title" ] && [ "$_extracted_title" != "$_without_prefix" ]; then
+      TERM_MANAGER_SESSION_TITLE="$_extracted_title"
+    fi
+  fi
+fi
+
 # -------------------------------------------------------------------
 # 터미널 앱 감지 함수들
 #
@@ -417,6 +445,7 @@ printf "%s" "$PAYLOAD" \
     TERM_TMUX_PANE="$TERM_TMUX_PANE" \
     TERM_TMUX_SOCKET="$TERM_TMUX_SOCKET" \
     TERM_TMUX_CLIENT="$TERM_TMUX_CLIENT" \
+    TERM_MANAGER_SESSION_TITLE="$TERM_MANAGER_SESSION_TITLE" \
     python3 "$PY_BRIDGE" --source "$CLI_SOURCE_ARG" --event "$HOOK_EVENT_ARG"
 
 exit 0

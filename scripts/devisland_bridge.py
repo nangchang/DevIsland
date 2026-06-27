@@ -301,6 +301,7 @@ def enrich_payload(payload: dict[str, Any], cli_source_arg: str, event_arg: str 
     set_if_present("terminal_tmux_pane", "TERM_TMUX_PANE", "")
     set_if_present("terminal_tmux_socket", "TERM_TMUX_SOCKET", "")
     set_if_present("terminal_tmux_client", "TERM_TMUX_CLIENT", "")
+    set_if_present("terminal_manager_session_title", "TERM_MANAGER_SESSION_TITLE", "")
     payload["cli_source"] = cli_source_arg
     _get_adapter(cli_source_arg).normalize_payload(payload, event_arg)
     return payload
