@@ -76,6 +76,10 @@ final class ApprovalProxyController {
         try store.closedSessions(since: since)
     }
 
+    func sessionInsightsSummary(since: Date) throws -> SessionInsightsSummary {
+        try store.sessionInsightsSummary(since: since)
+    }
+
     @discardableResult
     func recordPTYMessage(
         sessionId: String,

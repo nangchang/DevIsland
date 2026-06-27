@@ -2050,6 +2050,19 @@ class AppState: ObservableObject {
         return try approvalProxy.replayLog(sessionId: sessionId, limit: limit)
     }
 
+    func sessionInsightsSummary(retentionDays: Int) throws -> SessionInsightsSummary {
+        guard let approvalProxy else {
+            let since = Date().addingTimeInterval(-Double(retentionDays) * 86_400)
+            return SessionInsightsSummary(
+                since: since, totalClosedSessions: 0, todayClosedSessions: 0,
+                manualApproved: 0, manualDenied: 0, autoApproved: 0,
+                topApprovedTools: [], averageDurationSeconds: nil
+            )
+        }
+        let since = Date().addingTimeInterval(-Double(retentionDays) * 86_400)
+        return try approvalProxy.sessionInsightsSummary(since: since)
+    }
+
     func closedSessionRecords(retentionDays: Int) throws -> [ClosedSessionRecord] {
         guard let approvalProxy else { return [] }
         let since = Date().addingTimeInterval(-Double(retentionDays) * 86_400)
