@@ -655,6 +655,7 @@ class TerminalFocuser {
         DispatchQueue.global(qos: .userInitiated).async {
             // This launches /usr/bin/osascript as a child process, so keep it off the main thread.
             var tmuxHandled = false
+            var resolvedTTY: String? = tty
             if name == "VSCode", let path = workspaceRoot, !path.isEmpty {
                 let ok = runProcess(executable: URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", "Visual Studio Code", path])
                 if !ok {
@@ -711,38 +712,9 @@ class TerminalFocuser {
                         }
                     }
 
-                    // 3. Manager TUI session navigation (e.g. AoE "/" search)
-                    // If the activating pane belongs to a TUI manager (AoE etc.), send a search
-                    // sequence so the TUI navigates to the right session automatically.
-                    if paneActivated, let managerTitle = managerSessionTitle, !managerTitle.isEmpty {
-                        var sendPaneId: String? = nil
-                        var sendEnv: [String: String]? = nil
-                        if let activeTTY = outerTTY, !activeTTY.isEmpty,
-                           let found = wezTermPaneTarget(cli: cli, tty: activeTTY) {
-                            sendPaneId = found.paneId
-                            sendEnv = found.environment
-                        } else if let wid = windowId, !wid.isEmpty {
-                            sendPaneId = wid
-                            sendEnv = wezTermPreferredSocketEnvironment()
-                        }
-                        if let paneId = sendPaneId {
-                            let sendText = { (text: String) in
-                                _ = runProcess(executable: cli,
-                                               arguments: ["cli", "send-text", "--no-paste",
-                                                           "--pane-id", paneId, text],
-                                               environment: sendEnv)
-                            }
-                            Thread.sleep(forTimeInterval: 0.15)
-                            sendText("\u{11}")          // Ctrl+Q: exit LIVE mode if active
-                            Thread.sleep(forTimeInterval: 0.3)
-                            sendText("/")               // open AoE search
-                            Thread.sleep(forTimeInterval: 0.1)
-                            sendText(managerTitle)      // type session title
-                            Thread.sleep(forTimeInterval: 0.15)
-                            sendText("\r")              // confirm
-                        }
-                    }
                 }
+
+                resolvedTTY = outerTTY ?? resolvedTTY
 
                 DispatchQueue.main.async {
                     if let appUrl {
@@ -754,6 +726,18 @@ class TerminalFocuser {
                 if let error {
                     print("[DevIsland] terminal focus AppleScript error: \(error)")
                 }
+            }
+            // Manager TUI session navigation (e.g. AoE "/" search) — terminal-agnostic TTY write
+            if let managerTitle = managerSessionTitle, !managerTitle.isEmpty,
+               let targetTTY = resolvedTTY, !targetTTY.isEmpty {
+                Thread.sleep(forTimeInterval: 0.15)
+                sendToTTY("\u{11}", tty: targetTTY)     // Ctrl+Q: exit LIVE mode if active
+                Thread.sleep(forTimeInterval: 0.3)
+                sendToTTY("/", tty: targetTTY)          // open AoE search
+                Thread.sleep(forTimeInterval: 0.1)
+                sendToTTY(managerTitle, tty: targetTTY) // type session title
+                Thread.sleep(forTimeInterval: 0.15)
+                sendToTTY("\r", tty: targetTTY)         // confirm
             }
             if !tmuxHandled, let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
                 print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
@@ -791,6 +775,17 @@ class TerminalFocuser {
             return "CodexDesktop"
         default:
             return nil
+        }
+    }
+
+    private static func sendToTTY(_ text: String, tty: String) {
+        let path = tty.hasPrefix("/") ? tty : "/dev/\(tty)"
+        guard let data = text.data(using: .utf8) else { return }
+        let fd = Darwin.open(path, O_WRONLY | O_NOCTTY)
+        guard fd >= 0 else { return }
+        defer { Darwin.close(fd) }
+        data.withUnsafeBytes { ptr in
+            _ = Darwin.write(fd, ptr.baseAddress, ptr.count)
         }
     }
 
