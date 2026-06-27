@@ -8,6 +8,7 @@ struct TerminalContext: Equatable {
     var tmuxPane: String
     var tmuxSocket: String
     var tmuxClient: String
+    var managerSessionTitle: String
 
     init(
         app: String = "",
@@ -16,7 +17,8 @@ struct TerminalContext: Equatable {
         tabIndex: String = "",
         tmuxPane: String = "",
         tmuxSocket: String = "",
-        tmuxClient: String = ""
+        tmuxClient: String = "",
+        managerSessionTitle: String = ""
     ) {
         self.app = app
         self.tty = tty
@@ -25,6 +27,7 @@ struct TerminalContext: Equatable {
         self.tmuxPane = tmuxPane
         self.tmuxSocket = tmuxSocket
         self.tmuxClient = tmuxClient
+        self.managerSessionTitle = managerSessionTitle
     }
 
     init(from json: [String: Any]) {
@@ -35,6 +38,7 @@ struct TerminalContext: Equatable {
         tmuxPane  = json["terminal_tmux_pane"] as? String ?? ""
         tmuxSocket = json["terminal_tmux_socket"] as? String ?? ""
         tmuxClient = json["terminal_tmux_client"] as? String ?? ""
+        managerSessionTitle = json["terminal_manager_session_title"] as? String ?? ""
     }
 
     /// 비어있지 않은 필드만 덮어쓴다 — 새 이벤트에서 일부 필드가 비어 있어도 기존 값이 유지된다.
@@ -46,6 +50,7 @@ struct TerminalContext: Equatable {
         if !other.tmuxPane.isEmpty  { tmuxPane = other.tmuxPane }
         if !other.tmuxSocket.isEmpty { tmuxSocket = other.tmuxSocket }
         if !other.tmuxClient.isEmpty { tmuxClient = other.tmuxClient }
+        if !other.managerSessionTitle.isEmpty { managerSessionTitle = other.managerSessionTitle }
     }
 
     /// tmux pane → TTY → 앱+창 순서로 동일 터미널 세션인지 판별한다.
