@@ -446,6 +446,110 @@ final class SQLiteApprovalStore {
         return sqlite3_column_int(stmt, 0) > 0
     }
 
+    func sessionInsightsSummary(since: Date) throws -> SessionInsightsSummary {
+        let sinceTs = since.timeIntervalSince1970
+        let n = Self.sqlNormalize
+
+        // Decision breakdown: bucket by (action, source)
+        var manualApproved = 0, manualDenied = 0, autoApproved = 0, autoDenied = 0
+        var stmt: OpaquePointer?
+        let decisionSQL = """
+            SELECT action, source, COUNT(*) FROM approval_decisions
+            WHERE decided_at > ? GROUP BY action, source
+            """
+        guard sqlite3_prepare_v2(database, decisionSQL, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_double(stmt, 1, sinceTs)
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let action = columnString(stmt, 0) ?? ""
+            let source = columnString(stmt, 1) ?? ""
+            let count  = Int(sqlite3_column_int(stmt, 2))
+            switch (action, source) {
+            case ("allow", "user"):  manualApproved += count
+            case ("deny",  "user"):  manualDenied   += count
+            case ("allow", _):       autoApproved   += count
+            case ("deny",  _):       autoDenied     += count
+            default: break
+            }
+        }
+
+        // Top 5 manually-approved tools
+        var topTools: [(tool: String, count: Int)] = []
+        var toolStmt: OpaquePointer?
+        let toolSQL = """
+            SELECT tool_name, COUNT(*) AS cnt FROM approval_decisions
+            WHERE action = 'allow' AND source = 'user' AND decided_at > ?
+            GROUP BY tool_name ORDER BY cnt DESC LIMIT 5
+            """
+        guard sqlite3_prepare_v2(database, toolSQL, -1, &toolStmt, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(toolStmt) }
+        sqlite3_bind_double(toolStmt, 1, sinceTs)
+        while sqlite3_step(toolStmt) == SQLITE_ROW {
+            if let tool = columnString(toolStmt, 0) {
+                topTools.append((tool: tool, count: Int(sqlite3_column_int(toolStmt, 1))))
+            }
+        }
+
+        // Session counts (by end time) and average duration
+        var totalClosed = 0, todayClosed = 0
+        var avgDuration: Double? = nil
+        let todayStart = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970
+        var sessStmt: OpaquePointer?
+        let sessSQL = """
+            WITH starts AS (
+                SELECT session_id, MIN(received_at) AS start_at
+                FROM hook_events
+                WHERE \(n) IN ('sessionstart', 'startup', 'init') AND received_at > ?
+                GROUP BY session_id
+            ),
+            ended AS (
+                SELECT session_id, MAX(received_at) AS ended_at
+                FROM hook_events
+                WHERE \(n) IN ('exit', 'shutdown', 'sessionend', 'devislanddismissed')
+                  AND received_at > ?
+                GROUP BY session_id
+            )
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN en.ended_at >= ? THEN 1 ELSE 0 END) AS today,
+                AVG(CASE WHEN en.ended_at - s.start_at > 10 THEN en.ended_at - s.start_at END) AS avg_dur
+            FROM starts s
+            JOIN ended en ON en.session_id = s.session_id
+            WHERE en.ended_at > s.start_at
+            """
+        guard sqlite3_prepare_v2(database, sessSQL, -1, &sessStmt, nil) == SQLITE_OK else {
+            throw StoreError.prepareFailed(lastErrorMessage)
+        }
+        defer { sqlite3_finalize(sessStmt) }
+        sqlite3_bind_double(sessStmt, 1, sinceTs)
+        sqlite3_bind_double(sessStmt, 2, sinceTs)
+        sqlite3_bind_double(sessStmt, 3, todayStart)
+        if sqlite3_step(sessStmt) == SQLITE_ROW {
+            totalClosed = Int(sqlite3_column_int(sessStmt, 0))
+            todayClosed = Int(sqlite3_column_int(sessStmt, 1))
+            if sqlite3_column_type(sessStmt, 2) != SQLITE_NULL {
+                let val = sqlite3_column_double(sessStmt, 2)
+                if val > 0 { avgDuration = val }
+            }
+        }
+
+        return SessionInsightsSummary(
+            since: since,
+            totalClosedSessions: totalClosed,
+            todayClosedSessions: todayClosed,
+            manualApproved: manualApproved,
+            manualDenied: manualDenied,
+            autoApproved: autoApproved,
+            autoDenied: autoDenied,
+            topApprovedTools: topTools,
+            averageDurationSeconds: avgDuration
+        )
+    }
+
     func pruneOldLogs(replayRetentionDays: Int, ptyRetentionDays: Int) throws {
         guard replayRetentionDays > 0, ptyRetentionDays > 0 else { return }
         let replayCutoff = Date().timeIntervalSince1970 - Double(replayRetentionDays) * 86_400

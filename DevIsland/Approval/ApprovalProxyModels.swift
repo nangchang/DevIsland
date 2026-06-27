@@ -201,6 +201,22 @@ struct ClosedSessionRecord: Identifiable {
     let terminalTitle: String?
 }
 
+// MARK: - Session Insights
+
+struct SessionInsightsSummary {
+    let since: Date
+    let totalClosedSessions: Int
+    let todayClosedSessions: Int
+    let manualApproved: Int
+    let manualDenied: Int
+    let autoApproved: Int
+    let autoDenied: Int
+    let topApprovedTools: [(tool: String, count: Int)]
+    let averageDurationSeconds: Double?
+
+    var totalDecisions: Int { manualApproved + manualDenied + autoApproved + autoDenied }
+}
+
 // MARK: - PTY
 
 enum PTYDirection: String, Codable, CaseIterable {
