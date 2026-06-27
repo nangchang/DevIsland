@@ -656,6 +656,10 @@ class TerminalFocuser {
             // This launches /usr/bin/osascript as a child process, so keep it off the main thread.
             var tmuxHandled = false
             var resolvedTTY: String? = tty
+            var wezTermNavCli: URL? = nil
+            var wezTermNavPaneId: String? = nil
+            var wezTermNavEnv: [String: String]? = nil
+            var wezTermAppUrl: URL? = nil
             if name == "VSCode", let path = workspaceRoot, !path.isEmpty {
                 let ok = runProcess(executable: URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", "Visual Studio Code", path])
                 if !ok {
@@ -712,32 +716,77 @@ class TerminalFocuser {
                         }
                     }
 
+                    // Prepare AoE navigation (used in common block after if/else chain)
+                    wezTermNavCli = cli
+                    if let activeTTY = outerTTY, !activeTTY.isEmpty,
+                       let found = wezTermPaneTarget(cli: cli, tty: activeTTY) {
+                        wezTermNavPaneId = found.paneId
+                        wezTermNavEnv = found.environment
+                    } else if let wid = windowId, !wid.isEmpty {
+                        wezTermNavPaneId = wid
+                        wezTermNavEnv = wezTermPreferredSocketEnvironment()
+                    }
+
                 }
 
                 resolvedTTY = outerTTY ?? resolvedTTY
-
-                DispatchQueue.main.async {
-                    if let appUrl {
-                        NSWorkspace.shared.openApplication(at: appUrl, configuration: NSWorkspace.OpenConfiguration())
-                    }
-                }
+                wezTermAppUrl = appUrl
             } else {
                 let (_, error) = executeAppleScript(focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))
                 if let error {
                     print("[DevIsland] terminal focus AppleScript error: \(error)")
                 }
             }
-            // Manager TUI session navigation (e.g. AoE "/" search) — terminal-agnostic TTY write
-            if let managerTitle = managerSessionTitle, !managerTitle.isEmpty,
-               let targetTTY = resolvedTTY, !targetTTY.isEmpty {
-                Thread.sleep(forTimeInterval: 0.15)
-                sendToTTY("\u{11}", tty: targetTTY)     // Ctrl+Q: exit LIVE mode if active
-                Thread.sleep(forTimeInterval: 0.3)
-                sendToTTY("/", tty: targetTTY)          // open AoE search
-                Thread.sleep(forTimeInterval: 0.1)
-                sendToTTY(managerTitle, tty: targetTTY) // type session title
-                Thread.sleep(forTimeInterval: 0.15)
-                sendToTTY("\r", tty: targetTTY)         // confirm
+            // Manager TUI session navigation (e.g. AoE "/" search)
+            if let managerTitle = managerSessionTitle, !managerTitle.isEmpty {
+                if let cli = wezTermNavCli, let paneId = wezTermNavPaneId {
+                    // WezTerm: use send-text to avoid triggering WezTerm's activity-focus behavior
+                    let navEnv = wezTermNavEnv
+                    let sendText = { (text: String) in
+                        _ = runProcess(executable: cli,
+                                       arguments: ["cli", "send-text", "--no-paste",
+                                                   "--pane-id", paneId, text],
+                                       environment: navEnv)
+                    }
+                    Thread.sleep(forTimeInterval: 0.15)
+                    sendText("\u{11}")          // Ctrl+Q: exit LIVE mode if active
+                    Thread.sleep(forTimeInterval: 0.3)
+                    sendText("/")
+                    Thread.sleep(forTimeInterval: 0.1)
+                    sendText(managerTitle)
+                    Thread.sleep(forTimeInterval: 0.15)
+                    sendText("\r")
+                } else {
+                    // Non-WezTerm: app-native AppleScript (no Accessibility permission needed)
+                    let escapedTitle = appleScriptLiteral(managerTitle)
+                    switch name {
+                    case "iTerm":
+                        let send = { (text: String) in
+                            _ = executeAppleScript("""
+                            tell application "iTerm"
+                                tell current session of current window
+                                    write text \(text) newline false
+                                end tell
+                            end tell
+                            """)
+                        }
+                        Thread.sleep(forTimeInterval: 0.2)
+                        send("(ASCII character 17)")   // Ctrl+Q: exit LIVE mode if active
+                        Thread.sleep(forTimeInterval: 0.3)
+                        send("\"/\"")
+                        Thread.sleep(forTimeInterval: 0.1)
+                        send(escapedTitle)
+                        Thread.sleep(forTimeInterval: 0.2)
+                        send("(ASCII character 13)")   // Enter (CR, no extra newline)
+                    default:
+                        break
+                    }
+                }
+            }
+            if let appUrl = wezTermAppUrl {
+                DispatchQueue.main.async {
+                    NSWorkspace.shared.openApplication(at: appUrl, configuration: NSWorkspace.OpenConfiguration())
+                }
             }
             if !tmuxHandled, let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
                 print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
