@@ -757,30 +757,25 @@ class TerminalFocuser {
                     Thread.sleep(forTimeInterval: 0.15)
                     sendText("\r")
                 } else {
-                    // Non-WezTerm: app-native AppleScript (no Accessibility permission needed)
+                    // Non-WezTerm: use the same write text pattern as iTerm, targeting the current terminal by name.
                     let escapedTitle = appleScriptLiteral(managerTitle)
-                    switch name {
-                    case "iTerm":
-                        let send = { (text: String) in
-                            _ = executeAppleScript("""
-                            tell application "iTerm"
-                                tell current session of current window
-                                    write text \(text) newline false
-                                end tell
+                    let send = { (text: String) in
+                        _ = executeAppleScript("""
+                        tell application "\(name)"
+                            tell current session of current window
+                                write text \(text) newline false
                             end tell
-                            """)
-                        }
-                        Thread.sleep(forTimeInterval: 0.2)
-                        send("(ASCII character 17)")   // Ctrl+Q: exit LIVE mode if active
-                        Thread.sleep(forTimeInterval: 0.3)
-                        send("\"/\"")
-                        Thread.sleep(forTimeInterval: 0.1)
-                        send(escapedTitle)
-                        Thread.sleep(forTimeInterval: 0.2)
-                        send("(ASCII character 13)")   // Enter (CR, no extra newline)
-                    default:
-                        break
+                        end tell
+                        """)
                     }
+                    Thread.sleep(forTimeInterval: 0.2)
+                    send("(ASCII character 17)")   // Ctrl+Q: exit LIVE mode if active
+                    Thread.sleep(forTimeInterval: 0.3)
+                    send("\"/\"")
+                    Thread.sleep(forTimeInterval: 0.1)
+                    send(escapedTitle)
+                    Thread.sleep(forTimeInterval: 0.2)
+                    send("(ASCII character 13)")   // Enter (CR, no extra newline)
                 }
             }
             if let appUrl = wezTermAppUrl {
