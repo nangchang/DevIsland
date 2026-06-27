@@ -21,15 +21,19 @@ PAYLOAD=$(cat)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY_BRIDGE="$SCRIPT_DIR/devisland_bridge.py"
 
-# Cheap event prefilter: when the hook event is already available as an
-# argument, skip terminal detection for hooks the Python helper would suppress.
-if [ -f "$PY_BRIDGE" ] && [ -n "$HOOK_EVENT_ARG" ]; then
-  PREFILTER_OUTPUT=$(printf "%s" "$PAYLOAD" \
-    | python3 "$PY_BRIDGE" --source "$CLI_SOURCE_ARG" --event "$HOOK_EVENT_ARG" --prefilter-only 2>/dev/null || true)
-  if [ -n "$PREFILTER_OUTPUT" ] && [ "$PREFILTER_OUTPUT" != "__DEVISLAND_PREFILTER_CONTINUE__" ]; then
-    printf "%s\n" "$PREFILTER_OUTPUT"
-    exit 0
-  fi
+# Keep this list in sync with scripts/hook_events.json. The shell bridge only
+# uses it when the CLI already supplied --event, so forwarded hooks still start
+# Python exactly once.
+if [ -n "$HOOK_EVENT_ARG" ]; then
+  NORM_EVENT=$(printf "%s" "$HOOK_EVENT_ARG" | tr '[:upper:]' '[:lower:]' | tr -d '_-')
+  case "$NORM_EVENT" in
+    permissionrequest|sessionstart|sessionend|notification|stop|pretooluse|posttooluse|posttoolusefailure|userpromptsubmit|elicitation|beforetool|afteragent|preinvocation|postinvocation)
+      ;;
+    *)
+      printf '{"continue":true,"suppressOutput":true}\n'
+      exit 0
+      ;;
+  esac
 fi
 
 # -------------------------------------------------------------------

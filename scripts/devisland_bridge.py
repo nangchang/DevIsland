@@ -76,7 +76,6 @@ _TOKEN_PATH = _APP_SUPPORT / "bridge-token"
 _CONFIG_PATH = _APP_SUPPORT / "bridge-config.json"
 
 _DENIAL_MESSAGE = "DevIsland에서 거절되었습니다."
-PREFILTER_CONTINUE = "__DEVISLAND_PREFILTER_CONTINUE__"
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +315,7 @@ def event_name(payload: dict[str, Any]) -> str:
     return "PermissionRequest"
 
 
-def suppress_before_app_response(event: str) -> str | None:
+def prefilter_response(event: str) -> str | None:
     if _normalize_event(event) in _PASSIVE_EVENTS_NORMALIZED:
         return None
     return '{"continue":true,"suppressOutput":true}'
@@ -494,7 +493,6 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True)
     parser.add_argument("--event", default="")
-    parser.add_argument("--prefilter-only", action="store_true")
     args = parser.parse_args()
 
     cli_source = args.source
@@ -502,10 +500,7 @@ def main() -> int:
     event = event_name(payload)
     norm_event = _normalize_event(event)
 
-    suppressed = suppress_before_app_response(event)
-    if args.prefilter_only:
-        print(suppressed or PREFILTER_CONTINUE)
-        return 0
+    suppressed = prefilter_response(event)
 
     session_id = str(payload.get("session_id") or "")[:8]
     log(f"Event: {event} session={session_id} source={cli_source}")

@@ -10,11 +10,10 @@ from devisland_bridge import (
     _normalize_event,
     _PASSIVE_EVENTS_NORMALIZED,
     PASSIVE_EVENTS,
-    PREFILTER_CONTINUE,
     enrich_payload,
     event_name,
     final_output,
-    suppress_before_app_response,
+    prefilter_response,
 )
 
 _MANIFEST_PATH = Path(__file__).parent / "hook_events.json"
@@ -78,19 +77,16 @@ class TestPassiveEventsNormalized(unittest.TestCase):
 
 class TestPrefilterResponse(unittest.TestCase):
     def test_manifest_event_continues_to_terminal_detection(self):
-        self.assertIsNone(suppress_before_app_response("SessionStart"))
+        self.assertIsNone(prefilter_response("SessionStart"))
 
     def test_separator_variant_continues_to_terminal_detection(self):
-        self.assertIsNone(suppress_before_app_response("pre-tool-use"))
+        self.assertIsNone(prefilter_response("pre-tool-use"))
 
     def test_unknown_event_is_suppressed_before_terminal_detection(self):
         self.assertEqual(
-            suppress_before_app_response("SomeRandomEvent"),
+            prefilter_response("SomeRandomEvent"),
             '{"continue":true,"suppressOutput":true}',
         )
-
-    def test_prefilter_continue_sentinel_is_stable_for_shell_bridge(self):
-        self.assertEqual(PREFILTER_CONTINUE, "__DEVISLAND_PREFILTER_CONTINUE__")
 
 
 class TestFinalOutputNormalized(unittest.TestCase):

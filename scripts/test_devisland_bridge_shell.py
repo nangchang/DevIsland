@@ -32,13 +32,6 @@ class BridgeShellTest(unittest.TestCase):
             capture_path = tmp_path / "capture.json"
             fake_python = f"""
             #!/bin/sh
-            for arg in "$@"; do
-              if [ "$arg" = "--prefilter-only" ]; then
-                cat > /dev/null
-                printf '__DEVISLAND_PREFILTER_CONTINUE__\\n'
-                exit 0
-              fi
-            done
             cat > /dev/null
             printf '{{"TERM_APP":"%s","TERM_TITLE":"%s","TERM_TTY":"%s","TERM_WINDOW_ID":"%s","TERM_TMUX_PANE":"%s","TERM_TMUX_SOCKET":"%s","TERM_TMUX_CLIENT":"%s"}}\\n' \\
               "$TERM_APP" "$TERM_TITLE" "$TERM_TTY" "$TERM_WINDOW_ID" "$TERM_TMUX_PANE" "$TERM_TMUX_SOCKET" "$TERM_TMUX_CLIENT" > "{capture_path}"
@@ -172,13 +165,6 @@ class BridgeShellTest(unittest.TestCase):
 
             fake_python = f"""
             #!/bin/sh
-            for arg in "$@"; do
-              if [ "$arg" = "--prefilter-only" ]; then
-                cat > /dev/null
-                printf '{{"continue":true,"suppressOutput":true}}\\n'
-                exit 0
-              fi
-            done
             touch "{helper_marker}"
             cat > /dev/null
             printf '{{}}\\n'
@@ -210,6 +196,76 @@ class BridgeShellTest(unittest.TestCase):
             self.assertEqual(json.loads(proc.stdout), {"continue": True, "suppressOutput": True})
             self.assertFalse(detection_marker.exists(), "terminal detection ran despite prefilter suppression")
             self.assertFalse(helper_marker.exists(), "normal helper path ran despite prefilter suppression")
+
+    def test_prefilter_for_forwarded_event_invokes_python_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            script_dir = tmp_path / "bridge"
+            bin_dir.mkdir()
+            script_dir.mkdir()
+
+            shutil.copy(BRIDGE, script_dir / "devisland-bridge.sh")
+            (script_dir / "devisland_bridge.py").write_text("# fake helper placeholder\n", encoding="utf-8")
+            python_count = tmp_path / "python-count"
+
+            fake_python = f"""
+            #!/bin/sh
+            current=0
+            [ -f "{python_count}" ] && current=$(cat "{python_count}")
+            current=$((current + 1))
+            printf '%s\\n' "$current" > "{python_count}"
+            cat > /dev/null
+            printf '{{}}\\n'
+            """
+            for name, body in {
+                "python3": fake_python,
+                "tty": "#!/bin/sh\nprintf '/dev/ttys008\\n'\n",
+            }.items():
+                path = bin_dir / name
+                path.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
+                path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+            run_env = os.environ.copy()
+            run_env["TERM_PROGRAM"] = "WezTerm"
+            run_env["PATH"] = f"{bin_dir}:{run_env.get('PATH', '')}"
+            proc = subprocess.run(
+                [str(script_dir / "devisland-bridge.sh"), "--source", "antigravity", "--event", "PreToolUse"],
+                input=json.dumps({"conversationId": "s1", "toolCall": {"name": "run_command"}}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(ROOT),
+                env=run_env,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout, "{}\n")
+            self.assertEqual(python_count.read_text(encoding="utf-8").strip(), "1")
+
+    def test_shell_prefilter_events_match_manifest(self):
+        bridge_text = BRIDGE.read_text(encoding="utf-8")
+        start = bridge_text.index("case \"$NORM_EVENT\" in")
+        end = bridge_text.index("*)", start)
+        case_lines = bridge_text[start:end].splitlines()[1:]
+        raw_events = "".join(line.strip() for line in case_lines).replace(";;", "").rstrip(")")
+        shell_events = set(raw_events.split("|"))
+
+        manifest = json.loads((ROOT / "scripts" / "hook_events.json").read_text(encoding="utf-8"))
+        manifest_events: set[str] = set()
+        for key, value in manifest.items():
+            if key.startswith("_"):
+                manifest_events.update(value)
+            else:
+                manifest_events.update(value.get("active", []))
+                manifest_events.update(value.get("lifecycle", []))
+        normalized_manifest = {
+            event.lower().replace("_", "").replace("-", "")
+            for event in manifest_events
+        }
+
+        self.assertEqual(shell_events, normalized_manifest)
 
 
 if __name__ == "__main__":

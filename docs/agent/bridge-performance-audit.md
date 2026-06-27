@@ -6,7 +6,7 @@ This note records the June 27, 2026 audit of DevIsland log growth and hook-path 
 
 DevIsland does not currently show runaway bridge log growth on the inspected machine, but a few paths can still grow without rotation or can add latency to every hook invocation.
 
-The most direct hook latency issue was the shell bridge running terminal detection before the Python helper could suppress ignored events. The first mitigation is to prefilter explicit `--event` hooks before `tty`, `ps`, `tmux`, and `osascript` detection, without adding another Python startup to hooks whose event name is only available inside stdin payload.
+The most direct hook latency issue was the shell bridge running terminal detection before ignored explicit events could be suppressed. The first mitigation is a shell-native prefilter for explicit `--event` hooks before `tty`, `ps`, `tmux`, and `osascript` detection, without adding another Python startup to forwarded hooks.
 
 ## Current Handoff Status
 
@@ -15,7 +15,8 @@ Last updated: 2026-06-28 KST.
 - Branch: `codex/bridge-prefilter-performance`
 - Draft PR: https://github.com/nangchang/DevIsland/pull/337
 - PR base: `main`
-- Current PR commit before this status note: `7bc1b54 fix: prefilter ignored hooks before terminal detection`
+- Initial implementation commit: `7bc1b54 fix: prefilter ignored hooks before terminal detection`
+- Handoff status commit: `9e16866 docs: record bridge performance handoff status`
 - Changed files in the first PR commit:
   - `scripts/devisland-bridge.sh`
   - `scripts/devisland_bridge.py`
@@ -30,16 +31,17 @@ Last updated: 2026-06-28 KST.
 Implementation state:
 
 - The first mitigation is implemented and covered by focused tests.
+- After PR review, the prefilter is shell-native instead of Python-based so forwarded `--event` hooks still launch Python exactly once.
 - The shell bridge only runs the early prefilter when `--event` is already available.
-- This intentionally avoids adding a second Python startup to Claude, Codex, and other payload-only event paths.
-- PR #337 is still draft.
+- Payload-only event paths continue through the existing Python helper path.
+- PR #337 is open and no longer draft.
 
 Recommended next steps:
 
-1. Decide whether to commit and push this handoff status note into PR #337.
-2. Watch PR checks once GitHub CI starts.
+1. Watch PR checks after the review-fix commit is pushed.
+2. Re-check unresolved review threads and confirm the double Python startup concern is addressed.
 3. If continuing performance work, start with unbounded `/tmp` log rotation or `os.Logger` migration.
-4. Do not broaden prefiltering to payload-only event paths without measuring the extra Python startup cost or replacing it with a shell-native allowlist.
+4. Do not broaden prefiltering to payload-only event paths without measuring the parsing cost or implementing a shell-native payload parser.
 
 ## Observed Local State
 
@@ -105,10 +107,10 @@ PTY support is disabled by default. If enabled, output chunks are sent to the ap
 ## Improvement Plan
 
 1. Prefilter ignored explicit hook events before terminal detection.
-   - Add a Python helper mode that only answers whether an event would be suppressed before app IPC.
-   - Call that mode at the top of the shell bridge only when the CLI supplied `--event`.
+   - Normalize the CLI-supplied `--event` in Bash.
+   - Suppress unknown explicit events before terminal detection.
    - Preserve existing suppress output.
-   - Avoid a second Python startup for Claude, Codex, and other hooks where the event name must be parsed from stdin.
+   - Keep forwarded hooks to one Python startup.
 
 2. Rotate or redirect unbounded `/tmp` logs.
    - Prefer `os.Logger` for Swift diagnostics.
@@ -132,10 +134,11 @@ PTY support is disabled by default. If enabled, output chunks are sent to the ap
 
 ## First Mitigation
 
-The first mitigation is implemented in the bridge scripts for hooks with an explicit `--event` argument:
+The first mitigation is implemented in the bridge script for hooks with an explicit `--event` argument:
 
-- `scripts/devisland_bridge.py --prefilter-only` prints a sentinel when terminal detection should continue.
-- For events the helper would suppress before app IPC, it prints the existing suppress response.
-- `scripts/devisland-bridge.sh` calls this mode before terminal detection and exits early when suppression is returned.
+- `scripts/devisland-bridge.sh` normalizes `--event` using lowercase conversion and underscore/hyphen removal.
+- Known events from `scripts/hook_events.json` continue to terminal detection.
+- Unknown explicit events return the existing suppress response and exit before terminal detection.
+- A focused shell test keeps the Bash allowlist in sync with `scripts/hook_events.json`.
 
-This keeps provider hook behavior unchanged for forwarded events and avoids terminal metadata work for explicit events DevIsland would not send to the app. A later step can add a shell-native allowlist for payload-only event sources if profiling shows the extra coverage is worth it.
+This keeps provider hook behavior unchanged for forwarded events, avoids terminal metadata work for explicit events DevIsland would not send to the app, and avoids the double Python startup concern raised in PR review.
