@@ -147,6 +147,14 @@ struct SessionInsightsView: View {
                         total: s.totalDecisions,
                         color: .blue
                     )
+                    if s.autoDenied > 0 {
+                        approvalLegend(
+                            label: l10n.insightsAutoDenied,
+                            count: s.autoDenied,
+                            total: s.totalDecisions,
+                            color: .orange
+                        )
+                    }
                 }
             }
         }
@@ -155,10 +163,16 @@ struct SessionInsightsView: View {
     private func approvalBar(_ s: SessionInsightsSummary) -> some View {
         GeometryReader { geo in
             let total = Double(s.totalDecisions)
-            let approvedW = geo.size.width * Double(s.manualApproved) / total
-            let deniedW   = geo.size.width * Double(s.manualDenied)   / total
-            let autoW     = geo.size.width * Double(s.autoApproved)   / total
-            HStack(spacing: 2) {
+            let spacing: CGFloat = 2
+            let segments = [s.manualApproved, s.manualDenied, s.autoApproved, s.autoDenied]
+                .filter { $0 > 0 }.count
+            let totalSpacing = CGFloat(max(0, segments - 1)) * spacing
+            let available = max(0, geo.size.width - totalSpacing)
+            let approvedW = available * Double(s.manualApproved) / total
+            let deniedW   = available * Double(s.manualDenied)   / total
+            let autoW     = available * Double(s.autoApproved)   / total
+            let autoDeniedW = available * Double(s.autoDenied)   / total
+            HStack(spacing: spacing) {
                 if s.manualApproved > 0 {
                     RoundedRectangle(cornerRadius: 3).fill(Color.green).frame(width: approvedW)
                 }
@@ -167,6 +181,9 @@ struct SessionInsightsView: View {
                 }
                 if s.autoApproved > 0 {
                     RoundedRectangle(cornerRadius: 3).fill(Color.blue).frame(width: autoW)
+                }
+                if s.autoDenied > 0 {
+                    RoundedRectangle(cornerRadius: 3).fill(Color.orange).frame(width: autoDeniedW)
                 }
             }
         }
@@ -207,17 +224,22 @@ struct SessionInsightsView: View {
 
     private func toolRow(item: (tool: String, count: Int), maxCount: Int) -> some View {
         GeometryReader { geo in
-            let barW = geo.size.width * 0.6 * Double(item.count) / Double(maxCount)
-            HStack(spacing: 8) {
+            let spacing: CGFloat = 8
+            let available = max(0, geo.size.width - spacing * 2)
+            let labelW    = available * 0.35
+            let barContainerW = available * 0.60
+            let countW    = available * 0.05
+            let barW      = barContainerW * Double(item.count) / Double(maxCount)
+            HStack(spacing: spacing) {
                 Text(item.tool)
                     .font(.system(size: 12, design: .monospaced))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .frame(width: geo.size.width * 0.35, alignment: .leading)
+                    .frame(width: labelW, alignment: .leading)
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(Color.green.opacity(0.15))
-                        .frame(width: geo.size.width * 0.6)
+                        .frame(width: barContainerW)
                     RoundedRectangle(cornerRadius: 3)
                         .fill(Color.green.opacity(0.6))
                         .frame(width: barW)
@@ -226,7 +248,7 @@ struct SessionInsightsView: View {
                 Text("\(item.count)")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: geo.size.width * 0.05, alignment: .trailing)
+                    .frame(width: countW, alignment: .trailing)
             }
         }
         .frame(height: 20)

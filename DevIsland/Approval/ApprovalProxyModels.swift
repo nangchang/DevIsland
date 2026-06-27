@@ -210,10 +210,11 @@ struct SessionInsightsSummary {
     let manualApproved: Int
     let manualDenied: Int
     let autoApproved: Int
+    let autoDenied: Int
     let topApprovedTools: [(tool: String, count: Int)]
     let averageDurationSeconds: Double?
 
-    var totalDecisions: Int { manualApproved + manualDenied + autoApproved }
+    var totalDecisions: Int { manualApproved + manualDenied + autoApproved + autoDenied }
 }
 
 // MARK: - PTY

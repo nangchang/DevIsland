@@ -622,6 +622,7 @@ extension L10n {
     var insightsManualApproved:    String { s("Approved",            "수동 승인") }
     var insightsManualDenied:      String { s("Denied",              "수동 거부") }
     var insightsAutoApproved:      String { s("Auto",                "자동 승인") }
+    var insightsAutoDenied:        String { s("Policy Denied",       "정책 거부") }
     var insightsTopTools:          String { s("Most Approved Tools", "자주 승인된 도구") }
     var insightsNoData:            String { s("No data yet",         "데이터 없음") }
     var insightsRetentionNote:     String { s("Based on replay log retention window", "리플레이 로그 보존 기간 기준") }

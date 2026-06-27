@@ -2055,7 +2055,7 @@ class AppState: ObservableObject {
             let since = Date().addingTimeInterval(-Double(retentionDays) * 86_400)
             return SessionInsightsSummary(
                 since: since, totalClosedSessions: 0, todayClosedSessions: 0,
-                manualApproved: 0, manualDenied: 0, autoApproved: 0,
+                manualApproved: 0, manualDenied: 0, autoApproved: 0, autoDenied: 0,
                 topApprovedTools: [], averageDurationSeconds: nil
             )
         }
