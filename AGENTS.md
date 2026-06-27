@@ -15,6 +15,7 @@ Read this file before editing. Open the referenced docs only when the task touch
 | Build, tests, project generation | [docs/agent/build-and-test.md](docs/agent/build-and-test.md) |
 | Claude/Codex/Gemini hook setup and response shapes | [docs/agent/hook-providers.md](docs/agent/hook-providers.md) |
 | Approval Proxy, IPC, SQLite, PTY, known gaps | [docs/agent/approval-proxy.md](docs/agent/approval-proxy.md) |
+| Terminal focusing and AoE session navigation | [docs/agent/terminal-focus-aoe.md](docs/agent/terminal-focus-aoe.md) |
 | UI Customization (Notch settings) | [docs/agent/ui-customization.md](docs/agent/ui-customization.md) |
 | Caffeine power and session-timeout behavior | [docs/agent/caffeine.md](docs/agent/caffeine.md) |
 | OpenPeon CESP sound packs | [docs/agent/openpeon-cesp.md](docs/agent/openpeon-cesp.md) |

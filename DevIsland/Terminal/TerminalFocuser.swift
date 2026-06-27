@@ -757,25 +757,13 @@ class TerminalFocuser {
                     Thread.sleep(forTimeInterval: 0.15)
                     sendText("\r")
                 } else {
-                    // Non-WezTerm: use the same write text pattern as iTerm, targeting the current terminal by name.
-                    let escapedTitle = appleScriptLiteral(managerTitle)
-                    let send = { (text: String) in
-                        _ = executeAppleScript("""
-                        tell application "\(name)"
-                            tell current session of current window
-                                write text \(text) newline false
-                            end tell
-                        end tell
-                        """)
+                    let script = managerNavigationScript(appName: name, managerTitle: managerTitle)
+                    if !script.isEmpty {
+                        let (_, error) = executeAppleScript(script)
+                        if let error {
+                            print("[DevIsland] manager navigation AppleScript error for \(name): \(error)")
+                        }
                     }
-                    Thread.sleep(forTimeInterval: 0.2)
-                    send("(ASCII character 17)")   // Ctrl+Q: exit LIVE mode if active
-                    Thread.sleep(forTimeInterval: 0.3)
-                    send("\"/\"")
-                    Thread.sleep(forTimeInterval: 0.1)
-                    send(escapedTitle)
-                    Thread.sleep(forTimeInterval: 0.2)
-                    send("(ASCII character 13)")   // Enter (CR, no extra newline)
                 }
             }
             if let appUrl = wezTermAppUrl {
@@ -820,6 +808,72 @@ class TerminalFocuser {
         default:
             return nil
         }
+    }
+
+    static func managerNavigationScript(appName: String, managerTitle: String) -> String {
+        switch appName {
+        case "iTerm":
+            return iTermManagerNavigationScript(managerTitle: managerTitle)
+        case "cmux":
+            return cmuxManagerNavigationScript(managerTitle: managerTitle)
+        case "Terminal":
+            return terminalManagerNavigationScript(managerTitle: managerTitle)
+        default:
+            return ""
+        }
+    }
+
+    static func iTermManagerNavigationScript(managerTitle: String) -> String {
+        let escapedTitle = appleScriptLiteral(managerTitle)
+        return """
+        tell application "iTerm"
+          activate
+          tell current session of current window
+            write text (ASCII character 17) newline false
+            delay 0.3
+            write text "/" newline false
+            delay 0.1
+            write text \(escapedTitle) newline false
+            delay 0.15
+            write text (ASCII character 13) newline false
+          end tell
+        end tell
+        """
+    }
+
+    static func cmuxManagerNavigationScript(managerTitle: String) -> String {
+        let escapedTitle = appleScriptLiteral(managerTitle)
+        let controlQ = appleScriptLiteral("\u{11}")
+        let enter = appleScriptLiteral("\r")
+        return """
+        tell application "cmux"
+          activate
+          set targetTerminal to «property CMfT» of («property CMsT» of «property CMFW»)
+          «event CmuxInTx» \(controlQ) given «class CMiT»:targetTerminal
+          delay 0.3
+          «event CmuxInTx» "/" given «class CMiT»:targetTerminal
+          delay 0.1
+          «event CmuxInTx» \(escapedTitle) given «class CMiT»:targetTerminal
+          delay 0.15
+          «event CmuxInTx» \(enter) given «class CMiT»:targetTerminal
+        end tell
+        """
+    }
+
+    static func terminalManagerNavigationScript(managerTitle: String) -> String {
+        let escapedTitle = appleScriptLiteral(managerTitle)
+        return """
+        tell application "Terminal" to activate
+        tell application "System Events"
+          keystroke "q" using control down
+          delay 0.3
+          keystroke "/"
+          delay 0.1
+          keystroke \(escapedTitle)
+          delay 0.15
+          key code 36
+        end tell
+        """
     }
 
     private static func sendToTTY(_ text: String, tty: String) {
