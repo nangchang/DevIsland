@@ -8,6 +8,39 @@ DevIsland does not currently show runaway bridge log growth on the inspected mac
 
 The most direct hook latency issue was the shell bridge running terminal detection before the Python helper could suppress ignored events. The first mitigation is to prefilter explicit `--event` hooks before `tty`, `ps`, `tmux`, and `osascript` detection, without adding another Python startup to hooks whose event name is only available inside stdin payload.
 
+## Current Handoff Status
+
+Last updated: 2026-06-28 KST.
+
+- Branch: `codex/bridge-prefilter-performance`
+- Draft PR: https://github.com/nangchang/DevIsland/pull/337
+- PR base: `main`
+- Current PR commit before this status note: `7bc1b54 fix: prefilter ignored hooks before terminal detection`
+- Changed files in the first PR commit:
+  - `scripts/devisland-bridge.sh`
+  - `scripts/devisland_bridge.py`
+  - `scripts/test_devisland_bridge.py`
+  - `scripts/test_devisland_bridge_shell.py`
+  - `docs/agent/bridge-performance-audit.md`
+- Validation completed before opening PR #337:
+  - `python3 scripts/test_devisland_bridge.py`
+  - `python3 scripts/test_devisland_bridge_shell.py`
+  - `./scripts/run-tests.sh`
+
+Implementation state:
+
+- The first mitigation is implemented and covered by focused tests.
+- The shell bridge only runs the early prefilter when `--event` is already available.
+- This intentionally avoids adding a second Python startup to Claude, Codex, and other payload-only event paths.
+- PR #337 is still draft.
+
+Recommended next steps:
+
+1. Decide whether to commit and push this handoff status note into PR #337.
+2. Watch PR checks once GitHub CI starts.
+3. If continuing performance work, start with unbounded `/tmp` log rotation or `os.Logger` migration.
+4. Do not broaden prefiltering to payload-only event paths without measuring the extra Python startup cost or replacing it with a shell-native allowlist.
+
 ## Observed Local State
 
 - `~/Library/Logs/DevIsland/bridge.log`: about 2.5 MB.
