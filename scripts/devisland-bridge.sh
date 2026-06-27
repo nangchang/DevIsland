@@ -139,6 +139,26 @@ if [ -n "$TMUX" ] && [ -z "$CLIENT_TTY" ]; then
         esac
         CURRENT_TTY_NAME="${CURRENT_TTY##*/}"
       fi
+      # tmux 세션이 상속한 TERM_PROGRAM/WEZTERM_PANE이 틀릴 수 있으므로
+      # manager 프로세스의 부모 체인을 탐색해 실제 터미널 앱을 감지한다.
+      _check_pid="$_mgr_pid"
+      for _depth in 1 2 3 4 5; do
+        _pname=$(ps -o comm= -p "$_check_pid" 2>/dev/null | tr -d ' ')
+        _pname_lc=$(printf '%s' "$_pname" | tr '[:upper:]' '[:lower:]')
+        case "$_pname_lc" in
+          *iterm*) TERM_PROGRAM="iTerm.app"; unset WEZTERM_PANE; break ;;
+          *wezterm*) TERM_PROGRAM="WezTerm"; break ;;
+          *ghostty*) TERM_PROGRAM="Ghostty"; unset WEZTERM_PANE; break ;;
+          *terminal*) TERM_PROGRAM="Apple_Terminal"; unset WEZTERM_PANE; break ;;
+          *alacritty*) TERM_PROGRAM="Alacritty"; unset WEZTERM_PANE; break ;;
+          *warp*) TERM_PROGRAM="WarpTerminal"; unset WEZTERM_PANE; break ;;
+          *kitty*) TERM_PROGRAM="kitty"; unset WEZTERM_PANE; break ;;
+          *cmux*) unset WEZTERM_PANE; break ;;
+        esac
+        _ppid=$(ps -o ppid= -p "$_check_pid" 2>/dev/null | tr -d ' ')
+        [ -z "$_ppid" ] || [ "$_ppid" = "0" ] || [ "$_ppid" = "1" ] && break
+        _check_pid="$_ppid"
+      done
     fi
     # 세션명 두 번째 컴포넌트가 TUI 세션 타이틀 (예: aoe_Bohemians_xxx → Bohemians)
     _without_prefix="${_session_name#${_tool_prefix}_}"
