@@ -1599,6 +1599,7 @@ class AppState: ObservableObject {
             tmuxPane: session.terminal.tmuxPane,
             tmuxSocket: session.terminal.tmuxSocket,
             tmuxClient: session.terminal.tmuxClient,
+            managerSessionTitle: session.terminal.managerSessionTitle,
             workspaceRoot: session.workspaceRoot
         )
     }
@@ -2739,6 +2740,7 @@ class AppState: ObservableObject {
             tmuxPane: session?.terminal.tmuxPane,
             tmuxSocket: session?.terminal.tmuxSocket,
             tmuxClient: session?.terminal.tmuxClient,
+            managerSessionTitle: session?.terminal.managerSessionTitle,
             workspaceRoot: session?.workspaceRoot
         ) { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.terminalFocusRecheckDelay) {

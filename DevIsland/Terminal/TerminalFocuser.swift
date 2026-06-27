@@ -552,6 +552,40 @@ class TerminalFocuser {
         return activePane?["window_id"].map { "\($0)" }
     }
 
+    static func wezTermWindowIDForPaneID(in panesJSON: String, paneId: String) -> String? {
+        guard let data = panesJSON.data(using: .utf8),
+              let panes = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return nil
+        }
+        for pane in panes {
+            if pane["pane_id"].map({ "\($0)" }) == paneId {
+                return pane["window_id"].map { "\($0)" }
+            }
+        }
+        return nil
+    }
+
+    private static func wezTermWindowTarget(cli: URL, paneId: String) -> (windowId: String, environment: [String: String]?)? {
+        let socketEnvironments = wezTermSocketCandidates().map(wezTermSocketEnvironment)
+        let environments: [[String: String]?] = socketEnvironments.isEmpty ? [nil] : socketEnvironments.map(Optional.some)
+
+        for environment in environments {
+            let json = getProcessOutput(
+                executable: cli,
+                arguments: ["cli", "list", "--format", "json"],
+                environment: environment
+            )
+            if let wid = wezTermWindowIDForPaneID(in: json, paneId: paneId) {
+                return (wid, environment)
+            }
+            // Fallback: any active window
+            if let wid = wezTermActiveWindowID(in: json) {
+                return (wid, environment)
+            }
+        }
+        return nil
+    }
+
     private static func wezTermPaneTarget(cli: URL, tty: String) -> (paneId: String, environment: [String: String]?)? {
         let socketEnvironments = wezTermSocketCandidates().map(wezTermSocketEnvironment)
         let environments: [[String: String]?] = socketEnvironments.isEmpty ? [nil] : socketEnvironments.map(Optional.some)
@@ -597,6 +631,7 @@ class TerminalFocuser {
         tmuxPane: String? = nil,
         tmuxSocket: String? = nil,
         tmuxClient: String? = nil,
+        managerSessionTitle: String? = nil,
         workspaceRoot: String? = nil,
         completion: (() -> Void)? = nil
     ) {
@@ -619,7 +654,7 @@ class TerminalFocuser {
         let name = match.name
         DispatchQueue.global(qos: .userInitiated).async {
             // This launches /usr/bin/osascript as a child process, so keep it off the main thread.
-            var resolvedTmuxClient = tmuxClient
+            var tmuxHandled = false
             if name == "VSCode", let path = workspaceRoot, !path.isEmpty {
                 let ok = runProcess(executable: URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", "Visual Studio Code", path])
                 if !ok {
@@ -627,45 +662,88 @@ class TerminalFocuser {
                 }
             } else if name == "WezTerm" {
                 // WezTerm doesn't support AppleScript — use the CLI to focus the exact pane by TTY.
-                // App activation always runs regardless of CLI success/failure.
                 let appUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: match.bundleId)
                 let cli = appUrl.map(wezTermCLIURL)
                 var outerTTY: String? = nil
+
                 if let cli {
-                    var activated = false
-                    if let tty, !tty.isEmpty {
-                        if let target = wezTermPaneTarget(cli: cli, tty: tty) {
-                            _ = runProcess(
-                                executable: cli,
-                                arguments: wezTermActivatePaneArguments(paneId: target.paneId),
-                                environment: target.environment
-                            )
-                            outerTTY = tty
-                            activated = true
+                    // 1. Find and activate the WezTerm pane
+                    var paneActivated = false
+                    if let tty, !tty.isEmpty, let target = wezTermPaneTarget(cli: cli, tty: tty) {
+                        _ = runProcess(executable: cli,
+                                       arguments: wezTermActivatePaneArguments(paneId: target.paneId),
+                                       environment: target.environment)
+                        outerTTY = tty
+                        paneActivated = true
+                    }
+                    // Fallback: windowId = inherited WEZTERM_PANE (e.g. Agent of Empires detached sessions)
+                    // Only activate if the pane actually exists — stale WEZTERM_PANE (e.g. =0) must be skipped.
+                    if !paneActivated, let windowId, !windowId.isEmpty,
+                       let lookup = wezTermPaneTargetByID(cli: cli, paneId: windowId) {
+                        _ = runProcess(executable: cli,
+                                       arguments: wezTermActivatePaneArguments(paneId: windowId),
+                                       environment: lookup.environment)
+                        outerTTY = lookup.tty
+                        paneActivated = true
+                    }
+
+                    // 2. Navigate to the tmux session
+                    if let tmuxPane, !tmuxPane.isEmpty {
+                        tmuxHandled = true
+                        var client = tmuxClient
+
+                        // 2a. Find client from outer TTY (standard WezTerm+tmux case)
+                        if client == nil || client!.isEmpty, let tty = outerTTY, !tty.isEmpty {
+                            client = tmuxClientForTTY(socket: tmuxSocket, tty: tty)
+                        }
+
+                        if let client, !client.isEmpty {
+                            // Client found: switch it to the target session
+                            print("[DevIsland] WezTerm tmux switch: client=\(client) pane=\(tmuxPane)")
+                            if !switchTmuxClient(socket: tmuxSocket, client: client, pane: tmuxPane) {
+                                print("[DevIsland] WezTerm tmux switch-client failed pane=\(tmuxPane)")
+                            }
+                        } else {
+                            // No client attached (e.g. AoE fully detached sessions).
+                            // The windowId pane (WEZTERM_PANE) is the tool's own TUI pane which already
+                            // shows the agent output — activating it is sufficient; no new pane needed.
+                            print("[DevIsland] WezTerm: no tmux client for pane=\(tmuxPane), relying on windowId pane activation")
                         }
                     }
-                    // Fallback: windowId is WEZTERM_PANE (direct pane ID), e.g. when running in a
-                    // detached tmux session created by a tool like Agent of Empires. The inherited
-                    // WEZTERM_PANE points to the parent WezTerm pane; activate it directly and
-                    // resolve its outer TTY so switchTmuxClient can find the right tmux client.
-                    if !activated, let windowId, !windowId.isEmpty {
-                        _ = runProcess(
-                            executable: cli,
-                            arguments: wezTermActivatePaneArguments(paneId: windowId),
-                            environment: wezTermPreferredSocketEnvironment()
-                        )
-                        if let paneLookup = wezTermPaneTargetByID(cli: cli, paneId: windowId) {
-                            outerTTY = paneLookup.tty
+
+                    // 3. Manager TUI session navigation (e.g. AoE "/" search)
+                    // If the activating pane belongs to a TUI manager (AoE etc.), send a search
+                    // sequence so the TUI navigates to the right session automatically.
+                    if paneActivated, let managerTitle = managerSessionTitle, !managerTitle.isEmpty {
+                        var sendPaneId: String? = nil
+                        var sendEnv: [String: String]? = nil
+                        if let activeTTY = outerTTY, !activeTTY.isEmpty,
+                           let found = wezTermPaneTarget(cli: cli, tty: activeTTY) {
+                            sendPaneId = found.paneId
+                            sendEnv = found.environment
+                        } else if let wid = windowId, !wid.isEmpty {
+                            sendPaneId = wid
+                            sendEnv = wezTermPreferredSocketEnvironment()
+                        }
+                        if let paneId = sendPaneId {
+                            let sendText = { (text: String) in
+                                _ = runProcess(executable: cli,
+                                               arguments: ["cli", "send-text", "--no-paste",
+                                                           "--pane-id", paneId, text],
+                                               environment: sendEnv)
+                            }
+                            Thread.sleep(forTimeInterval: 0.15)
+                            sendText("\u{11}")          // Ctrl+Q: exit LIVE mode if active
+                            Thread.sleep(forTimeInterval: 0.3)
+                            sendText("/")               // open AoE search
+                            Thread.sleep(forTimeInterval: 0.1)
+                            sendText(managerTitle)      // type session title
+                            Thread.sleep(forTimeInterval: 0.15)
+                            sendText("\r")              // confirm
                         }
                     }
                 }
-                // If tmuxClient wasn't captured (detached session), find the client currently
-                // attached to the activated WezTerm pane so switchTmuxClient can switch it.
-                if (resolvedTmuxClient == nil || resolvedTmuxClient!.isEmpty),
-                   let tty = outerTTY, !tty.isEmpty {
-                    resolvedTmuxClient = tmuxClientForTTY(socket: tmuxSocket, tty: tty)
-                    print("[DevIsland] resolved tmux client from WezTerm pane TTY: \(resolvedTmuxClient ?? "nil")")
-                }
+
                 DispatchQueue.main.async {
                     if let appUrl {
                         NSWorkspace.shared.openApplication(at: appUrl, configuration: NSWorkspace.OpenConfiguration())
@@ -677,9 +755,9 @@ class TerminalFocuser {
                     print("[DevIsland] terminal focus AppleScript error: \(error)")
                 }
             }
-            if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
-                print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(resolvedTmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
-                if !switchTmuxClient(socket: tmuxSocket, client: resolvedTmuxClient, pane: tmuxPane) {
+            if !tmuxHandled, let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
+                print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
+                if !switchTmuxClient(socket: tmuxSocket, client: tmuxClient, pane: tmuxPane) {
                     print("[DevIsland] tmux switch failed for pane=\(tmuxPane)")
                 }
             }
