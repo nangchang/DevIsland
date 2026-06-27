@@ -8,7 +8,7 @@ PR: <https://github.com/nangchang/DevIsland/pull/336>
 
 Branch: `codex/improve-aoe-terminal-navigation`
 
-Last implementation commit: `ead0c4b fix: improve AoE terminal navigation support`
+Initial implementation commit: `ead0c4b fix: improve AoE terminal navigation support`
 
 As of 2026-06-28, the PR has:
 
@@ -20,6 +20,12 @@ As of 2026-06-28, the PR has:
 - Added regression coverage in `TerminalFocuserTests` for terminal-specific manager navigation script generation.
 - Added bridge shell coverage for detached `aoe_*` tmux sessions forwarding `TERM_MANAGER_SESSION_TITLE`.
 - Documented terminal-specific strategy, limits, and manual verification steps in this file.
+
+Review follow-up status:
+
+- Owner review identified missing activation settle delays for iTerm and Apple Terminal; follow-up code restores a `0.2s` delay after `activate` before sending the first AoE navigation input.
+- Gemini review suggested replacing deprecated AppleScript `ASCII character` and raw control-character string literals with `character id`; follow-up code uses `character id 17` and `character id 13` for iTerm and cmux.
+- Apple Terminal Accessibility behavior remains a manual verification item because System Events can fail when DevIsland lacks Accessibility permission.
 
 Verification already run for the PR:
 

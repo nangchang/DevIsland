@@ -107,22 +107,26 @@ final class TerminalFocuserTests: XCTestCase {
         let script = TerminalFocuser.iTermManagerNavigationScript(managerTitle: #"Quote " and \ slash"#)
 
         XCTAssertTrue(script.contains(#"write text "Quote \" and \\ slash" newline false"#))
-        XCTAssertTrue(script.contains("write text (ASCII character 17) newline false"))
-        XCTAssertTrue(script.contains("write text (ASCII character 13) newline false"))
+        XCTAssertTrue(script.contains("delay 0.2"))
+        XCTAssertTrue(script.contains("write text (character id 17) newline false"))
+        XCTAssertTrue(script.contains("write text (character id 13) newline false"))
     }
 
     func testCmuxManagerNavigationScriptTargetsFocusedTerminal() {
         let script = TerminalFocuser.cmuxManagerNavigationScript(managerTitle: "Bohemians")
 
         XCTAssertTrue(script.contains("set targetTerminal to «property CMfT» of («property CMsT» of «property CMFW»)"))
+        XCTAssertTrue(script.contains("«event CmuxInTx» (character id 17) given «class CMiT»:targetTerminal"))
         XCTAssertTrue(script.contains(#"«event CmuxInTx» "/" given «class CMiT»:targetTerminal"#))
         XCTAssertTrue(script.contains(#"«event CmuxInTx» "Bohemians" given «class CMiT»:targetTerminal"#))
+        XCTAssertTrue(script.contains("«event CmuxInTx» (character id 13) given «class CMiT»:targetTerminal"))
     }
 
     func testTerminalManagerNavigationScriptUsesSystemEvents() {
         let script = TerminalFocuser.terminalManagerNavigationScript(managerTitle: "Bohemians")
 
         XCTAssertTrue(script.contains("tell application \"Terminal\" to activate"))
+        XCTAssertTrue(script.contains("delay 0.2"))
         XCTAssertTrue(script.contains("keystroke \"q\" using control down"))
         XCTAssertTrue(script.contains("keystroke \"/\""))
         XCTAssertTrue(script.contains("key code 36"))

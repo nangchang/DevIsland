@@ -828,14 +828,15 @@ class TerminalFocuser {
         return """
         tell application "iTerm"
           activate
+          delay 0.2
           tell current session of current window
-            write text (ASCII character 17) newline false
+            write text (character id 17) newline false
             delay 0.3
             write text "/" newline false
             delay 0.1
             write text \(escapedTitle) newline false
             delay 0.15
-            write text (ASCII character 13) newline false
+            write text (character id 13) newline false
           end tell
         end tell
         """
@@ -843,19 +844,17 @@ class TerminalFocuser {
 
     static func cmuxManagerNavigationScript(managerTitle: String) -> String {
         let escapedTitle = appleScriptLiteral(managerTitle)
-        let controlQ = appleScriptLiteral("\u{11}")
-        let enter = appleScriptLiteral("\r")
         return """
         tell application "cmux"
           activate
           set targetTerminal to «property CMfT» of («property CMsT» of «property CMFW»)
-          «event CmuxInTx» \(controlQ) given «class CMiT»:targetTerminal
+          «event CmuxInTx» (character id 17) given «class CMiT»:targetTerminal
           delay 0.3
           «event CmuxInTx» "/" given «class CMiT»:targetTerminal
           delay 0.1
           «event CmuxInTx» \(escapedTitle) given «class CMiT»:targetTerminal
           delay 0.15
-          «event CmuxInTx» \(enter) given «class CMiT»:targetTerminal
+          «event CmuxInTx» (character id 13) given «class CMiT»:targetTerminal
         end tell
         """
     }
@@ -864,6 +863,7 @@ class TerminalFocuser {
         let escapedTitle = appleScriptLiteral(managerTitle)
         return """
         tell application "Terminal" to activate
+        delay 0.2
         tell application "System Events"
           keystroke "q" using control down
           delay 0.3
