@@ -2,6 +2,37 @@
 
 DevIsland terminal focusing is best effort. It must not block hook responses, approval decisions, or UI responsiveness.
 
+## Current PR Status
+
+PR: <https://github.com/nangchang/DevIsland/pull/336>
+
+Branch: `codex/improve-aoe-terminal-navigation`
+
+Last implementation commit: `ead0c4b fix: improve AoE terminal navigation support`
+
+As of 2026-06-28, the PR has:
+
+- Split AoE manager navigation out of the old generic non-WezTerm AppleScript path.
+- Kept the existing WezTerm CLI path for pane activation and `send-text`.
+- Added explicit iTerm manager navigation with `write text ... newline false`.
+- Added cmux manager navigation using raw AppleEvent codes for `CmuxInTx` against the focused terminal in the selected workspace.
+- Added Apple Terminal manager navigation with a System Events keystroke fallback after Terminal tab focus.
+- Added regression coverage in `TerminalFocuserTests` for terminal-specific manager navigation script generation.
+- Added bridge shell coverage for detached `aoe_*` tmux sessions forwarding `TERM_MANAGER_SESSION_TITLE`.
+- Documented terminal-specific strategy, limits, and manual verification steps in this file.
+
+Verification already run for the PR:
+
+- `python3 -m unittest scripts.test_devisland_bridge_shell`
+- cmux raw-event AppleScript compile check with `osacompile`
+- `./scripts/run-tests.sh`
+
+Known follow-up risks:
+
+- Apple Terminal navigation is less deterministic than iTerm, WezTerm, or cmux because it uses System Events keystrokes and requires Accessibility permission.
+- Detached AoE manager detection still uses the `aoe_*` tmux session-name convention plus `pgrep -nx aoe`, so multiple AoE manager processes may be ambiguous.
+- Manual verification is still needed in real iTerm, WezTerm, cmux, and Apple Terminal windows with active AoE dashboards.
+
 ## AoE Session Navigation
 
 Agent of Empires (`aoe`) runs agent sessions under tmux. DevIsland captures two pieces of state for detached AoE sessions:
