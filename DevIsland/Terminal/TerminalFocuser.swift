@@ -820,7 +820,8 @@ class TerminalFocuser {
         let delays: [TimeInterval] = [0.2, 0.3, 0.1, 0.2]
 
         for (index, input) in inputs.enumerated() {
-            Thread.sleep(forTimeInterval: delays[index])
+            let delay = index < delays.count ? delays[index] : 0.2
+            Thread.sleep(forTimeInterval: delay)
             let (_, error) = executeAppleScript("""
             tell application "iTerm"
                 tell current session of current window
