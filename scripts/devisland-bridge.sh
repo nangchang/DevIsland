@@ -278,14 +278,15 @@ tell application "Terminal"
 end tell
 ASEOF
 )
-  TERM_APP="Terminal"
   if [ -z "$info" ]; then
     [ "$TERM_PROGRAM" = "Apple_Terminal" ] && [ -n "$TERM_MANAGER_SESSION_TITLE" ] || return 1
+    TERM_APP="Terminal"
     TERM_TITLE="Terminal"
     TERM_WINDOW_ID=""
     TERM_TAB_INDEX=""
     return 0
   fi
+  TERM_APP="Terminal"
   TERM_TITLE=$(printf '%s' "$info" | awk -F ':::' '{print $1}')
   TERM_WINDOW_ID=$(printf '%s' "$info" | awk -F ':::' '{print $2}')
   TERM_TAB_INDEX=$(printf '%s' "$info" | awk -F ':::' '{print $3}')

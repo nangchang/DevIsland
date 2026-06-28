@@ -335,7 +335,7 @@ class BridgeShellTest(unittest.TestCase):
         self.assertEqual(captured["TERM_TMUX_PANE"], "%12")
         self.assertEqual(captured["TERM_MANAGER_SESSION_TITLE"], "Bohemians")
 
-    def test_detached_aoe_terminal_parent_chain_falls_back_without_tty_match(self):
+    def test_detached_aoe_terminal_fallback_when_osascript_returns_no_info(self):
         captured = self.run_bridge(
             env={
                 "TERM_PROGRAM": "tmux",
