@@ -756,26 +756,10 @@ class TerminalFocuser {
                     sendText(managerTitle)
                     Thread.sleep(forTimeInterval: 0.15)
                     sendText("\r")
-                } else {
-                    // Non-WezTerm: use the same write text pattern as iTerm, targeting the current terminal by name.
-                    let escapedTitle = appleScriptLiteral(managerTitle)
-                    let send = { (text: String) in
-                        _ = executeAppleScript("""
-                        tell application "\(name)"
-                            tell current session of current window
-                                write text \(text) newline false
-                            end tell
-                        end tell
-                        """)
-                    }
-                    Thread.sleep(forTimeInterval: 0.2)
-                    send("(ASCII character 17)")   // Ctrl+Q: exit LIVE mode if active
-                    Thread.sleep(forTimeInterval: 0.3)
-                    send("\"/\"")
-                    Thread.sleep(forTimeInterval: 0.1)
-                    send(escapedTitle)
-                    Thread.sleep(forTimeInterval: 0.2)
-                    send("(ASCII character 13)")   // Enter (CR, no extra newline)
+                } else if name == "iTerm" {
+                    runITermManagerNavigation(managerTitle: managerTitle)
+                } else if name == "Terminal" || name == "cmux" {
+                    tmuxHandled = true
                 }
             }
             if let appUrl = wezTermAppUrl {
@@ -819,6 +803,35 @@ class TerminalFocuser {
             return "CodexDesktop"
         default:
             return nil
+        }
+    }
+
+    static func iTermManagerNavigationInputs(managerTitle: String) -> [String] {
+        [
+            "(ASCII character 17)",
+            "\"/\"",
+            appleScriptLiteral(managerTitle),
+            "(ASCII character 13)"
+        ]
+    }
+
+    private static func runITermManagerNavigation(managerTitle: String) {
+        let inputs = iTermManagerNavigationInputs(managerTitle: managerTitle)
+        let delays: [TimeInterval] = [0.2, 0.3, 0.1, 0.2]
+
+        for (index, input) in inputs.enumerated() {
+            Thread.sleep(forTimeInterval: delays[index])
+            let (_, error) = executeAppleScript("""
+            tell application "iTerm"
+                tell current session of current window
+                    write text \(input) newline false
+                end tell
+            end tell
+            """)
+            if let error {
+                print("[DevIsland] iTerm manager navigation AppleScript error: \(error)")
+                return
+            }
         }
     }
 
@@ -895,14 +908,15 @@ class TerminalFocuser {
               set wantedTabIndexText to \(tabIndexLiteral)
               if wantedWindowIdText is not "" and wantedTabIndexText is not "" then
                 try
-                  set wantedWindow to window id (wantedWindowIdText as integer)
-                  set wantedTab to tab (wantedTabIndexText as integer) of wantedWindow
-                  set selected tab of wantedWindow to wantedTab
-                  set selected of wantedTab to true
-                  set frontmost of wantedWindow to true
-                  set index of wantedWindow to 1
-                  activate
-                  return
+                  repeat with aWindow in windows
+                    if (id of aWindow as text) is wantedWindowIdText then
+                      set wantedTab to tab (wantedTabIndexText as integer) of aWindow
+                      set selected of wantedTab to true
+                      set index of aWindow to 1
+                      activate
+                      return
+                    end if
+                  end repeat
                 end try
               end if
               repeat with aWindow in windows
