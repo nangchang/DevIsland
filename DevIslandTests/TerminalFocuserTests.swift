@@ -95,4 +95,13 @@ final class TerminalFocuserTests: XCTestCase {
 
         XCTAssertEqual(TerminalFocuser.wezTermActiveWindowID(in: panesJSON), "9")
     }
+
+    func testITermManagerNavigationInputsUseLegacySequence() {
+        let inputs = TerminalFocuser.iTermManagerNavigationInputs(managerTitle: #"Quote " and \ slash"#)
+
+        XCTAssertEqual(inputs[0], "(ASCII character 17)")
+        XCTAssertEqual(inputs[1], "\"/\"")
+        XCTAssertEqual(inputs[2], #""Quote \" and \\ slash""#)
+        XCTAssertEqual(inputs[3], "(ASCII character 13)")
+    }
 }

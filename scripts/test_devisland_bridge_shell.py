@@ -33,8 +33,8 @@ class BridgeShellTest(unittest.TestCase):
             fake_python = f"""
             #!/bin/sh
             cat > /dev/null
-            printf '{{"TERM_APP":"%s","TERM_TITLE":"%s","TERM_TTY":"%s","TERM_WINDOW_ID":"%s","TERM_TMUX_PANE":"%s","TERM_TMUX_SOCKET":"%s","TERM_TMUX_CLIENT":"%s"}}\\n' \\
-              "$TERM_APP" "$TERM_TITLE" "$TERM_TTY" "$TERM_WINDOW_ID" "$TERM_TMUX_PANE" "$TERM_TMUX_SOCKET" "$TERM_TMUX_CLIENT" > "{capture_path}"
+            printf '{{"TERM_APP":"%s","TERM_TITLE":"%s","TERM_TTY":"%s","TERM_WINDOW_ID":"%s","TERM_TMUX_PANE":"%s","TERM_TMUX_SOCKET":"%s","TERM_TMUX_CLIENT":"%s","TERM_MANAGER_SESSION_TITLE":"%s"}}\\n' \\
+              "$TERM_APP" "$TERM_TITLE" "$TERM_TTY" "$TERM_WINDOW_ID" "$TERM_TMUX_PANE" "$TERM_TMUX_SOCKET" "$TERM_TMUX_CLIENT" "$TERM_MANAGER_SESSION_TITLE" > "{capture_path}"
             printf '{{}}\\n'
             """
             fake_bins = {**fake_bins, "python3": textwrap.dedent(fake_python)}
@@ -266,6 +266,138 @@ class BridgeShellTest(unittest.TestCase):
         }
 
         self.assertEqual(shell_events, normalized_manifest)
+
+    def test_detached_aoe_tmux_session_prefers_manager_with_tty(self):
+        captured = self.run_bridge(
+            env={
+                "TERM_PROGRAM": "tmux",
+                "TMUX": "/private/tmp/tmux-501/default,2797,2",
+                "TMUX_PANE": "%12",
+            },
+            fake_bins={
+                "tty": "#!/bin/sh\nprintf '/dev/ttys999\\n'\n",
+                "tmux": """
+                    #!/bin/sh
+                    if [ "$1" = "display-message" ] && [ "$3" = '#{session_name}' ]; then
+                      printf 'aoe_Bohemians_abc123\\n'
+                    fi
+                """,
+                "pgrep": """
+                    #!/bin/sh
+                    if [ "$1" = "-x" ] && [ "$2" = "aoe" ]; then
+                      printf '32263\\n4321\\n'
+                    elif [ "$1" = "-nx" ] && [ "$2" = "aoe" ]; then
+                      printf '32263\\n'
+                    fi
+                """,
+                "ps": """
+                    #!/bin/sh
+                    field="$2"
+                    pid="$4"
+                    if [ "$field" = "tty=" ]; then
+                      case "$pid" in
+                        32263) printf '??\\n' ;;
+                        4321) printf 'ttys012\\n' ;;
+                      esac
+                    elif [ "$field" = "comm=" ]; then
+                      case "$pid" in
+                        32263) printf '/opt/homebrew/bin/aoe\\n' ;;
+                        4321) printf '/opt/homebrew/bin/aoe\\n' ;;
+                        5000) printf '/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal\\n' ;;
+                        *) printf 'launchd\\n' ;;
+                      esac
+                    elif [ "$field" = "ppid=" ]; then
+                      case "$pid" in
+                        32263) printf '31133\\n' ;;
+                        4321) printf '5000\\n' ;;
+                        5000) printf '1\\n' ;;
+                        *) printf '0\\n' ;;
+                      esac
+                    fi
+                """,
+                "osascript": """
+                    #!/bin/sh
+                    if [ "$1" = "-e" ]; then
+                      case "$2" in
+                        *Terminal*) printf 'true\\n' ;;
+                        *) printf 'false\\n' ;;
+                      esac
+                    else
+                      cat > /dev/null
+                      printf 'Terminal:::42:::1\\n'
+                    fi
+                """,
+            },
+        )
+
+        self.assertEqual(captured["TERM_APP"], "Terminal")
+        self.assertEqual(captured["TERM_TTY"], "/dev/ttys012")
+        self.assertEqual(captured["TERM_TMUX_PANE"], "%12")
+        self.assertEqual(captured["TERM_MANAGER_SESSION_TITLE"], "Bohemians")
+
+    def test_detached_aoe_terminal_fallback_when_osascript_returns_no_info(self):
+        captured = self.run_bridge(
+            env={
+                "TERM_PROGRAM": "tmux",
+                "TMUX": "/private/tmp/tmux-501/default,2797,2",
+                "TMUX_PANE": "%12",
+            },
+            fake_bins={
+                "tty": "#!/bin/sh\nprintf '/dev/ttys999\\n'\n",
+                "tmux": """
+                    #!/bin/sh
+                    if [ "$1" = "display-message" ] && [ "$3" = '#{session_name}' ]; then
+                      printf 'aoe_Bohemians_abc123\\n'
+                    fi
+                """,
+                "pgrep": """
+                    #!/bin/sh
+                    if [ "$1" = "-x" ] && [ "$2" = "aoe" ]; then
+                      printf '4321\\n'
+                    elif [ "$1" = "-nx" ] && [ "$2" = "aoe" ]; then
+                      printf '4321\\n'
+                    fi
+                """,
+                "ps": """
+                    #!/bin/sh
+                    field="$2"
+                    pid="$4"
+                    if [ "$field" = "tty=" ]; then
+                      case "$pid" in
+                        4321) printf 'ttys012\\n' ;;
+                      esac
+                    elif [ "$field" = "comm=" ]; then
+                      case "$pid" in
+                        4321) printf '/opt/homebrew/bin/aoe\\n' ;;
+                        5000) printf '/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal\\n' ;;
+                        *) printf 'launchd\\n' ;;
+                      esac
+                    elif [ "$field" = "ppid=" ]; then
+                      case "$pid" in
+                        4321) printf '5000\\n' ;;
+                        5000) printf '1\\n' ;;
+                        *) printf '0\\n' ;;
+                      esac
+                    fi
+                """,
+                "osascript": """
+                    #!/bin/sh
+                    if [ "$1" = "-e" ]; then
+                      case "$2" in
+                        *Terminal*) printf 'true\\n' ;;
+                        *) printf 'false\\n' ;;
+                      esac
+                    else
+                      cat > /dev/null
+                    fi
+                """,
+            },
+        )
+
+        self.assertEqual(captured["TERM_APP"], "Terminal")
+        self.assertEqual(captured["TERM_TTY"], "/dev/ttys012")
+        self.assertEqual(captured["TERM_WINDOW_ID"], "")
+        self.assertEqual(captured["TERM_MANAGER_SESSION_TITLE"], "Bohemians")
 
 
 if __name__ == "__main__":

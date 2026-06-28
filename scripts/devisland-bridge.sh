@@ -147,9 +147,24 @@ if [ -n "$TMUX" ] && [ -z "$CLIENT_TTY" ]; then
   _session_name=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "")
   _tool_prefix="${_session_name%%_*}"
   if [ -n "$_tool_prefix" ] && [ "$_tool_prefix" != "$_session_name" ]; then
-    _mgr_pid=$(pgrep -nx "$_tool_prefix" 2>/dev/null)
+    _mgr_pid=""
+    _mgr_tty=""
+    while read -r _candidate_pid; do
+      [ -n "$_candidate_pid" ] || continue
+      _candidate_tty=$(ps -o tty= -p "$_candidate_pid" 2>/dev/null | awk '{print $1}')
+      if [ -n "$_candidate_tty" ] && [ "$_candidate_tty" != "??" ] && [ "$_candidate_tty" != "?" ]; then
+        _mgr_pid="$_candidate_pid"
+        _mgr_tty="$_candidate_tty"
+        break
+      fi
+    done < <(pgrep -x "$_tool_prefix" 2>/dev/null)
+    if [ -z "$_mgr_pid" ]; then
+      _mgr_pid=$(pgrep -nx "$_tool_prefix" 2>/dev/null)
+    fi
     if [ -n "$_mgr_pid" ]; then
-      _mgr_tty=$(ps -o tty= -p "$_mgr_pid" 2>/dev/null | awk '{print $1}')
+      if [ -z "$_mgr_tty" ]; then
+        _mgr_tty=$(ps -o tty= -p "$_mgr_pid" 2>/dev/null | awk '{print $1}')
+      fi
       if [ -n "$_mgr_tty" ] && [ "$_mgr_tty" != "??" ] && [ "$_mgr_tty" != "?" ]; then
         case "$_mgr_tty" in
           /dev/*) CURRENT_TTY="$_mgr_tty" ;;
@@ -263,7 +278,14 @@ tell application "Terminal"
 end tell
 ASEOF
 )
-  [ -n "$info" ] || return 1
+  if [ -z "$info" ]; then
+    [ "$TERM_PROGRAM" = "Apple_Terminal" ] && [ -n "$TERM_MANAGER_SESSION_TITLE" ] || return 1
+    TERM_APP="Terminal"
+    TERM_TITLE="Terminal"
+    TERM_WINDOW_ID=""
+    TERM_TAB_INDEX=""
+    return 0
+  fi
   TERM_APP="Terminal"
   TERM_TITLE=$(printf '%s' "$info" | awk -F ':::' '{print $1}')
   TERM_WINDOW_ID=$(printf '%s' "$info" | awk -F ':::' '{print $2}')
