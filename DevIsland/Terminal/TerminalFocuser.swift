@@ -912,6 +912,7 @@ class TerminalFocuser {
                   repeat with aWindow in windows
                     if (id of aWindow as text) is wantedWindowIdText then
                       set wantedTab to tab (wantedTabIndexText as integer) of aWindow
+                      set selected tab of aWindow to wantedTab
                       set selected of wantedTab to true
                       set index of aWindow to 1
                       activate
