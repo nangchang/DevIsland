@@ -315,6 +315,12 @@ def event_name(payload: dict[str, Any]) -> str:
     return "PermissionRequest"
 
 
+def prefilter_response(event: str) -> str | None:
+    if _normalize_event(event) in _PASSIVE_EVENTS_NORMALIZED:
+        return None
+    return '{"continue":true,"suppressOutput":true}'
+
+
 # ---------------------------------------------------------------------------
 # Token
 # ---------------------------------------------------------------------------
@@ -494,13 +500,15 @@ def main() -> int:
     event = event_name(payload)
     norm_event = _normalize_event(event)
 
+    suppressed = prefilter_response(event)
+
     session_id = str(payload.get("session_id") or "")[:8]
     log(f"Event: {event} session={session_id} source={cli_source}")
     event = norm_event
 
-    if event not in _PASSIVE_EVENTS_NORMALIZED:
+    if suppressed:
         log(f"Passive event suppressed before app: {event}")
-        print('{"continue":true,"suppressOutput":true}')
+        print(suppressed)
         return 0
 
     try:

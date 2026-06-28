@@ -18,6 +18,24 @@ done
 
 PAYLOAD=$(cat)
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY_BRIDGE="$SCRIPT_DIR/devisland_bridge.py"
+
+# Keep this list in sync with scripts/hook_events.json. The shell bridge only
+# uses it when the CLI already supplied --event, so forwarded hooks still start
+# Python exactly once.
+if [ -n "$HOOK_EVENT_ARG" ]; then
+  NORM_EVENT=$(printf "%s" "$HOOK_EVENT_ARG" | tr '[:upper:]' '[:lower:]' | tr -d '_-')
+  case "$NORM_EVENT" in
+    permissionrequest|sessionstart|sessionend|notification|stop|pretooluse|posttooluse|posttoolusefailure|userpromptsubmit|elicitation|beforetool|afteragent|preinvocation|postinvocation)
+      ;;
+    *)
+      printf '{"continue":true,"suppressOutput":true}\n'
+      exit 0
+      ;;
+  esac
+fi
+
 # -------------------------------------------------------------------
 # TTY 탐지
 # -------------------------------------------------------------------
@@ -453,8 +471,6 @@ fi
 # -------------------------------------------------------------------
 # 페이로드 처리, TCP 송수신, CLI별 응답 변환은 Python helper가 담당한다.
 # -------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PY_BRIDGE="$SCRIPT_DIR/devisland_bridge.py"
 
 if [ ! -f "$PY_BRIDGE" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Python bridge helper missing: $PY_BRIDGE" >> /tmp/DevIsland.bridge.log

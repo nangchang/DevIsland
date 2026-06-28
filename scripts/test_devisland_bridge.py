@@ -13,6 +13,7 @@ from devisland_bridge import (
     enrich_payload,
     event_name,
     final_output,
+    prefilter_response,
 )
 
 _MANIFEST_PATH = Path(__file__).parent / "hook_events.json"
@@ -72,6 +73,20 @@ class TestPassiveEventsNormalized(unittest.TestCase):
 
     def test_empty_string_is_not_passive(self):
         self.assertFalse(self._is_passive(""))
+
+
+class TestPrefilterResponse(unittest.TestCase):
+    def test_manifest_event_continues_to_terminal_detection(self):
+        self.assertIsNone(prefilter_response("SessionStart"))
+
+    def test_separator_variant_continues_to_terminal_detection(self):
+        self.assertIsNone(prefilter_response("pre-tool-use"))
+
+    def test_unknown_event_is_suppressed_before_terminal_detection(self):
+        self.assertEqual(
+            prefilter_response("SomeRandomEvent"),
+            '{"continue":true,"suppressOutput":true}',
+        )
 
 
 class TestFinalOutputNormalized(unittest.TestCase):
