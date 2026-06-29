@@ -69,6 +69,16 @@ final class GoldenResponseTests: XCTestCase {
         XCTAssertTrue(extra.isEmpty, "Unexpected keys: \(extra)", file: file, line: line)
     }
 
+    /// Spins the run loop in short bursts until `condition` is true or `timeout` elapses.
+    /// Prefer this over fixed-duration RunLoop waits so tests exit as soon as the async
+    /// work completes rather than always sleeping for the worst-case duration.
+    private func spinRunLoop(timeout: TimeInterval = 1.0, until condition: () -> Bool) {
+        let limit = Date(timeIntervalSinceNow: timeout)
+        while !condition() && Date() < limit {
+            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+        }
+    }
+
     // MARK: - Stop × claude / codex / gemini
 
     func testClaudeStopYieldsApproved() {
@@ -83,9 +93,10 @@ final class GoldenResponseTests: XCTestCase {
     }
 
     func testCodexStopYieldsApproved() {
+        // Codex emits "Stop" (not "SessionEnd" which is retired for Codex)
         let exp = expectation(description: #function)
         appState.handleMessage(
-            #"{"hook_event_name":"sessionend","session_id":"stop-codex","cli_source":"codex"}"#
+            #"{"hook_event_name":"Stop","session_id":"stop-codex","cli_source":"codex"}"#
         ) { [self] r in
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
@@ -114,7 +125,6 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         wait(for: [exp], timeout: 2)
     }
 
@@ -126,7 +136,6 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         wait(for: [exp], timeout: 2)
     }
 
@@ -138,7 +147,6 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         wait(for: [exp], timeout: 2)
     }
 
@@ -165,7 +173,6 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "pass"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         wait(for: [exp], timeout: 2)
     }
 
@@ -180,7 +187,6 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         wait(for: [exp], timeout: 2)
     }
 
@@ -194,7 +200,7 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+        spinRunLoop { appState.sessionStore.pendingCount == 1 }
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         appState.approve()
         wait(for: [exp], timeout: 2)
@@ -208,7 +214,7 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+        spinRunLoop { appState.sessionStore.pendingCount == 1 }
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         appState.approve()
         wait(for: [exp], timeout: 2)
@@ -228,7 +234,7 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+        spinRunLoop { state.sessionStore.pendingCount == 1 }
         XCTAssertEqual(state.sessionStore.pendingCount, 1)
         state.approve()
         wait(for: [exp], timeout: 2)
@@ -244,7 +250,7 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "denied"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+        spinRunLoop { appState.sessionStore.pendingCount == 1 }
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         appState.deny()
         wait(for: [exp], timeout: 2)
@@ -258,7 +264,7 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "denied"])
             exp.fulfill()
         }
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.5))
+        spinRunLoop { appState.sessionStore.pendingCount == 1 }
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         appState.deny()
         wait(for: [exp], timeout: 2)
@@ -316,7 +322,7 @@ final class GoldenResponseTests: XCTestCase {
             exp.fulfill()
         }
 
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+        spinRunLoop { appState.sessionStore.pendingCount == 1 }
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
         XCTAssertNotNil(appState.currentClaudeQuestion)
 
@@ -328,7 +334,7 @@ final class GoldenResponseTests: XCTestCase {
         appState.submitClaudeQuestion()
 
         wait(for: [exp], timeout: 2)
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        spinRunLoop { appState.sessionStore.pendingCount == 0 }
         XCTAssertEqual(appState.sessionStore.pendingCount, 0)
     }
 }
