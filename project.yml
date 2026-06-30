@@ -34,8 +34,8 @@ targets:
     info:
       path: DevIsland/Info.plist
       properties:
-        CFBundleShortVersionString: "0.12.1-dev"
-        CFBundleVersion: "85"
+        CFBundleShortVersionString: "0.13.0"
+        CFBundleVersion: "86"
         LSUIElement: true
         NSHighResolutionCapable: true
         NSAppleEventsUsageDescription: "Approve/Deny 후 터미널 앱을 포커스하기 위해 사용합니다."
