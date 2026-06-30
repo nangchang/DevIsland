@@ -79,8 +79,8 @@ final class GoldenResponseTests: XCTestCase {
         }
     }
 
-    private func waitForDisplayedPendingRequest(in state: AppState) {
-        spinRunLoop {
+    private func waitForDisplayedPendingRequest(in state: AppState, timeout: TimeInterval = 2.0) {
+        spinRunLoop(timeout: timeout) {
             state.sessionStore.pendingCount == 1 && state.hasResponseHandler
         }
     }
