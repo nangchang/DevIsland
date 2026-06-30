@@ -79,6 +79,12 @@ final class GoldenResponseTests: XCTestCase {
         }
     }
 
+    private func waitForDisplayedPendingRequest(in state: AppState, timeout: TimeInterval = 2.0) {
+        spinRunLoop(timeout: timeout) {
+            state.sessionStore.pendingCount == 1 && state.hasResponseHandler
+        }
+    }
+
     // MARK: - Stop × claude / codex / gemini
 
     func testClaudeStopYieldsApproved() {
@@ -200,8 +206,9 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        spinRunLoop { appState.sessionStore.pendingCount == 1 }
+        waitForDisplayedPendingRequest(in: appState)
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
         appState.approve()
         wait(for: [exp], timeout: 2)
     }
@@ -214,8 +221,9 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        spinRunLoop { appState.sessionStore.pendingCount == 1 }
+        waitForDisplayedPendingRequest(in: appState)
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
         appState.approve()
         wait(for: [exp], timeout: 2)
     }
@@ -234,8 +242,9 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "approved"])
             exp.fulfill()
         }
-        spinRunLoop { state.sessionStore.pendingCount == 1 }
+        waitForDisplayedPendingRequest(in: state)
         XCTAssertEqual(state.sessionStore.pendingCount, 1)
+        XCTAssertTrue(state.hasResponseHandler)
         state.approve()
         wait(for: [exp], timeout: 2)
     }
@@ -250,8 +259,9 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "denied"])
             exp.fulfill()
         }
-        spinRunLoop { appState.sessionStore.pendingCount == 1 }
+        waitForDisplayedPendingRequest(in: appState)
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
         appState.deny()
         wait(for: [exp], timeout: 2)
     }
@@ -264,8 +274,9 @@ final class GoldenResponseTests: XCTestCase {
             assertGolden(r, expected: ["response": "denied"])
             exp.fulfill()
         }
-        spinRunLoop { appState.sessionStore.pendingCount == 1 }
+        waitForDisplayedPendingRequest(in: appState)
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
         appState.deny()
         wait(for: [exp], timeout: 2)
     }
@@ -322,8 +333,9 @@ final class GoldenResponseTests: XCTestCase {
             exp.fulfill()
         }
 
-        spinRunLoop { appState.sessionStore.pendingCount == 1 }
+        waitForDisplayedPendingRequest(in: appState)
         XCTAssertEqual(appState.sessionStore.pendingCount, 1)
+        XCTAssertTrue(appState.hasResponseHandler)
         XCTAssertNotNil(appState.currentClaudeQuestion)
 
         guard let question = appState.currentClaudeQuestion?.questions.first,
