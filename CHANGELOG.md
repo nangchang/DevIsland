@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.13.0 - 2026-06-30
+
+이번 릴리즈는 세션을 다시 찾고 이어가는 흐름을 강화하고, 승인 요청과 터미널 포커스 경험을 더 똑똑하게 다듬은 기능 업데이트입니다. Compact notch 영역을 플러그인으로 확장할 수 있게 되었고, 세션 히스토리/인사이트, macOS 알림, Always allow 제안, AoE 터미널 탐색과 bridge 성능 개선도 함께 담았습니다.
+
+### Highlights
+
+- Compact notch의 좌우 영역을 플러그인 contribution으로 확장할 수 있게 하고, 기존 compact 표시를 기본 플러그인으로 이전했습니다.
+- 세션 히스토리 창에 live session 표시, 즐겨찾기, 설명 편집과 Insights 탭을 추가했습니다.
+- Quick Launch로 작업 경로 컨텍스트 메뉴에서 새 세션을 바로 시작할 수 있게 했습니다.
+- Advanced 설정에 Diagnostics pane을 추가해 provider별 bridge hook 설치 상태를 확인할 수 있게 했습니다.
+
+### UI/UX
+
+- 승인 요청을 macOS Notification Center로도 받을 수 있게 하고, 설정에서 알림 동작을 제어할 수 있게 했습니다.
+- 같은 도구를 반복 승인한 뒤에는 `Always allow` 제안을 표시해 승인 규칙 생성 흐름을 줄였습니다.
+- Claude `AskUserQuestion` 중에는 Always allow 제안을 숨겨 질문 응답 UI와 승인 제안이 섞이지 않도록 했습니다.
+- 세션 설명 편집기와 세션 히스토리 행 표시를 다듬어 긴 텍스트와 live session 상태가 더 안정적으로 보입니다.
+
+### Terminal & Hooks
+
+- WezTerm, iTerm, Apple Terminal에서 AoE TUI의 올바른 세션으로 이동한 뒤 터미널을 포커스하도록 개선했습니다.
+- tmux manager, detached session, stale metadata 상황에서도 실제 터미널 앱과 세션 제목을 더 정확히 복원합니다.
+- 무시할 hook 이벤트는 터미널 감지 전에 빠르게 prefilter하고, Python bridge 이중 시작을 피하도록 bridge 경로를 최적화했습니다.
+- Antigravity, Claude, Codex, Gemini provider handler 등록 구조를 정리하고 golden response 테스트를 확충했습니다.
+
+### Stability & Performance
+
+- invalid pending approval request는 승인으로 오해하지 않도록 provider 흐름에 맞는 pass 응답으로 처리합니다.
+- 승인 결정 조회용 SQLite composite index를 추가하고 replay log 읽기와 diagnostics 조회를 메인 스레드 밖으로 옮겼습니다.
+- 터미널 포커스 타이밍과 Apple Terminal tab 선택 경로를 안정화했습니다.
+- bridge 로그 tail 읽기와 shell terminal detector 구조를 개선해 hook 응답 경로의 비용을 줄였습니다.
+
+### Internal & CI
+
+- Python bridge 테스트, shellcheck, main push CI trigger와 nightly golden response 안정화 테스트를 추가했습니다.
+- ProviderAdapter, terminal detector, TerminalContext 구조를 정리해 provider/terminal별 확장을 더 작고 명확하게 만들었습니다.
+- AI-friendly PR/issue template과 DevIsland issue triage skill을 추가했습니다.
+- bridge 성능 감사, AoE 터미널 포커스, 플러그인 아키텍처와 로드맵 문서를 최신 상태로 갱신했습니다.
+
+**Full Changelog**: https://github.com/nangchang/DevIsland/compare/v0.12.0...v0.13.0
+
 ## v0.12.0 - 2026-06-20
 
 이번 릴리즈는 DevIsland의 기능 확장 기반을 플러그인 아키텍처로 전환하고, 세션 타이머·통계·Pomodoro·세션 액션을 기본 플러그인으로 제공하는 대규모 업데이트입니다. Codex Desktop과 Antigravity 연동, 승인 IPC와 로그 보안 강화, 질문 미리보기와 세션 목록 개선도 함께 담았습니다.
