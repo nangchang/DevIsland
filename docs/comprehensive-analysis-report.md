@@ -34,7 +34,7 @@
 
 **신규 발견 (Codex 보안 스캔 2026-07-01, [docs/security](security/codex-security-scan-2026-07-01.md) — 4건 중 2건은 PR #344/#345 등으로 수정):**
 
-- **[오픈, High]** 업데이터가 DMG를 `-noverify` 마운트 후 서명 검증 없이 앱을 교체한다(`UpdateChecker.installFromDMG`). S5(서명·공증 릴리스) 트랙과 함께 다룰 것.
+- **[오픈, High — 장기 보류]** 업데이터가 DMG를 `-noverify` 마운트 후 서명 검증 없이 앱을 교체한다(`UpdateChecker.installFromDMG`). S5(서명·공증 릴리스) 트랙과 함께 다룰 것 — 단 S5는 Apple Developer Program 등록이 선결 조건이라 등록 이후로 보류하기로 결정(2026-07-02). 그 전까지는 알려진 리스크로 유지.
 - **[기각, by design]** focused-terminal pass가 영속 deny 정책보다 우선하는 문제(finding [3]) — 터미널이 frontmost면 CLI가 자체 처리하도록 pass하는 것은 편의도구라는 제품 정체성에 따른 의도된 설계로, 수정하지 않기로 결정(2026-07-02).
 
 ---
