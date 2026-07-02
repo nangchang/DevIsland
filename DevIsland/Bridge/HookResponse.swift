@@ -16,17 +16,20 @@ struct HookResponse {
     var reason: String?
     var approvalScope: RuleScope?
     var toolInput: [String: AnyJSON]?
+    var injection: String?
 
     init(
         _ decision: HookDecision,
         reason: String? = nil,
         approvalScope: RuleScope? = nil,
-        toolInput: [String: AnyJSON]? = nil
+        toolInput: [String: AnyJSON]? = nil,
+        injection: String? = nil
     ) {
         self.decision = decision
         self.reason = reason
         self.approvalScope = approvalScope
         self.toolInput = toolInput
+        self.injection = injection
     }
 
     func jsonString() -> String {
@@ -39,6 +42,9 @@ struct HookResponse {
         }
         if let toolInput {
             payload["tool_input"] = toolInput.mapValues { $0.rawValue }
+        }
+        if let injection {
+            payload["injection"] = injection
         }
         if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
            let string = String(data: data, encoding: .utf8) {

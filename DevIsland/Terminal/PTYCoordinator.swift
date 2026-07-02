@@ -62,15 +62,7 @@ final class PTYCoordinator {
             }
         }
 
-        if let injection = injectionText {
-            let resp: [String: Any] = ["response": "approved", "injection": injection]
-            if let data = try? JSONSerialization.data(withJSONObject: resp),
-               let str = String(data: data, encoding: .utf8) {
-                responseHandler(str)
-                return
-            }
-        }
-        responseHandler(HookResponse(.approved).jsonString())
+        responseHandler(HookResponse(.approved, injection: injectionText).jsonString())
     }
 
     func clearBuffer(sessionId: String) {

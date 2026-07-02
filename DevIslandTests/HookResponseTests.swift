@@ -53,15 +53,31 @@ final class HookResponseTests: XCTestCase {
         XCTAssertEqual(obj?.count, 2)
     }
 
+    func testInjectionIsIncludedWhenSet() {
+        let obj = decoded(HookResponse(.approved, injection: "y\n").jsonString())
+        XCTAssertEqual(obj?["response"] as? String, "approved")
+        XCTAssertEqual(obj?["injection"] as? String, "y\n")
+        XCTAssertEqual(obj?.count, 2)
+    }
+
+    func testNilInjectionIsOmitted() {
+        let obj = decoded(HookResponse(.approved, injection: nil).jsonString())
+        XCTAssertEqual(obj?["response"] as? String, "approved")
+        XCTAssertEqual(obj?.count, 1)
+    }
+
     // MARK: - 결정성
 
-    func testJsonStringIsDeterministic() {
+    /// .sortedKeys가 실제로 적용되어 키가 알파벳순으로 정렬되는지 정확한 문자열로 검증한다.
+    /// 같은 인스턴스의 두 호출 비교는 프로세스 내 해시 시드가 고정이라 정렬 없이도 통과할 수 있다.
+    func testJsonStringSortsKeysDeterministically() {
         let response = HookResponse(
             .approved,
             reason: "auto",
             approvalScope: .persistent,
-            toolInput: ["a": .string("1"), "b": .string("2")]
+            toolInput: ["b": .string("2"), "a": .string("1")]
         )
-        XCTAssertEqual(response.jsonString(), response.jsonString())
+        let expected = "{\"approval_scope\":\"persistent\",\"reason\":\"auto\",\"response\":\"approved\",\"tool_input\":{\"a\":\"1\",\"b\":\"2\"}}"
+        XCTAssertEqual(response.jsonString(), expected)
     }
 }
