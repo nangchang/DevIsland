@@ -33,59 +33,69 @@ enum BridgeInstaller {
 
     /// Claude Code, Codex CLI, Gemini CLI, Antigravity CLI 모두 설치
     static func installAll() {
-        do {
-            try installClaudeHooks()
-            try installCodexHooks()
-            try installGeminiHooks()
-            try installAntigravityHooks()
-            let l = L10n.shared
-            showAlert(title: l.alertAllInstalled, message: l.alertAllInstalledMsg, isError: false)
-        } catch {
-            showAlert(title: L10n.shared.alertInstallFailed, message: error.localizedDescription, isError: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try installClaudeHooks()
+                try installCodexHooks()
+                try installGeminiHooks()
+                try installAntigravityHooks()
+                let l = L10n.shared
+                showAlert(title: l.alertAllInstalled, message: l.alertAllInstalledMsg, isError: false)
+            } catch {
+                showAlert(title: L10n.shared.alertInstallFailed, message: error.localizedDescription, isError: true)
+            }
         }
     }
 
     /// Claude Code (~/.claude/settings.json)
     static func install() {
-        do {
-            try installClaudeHooks()
-            let l = L10n.shared
-            showAlert(title: l.alertClaudeInstalled, message: l.alertClaudeRestartMsg, isError: false)
-        } catch {
-            showAlert(title: L10n.shared.alertClaudeInstallFailed, message: error.localizedDescription, isError: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try installClaudeHooks()
+                let l = L10n.shared
+                showAlert(title: l.alertClaudeInstalled, message: l.alertClaudeRestartMsg, isError: false)
+            } catch {
+                showAlert(title: L10n.shared.alertClaudeInstallFailed, message: error.localizedDescription, isError: true)
+            }
         }
     }
 
     /// Codex CLI (~/.codex/hooks.json + config.toml)
     static func installCodex() {
-        do {
-            try installCodexHooks()
-            let l = L10n.shared
-            showAlert(title: l.alertCodexInstalled, message: l.alertCodexRestartMsg, isError: false)
-        } catch {
-            showAlert(title: L10n.shared.alertCodexInstallFailed, message: error.localizedDescription, isError: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try installCodexHooks()
+                let l = L10n.shared
+                showAlert(title: l.alertCodexInstalled, message: l.alertCodexRestartMsg, isError: false)
+            } catch {
+                showAlert(title: L10n.shared.alertCodexInstallFailed, message: error.localizedDescription, isError: true)
+            }
         }
     }
 
     /// Gemini CLI (~/.gemini/settings.json)
     static func installGemini() {
-        do {
-            try installGeminiHooks()
-            let l = L10n.shared
-            showAlert(title: l.alertGeminiInstalled, message: l.alertGeminiRestartMsg, isError: false)
-        } catch {
-            showAlert(title: L10n.shared.alertGeminiInstallFailed, message: error.localizedDescription, isError: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try installGeminiHooks()
+                let l = L10n.shared
+                showAlert(title: l.alertGeminiInstalled, message: l.alertGeminiRestartMsg, isError: false)
+            } catch {
+                showAlert(title: L10n.shared.alertGeminiInstallFailed, message: error.localizedDescription, isError: true)
+            }
         }
     }
 
     /// Antigravity CLI (~/.gemini/config/hooks.json)
     static func installAntigravity() {
-        do {
-            try installAntigravityHooks()
-            let l = L10n.shared
-            showAlert(title: l.alertAntigravityInstalled, message: l.alertAntigravityRestartMsg, isError: false)
-        } catch {
-            showAlert(title: L10n.shared.alertAntigravityInstallFailed, message: error.localizedDescription, isError: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try installAntigravityHooks()
+                let l = L10n.shared
+                showAlert(title: l.alertAntigravityInstalled, message: l.alertAntigravityRestartMsg, isError: false)
+            } catch {
+                showAlert(title: L10n.shared.alertAntigravityInstallFailed, message: error.localizedDescription, isError: true)
+            }
         }
     }
 
@@ -432,78 +442,88 @@ enum BridgeInstaller {
     // MARK: Uninstall entry points
 
     static func uninstallAll() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        var errors: [String] = []
-        let targets: [(URL, String)] = [
-            (home.appendingPathComponent(".claude/settings.json"), "Claude Code"),
-            (home.appendingPathComponent(".codex/hooks.json"),     "Codex CLI"),
-            (home.appendingPathComponent(".gemini/settings.json"), "Gemini CLI"),
-        ]
-        for (url, name) in targets {
-            do {
-                try removeHooks(at: url, fileName: url.lastPathComponent)
-            } catch {
-                errors.append("\(name): \(error.localizedDescription)")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            var errors: [String] = []
+            let targets: [(URL, String)] = [
+                (home.appendingPathComponent(".claude/settings.json"), "Claude Code"),
+                (home.appendingPathComponent(".codex/hooks.json"),     "Codex CLI"),
+                (home.appendingPathComponent(".gemini/settings.json"), "Gemini CLI"),
+            ]
+            for (url, name) in targets {
+                do {
+                    try removeHooks(at: url, fileName: url.lastPathComponent)
+                } catch {
+                    errors.append("\(name): \(error.localizedDescription)")
+                }
             }
-        }
-        do {
-            try removeAntigravityHooks(at: home.appendingPathComponent(".gemini/config/hooks.json"))
-            try removeLegacyAntigravityHooks(at: home.appendingPathComponent(".gemini/antigravity-cli/hooks.json"))
-        } catch {
-            errors.append("Antigravity CLI: \(error.localizedDescription)")
-        }
-        if errors.isEmpty {
-            let l = L10n.shared
-            showAlert(title: l.alertAllRemoved, message: l.alertAllRemovedMsg, isError: false)
-        } else {
-            showAlert(title: L10n.shared.alertSomeRemoveFailed, message: errors.joined(separator: "\n"), isError: true)
+            do {
+                try removeAntigravityHooks(at: home.appendingPathComponent(".gemini/config/hooks.json"))
+                try removeLegacyAntigravityHooks(at: home.appendingPathComponent(".gemini/antigravity-cli/hooks.json"))
+            } catch {
+                errors.append("Antigravity CLI: \(error.localizedDescription)")
+            }
+            if errors.isEmpty {
+                let l = L10n.shared
+                showAlert(title: l.alertAllRemoved, message: l.alertAllRemovedMsg, isError: false)
+            } else {
+                showAlert(title: L10n.shared.alertSomeRemoveFailed, message: errors.joined(separator: "\n"), isError: true)
+            }
         }
     }
 
     static func uninstall() {
-        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
-        do {
-            try removeHooks(at: url, fileName: url.lastPathComponent)
-            let l = L10n.shared
-            showAlert(title: l.alertClaudeRemoved, message: l.alertClaudeHooksRemoved, isError: false)
-        } catch {
-            showAlert(title: L10n.shared.alertClaudeRemoveFailed, message: error.localizedDescription, isError: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
+            do {
+                try removeHooks(at: url, fileName: url.lastPathComponent)
+                let l = L10n.shared
+                showAlert(title: l.alertClaudeRemoved, message: l.alertClaudeHooksRemoved, isError: false)
+            } catch {
+                showAlert(title: L10n.shared.alertClaudeRemoveFailed, message: error.localizedDescription, isError: true)
+            }
         }
     }
 
     static func uninstallCodex() {
-        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/hooks.json")
-        do {
-            try removeHooks(at: url, fileName: url.lastPathComponent)
-            let l = L10n.shared
-            showAlert(title: l.alertCodexRemoved, message: l.alertCodexHooksRemoved, isError: false)
-        } catch {
-            showAlert(title: L10n.shared.alertCodexRemoveFailed, message: error.localizedDescription, isError: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/hooks.json")
+            do {
+                try removeHooks(at: url, fileName: url.lastPathComponent)
+                let l = L10n.shared
+                showAlert(title: l.alertCodexRemoved, message: l.alertCodexHooksRemoved, isError: false)
+            } catch {
+                showAlert(title: L10n.shared.alertCodexRemoveFailed, message: error.localizedDescription, isError: true)
+            }
         }
     }
 
     static func uninstallGemini() {
-        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/settings.json")
-        do {
-            try removeHooks(at: url, fileName: url.lastPathComponent)
-            let l = L10n.shared
-            showAlert(title: l.alertGeminiRemoved, message: l.alertGeminiHooksRemoved, isError: false)
-        } catch {
-            showAlert(title: L10n.shared.alertGeminiRemoveFailed, message: error.localizedDescription, isError: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/settings.json")
+            do {
+                try removeHooks(at: url, fileName: url.lastPathComponent)
+                let l = L10n.shared
+                showAlert(title: l.alertGeminiRemoved, message: l.alertGeminiHooksRemoved, isError: false)
+            } catch {
+                showAlert(title: L10n.shared.alertGeminiRemoveFailed, message: error.localizedDescription, isError: true)
+            }
         }
     }
 
     static func uninstallAntigravity() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let url = home.appendingPathComponent(".gemini/config/hooks.json")
-        let legacyURL = home.appendingPathComponent(".gemini/antigravity-cli/hooks.json")
-        do {
-            try removeAntigravityHooks(at: url)
-            try removeLegacyAntigravityHooks(at: legacyURL)
-            let l = L10n.shared
-            showAlert(title: l.alertAntigravityRemoved, message: l.alertAntigravityHooksRemoved, isError: false)
-        } catch {
-            showAlert(title: L10n.shared.alertAntigravityRemoveFailed, message: error.localizedDescription, isError: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            let url = home.appendingPathComponent(".gemini/config/hooks.json")
+            let legacyURL = home.appendingPathComponent(".gemini/antigravity-cli/hooks.json")
+            do {
+                try removeAntigravityHooks(at: url)
+                try removeLegacyAntigravityHooks(at: legacyURL)
+                let l = L10n.shared
+                showAlert(title: l.alertAntigravityRemoved, message: l.alertAntigravityHooksRemoved, isError: false)
+            } catch {
+                showAlert(title: L10n.shared.alertAntigravityRemoveFailed, message: error.localizedDescription, isError: true)
+            }
         }
     }
 
