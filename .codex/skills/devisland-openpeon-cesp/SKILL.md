@@ -33,8 +33,11 @@ Inspect the relevant module under `DevIsland/Plugins/BuiltIn/OpenPeon/` before e
 - `CESPEventMapper.swift`: hook event to CESP category mapping.
 - `CESPPackStore.swift`: Settings Sound tab scan and active-pack display only.
 - `CESPAudioPlayer.swift`: Settings preview playback only.
-- `SettingsStore.swift`: OpenPeon settings persistence and defaults.
-- `PluginScopedResources.swift` / `PluginEffectExecutor.swift`: scoped file and audio effect enforcement when touched.
+
+Also inspect these related host/settings files when the change crosses the plugin boundary:
+
+- `DevIsland/Settings/SettingsStore.swift`: OpenPeon settings persistence and defaults.
+- `DevIsland/Plugins/PluginScopedResources.swift` / `DevIsland/Plugins/PluginEffectExecutor.swift`: scoped file and audio effect enforcement when touched.
 
 ## Validation Rules
 
