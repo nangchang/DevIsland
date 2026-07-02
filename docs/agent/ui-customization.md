@@ -61,7 +61,7 @@ These settings are managed in `SettingsStore` and applied in `NotchView` / `Notc
 ### Auto-Collapse Logic
 - Managed in `AppState` using a `notificationTimer`.
 - Informational events (starts, task completions, notifications) trigger the timer.
-- Approval requests (`currentResponseHandler != nil`) **do not** auto-collapse; they rely on the permission timeout.
+- Approval requests (`hasResponseHandler`) **do not** auto-collapse; they rely on the permission timeout.
 - New events reset the timer if one is already running.
 
 ### Buddy Management
