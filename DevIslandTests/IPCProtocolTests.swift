@@ -234,7 +234,7 @@ final class AppStateEnvelopeTests: XCTestCase {
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false }
+            frontmostCheck: { _ in false }
         )
     }
 

@@ -18,15 +18,16 @@ class TerminalFocuser {
         ("com.openai.codex",               "CodexDesktop"),
     ]
 
-    static func isSessionFrontmost(
-        appName: String?,
-        tty: String?,
-        windowId: String?,
-        tabIndex: String?,
-        tmuxPane: String?,
-        tmuxSocket: String?,
-        tmuxClient: String?
-    ) -> Bool {
+    static func isSessionFrontmost(_ terminal: TerminalContext) -> Bool {
+        // TerminalContext는 빈 문자열을 "값 없음"으로 쓰므로 기존 옵셔널 기반 판정 로직에 그대로 매핑한다.
+        let appName: String? = terminal.app.isEmpty ? nil : terminal.app
+        let tty: String? = terminal.tty.isEmpty ? nil : terminal.tty
+        let windowId: String? = terminal.windowId.isEmpty ? nil : terminal.windowId
+        let tabIndex: String? = terminal.tabIndex.isEmpty ? nil : terminal.tabIndex
+        let tmuxPane: String? = terminal.tmuxPane.isEmpty ? nil : terminal.tmuxPane
+        let tmuxSocket: String? = terminal.tmuxSocket.isEmpty ? nil : terminal.tmuxSocket
+        let tmuxClient: String? = terminal.tmuxClient.isEmpty ? nil : terminal.tmuxClient
+
         let targetName = normalizedAppName(appName)
         let match = targetName.flatMap { name in
             candidates.first { $0.name == name }
@@ -623,18 +624,21 @@ class TerminalFocuser {
     }
 
     static func focusTerminal(
-        appName: String? = nil,
+        _ terminal: TerminalContext = TerminalContext(),
         title: String? = nil,
-        tty: String? = nil,
-        windowId: String? = nil,
-        tabIndex: String? = nil,
-        tmuxPane: String? = nil,
-        tmuxSocket: String? = nil,
-        tmuxClient: String? = nil,
-        managerSessionTitle: String? = nil,
         workspaceRoot: String? = nil,
         completion: (() -> Void)? = nil
     ) {
+        // TerminalContext는 빈 문자열을 "값 없음"으로 쓰므로 기존 옵셔널 기반 포커스 로직에 그대로 매핑한다.
+        let appName: String? = terminal.app.isEmpty ? nil : terminal.app
+        let tty: String? = terminal.tty.isEmpty ? nil : terminal.tty
+        let windowId: String? = terminal.windowId.isEmpty ? nil : terminal.windowId
+        let tabIndex: String? = terminal.tabIndex.isEmpty ? nil : terminal.tabIndex
+        let tmuxPane: String? = terminal.tmuxPane.isEmpty ? nil : terminal.tmuxPane
+        let tmuxSocket: String? = terminal.tmuxSocket.isEmpty ? nil : terminal.tmuxSocket
+        let tmuxClient: String? = terminal.tmuxClient.isEmpty ? nil : terminal.tmuxClient
+        let managerSessionTitle: String? = terminal.managerSessionTitle.isEmpty ? nil : terminal.managerSessionTitle
+
         let targetName = normalizedAppName(appName)
         let match = targetName.flatMap { name in
             candidates.first { $0.name == name }

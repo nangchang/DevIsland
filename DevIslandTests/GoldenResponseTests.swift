@@ -29,7 +29,7 @@ final class GoldenResponseTests: XCTestCase {
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false }
+            frontmostCheck: { _ in false }
         )
     }
 
@@ -233,7 +233,7 @@ final class GoldenResponseTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false }
+            frontmostCheck: { _ in false }
         )
         let exp = expectation(description: #function)
         state.handleMessage(

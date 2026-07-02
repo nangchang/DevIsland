@@ -16,7 +16,7 @@ final class AppStateTests: XCTestCase {
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false }
+            frontmostCheck: { _ in false }
         )
     }
     
@@ -112,7 +112,7 @@ final class AppStateTests: XCTestCase {
         let restored = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false }
+            frontmostCheck: { _ in false }
         )
 
         XCTAssertTrue(restored.isSessionFavorite("session-a"))
@@ -220,7 +220,7 @@ final class AppStateTests: XCTestCase {
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in true }
+            frontmostCheck: { _ in true }
         )
 
         let expectation = XCTestExpectation(description: "Focused terminal receives native Claude question")
@@ -259,7 +259,7 @@ final class AppStateTests: XCTestCase {
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in
+            frontmostCheck: { _ in
                 lock.lock()
                 defer { lock.unlock() }
                 frontmostCheckCount += 1
@@ -349,7 +349,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Codex policy auto-approval")
@@ -383,7 +383,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Codex manual session approval")
@@ -428,7 +428,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Claude manual session approval")
@@ -473,7 +473,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Claude manual persistent approval")
@@ -514,7 +514,7 @@ final class AppStateTests: XCTestCase {
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in true }
+            frontmostCheck: { _ in true }
         )
         let entry = ReplayLogEntry(
             id: 42,
@@ -785,7 +785,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
 
@@ -1621,7 +1621,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Session start recorded")
@@ -1666,7 +1666,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
         let expectation = XCTestExpectation(description: "Session start recorded")
@@ -1692,7 +1692,7 @@ final class AppStateTests: XCTestCase {
         let restoredState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
         let restored = try XCTUnwrap(
@@ -1754,7 +1754,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in true }
+            frontmostCheck: { _ in true }
         )
         let expectation = XCTestExpectation(description: "Frontmost approval passed")
         let message = """
@@ -2109,7 +2109,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
 
@@ -2147,7 +2147,7 @@ final class AppStateTests: XCTestCase {
         let state = AppState(
             startServer: false,
             userDefaults: mockDefaults,
-            frontmostCheck: { _, _, _, _, _, _, _ in false },
+            frontmostCheck: { _ in false },
             approvalProxy: controller
         )
 
