@@ -1,6 +1,6 @@
 ---
 name: devisland-approval-proxy
-description: Change DevIsland Approval Proxy behavior, IPC framing, policy evaluation, SQLite persistence, pending approval queues, replay logs, or PTY transcript handling. Use for AppState, ApprovalProxyController, ApprovalPolicyEngine, SQLiteApprovalStore, HookSocketServer, IPCProtocol, and related tests.
+description: Change DevIsland Approval Proxy behavior, IPC framing, policy evaluation, SQLite persistence, pending approval queues, replay logs, PTY transcript handling, fallback policy, or approval-related plugin observation events. Use for AppState, ApprovalProxyController, ApprovalPolicyEngine, SQLiteApprovalStore, HookSocketServer, IPCProtocol, and related tests.
 ---
 
 # DevIsland Approval Proxy
@@ -21,6 +21,8 @@ The macOS app owns:
 - `HookEventClassifier` event classification and `ApprovalQueuePolicy` pending-queue policy.
 - `ProviderAdapter` provider response JSON.
 - `AppState` pending queue and session state.
+
+Plugin observation events are best-effort side effects. They must not gate provider responses, approval queue draining, or persistence required for the approval decision.
 
 ## Security Invariants
 
