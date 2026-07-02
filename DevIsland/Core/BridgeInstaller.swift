@@ -671,11 +671,15 @@ enum BridgeInstaller {
 
     // MARK: Alert helper
 
-    private static func showAlert(title: String, message: String, isError: Bool) {
+    /// title/message는 @autoclosure로 받아 메인 스레드에서 평가한다.
+    /// 설치/제거 작업이 백그라운드 큐에서 실행되므로, L10n.shared(@Published
+    /// language 보유) 문자열을 백그라운드에서 읽으면 언어 변경 쓰기와 레이스가
+    /// 날 수 있다. 평가를 main.async 내부로 미뤄 이를 방지한다.
+    private static func showAlert(title: @escaping @autoclosure () -> String, message: @escaping @autoclosure () -> String, isError: Bool) {
         DispatchQueue.main.async {
             let alert = NSAlert()
-            alert.messageText = title
-            alert.informativeText = message
+            alert.messageText = title()
+            alert.informativeText = message()
             alert.alertStyle = isError ? .critical : .informational
             alert.addButton(withTitle: L10n.shared.alertOK)
             alert.runModal()
