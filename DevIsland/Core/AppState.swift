@@ -606,35 +606,24 @@ class AppState: ObservableObject {
 
     private func handleParsedEvent(_ h: ParsedHookEvent, responseHandler: @escaping (String) -> Void) {
         let ud = self.userDefaults
-        let processVSCode = ud.object(forKey: "processVSCodeEnabled") as? Bool ?? false
-        let processClaudeDesktop = ud.object(forKey: "processClaudeDesktopEnabled") as? Bool ?? false
-        let processCodexDesktop = ud.object(forKey: "processCodexDesktopEnabled") as? Bool ?? false
-        // When integrations are disabled, we return "pass" to bypass DevIsland's approval.
-        // For Claude/Codex, this delegates to their native terminal prompts.
-        // For Gemini, BeforeTool hook returns {} which does not enforce auto-approval itself;
-        // rather, Gemini CLI preserves its own configured approval behavior (interactive prompt or --auto-approve).
-        switch h.terminal.app {
-        case "VSCode" where !processVSCode:
-            responseHandler(HookResponse(.pass).jsonString())
-            return
-        case "ClaudeDesktop" where !processClaudeDesktop:
-            responseHandler(HookResponse(.pass).jsonString())
-            return
-        case "CodexDesktop" where !processCodexDesktop:
-            responseHandler(HookResponse(.pass).jsonString())
-            return
-        default:
-            break
-        }
+        let routingSettings = HookRoutingSettings(
+            processVSCode: ud.bool(forKey: "processVSCodeEnabled"),
+            processClaudeDesktop: ud.bool(forKey: "processClaudeDesktopEnabled"),
+            processCodexDesktop: ud.bool(forKey: "processCodexDesktopEnabled"),
+            emulateGeminiInteractiveMode: geminiState.emulateInteractiveMode
+        )
+        let routed = HookEventRouter.route(h, settings: routingSettings)
 
-        // MARK: Phase 1: Sub-Agent
-        if h.isSubAgentSession {
+        // MARK: Phase 1–2a: routes resolved before replay recording
+        switch routed.route {
+        case .integrationDisabledPass:
+            responseHandler(HookResponse(.pass).jsonString())
+            return
+        case .subAgent:
             handleSubAgentEvent(h, displayToolName: h.displayToolName, responseHandler: responseHandler)
             return
-        }
-
-        // MARK: Phase 2a: PTY Output (processed separately to avoid replay log pollution)
-        if h.event == "PTYOutput" {
+        case .ptyOutput:
+            // Processed separately to avoid replay log pollution.
             ptyCoordinator.handleOutputEvent(
                 sessionId: h.sessionId,
                 provider: providerKind(for: h.agentKind),
@@ -642,9 +631,12 @@ class AppState: ObservableObject {
                 responseHandler: responseHandler
             )
             return
+        case .stop, .promptPolicyDenied, .userQuestionPassthrough, .notification,
+             .nonApprovalAutoApprove, .emptyApprovalAutoApprove, .claudeQuestion, .approval:
+            break
         }
 
-        // MARK: Phase 2b: Event Classification
+        // MARK: Phase 2b: Replay Recording + Plugin Observation
         let hookEventId = recordReplayHookEvent(
             requestId: h.requestId,
             provider: providerKind(for: h.agentKind),
@@ -662,32 +654,22 @@ class AppState: ObservableObject {
                 self.pluginHost.enqueue(self.pluginEventFactory.makeHookReceivedEvent(from: h, session: session))
             }
         }
-        // approval:
-        // - Claude/Codex: PermissionRequest only
-        // - Gemini: BeforeTool only
-        // - Claude AskUserQuestion is handled as a structured reply request from PreToolUse.
-        let classification = HookEventClassifier.classify(h)
+
+        let classification = routed.classification
         let displayToolName = classification.displayToolName
-        let normalizedEvent = classification.normalizedEvent
-        let isUserQuestionTool = classification.isUserQuestionTool
-        let claudeQuestion = classification.claudeQuestion
-        let isClaudeQuestionRequest = classification.isClaudeQuestionRequest
-        let isStop = classification.isStop
-        let isApproval = classification.isApproval
-        let isNotification = classification.isNotification
-        let isCodexStatusOnlyLifecycleEvent = classification.isCodexStatusOnlyLifecycleEvent
         let replayToolName = classification.replayToolName
 
+        switch routed.route {
+        case .integrationDisabledPass, .subAgent, .ptyOutput:
+            return  // resolved before replay recording above
+
         // MARK: Phase 2c: Stop
-        if isStop {
+        case .stop:
             handleStopEvent(h, hookEventId: hookEventId, replayToolName: replayToolName, responseHandler: responseHandler)
             return
-        }
 
         // MARK: Phase 2d: UserPromptSubmit Policy
-        if normalizedEvent == "userpromptsubmit", h.agentKind == .claudeCode,
-           let prompt = h.parsedJSON["prompt"] as? String,
-           let denialReason = ClaudePromptPolicy.denialReason(for: prompt) {
+        case .promptPolicyDenied(let denialReason):
             print("[DevIsland] Claude UserPromptSubmit blocked by prompt policy")
             respondWithReplay(
                 HookResponse(.denied, reason: denialReason).jsonString(),
@@ -702,12 +684,9 @@ class AppState: ObservableObject {
                 reason: denialReason
             )
             return
-        }
 
         // MARK: Phase 2e: Claude user-question follow-up passthrough
-        if h.agentKind == .claudeCode,
-           (normalizedEvent == "permissionrequest" || normalizedEvent == "posttooluse"),
-           isUserQuestionTool {
+        case .userQuestionPassthrough:
             print("[DevIsland] passing Claude user-question \(h.event) without notification: \(h.toolName)")
             respondWithReplay(
                 HookResponse(.pass).jsonString(),
@@ -722,26 +701,22 @@ class AppState: ObservableObject {
                 reason: "Claude user question follow-up passthrough"
             )
             return
-        }
 
         // MARK: Phase 2f: Notification
-        if isNotification {
+        case .notification:
             handleNotificationEvent(
                 h,
                 hookEventId: hookEventId,
-                isCodexStatusOnlyLifecycleEvent: isCodexStatusOnlyLifecycleEvent,
-                isUserQuestionTool: isUserQuestionTool,
+                isCodexStatusOnlyLifecycleEvent: classification.isCodexStatusOnlyLifecycleEvent,
+                isUserQuestionTool: classification.isUserQuestionTool,
                 displayToolName: displayToolName,
                 replayToolName: replayToolName,
                 responseHandler: responseHandler
             )
             return
-        }
 
         // MARK: Phase 3: Decision Logic
-        let isGeminiNormalMode = h.agentKind == .gemini && !geminiState.emulateInteractiveMode
-        
-        guard isApproval && !isGeminiNormalMode else {
+        case .nonApprovalAutoApprove(let isGeminiNormalMode):
             print("[DevIsland] ignoring non-approval h.event (or Gemini normal mode): \(h.event)")
             if isGeminiNormalMode && h.toolName == "enter_plan_mode" {
                 DispatchQueue.main.async {
@@ -763,9 +738,8 @@ class AppState: ObservableObject {
                 reason: isGeminiNormalMode ? "Gemini normal mode notification" : "non-approval h.event"
             )
             return
-        }
 
-        guard !h.toolName.isEmpty || !h.displayMsg.isEmpty else {
+        case .emptyApprovalAutoApprove:
             print("[DevIsland] ignoring empty approval request")
             respondWithReplay(
                 HookResponse(.approved).jsonString(),
@@ -780,84 +754,97 @@ class AppState: ObservableObject {
                 reason: "empty approval request"
             )
             return
-        }
 
-        let request = PendingRequest(
-            hookEventId: hookEventId,
-            sessionId: h.sessionId,
-            agentKind: h.agentKind,
-            eventName: h.event,
-            toolName: displayToolName,
-            rawToolName: h.toolName,
-            workspaceRoot: h.workspaceRoot,
-            isReplay: h.isReplayPayload,
-            message: h.displayMsg,
-            claudeQuestion: claudeQuestion,
-            responseHandler: responseHandler,
-            receivedAt: Date()
-        )
-
-        if isClaudeQuestionRequest {
-            isTerminalFrontmostAsync(terminal: h.terminal) { [weak self] isFrontmost in
-                guard let self else { return }
-                if !h.isReplayPayload && isFrontmost {
-                    print("[DevIsland] [PASS] Terminal is frontmost, passing Claude question for session \(h.sessionId.prefix(8))")
-                    self.passRequestToFocusedTerminal(
-                        h,
-                        request: request,
-                        hookEventId: hookEventId,
-                        replayToolName: replayToolName,
-                        displayToolName: displayToolName
-                    )
-                    return
-                }
-
-                // 기존 세션의 lifecycle 추적 여부 보존 — 질문 요청이 추적 상태를 바꾸지 않도록
-                let isLifecycleTracked = self.sessionStore.activeSessions
-                    .first { $0.id == request.sessionId }?.isLifecycleTracked
-                    ?? (request.agentKind != .claudeCode)
-                self.enqueueManualRequest(request, from: h, isLifecycleTracked: isLifecycleTracked)
+        case .claudeQuestion, .approval:
+            let request = PendingRequest(
+                hookEventId: hookEventId,
+                sessionId: h.sessionId,
+                agentKind: h.agentKind,
+                eventName: h.event,
+                toolName: displayToolName,
+                rawToolName: h.toolName,
+                workspaceRoot: h.workspaceRoot,
+                isReplay: h.isReplayPayload,
+                message: h.displayMsg,
+                claudeQuestion: classification.claudeQuestion,
+                responseHandler: responseHandler,
+                receivedAt: Date()
+            )
+            if case .claudeQuestion = routed.route {
+                handleClaudeQuestionRequest(
+                    h,
+                    request: request,
+                    hookEventId: hookEventId,
+                    replayToolName: replayToolName,
+                    displayToolName: displayToolName
+                )
+            } else {
+                handleApprovalRequest(
+                    h,
+                    request: request,
+                    hookEventId: hookEventId,
+                    settings: routingSettings,
+                    replayToolName: replayToolName,
+                    displayToolName: displayToolName
+                )
             }
             return
         }
+    }
 
-        // [디자인 결정] 툴 필터링 및 자동 승인 전략
-        // -------------------------------------------------------------------
-        // 1. 완전 무시 (Bypass): 시스템에 영향이 없는 순수 내부 상태/UI 업데이트 툴들.
-        //    - 브릿지가 아닌 앱 단계에서 처리하는 이유: 앱이 에이전트의 현재 진행 상태를 계속 추적하여
-        //      UI를 동기화하고 세션 상태(예: Auto-Edit 모드 여부)를 관리해야 하기 때문입니다.
-        let bypassTools: Set<String> = ["update_topic", "activate_skill"]
+    // MARK: - Phase 3 handler: Claude question
 
-        // 2. 터미널 유도 알림 (Interactive): 사용자가 터미널에서 직접 키보드 입력을 해야 하는 툴들.
-        //    - 목적: "DevIsland에서 승인 클릭" + "터미널에서 Y/Enter 입력" 이라는 '이중 승인'의 번거로움을 해결합니다.
-        //    - 동작: 앱에서는 즉시 승인(approved)을 보내어 터미널에 프롬프트가 즉시 뜨게 하되, 
-        //           노치 UI를 펼쳐 사용자에게 터미널로 돌아가야 함을 알립니다.
-        //    - 대상: 직접 입력(ask_user), 계획 승인(exit_plan_mode), 자체 보안 정책상 터미널 확인이 강제되는 툴(run_shell_command),
-        //           그리고 계획 단계에서 발생하는 임시 파일 작업들(.gemini/tmp/).
-        let isInteractive = GeminiPromptPolicy.isInteractiveTool(h.toolName, isPlanAction: h.isPlanAction)
-        
-        // 자동 승인 여부 판단 (전역 설정 + 세션별 툴 등록 + 현재가 자동 편집 모드인지 + Safe 등급 툴 자동 승인 옵션)
-        var isAutoApprovedGlobal = globalAutoApproveTypes.contains(h.toolName) || bypassTools.contains(h.toolName) || isInteractive
-        let isAutoApprovedSession = sessionStore.sessionAutoApproveTypes[h.sessionId]?.contains(h.toolName) == true
-
-        var isAutoEditActive = false
-        if let session = sessionStore.activeSessions.first(where: { $0.id == h.sessionId }) {
-            isAutoEditActive = session.isAutoEditActive
-        }
-
-        // 사용자가 메뉴에서 설정한 "Safe 등급 툴 자동 승인" 옵션 적용
-        let isSafeAutoApprove = autoApproveSafeTools && (ToolKnowledge.risk(for: h.toolName) == .safe)
-
-        // [핵심] Gemini 호환 일반 모드 에뮬레이션 로직
-        // Gemini/Antigravity가 --auto-approve나 --yolo로 실행되어 터미널 프롬프트가 뜨지 않는 상황일 때,
-        // DevIsland가 'Interactive 모드'처럼 위험한 툴을 선별해서 승인 창을 띄웁니다.
-        if geminiState.emulateInteractiveMode && (h.agentKind == .gemini || h.agentKind == .antigravity) {
-            let isExplicitlyApproved = globalAutoApproveTypes.contains(h.toolName) || isAutoApprovedSession
-            if GeminiPromptPolicy.emulationShouldForceApproval(toolName: h.toolName, isExplicitlyApproved: isExplicitlyApproved) {
-                isAutoApprovedGlobal = false
-                isAutoEditActive = false
-                print("[DevIsland] [EMULATION] \(h.agentKind.accessibilityName) interactive emulation forced for tool: \(h.toolName)")
+    /// Claude AskUserQuestion 구조화 응답 요청 — 터미널이 포커스면 pass, 아니면 수동 큐잉.
+    private func handleClaudeQuestionRequest(
+        _ h: ParsedHookEvent,
+        request: PendingRequest,
+        hookEventId: Int64?,
+        replayToolName: String,
+        displayToolName: String
+    ) {
+        isTerminalFrontmostAsync(terminal: h.terminal) { [weak self] isFrontmost in
+            guard let self else { return }
+            if !h.isReplayPayload && isFrontmost {
+                print("[DevIsland] [PASS] Terminal is frontmost, passing Claude question for session \(h.sessionId.prefix(8))")
+                self.passRequestToFocusedTerminal(
+                    h,
+                    request: request,
+                    hookEventId: hookEventId,
+                    replayToolName: replayToolName,
+                    displayToolName: displayToolName
+                )
+                return
             }
+
+            // 기존 세션의 lifecycle 추적 여부 보존 — 질문 요청이 추적 상태를 바꾸지 않도록
+            let isLifecycleTracked = self.sessionStore.activeSessions
+                .first { $0.id == request.sessionId }?.isLifecycleTracked
+                ?? (request.agentKind != .claudeCode)
+            self.enqueueManualRequest(request, from: h, isLifecycleTracked: isLifecycleTracked)
+        }
+    }
+
+    // MARK: - Phase 3–4 handler: Approval evaluation
+
+    /// 승인 이벤트 — 휘발성 자동 승인 판정(HookEventRouter.approvalRouting)을 거쳐
+    /// 평가 계층을 수행한다.
+    private func handleApprovalRequest(
+        _ h: ParsedHookEvent,
+        request: PendingRequest,
+        hookEventId: Int64?,
+        settings: HookRoutingSettings,
+        replayToolName: String,
+        displayToolName: String
+    ) {
+        let approvalState = ApprovalStateSnapshot(
+            globalAutoApproveTools: globalAutoApproveTypes,
+            sessionAutoApproveTools: sessionStore.sessionAutoApproveTypes[h.sessionId] ?? [],
+            isAutoEditActive: sessionStore.activeSessions.first(where: { $0.id == h.sessionId })?.isAutoEditActive ?? false,
+            autoApproveSafeTools: autoApproveSafeTools
+        )
+        let routing = HookEventRouter.approvalRouting(h, settings: settings, state: approvalState)
+        if routing.isEmulationForced {
+            print("[DevIsland] [EMULATION] \(h.agentKind.accessibilityName) interactive emulation forced for tool: \(h.toolName)")
         }
 
         // MARK: Phase 4: Evaluation Hierarchy
@@ -892,16 +879,16 @@ class AppState: ObservableObject {
             }
 
             // 3. Volatile/Cache Approval: Check in-memory fast-path and mode-based auto-approvals.
-            if isAutoApprovedGlobal || isAutoApprovedSession || isAutoEditActive || isSafeAutoApprove {
+            if routing.isAutoApproved {
                 self.autoApproveRequest(
                     h,
                     request: request,
                     hookEventId: hookEventId,
                     replayToolName: replayToolName,
                     displayToolName: displayToolName,
-                    isInteractive: isInteractive,
-                    isAutoEditActive: isAutoEditActive,
-                    isSafeAutoApprove: isSafeAutoApprove
+                    isInteractive: routing.isInteractive,
+                    isAutoEditActive: routing.isAutoEditActive,
+                    isSafeAutoApprove: routing.isSafeAutoApprove
                 )
                 return
             }
@@ -1105,7 +1092,7 @@ class AppState: ObservableObject {
             // sessionStore 뮤테이션은 항상 메인 스레드에서 수행 (@Published → SwiftUI 업데이트)
             if isStartEvent &&
                 h.agentKind == .codex &&
-                Self.shouldSupersedeCodexSessionsOnStart(source: h.sessionStartSource) {
+                HookEventRouter.shouldSupersedeCodexSessionsOnStart(source: h.sessionStartSource) {
                 let removedSessionIds = self.sessionStore.removeSupersededCodexSessions(
                     newSessionId: fullSessionId,
                     terminal: h.terminal
@@ -1445,12 +1432,6 @@ class AppState: ObservableObject {
             syncDisplayToSelectedSession()
         }
     }
-
-    private static func shouldSupersedeCodexSessionsOnStart(source: String) -> Bool {
-        let normalized = HookEventNormalizer.normalizedName(source)
-        return ["clear", "startup", "resume"].contains(normalized)
-    }
-
 
     static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
         HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)

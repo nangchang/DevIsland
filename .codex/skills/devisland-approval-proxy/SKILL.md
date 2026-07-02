@@ -18,7 +18,7 @@ The macOS app owns:
 - `ApprovalProxyController` orchestration.
 - `ApprovalPolicyEngine` rule evaluation and `ApprovalRuleService` rule management.
 - `SQLiteApprovalStore` persistence.
-- `HookEventClassifier` event classification and `ApprovalQueuePolicy` pending-queue policy.
+- `HookEventClassifier` event classification, `HookEventRouter` routing/auto-approve judgment, and `ApprovalQueuePolicy` pending-queue policy.
 - `ProviderAdapter` provider response JSON.
 - `AppState` pending queue and session state.
 
@@ -63,6 +63,7 @@ Choose focused tests based on the touched area:
 - `ApprovalQueuePolicyTests`
 - `ApprovalRuleServiceTests`
 - `HookEventClassifierTests`
+- `HookEventRouterTests`
 - `AppStateTests`
 - `HookEventNormalizerTests`
 - `ProviderAdapterTests`
