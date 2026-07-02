@@ -13,14 +13,25 @@ Keep bridge scripts thin. They may receive stdin, add terminal metadata, forward
 
 The macOS app owns:
 
-- `HookSocketServer` / IPC listener behavior.
+- `HookSocketServer` / IPC listener behavior (TCP loopback + Unix socket).
+- `BridgeTokenManager` / `HookEventHandler` IPC token lifecycle and message authentication.
 - `ApprovalProxyController` orchestration.
-- `ApprovalPolicyEngine` rule evaluation.
+- `ApprovalPolicyEngine` rule evaluation and `ApprovalRuleService` rule management.
 - `SQLiteApprovalStore` persistence.
+- `HookEventClassifier` event classification and `ApprovalQueuePolicy` pending-queue policy.
 - `ProviderAdapter` provider response JSON.
 - `AppState` pending queue and session state.
 
 Plugin observation events are best-effort side effects. They must not gate provider responses, approval queue draining, or persistence required for the approval decision.
+
+## Security Invariants
+
+Do not regress these when changing transports or message parsing:
+
+- The TCP listener binds to loopback (`127.0.0.1`) only.
+- Raw JSON on TCP is rejected when a token file is present (authenticated envelope required); legacy raw JSON belongs on the Unix socket path.
+- Envelope token validation failures deny the request.
+- `HookSocketServerTests` and `GoldenResponseTests` lock this behavior — keep them passing unchanged.
 
 ## Non-Blocking Rules
 
@@ -47,6 +58,11 @@ Choose focused tests based on the touched area:
 - `ApprovalPolicyEngineTests`
 - `SQLiteApprovalStoreTests`
 - `IPCProtocolTests`
+- `HookSocketServerTests`
+- `GoldenResponseTests` (handleMessage → response JSON behavior lock)
+- `ApprovalQueuePolicyTests`
+- `ApprovalRuleServiceTests`
+- `HookEventClassifierTests`
 - `AppStateTests`
 - `HookEventNormalizerTests`
 - `ProviderAdapterTests`

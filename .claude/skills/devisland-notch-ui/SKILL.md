@@ -1,6 +1,6 @@
 ---
 name: devisland-notch-ui
-description: Change DevIsland notch UI, expanded panel, notification auto-collapse, session list display, character settings, Markdown rendering, modal presentation, or NSPanel/window behavior. Use for NotchView, NotchWindowController, NotchComponents, MarkdownView, Settings UI, and related AppState UI state.
+description: Change DevIsland notch UI, expanded panel, compact region providers, plugin contribution rendering, notification auto-collapse, session list display, character settings, Markdown rendering, modal presentation, or NSPanel/window behavior. Use for NotchView, NotchWindowController, NotchComponents, MarkdownView, PluginContributionRenderer, Settings UI, and related AppState UI state.
 ---
 
 # DevIsland Notch UI
@@ -12,6 +12,8 @@ Use this for notch and panel-facing UI changes. Read `docs/agent/ui-customizatio
 Approval requests do not auto-collapse. Informational notifications may auto-collapse according to settings. New events should reset the notification timer predictably.
 
 Do not let UI changes alter approval queue order or provider decisions. Visual state must reflect `AppState`, not become a second source of truth.
+
+Compact left/center/right regions are exclusive provider selections. Host chrome, unread/pending dots, and layout remain host-owned; built-in plugins provide cached declarative content only.
 
 ## Window And Modal Rules
 
@@ -39,6 +41,14 @@ For agent message rendering, preserve security constraints:
 - Do not open links without user intent.
 - Preserve whitespace and scalar hook message formatting.
 - Keep diff rendering legible and avoid crashes on malformed headings or patches.
+
+## Plugin Contributions
+
+Renderer code must read cached contributions only. Do not call plugin code from SwiftUI body rendering.
+
+Keep per-second-changing elements (timeAgo text, plugin badges) in child views that do not observe the parent, or open context menus will flicker (see `SessionRowTimeAgo`, `SessionRowPluginBadges`).
+
+Use `PluginContributionRendererTests`, compact appearance tests, or focused UI tests when changing contribution rendering, compact regions, or session surfaces.
 
 ## Verification
 

@@ -15,6 +15,30 @@
 
 ---
 
+## 현황 갱신 (2026-07-02, b67bc72 / v0.13.1-dev 기준)
+
+원 보고서 이후 305커밋이 진행되어 아래 내용이 본문과 달라졌다. 본문은 작성 시점 스냅샷으로 유지한다.
+
+**해소된 발견 (Top 5 중 1·2·3번):**
+
+- S1(루프백 바인딩)·S2(raw JSON 토큰 우회)·S3(grace mode 경고)·S4(로그 로테이션·0o600)·S6(regex 앵커링) 모두 v0.12.0에서 수정. TCP는 인증 envelope를 강제한다.
+- P1 회귀 테스트 확보: `HookSocketServerTests`(토큰 grace mode 포함), `ApprovalPolicyEngineTests`의 glob/regex 매트릭스, R0 `GoldenResponseTests`. 문서 불일치 D1~D4 동기화, CI에 shellcheck·python 테스트 연결 완료.
+- 평가표의 보안 C는 현재 기준 **B** 수준으로 상향 (아래 신규 발견의 업데이터 건이 남아 A는 아님). 테스트 B는 역전 분포 해소로 **B+**.
+- Top 5 5번(반쯤 구현된 기능)도 대부분 전환됨: H1 6종 중 H1-1(규칙 제안)·H1-2(진단 뷰)·H1-3(알림 센터)·H1-5(Quick Launch)·H1-6(인사이트) 완료 — **H1-4(PTY 회신)만 미착수**. R0와 R1-a(`TerminalContext` 타입화)도 완료.
+
+**여전히 유효한 발견 (Top 5 중 4번 — R2·R3 미착수라 예상된 상태):**
+
+- `AppState`는 2,839줄로 오히려 증가, `MainActor.assumeIsolated` 24곳(전부 AppState).
+- 정책 평가 SQLite 읽기는 여전히 메인 스레드 동기 실행(`policyDecision` → `approvalProxy.evaluate`), 시작 시 `restoreOpenSessions`도 동일. `os.Logger` 전환(Q1) 미착수.
+- 소스 트리가 `Bridge/`·`Core/` 등으로 재편되어 본문의 flat 파일 경로 인용은 stale.
+
+**신규 발견 (Codex 보안 스캔 2026-07-01, [docs/security](security/codex-security-scan-2026-07-01.md) — 4건 중 2건은 PR #344/#345 등으로 수정):**
+
+- **[오픈, High — 장기 보류]** 업데이터가 DMG를 `-noverify` 마운트 후 서명 검증 없이 앱을 교체한다(`UpdateChecker.installFromDMG`). S5(서명·공증 릴리스) 트랙과 함께 다룰 것 — 단 S5는 Apple Developer Program 등록이 선결 조건이라 등록 이후로 보류하기로 결정(2026-07-02). 그 전까지는 알려진 리스크로 유지.
+- **[기각, by design]** focused-terminal pass가 영속 deny 정책보다 우선하는 문제(finding [3]) — 터미널이 frontmost면 CLI가 자체 처리하도록 pass하는 것은 편의도구라는 제품 정체성에 따른 의도된 설계로, 수정하지 않기로 결정(2026-07-02).
+
+---
+
 ## 1. 한 줄 진단
 
 > DevIsland는 설계 품질·문서화·테스트 문화가 좋은 프로젝트이나, **"승인 게이트"라는 제품의 존재 이유에 비해 IPC 입구의 보안과 그 주변의 테스트가 가장 약하다.** 보안 하드닝 → 구조 정리 → 기능 확장 순서를 지키면, 병렬 에이전트 시대의 관제탑으로 성장할 기반은 이미 갖춰져 있다.

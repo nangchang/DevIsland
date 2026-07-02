@@ -1,6 +1,6 @@
 ---
 name: devisland-change-verification
-description: Verify DevIsland repository changes before commit or handoff. Use when Claude Code changes DevIsland code, tests, project.yml, scripts, docs, packaging, or agent instructions and needs the project-specific build, test, documentation, and working-tree checks.
+description: Verify DevIsland repository changes before commit or handoff. Use when Claude Code changes DevIsland code, tests, project.yml, scripts, docs, packaging, skills, plugin architecture, or agent instructions and needs the project-specific build, test, documentation, and working-tree checks.
 ---
 
 # DevIsland Change Verification
@@ -55,11 +55,16 @@ After code, behavior, settings, commands, architecture, hook semantics, or packa
 - Hooks and provider semantics: `docs/agent/hook-providers.md`
 - Approval proxy, IPC, SQLite, PTY: `docs/agent/approval-proxy.md`
 - Notch settings and UI behavior: `docs/agent/ui-customization.md`
+- Plugin platform changes: `docs/agent/plugin-architecture.md` and `docs/agent/plugin-architecture-implementation-plan.md`
+- Terminal focus and AoE navigation: `docs/agent/terminal-focus-aoe.md`
+- Caffeine power behavior: `docs/agent/caffeine.md`
 - OpenPeon CESP: `docs/agent/openpeon-cesp.md`
 - Stability rules: `docs/agent/stability-standards.md`
 - Top-level agent rules: `AGENTS.md`
 
 If docs do not need changes, state that explicitly in the handoff.
+
+When editing any `SKILL.md`, apply the same change to both skill trees (`.claude/skills/` and `.codex/skills/`) unless the content is tool-specific. Diverged trees cause stale guidance for the other agent.
 
 ## Handoff
 

@@ -36,6 +36,7 @@ For security:
 - Do not load remote images unexpectedly.
 - Do not open links without explicit user intent.
 - Treat command output and tool responses as untrusted display content.
+- HTML previews go through `HTMLPreviewContentPolicy` (size limits, document wrapping) — keep it restrictive and covered by `HTMLPreviewContentPolicyTests`.
 
 ## UI Fit
 

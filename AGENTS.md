@@ -13,9 +13,11 @@ Read this file before editing. Open the referenced docs only when the task touch
 | Topic | Document |
 |---|---|
 | Build, tests, project generation | [docs/agent/build-and-test.md](docs/agent/build-and-test.md) |
-| Claude/Codex/Gemini hook setup and response shapes | [docs/agent/hook-providers.md](docs/agent/hook-providers.md) |
+| Claude/Codex/Gemini/Antigravity hook setup and response shapes | [docs/agent/hook-providers.md](docs/agent/hook-providers.md) |
 | Approval Proxy, IPC, SQLite, PTY, known gaps | [docs/agent/approval-proxy.md](docs/agent/approval-proxy.md) |
 | UI Customization (Notch settings) | [docs/agent/ui-customization.md](docs/agent/ui-customization.md) |
+| Plugin architecture, host surfaces, permissions | [docs/agent/plugin-architecture.md](docs/agent/plugin-architecture.md) |
+| Terminal focus and AoE session navigation | [docs/agent/terminal-focus-aoe.md](docs/agent/terminal-focus-aoe.md) |
 | Caffeine power and session-timeout behavior | [docs/agent/caffeine.md](docs/agent/caffeine.md) |
 | OpenPeon CESP sound packs | [docs/agent/openpeon-cesp.md](docs/agent/openpeon-cesp.md) |
 | Performance and stability rules | [docs/agent/stability-standards.md](docs/agent/stability-standards.md) |
@@ -68,7 +70,8 @@ xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
 |---|---|
 | `DevIslandApp.swift` | `@main` entry, `MenuBarExtra`, `AppDelegate` |
 | `AppState.swift` | Socket lifecycle, session state, pending queue, event classification, approval flow |
-| `HookSocketServer.swift` | TCP listener and one-connection-per-hook event handling |
+| `HookSocketServer.swift` | Loopback TCP + Unix socket listener, one-connection-per-hook event handling |
+| `PluginHost.swift` | Plugin lifecycle, event dispatch, host command/effect execution |
 | `ApprovalProxyController.swift` | Policy lookup, persistence, and rich IPC response orchestration |
 | `ProviderAdapter.swift` | Provider-specific hook response JSON |
 | `SQLiteApprovalStore.swift` | Rules, session cache, replay log, decisions, PTY transcript storage |
@@ -77,7 +80,7 @@ xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
 | `Plugins/BuiltIn/OpenPeon/` | OpenPeon plugin, CESP models, pack store/validation, event mapping, audio playback |
 | `scripts/devisland-bridge.sh` | Shell hook entrypoint |
 | `scripts/devisland_bridge.py` | Payload enrichment, IPC forwarding, provider response formatting |
-| `scripts/install-bridge.sh` | Hook registration for Claude, Codex, and Gemini |
+| `scripts/install-bridge.sh` | Hook registration for Claude, Codex, Gemini, and Antigravity |
 | `scripts/test-hook.sh` | Manual hook simulation |
 
 ## Commit Guidelines

@@ -30,6 +30,8 @@ Inspect existing patterns in:
 - `DevIslandTests/SettingsStoreTests.swift`
 - `DevIslandTests/PluginSettingsTests.swift`
 
+Plugin-contributed settings do not go through `SettingsStore`: they are declared via the plugin settings schema (`PluginSettingDescriptor`, `PluginSettingsStore`) and rendered by `DevIsland/Settings/PluginSettingsView.swift`. Setting changes fan out to plugins as `settings.changed` events.
+
 ## Implementation Rules
 
 Keep setting ownership explicit:

@@ -27,6 +27,8 @@ For detached AoE sessions, preserve `terminal_manager_session_title` and the out
 
 Treat WezTerm, iTerm, cmux, Terminal.app, and other terminal hosts as separate focus cases when behavior diverges. Avoid a generic AppleScript path if a provider needs different selection semantics.
 
+Pass dynamic values (cmux workspace ids, session titles) to `osascript` as argv arguments, never by interpolating them into the AppleScript source string.
+
 Supported AoE dashboard row selection currently differs by host:
 
 - WezTerm can activate the target pane and send AoE navigation text through `wezterm cli`.

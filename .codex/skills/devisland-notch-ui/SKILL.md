@@ -46,6 +46,8 @@ For agent message rendering, preserve security constraints:
 
 Renderer code must read cached contributions only. Do not call plugin code from SwiftUI body rendering.
 
+Keep per-second-changing elements (timeAgo text, plugin badges) in child views that do not observe the parent, or open context menus will flicker (see `SessionRowTimeAgo`, `SessionRowPluginBadges`).
+
 Use `PluginContributionRendererTests`, compact appearance tests, or focused UI tests when changing contribution rendering, compact regions, or session surfaces.
 
 ## Verification
