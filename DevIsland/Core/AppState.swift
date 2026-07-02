@@ -40,15 +40,7 @@ class AppState: ObservableObject {
         static let sessionDescriptions = "sessionDescriptions"
     }
 
-    typealias FrontmostCheck = (
-        _ appName: String?,
-        _ tty: String?,
-        _ windowId: String?,
-        _ tabIndex: String?,
-        _ tmuxPane: String?,
-        _ tmuxSocket: String?,
-        _ tmuxClient: String?
-    ) -> Bool
+    typealias FrontmostCheck = (TerminalContext) -> Bool
 
     private let userDefaults: UserDefaults
     private let frontmostCheck: FrontmostCheck
@@ -826,15 +818,7 @@ class AppState: ObservableObject {
         )
 
         if isClaudeQuestionRequest {
-            isTerminalFrontmostAsync(
-                appName: h.terminal.app,
-                tty: h.terminal.tty,
-                windowId: h.terminal.windowId,
-                tabIndex: h.terminal.tabIndex,
-                tmuxPane: h.terminal.tmuxPane,
-                tmuxSocket: h.terminal.tmuxSocket,
-                tmuxClient: h.terminal.tmuxClient
-            ) { [weak self] isFrontmost in
+            isTerminalFrontmostAsync(terminal: h.terminal) { [weak self] isFrontmost in
                 guard let self else { return }
                 if !h.isReplayPayload && isFrontmost {
                     print("[DevIsland] [PASS] Terminal is frontmost, passing Claude question for session \(h.sessionId.prefix(8))")
@@ -898,15 +882,7 @@ class AppState: ObservableObject {
 
         // MARK: Phase 4: Evaluation Hierarchy
         // 우선순위: 터미널 포커스 pass → 영속 정책 → 휘발성 자동 승인 → 수동 승인 큐잉.
-        isTerminalFrontmostAsync(
-            appName: h.terminal.app,
-            tty: h.terminal.tty,
-            windowId: h.terminal.windowId,
-            tabIndex: h.terminal.tabIndex,
-            tmuxPane: h.terminal.tmuxPane,
-            tmuxSocket: h.terminal.tmuxSocket,
-            tmuxClient: h.terminal.tmuxClient
-        ) { [weak self] isFrontmost in
+        isTerminalFrontmostAsync(terminal: h.terminal) { [weak self] isFrontmost in
             guard let self = self else { return }
 
             // 1. 터미널 포커스 최우선 — 사용자가 이미 터미널에 있으면 CLI가 자체 처리하도록 pass
@@ -1591,15 +1567,8 @@ class AppState: ObservableObject {
             return
         }
         TerminalFocuser.focusTerminal(
-            appName: session.terminal.app,
+            session.terminal,
             title: session.terminalTitle,
-            tty: session.terminal.tty,
-            windowId: session.terminal.windowId,
-            tabIndex: session.terminal.tabIndex,
-            tmuxPane: session.terminal.tmuxPane,
-            tmuxSocket: session.terminal.tmuxSocket,
-            tmuxClient: session.terminal.tmuxClient,
-            managerSessionTitle: session.terminal.managerSessionTitle,
             workspaceRoot: session.workspaceRoot
         )
     }
@@ -1868,40 +1837,17 @@ class AppState: ObservableObject {
     }
 
     private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
-        isTerminalFrontmostAsync(
-            appName: session?.terminal.app,
-            tty: session?.terminal.tty,
-            windowId: session?.terminal.windowId,
-            tabIndex: session?.terminal.tabIndex,
-            tmuxPane: session?.terminal.tmuxPane,
-            tmuxSocket: session?.terminal.tmuxSocket,
-            tmuxClient: session?.terminal.tmuxClient,
-            completion: completion
-        )
+        isTerminalFrontmostAsync(terminal: session?.terminal ?? TerminalContext(), completion: completion)
     }
 
     private func isTerminalFrontmostAsync(
-        appName: String?,
-        tty: String?,
-        windowId: String?,
-        tabIndex: String?,
-        tmuxPane: String?,
-        tmuxSocket: String?,
-        tmuxClient: String?,
+        terminal: TerminalContext,
         completion: @escaping (Bool) -> Void
     ) {
         let frontmostCheck = self.frontmostCheck
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let isFrontmost = frontmostCheck(
-                appName,
-                tty,
-                windowId,
-                tabIndex,
-                tmuxPane,
-                tmuxSocket,
-                tmuxClient
-            )
+            let isFrontmost = frontmostCheck(terminal)
             DispatchQueue.main.async {
                 completion(isFrontmost)
             }
@@ -2745,15 +2691,8 @@ class AppState: ObservableObject {
             sessionStore.activeSessions.first { $0.id == id }
         }
         TerminalFocuser.focusTerminal(
-            appName: session?.terminal.app,
+            session?.terminal ?? TerminalContext(),
             title: session?.terminalTitle,
-            tty: session?.terminal.tty,
-            windowId: session?.terminal.windowId,
-            tabIndex: session?.terminal.tabIndex,
-            tmuxPane: session?.terminal.tmuxPane,
-            tmuxSocket: session?.terminal.tmuxSocket,
-            tmuxClient: session?.terminal.tmuxClient,
-            managerSessionTitle: session?.terminal.managerSessionTitle,
             workspaceRoot: session?.workspaceRoot
         ) { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.terminalFocusRecheckDelay) {
