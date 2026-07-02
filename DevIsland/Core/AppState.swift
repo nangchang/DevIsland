@@ -47,10 +47,14 @@ class AppState: ObservableObject {
 
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
-    @Published var currentMessage: String = ""
-    @Published var currentSessionId: String = ""
-    @Published var currentToolName: String = ""
-    @Published var currentEventName: String = ""
+    /// The approval/notification currently displayed in the notch. Mutated only
+    /// inside AppState; UI reads it through the forwarding properties below.
+    @Published private(set) var displayState = ApprovalDisplayState()
+    var currentMessage: String { displayState.message }
+    var currentSessionId: String { displayState.sessionId }
+    var currentToolName: String { displayState.toolName }
+    var currentEventName: String { displayState.eventName }
+    var hasResponseHandler: Bool { displayState.hasResponseHandler }
     var currentClaudeQuestion: ClaudeQuestionRequest? { claudeQuestionState.currentClaudeQuestion }
     var currentClaudeQuestionAnswers: [String: ClaudeQuestionAnswer] { claudeQuestionState.currentClaudeQuestionAnswers }
     @Published var timeoutProgress: Double = 1.0
@@ -92,14 +96,6 @@ class AppState: ObservableObject {
 
     private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
-    private var currentResponseHandler: ((String) -> Void)?
-    var hasResponseHandler: Bool { currentResponseHandler != nil }
-    private var currentAgentKind: BuddyKind?
-    private var currentRawToolName: String = ""
-    private var currentWorkspaceRoot: String?
-    private var currentHookEventId: Int64?
-    private var isShowingRequest = false
-    private var showingRequestId: UUID?
     private var suspendedClaudeQuestionAnswers: [UUID: [String: ClaudeQuestionAnswer]] = [:]
     private var claudeQuestionCancellable: AnyCancellable?
     private var _previousSessionId: String?
@@ -480,13 +476,13 @@ class AppState: ObservableObject {
     /// 현재 표시 중인 요청의 터미널이 포커스되었는지 확인하고, 그렇다면 자동으로 'pass' 또는 'dismiss' 처리
     func passIfTerminalFocused() {
         // 승인 대기 중이거나 정보성 알림이 표시 중일 때만 동작
-        guard currentResponseHandler != nil || (isNotchExpanded && isExpandingFromRequest) else { return }
-        
+        guard displayState.hasResponseHandler || (isNotchExpanded && isExpandingFromRequest) else { return }
+
         let session = sessionStore.activeSessions.first { $0.id == currentSessionId }
 
         isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
             guard isFrontmost else { return }
-            if self?.currentResponseHandler != nil {
+            if self?.displayState.hasResponseHandler == true {
                 print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
                 self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
             } else {
@@ -500,15 +496,15 @@ class AppState: ObservableObject {
 
     /// 현재 화면에 표시할 데이터를 선택된 세션 정보로 업데이트
     func syncDisplayToSelectedSession() {
-        guard currentResponseHandler == nil else { return }
+        guard !displayState.hasResponseHandler else { return }
         let sessionId = sessionStore.selectedSessionId ?? currentSessionId
 
         if let session = sessionStore.activeSessions.first(where: { $0.id == sessionId }) {
             DispatchQueue.main.async {
-                guard self.currentResponseHandler == nil else { return }
-                self.currentToolName = session.lastToolName
-                self.currentEventName = session.lastEventName
-                self.currentMessage = session.lastMessage
+                guard !self.displayState.hasResponseHandler else { return }
+                self.displayState.toolName = session.lastToolName
+                self.displayState.eventName = session.lastEventName
+                self.displayState.message = session.lastMessage
             }
         }
     }
@@ -993,14 +989,14 @@ class AppState: ObservableObject {
             self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
             MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: fullSessionId) }
 
-            if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
+            if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.displayState.showingRequestId }) {
                 self.clearCurrentRequestDisplay()
             }
 
             if self.sessionStore.pendingQueue.isEmpty {
                 self.isNotchExpanded = false
                 self.syncDisplayToSelectedSession()
-            } else if self.currentResponseHandler == nil {
+            } else if !self.displayState.hasResponseHandler {
                 self.showNextRequest()
             }
         }
@@ -1102,7 +1098,7 @@ class AppState: ObservableObject {
                 for removedSessionId in removedSessionIds {
                     let removedRequests = self.sessionStore.removeAllPending(sessionId: removedSessionId)
                     removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
-                    if removedRequests.contains(where: { $0.id == self.showingRequestId }) {
+                    if removedRequests.contains(where: { $0.id == self.displayState.showingRequestId }) {
                         removedCurrentRequest = true
                     }
                     removedRequests.forEach {
@@ -1167,7 +1163,7 @@ class AppState: ObservableObject {
                 if isNotificationMsg { return s.expandOnNotificationMessage }
                 return false
             }
-            if isInformational && !isStartEvent && !hasPendingForSession && self.currentResponseHandler == nil {
+            if isInformational && !isStartEvent && !hasPendingForSession && !self.displayState.hasResponseHandler {
                 // expandEnabled 여부와 무관하게 포커스된 터미널의 unread 해제는 항상 수행
                 let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
                 self.isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
@@ -1190,7 +1186,7 @@ class AppState: ObservableObject {
                         }
                     }
                     guard expandEnabled else { return }
-                    guard self.currentResponseHandler == nil else { return }
+                    guard !self.displayState.hasResponseHandler else { return }
                     // 세션의 팝아웃 창이 열려있으면 노치 확장 억제 — 창이 알림을 표시함
                     let hasDetachedWindow = MainActor.assumeIsolated {
                         SessionMessageWindowManager.shared.hasWindow(for: fullSessionId)
@@ -1200,10 +1196,10 @@ class AppState: ObservableObject {
                         self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
                         self.previousSessionId = self.currentSessionId
                     }
-                    self.currentToolName = displayToolName
-                    self.currentEventName = h.event
-                    self.currentMessage = sessionMessage
-                    self.currentSessionId = fullSessionId
+                    self.displayState.toolName = displayToolName
+                    self.displayState.eventName = h.event
+                    self.displayState.message = sessionMessage
+                    self.displayState.sessionId = fullSessionId
                     self.isNotchExpanded = true
                     self.isExpandingFromRequest = true
 
@@ -1213,7 +1209,7 @@ class AppState: ObservableObject {
                     }
                 }
             } else if isInformational && !isStartEvent && !isCurrentlyViewed && !sessionMessage.isEmpty {
-                // hasPendingForSession || currentResponseHandler != nil: frontmost 체크 없이
+                // hasPendingForSession || hasResponseHandler: frontmost 체크 없이
                 // setUnread(true)가 이미 됐으므로 notification.shown 발행
                 if let s = self.sessionStore.activeSessions.first(where: { $0.id == fullSessionId }) {
                     MainActor.assumeIsolated {
@@ -1359,8 +1355,8 @@ class AppState: ObservableObject {
         if isInteractive && !h.isReplayPayload && interactiveExpandEnabled {
             isNotchExpanded = true
             isExpandingFromRequest = true
-            currentSessionId = h.sessionId
-            currentMessage = L10n.shared.terminalCheckMsg(displayToolName)
+            displayState.sessionId = h.sessionId
+            displayState.message = L10n.shared.terminalCheckMsg(displayToolName)
         }
 
         if h.toolName == "exit_plan_mode",
@@ -1423,7 +1419,7 @@ class AppState: ObservableObject {
             sessionStore.selectedSessionId = request.sessionId
         }
 
-        if currentResponseHandler == nil {
+        if !displayState.hasResponseHandler {
             showNextRequest()
         } else if isShowingLowerPriorityPendingRequest(than: request) {
             preemptCurrentPendingDisplay()
@@ -1506,7 +1502,7 @@ class AppState: ObservableObject {
     /// a plugin-initiated focus must be refused in exactly the state that guard fires in, keeping
     /// the command approval-neutral. (PR #280 codex review, architecture doc §8)
     var canPluginFocusTerminal: Bool {
-        currentResponseHandler == nil && !(isNotchExpanded && isExpandingFromRequest)
+        !displayState.hasResponseHandler && !(isNotchExpanded && isExpandingFromRequest)
     }
 
     /// Brings a plugin-requested session's terminal to the front. Deliberately does NOT reuse
@@ -1591,8 +1587,8 @@ class AppState: ObservableObject {
             self.ptyCoordinator.clearBuffer(sessionId: sessionId)
             MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: sessionId) }
 
-            if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
-                self.currentResponseHandler?(HookResponse(.pass).jsonString())
+            if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.displayState.showingRequestId }) {
+                self.displayState.responseHandler?(HookResponse(.pass).jsonString())
                 self.clearCurrentRequestDisplay()
             }
 
@@ -1602,7 +1598,7 @@ class AppState: ObservableObject {
                     self.sessionStore.selectedSessionId = nil
                 }
                 self.syncDisplayToSelectedSession()
-            } else if self.currentResponseHandler == nil {
+            } else if !self.displayState.hasResponseHandler {
                 self.showNextRequest()
             }
         }
@@ -1612,26 +1608,16 @@ class AppState: ObservableObject {
         discardInvalidPendingRequests()
 
         guard let next = nextPendingRequestToDisplay() else {
-            currentResponseHandler = nil
-            isShowingRequest = false
-            showingRequestId = nil
+            displayState.clear()
             timeoutCountdown.cancel()
             timeoutProgress = 1.0
-            currentEventName = ""
-            currentToolName = ""
-            currentRawToolName = ""
-            currentAgentKind = nil
-            currentWorkspaceRoot = nil
-            currentHookEventId = nil
-            currentMessage = ""
             alwaysAllowSuggestion = nil
             claudeQuestionState.reset()
-            currentSessionId = ""
             if let prev = previousSessionId {
                 previousSessionId = nil
                 sessionStore.selectedSessionId = prev
                 sessionStore.setUnread(false, sessionId: prev)
-                currentSessionId = prev
+                displayState.sessionId = prev
                 syncDisplayToSelectedSession()
                 isExpandingFromRequest = true
                 let autoExpandEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notchAutoExpandEnabled }
@@ -1645,14 +1631,14 @@ class AppState: ObservableObject {
             return
         }
 
-        if isShowingRequest { return }
-        isShowingRequest = true
-        showingRequestId = next.id
+        if displayState.isShowingRequest { return }
+        displayState.isShowingRequest = true
+        displayState.showingRequestId = next.id
 
         let session = sessionStore.activeSessions.first { $0.id == next.sessionId }
         isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
             guard let self else { return }
-            guard self.showingRequestId == next.id else { return }
+            guard self.displayState.showingRequestId == next.id else { return }
 
             if isFrontmost && !next.isReplay {
                 print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
@@ -1685,19 +1671,18 @@ class AppState: ObservableObject {
                         )
                     }
                     self.claudeQuestionState.reset()
-                    self.isShowingRequest = false
-                    self.showingRequestId = nil
+                    self.displayState.clearResponseState()
                     self.timeoutCountdown.cancel()
                     self.timeoutProgress = 1.0
                     self.showNextRequest()
                     return
                 }
-                self.currentResponseHandler = next.responseHandler
-                self.currentSessionId = next.sessionId
-                self.currentRawToolName = next.rawToolName
-                self.currentAgentKind = next.agentKind
-                self.currentWorkspaceRoot = next.workspaceRoot
-                self.currentHookEventId = next.hookEventId
+                self.displayState.responseHandler = next.responseHandler
+                self.displayState.sessionId = next.sessionId
+                self.displayState.rawToolName = next.rawToolName
+                self.displayState.agentKind = next.agentKind
+                self.displayState.workspaceRoot = next.workspaceRoot
+                self.displayState.hookEventId = next.hookEventId
                 self.sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
                 return
             }
@@ -1707,14 +1692,14 @@ class AppState: ObservableObject {
                 self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
                 self.previousSessionId = self.currentSessionId
             }
-            self.currentResponseHandler = next.responseHandler
-            self.currentEventName  = next.eventName
-            self.currentToolName   = next.toolName
-            self.currentRawToolName = next.rawToolName
-            self.currentAgentKind  = next.agentKind
-            self.currentWorkspaceRoot = next.workspaceRoot
-            self.currentHookEventId = next.hookEventId
-            self.currentMessage    = next.message
+            self.displayState.responseHandler = next.responseHandler
+            self.displayState.eventName = next.eventName
+            self.displayState.toolName = next.toolName
+            self.displayState.rawToolName = next.rawToolName
+            self.displayState.agentKind = next.agentKind
+            self.displayState.workspaceRoot = next.workspaceRoot
+            self.displayState.hookEventId = next.hookEventId
+            self.displayState.message = next.message
             if let claudeQuestion = next.claudeQuestion {
                 let answers = self.suspendedClaudeQuestionAnswers.removeValue(forKey: next.id)
                     ?? ClaudeQuestionState.defaultAnswers(for: claudeQuestion)
@@ -1722,7 +1707,7 @@ class AppState: ObservableObject {
             } else {
                 self.claudeQuestionState.reset()
             }
-            self.currentSessionId  = next.sessionId
+            self.displayState.sessionId = next.sessionId
             let notifEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notificationsEnabled }
             if notifEnabled && next.claudeQuestion == nil {
                 NotificationManager.shared.sendApprovalRequest(next)
@@ -1759,7 +1744,7 @@ class AppState: ObservableObject {
     private func isShowingLowerPriorityPendingRequest(than request: PendingRequest) -> Bool {
         ApprovalQueuePolicy.showingIsLowerPriority(
             than: request,
-            showingRequestId: showingRequestId,
+            showingRequestId: displayState.showingRequestId,
             queue: sessionStore.pendingQueue
         )
     }
@@ -1769,30 +1754,21 @@ class AppState: ObservableObject {
     /// superseded) so no stale request is left showing. Callers handle their own
     /// pre-clear response (e.g. pass-to-terminal) and post-clear `showNextRequest`.
     private func clearCurrentRequestDisplay() {
-        if let showingRequestId {
+        if let showingRequestId = displayState.showingRequestId {
             NotificationManager.shared.cancelNotification(id: showingRequestId)
         }
-        currentResponseHandler = nil
-        isShowingRequest = false
-        showingRequestId = nil
+        displayState.clear()
         timeoutCountdown.cancel()
         timeoutProgress = 1.0
-        currentSessionId = ""
-        currentToolName = ""
-        currentEventName = ""
-        currentMessage = ""
         claudeQuestionState.reset()
     }
 
     private func preemptCurrentPendingDisplay() {
-        if let showingRequestId, claudeQuestionState.currentClaudeQuestion != nil {
+        if let showingRequestId = displayState.showingRequestId, claudeQuestionState.currentClaudeQuestion != nil {
             suspendedClaudeQuestionAnswers[showingRequestId] = claudeQuestionState.currentClaudeQuestionAnswers
         }
-        currentResponseHandler = nil
-        currentHookEventId = nil
+        displayState.clearResponseState()
         claudeQuestionState.reset()
-        isShowingRequest = false
-        showingRequestId = nil
         timeoutCountdown.cancel()
         timeoutProgress = 1.0
     }
@@ -2048,7 +2024,7 @@ class AppState: ObservableObject {
                 self?.timeoutProgress = progress
             },
             onExpire: { [weak self] in
-                guard let self, self.currentResponseHandler != nil else { return }
+                guard let self, self.displayState.hasResponseHandler else { return }
                 self.sendDecision(approved: false, reason: "Timeout", status: .timeoutBypassed(Date()), passToTerminal: true)
             }
         )
@@ -2068,7 +2044,7 @@ class AppState: ObservableObject {
                 guard let self else { return }
                 self.isNotificationAutoCollapseActive = false
                 self.notificationAutoCollapseProgress = 1.0
-                if self.currentResponseHandler == nil && self.isNotchExpanded {
+                if !self.displayState.hasResponseHandler && self.isNotchExpanded {
                     self.isNotchExpanded = false
                     self.isExpandingFromRequest = false
                 }
@@ -2084,12 +2060,12 @@ class AppState: ObservableObject {
 
     @MainActor
     private func presentPluginNotification(title: String, body: String?) {
-        guard currentResponseHandler == nil, !isShowingRequest else { return }
+        guard !displayState.hasResponseHandler, !displayState.isShowingRequest else { return }
 
-        currentToolName = title
-        currentEventName = PluginEventKind.notificationShown.rawValue
-        currentMessage = body ?? title
-        currentSessionId = ""
+        displayState.toolName = title
+        displayState.eventName = PluginEventKind.notificationShown.rawValue
+        displayState.message = body ?? title
+        displayState.sessionId = ""
         isNotchExpanded = true
         isExpandingFromRequest = false
 
@@ -2120,16 +2096,16 @@ class AppState: ObservableObject {
             approvalScope: approvalScope,
             toolInput: toolInput
         ).jsonString()
-        let hadResponseHandler = currentResponseHandler != nil
-        print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
-        currentResponseHandler?(payload)
+        let hadResponseHandler = displayState.hasResponseHandler
+        print("[DevIsland] sendDecision approved=\(approved), handler=\(displayState.hasResponseHandler ? "SET" : "NIL"), reason=\(reason ?? "none")")
+        displayState.responseHandler?(payload)
         print("[DevIsland] sendDecision: response payload sent")
         recordReplayDecision(
-            hookEventId: currentHookEventId,
-            agentKind: currentAgentKind,
-            sessionId: currentSessionId,
-            toolName: currentRawToolName.isEmpty ? currentToolName : currentRawToolName,
-            workspaceRoot: currentWorkspaceRoot,
+            hookEventId: displayState.hookEventId,
+            agentKind: displayState.agentKind,
+            sessionId: displayState.sessionId,
+            toolName: displayState.rawToolName.isEmpty ? displayState.toolName : displayState.rawToolName,
+            workspaceRoot: displayState.workspaceRoot,
             action: passToTerminal ? .prompt : approved ? .allow : .deny,
             source: reason == nil ? .user : .automatic,
             reason: reason
@@ -2139,9 +2115,9 @@ class AppState: ObservableObject {
         // terminal-focus) are deferrals, not approve/deny decisions, so they are excluded.
         // A non-nil `toolInput` is an AskUserQuestion structured reply (submitClaudeQuestion):
         // a question answer, not a tool approval, so it must not count as an approve decision.
-        if hadResponseHandler, !passToTerminal, toolInput == nil, !currentSessionId.isEmpty {
-            let decidedSessionID = currentSessionId
-            let decidedToolName = currentRawToolName.isEmpty ? currentToolName : currentRawToolName
+        if hadResponseHandler, !passToTerminal, toolInput == nil, !displayState.sessionId.isEmpty {
+            let decidedSessionID = displayState.sessionId
+            let decidedToolName = displayState.rawToolName.isEmpty ? displayState.toolName : displayState.rawToolName
             let decidedScope = approvalScope?.rawValue ?? RuleScope.once.rawValue
             // Dispatch to the main actor instead of asserting isolation: sendDecision is not
             // statically main-actor-isolated, so a future off-main caller would crash on
@@ -2156,12 +2132,9 @@ class AppState: ObservableObject {
             }
         }
         persistApprovalScope(approved: approved, approvalScope: approvalScope)
-        let completedRequestId = showingRequestId
-        currentResponseHandler = nil
-        currentHookEventId = nil
+        let completedRequestId = displayState.showingRequestId
+        displayState.clearResponseState()
         claudeQuestionState.reset()
-        isShowingRequest = false
-        showingRequestId = nil
         timeoutCountdown.cancel()
 
         DispatchQueue.main.async {
@@ -2212,18 +2185,18 @@ class AppState: ObservableObject {
 
     private func persistApprovalScope(approved: Bool, approvalScope: RuleScope?) {
         guard approved,
-              let agentKind = currentAgentKind,
+              let agentKind = displayState.agentKind,
               let approvalScope,
               let approvalProxy,
-              !currentSessionId.isEmpty,
-              !currentRawToolName.isEmpty else {
+              !displayState.sessionId.isEmpty,
+              !displayState.rawToolName.isEmpty else {
             return
         }
 
         let provider = providerKind(for: agentKind)
-        let sessionId = currentSessionId
-        let toolName = currentRawToolName
-        let workspaceRoot = currentWorkspaceRoot
+        let sessionId = displayState.sessionId
+        let toolName = displayState.rawToolName
+        let workspaceRoot = displayState.workspaceRoot
         approvalPersistenceQueue.async { [weak self] in
             self?.persistApprovalScopeOnPersistenceQueue(
                 approvalProxy: approvalProxy,
@@ -2277,8 +2250,8 @@ class AppState: ObservableObject {
     }
 
     func approve(globalAlways: Bool = false, sessionAlways: Bool = false) {
-        let tool = currentRawToolName.isEmpty ? currentToolName : currentRawToolName
-        let sId = currentSessionId
+        let tool = displayState.rawToolName.isEmpty ? displayState.toolName : displayState.rawToolName
+        let sId = displayState.sessionId
 
         // in-memory sets are kept as a fast-path read cache for the current session.
         // SQLite is the durable source of truth (written via persistApprovalScope → sendDecision).
@@ -2292,7 +2265,7 @@ class AppState: ObservableObject {
             sessionStore.sessionAutoApproveTypes[sId]?.insert(tool)
         }
 
-        print("[DevIsland] approve() called, handler=\(currentResponseHandler != nil ? "SET" : "NIL")")
+        print("[DevIsland] approve() called, handler=\(displayState.hasResponseHandler ? "SET" : "NIL")")
 
         // exit_plan_mode를 수동으로 승인했을 때도 Auto-Edit 모드 활성화
         if tool == "exit_plan_mode" {
@@ -2333,7 +2306,7 @@ class AppState: ObservableObject {
     }
 
     @MainActor func respondFromNotification(requestId: UUID, approved: Bool) {
-        if showingRequestId == requestId {
+        if displayState.showingRequestId == requestId {
             if approved { approve() } else { deny() }
             return
         }
@@ -2585,7 +2558,7 @@ class AppState: ObservableObject {
     }
 
     func showSessionDetail(_ sessionId: String) {
-        guard currentResponseHandler == nil else { return }
+        guard !displayState.hasResponseHandler else { return }
         if isExpandingFromRequest && !currentSessionId.isEmpty && currentSessionId != sessionId {
             sessionStore.setUnread(false, sessionId: currentSessionId)
             previousSessionId = currentSessionId
@@ -2593,13 +2566,13 @@ class AppState: ObservableObject {
         sessionStore.selectedSessionId = sessionId
         sessionStore.setUnread(false, sessionId: sessionId)
         sessionStore.setMissedApproval(false, sessionId: sessionId)
-        currentSessionId = sessionId
+        displayState.sessionId = sessionId
         syncDisplayToSelectedSession()
         isExpandingFromRequest = true
     }
 
     func dismissCurrentRequest() {
-        if currentResponseHandler != nil {
+        if displayState.hasResponseHandler {
             sendDecision(approved: false, reason: "Dismissed", passToTerminal: true)
         } else if isExpandingFromRequest {
             if !currentSessionId.isEmpty {
@@ -2609,10 +2582,7 @@ class AppState: ObservableObject {
             stopNotificationAutoCollapseTimer()
             if let prev = previousSessionId {
                 previousSessionId = nil
-                currentSessionId = ""
-                currentMessage = ""
-                currentToolName = ""
-                currentEventName = ""
+                displayState.clearDisplayText()
                 claudeQuestionState.reset()
                 showSessionDetail(prev)
             } else {
@@ -2625,7 +2595,7 @@ class AppState: ObservableObject {
     }
 
     func pauseAutoTimersForUserViewing() {
-        if currentResponseHandler != nil {
+        if displayState.hasResponseHandler {
             timeoutCountdown.cancel()
             timeoutProgress = 1.0
         }

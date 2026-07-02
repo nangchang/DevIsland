@@ -878,7 +878,7 @@ final class PluginHost: ObservableObject {
 }
 ```
 
-`PluginHost`는 `AppState`에서 생성하지만, `AppState`의 approval 관련 private 상태(`currentResponseHandler`, `PendingRequest.responseHandler`, `currentHookEventId`)를 넘겨받지 않는다. Host에 들어가는 입력은 `PluginEventFactory`가 만든 DTO뿐이다.
+`PluginHost`는 `AppState`에서 생성하지만, `AppState`의 approval 관련 private 상태(`displayState.responseHandler`, `PendingRequest.responseHandler`, `displayState.hookEventId`)를 넘겨받지 않는다. Host에 들어가는 입력은 `PluginEventFactory`가 만든 DTO뿐이다.
 
 ```swift
 struct QueuedPluginEvent {
@@ -1272,7 +1272,7 @@ private func emitPluginEvent(_ event: PluginEvent) {
 | `session.started` / `session.updated` | `SessionStore.updateActiveSession(...)` 이후의 neutral callback | `SessionStore`는 PluginHost를 모르고, AppState가 callback을 받아 PluginEvent로 변환한다. |
 | `session.ended` | `SessionStore`의 세션 제거 callback | `removeSession`·`pruneInactiveSessions`·`removeSupersededCodexSessions`가 제거 전 `ActiveSession` snapshot을 callback에 포함하고, AppState가 이를 PluginEvent로 변환한다. |
 | `hook.received` | `handleParsedEvent`, `recordReplayHookEvent(...)` 직후 | factory가 `ParsedHookEvent` → `PluginHookSummary` 변환 |
-| `approval.decided` | `sendDecision`에서 `currentResponseHandler?(payload)` 호출과 `recordReplayDecision` enqueue 이후 | 응답이 이미 전송된 뒤라 Fail-Safe 보장. SQLite 기록 완료는 기다리지 않는다. |
+| `approval.decided` | `sendDecision`에서 `displayState.responseHandler?(payload)` 호출과 `recordReplayDecision` enqueue 이후 | 응답이 이미 전송된 뒤라 Fail-Safe 보장. SQLite 기록 완료는 기다리지 않는다. |
 | `notification.shown` | `handleNotificationEvent` | |
 | `settings.changed` | `SettingsStore` mutation | |
 
