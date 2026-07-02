@@ -45,12 +45,12 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 
 | 기능 | 가치 | 노력 | 기존 기반 (이미 있는 것) | 배치 | 상태 |
 |---|---|---|---|---|---|
-| 규칙 제안 (반복 승인 → 룰 승격 제안) | ★★★ | 낮음 | `approval_decisions` 테이블, deterministic rule ID | H1 | 미완 |
-| 브리지 헬스 진단 뷰 | ★★★ | 낮음 | replay log, 토큰/transport 상태 | H1 | 미완 |
-| macOS 알림 센터 연동 | ★★★ | 낮음 | `showNotification` capability 설계 존재 | H1 | 미완 |
+| 규칙 제안 (반복 승인 → 룰 승격 제안) | ★★★ | 낮음 | `approval_decisions` 테이블, deterministic rule ID | H1 | ✅ v0.13.0 |
+| 브리지 헬스 진단 뷰 | ★★★ | 낮음 | replay log, 토큰/transport 상태 | H1 | ✅ v0.13.0 |
+| macOS 알림 센터 연동 | ★★★ | 낮음 | `showNotification` capability 설계 존재 | H1 | ✅ v0.13.0 |
 | 노치에서 프롬프트 회신 (PTY 주입 정식화) | ★★★ | 중간 | `devisland_pty.py` + `injection` 응답 필드 (실험 기능) | H1 | 미완 |
 | 노치에서 새 세션 시작 (Quick Launch) | ★★ | 낮음 | `TerminalFocuser.openNewWindow` 이미 구현됨 | H1 | ✅ v0.12.1 |
-| 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | `approval.decided` 관찰 이벤트와 `SessionStatsPlugin` 기초 통계 구현 완료 | H1 | ✅ 완료 |
+| 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | `approval.decided` 관찰 이벤트와 `SessionStatsPlugin` 기초 통계 구현 완료 | H1 | ✅ v0.13.0 |
 | Fleet 보드 (멀티 세션 관제 뷰) | ★★★ | 중간 | SessionStore, 서브에이전트 그룹화, 세션 히스토리 창 | H2 | 미완 |
 | Git 컨텍스트 (브랜치·워크트리·PR 상태 표시) | ★★★ | 중간 | `workspaceRoot` 이미 전 세션에 전파됨 | H2 | 미완 |
 | 승인 정책 프로파일 (워크스페이스별/시간제한 자동 승인) | ★★★ | 중간 | `workspaceRoot` 스코프 룰, `ToolKnowledge` 위험도 | H2 | 미완 |
@@ -70,7 +70,7 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 
 기술 로드맵의 v0.12 보안 하드닝 이후, 기존 데이터와 반쯤 구현된 기능을 사용자 가치로 전환하는 단계. 큰 신규 표면 없이 체감 가치를 올린다.
 
-### H1-1. 규칙 제안 (Approval → Rule 승격)
+### H1-1. 규칙 제안 (Approval → Rule 승격) ✅ 완료 (v0.13.0, PR #328)
 
 같은 도구/명령 프리픽스를 N회(기본 3회) 수동 승인하면, 승인 UI에 "이 도구를 항상 허용할까요?" 제안 칩을 띄운다. 수락 시 기존 `persistApprovalScope` 경로로 룰 생성.
 
@@ -78,13 +78,13 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 - 효과: 승인 피로(이 앱의 핵심 적)를 데이터 기반으로 줄인다. 정책 기능의 사용률을 끌어올리는 진입로.
 - 주의: 제안은 **once 승인 흐름을 늦추지 않는 위치**(결정 후 토스트)에 배치. 원칙 3.
 
-### H1-2. 브리지 헬스 진단 뷰
+### H1-2. 브리지 헬스 진단 뷰 ✅ 완료 (v0.13.0, PR #327)
 
 설정 또는 메뉴바에 "진단" 패널: 훅 설치 상태(provider별 settings 파일 검사), 토큰 모드(정상/grace 경고), transport·포트, 최근 이벤트 수신 시각, 브리지 로그 tail.
 
 - 효과: 현재 가장 흔한 지원 문제("훅이 안 와요")를 사용자가 자가 진단. 검토 보고서 S3(grace mode 경고)도 이 화면이 수용.
 
-### H1-3. macOS 알림 센터 연동
+### H1-3. macOS 알림 센터 연동 ✅ 완료 (v0.13.0, PR #329)
 
 노치를 못 보는 상황(전체화면 앱, 다른 데스크탑, 외장 모니터만 사용)을 위해 승인 요청·작업 완료를 `UNUserNotificationCenter`로도 발행(설정 opt-in). 알림의 Approve/Deny 액션 버튼으로 즉시 결정 가능하게.
 
@@ -102,11 +102,11 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 
 세션 히스토리/노치에서 "이 워크스페이스에서 새 세션 시작" 액션. `TerminalFocuser.openNewWindow(appName:command:)`가 이미 있으므로, 워크스페이스 루트 + 선호 터미널 + provider 선택만 UI로 연결하면 된다.
 
-### H1-6. 세션 인사이트 v1 (built-in 플러그인)
+### H1-6. 세션 인사이트 v1 (built-in 플러그인) ✅ 완료 (v0.13.0, PR #338)
 
-기초 구현은 완료됐다. `approval.decided` 관찰 이벤트가 provider response 전송 이후 발행되고, `SessionStatsPlugin`이 앱 실행 중 active session 수, hook provider별 누계, manual approve/deny 누계를 menubar/notch contribution으로 표시한다.
+기초 구현: `approval.decided` 관찰 이벤트가 provider response 전송 이후 발행되고, `SessionStatsPlugin`이 앱 실행 중 active session 수, hook provider별 누계, manual approve/deny 누계를 menubar/notch contribution으로 표시한다.
 
-다음 제품화 후보는 이를 별도 인사이트 화면으로 확장하는 것이다: 오늘의 세션 수, 승인/거부/자동승인 비율, 가장 자주 승인한 도구, 세션별 소요 시간. durable 통계가 필요하면 replay DB를 plugin이 직접 읽게 하지 말고 host-owned summary API를 추가한다.
+제품화(PR #338): 세션 히스토리 창에 Insights 탭이 추가됐고, durable 통계는 replay DB를 plugin이 직접 읽는 대신 host-owned `SessionInsightsSummary` API가 제공한다.
 
 - 효과: 플러그인 플랫폼의 첫 "데이터 소비형" 사례 — v2 생태계의 레퍼런스 구현이 된다.
 
