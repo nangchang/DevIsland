@@ -432,7 +432,7 @@ enum BridgeInstaller {
     // MARK: Uninstall entry points
 
     static func uninstallAll() {
-        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let home = FileManager.default.homeDirectoryForCurrentUser
         var errors: [String] = []
         let targets: [(URL, String)] = [
             (home.appendingPathComponent(".claude/settings.json"), "Claude Code"),
@@ -461,7 +461,7 @@ enum BridgeInstaller {
     }
 
     static func uninstall() {
-        let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/settings.json")
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
         do {
             try removeHooks(at: url, fileName: url.lastPathComponent)
             let l = L10n.shared
@@ -472,7 +472,7 @@ enum BridgeInstaller {
     }
 
     static func uninstallCodex() {
-        let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".codex/hooks.json")
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/hooks.json")
         do {
             try removeHooks(at: url, fileName: url.lastPathComponent)
             let l = L10n.shared
@@ -483,7 +483,7 @@ enum BridgeInstaller {
     }
 
     static func uninstallGemini() {
-        let url = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".gemini/settings.json")
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/settings.json")
         do {
             try removeHooks(at: url, fileName: url.lastPathComponent)
             let l = L10n.shared
@@ -494,7 +494,7 @@ enum BridgeInstaller {
     }
 
     static func uninstallAntigravity() {
-        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let home = FileManager.default.homeDirectoryForCurrentUser
         let url = home.appendingPathComponent(".gemini/config/hooks.json")
         let legacyURL = home.appendingPathComponent(".gemini/antigravity-cli/hooks.json")
         do {
