@@ -74,8 +74,8 @@ struct ApprovalPolicyEngine {
 
     private static func commandPrefixMatches(command: String, pattern: String, action: RuleAction) -> Bool {
         guard !pattern.isEmpty, command.hasPrefix(pattern) else { return false }
-        if action == .deny { return true }
         guard hasSafeCommandPrefixBoundary(command: command, pattern: pattern) else { return false }
+        if action == .deny { return true }
         return !containsShellControlSyntax(command)
     }
 
