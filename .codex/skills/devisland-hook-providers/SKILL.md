@@ -50,6 +50,7 @@ Preserve hard-deny messages and exit behavior for each provider. A malformed res
 Bridge responsibilities stay thin:
 
 - Read stdin payload.
+- Prefilter ignored hook events before terminal detection (performance — keep the prefilter ahead of heavy work).
 - Add terminal metadata and `cli_source`.
 - Send IPC envelope.
 - Print provider output.

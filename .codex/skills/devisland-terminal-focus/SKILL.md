@@ -5,7 +5,7 @@ description: Change DevIsland terminal focusing, terminal metadata, cmux/iTerm/T
 
 # DevIsland Terminal Focus
 
-Use this for focus restoration and terminal-selection work. Read `docs/agent/stability-standards.md` and the terminal-related parts of `docs/agent/approval-proxy.md`.
+Use this for focus restoration and terminal-selection work. Read `docs/agent/stability-standards.md` and the terminal-related parts of `docs/agent/approval-proxy.md`. For AoE (agent-of-agents TUI) session navigation and tmux manager sessions, read `docs/agent/terminal-focus-aoe.md`.
 
 ## Invariants
 
@@ -23,7 +23,11 @@ For Codex sessions, a new `SessionStart` in the same terminal identity can close
 
 ## cmux And Terminal Apps
 
-Treat cmux, iTerm, Terminal.app, and other terminal hosts as separate focus cases when behavior diverges. Avoid a generic AppleScript path if a provider needs different selection semantics.
+Treat cmux, iTerm, Terminal.app, WezTerm, and other terminal hosts as separate focus cases when behavior diverges. Avoid a generic AppleScript path if a provider needs different selection semantics.
+
+Pass dynamic values (cmux workspace ids, session titles) to `osascript` as argv arguments, never by interpolating them into the AppleScript source string.
+
+AoE-managed sessions may run inside detached tmux managers; session navigation uses TTY writes and must stay limited to terminals verified to support it.
 
 When changing focus behavior, inspect:
 

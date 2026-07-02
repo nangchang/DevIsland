@@ -13,6 +13,8 @@ Approval requests do not auto-collapse. Informational notifications may auto-col
 
 Do not let UI changes alter approval queue order or provider decisions. Visual state must reflect `AppState`, not become a second source of truth.
 
+Plugin UI contributions render through `PluginContributionRenderer` with cached contributions — do not bypass the cache. Keep per-second-changing elements (timeAgo text, plugin badges) in child views that do not observe the parent, or open context menus will flicker (see `SessionRowTimeAgo`, `SessionRowPluginBadges`).
+
 ## Window And Modal Rules
 
 DevIsland is an `LSUIElement` app with notch-style `NSPanel` behavior. When changing windows, panels, sheets, or modal alerts:

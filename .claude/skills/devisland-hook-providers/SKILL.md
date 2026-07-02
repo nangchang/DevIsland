@@ -1,6 +1,6 @@
 ---
 name: devisland-hook-providers
-description: Change DevIsland Claude Code, Codex CLI, or Gemini CLI hook handling, hook normalization, provider response JSON, bridge install scripts, source detection, interactive prompt behavior, or provider-specific approval semantics.
+description: Change DevIsland Claude Code, Codex CLI, Gemini CLI, or Antigravity CLI hook handling, hook normalization, provider response JSON, bridge install scripts, source detection, interactive prompt behavior, or provider-specific approval semantics.
 ---
 
 # DevIsland Hook Providers
@@ -9,7 +9,7 @@ Use this when touching provider-specific hook behavior. Read `docs/agent/hook-pr
 
 ## Provider Semantics
 
-Do not generalize provider outputs blindly. Claude, Codex, and Gemini use different event names, timeout units, and response shapes.
+Do not generalize provider outputs blindly. Claude, Codex, Gemini, and Antigravity use different event names, timeout units, payload fields, and response shapes.
 
 Claude:
 
@@ -32,6 +32,13 @@ Gemini:
 - `{}` or omitted decision allows the action.
 - Interactive emulation and safe-tool auto approval must avoid double prompting.
 
+Antigravity:
+
+- `PreToolUse` is the primary approval event.
+- Payloads use camelCase fields such as `conversationId`, `workspacePaths`, and `toolCall`.
+- The bridge normalizes Antigravity payloads into DevIsland's internal session, cwd, tool name, and tool input fields.
+- Returning `ask` delegates bypass/unavailable cases back to Antigravity's native permission flow.
+
 ## Response JSON
 
 Use `ProviderAdapter` for provider output. Do not assemble provider JSON ad hoc unless the adapter is the code under change.
@@ -43,6 +50,7 @@ Preserve hard-deny messages and exit behavior for each provider. A malformed res
 Bridge responsibilities stay thin:
 
 - Read stdin payload.
+- Prefilter ignored hook events before terminal detection (performance — keep the prefilter ahead of heavy work).
 - Add terminal metadata and `cli_source`.
 - Send IPC envelope.
 - Print provider output.

@@ -1,6 +1,6 @@
 ---
 name: devisland-openpeon-cesp
-description: Change DevIsland OpenPeon CESP sound pack support, pack scanning, manifest validation, event-to-category mapping, audio playback, mute/debounce settings, or OpenPeon docs/tests. Use for DevIsland/OpenPeon files, SettingsStore OpenPeon values, and CESP tests.
+description: Change DevIsland OpenPeon CESP sound pack support, pack scanning, manifest validation, event-to-category mapping, audio playback, mute/debounce settings, or OpenPeon docs/tests. Use for DevIsland/Plugins/BuiltIn/OpenPeon files, SettingsStore OpenPeon values, and CESP tests.
 ---
 
 # DevIsland OpenPeon CESP
@@ -15,7 +15,7 @@ Bridge scripts remain unchanged for CESP work. Keep pack loading, mapping, setti
 
 ## Runtime Modules
 
-Inspect the relevant module before editing:
+Inspect the relevant module under `DevIsland/Plugins/BuiltIn/OpenPeon/` before editing:
 
 - `CESPModels.swift`: manifest and runtime models.
 - `CESPPackStore.swift`: background scan and active pack selection.

@@ -63,6 +63,8 @@ Do not hand-edit generated `.xcodeproj`; change `project.yml`.
 
 The bump workflow reacts to `vX.Y.Z` tags, updates `project.yml`, commits the bump, retags, and triggers release. Verify this behavior before changing version automation.
 
+`.github/workflows/nightly.yml` builds a prerelease nightly (tags like `nightly-X.Y.Z-YYYYMMDD-N`) when new commits landed in the last 24 hours. Nightly tags are not curated releases — do not treat them as changelog targets.
+
 Before tagging:
 
 - Ensure `CHANGELOG.md` has the target version.

@@ -55,6 +55,9 @@ After code, behavior, settings, commands, architecture, hook semantics, or packa
 - Hooks and provider semantics: `docs/agent/hook-providers.md`
 - Approval proxy, IPC, SQLite, PTY: `docs/agent/approval-proxy.md`
 - Notch settings and UI behavior: `docs/agent/ui-customization.md`
+- Plugin architecture and host surfaces: `docs/agent/plugin-architecture.md`
+- Terminal focus and AoE navigation: `docs/agent/terminal-focus-aoe.md`
+- Caffeine power behavior: `docs/agent/caffeine.md`
 - OpenPeon CESP: `docs/agent/openpeon-cesp.md`
 - Stability rules: `docs/agent/stability-standards.md`
 - Top-level agent rules: `AGENTS.md`
