@@ -64,6 +64,8 @@ After code, behavior, settings, commands, architecture, hook semantics, or packa
 
 If docs do not need changes, state that explicitly in the handoff.
 
+When editing any `SKILL.md`, apply the same change to both skill trees (`.claude/skills/` and `.codex/skills/`) unless the content is tool-specific. Diverged trees cause stale guidance for the other agent.
+
 ## Handoff
 
 Report:
