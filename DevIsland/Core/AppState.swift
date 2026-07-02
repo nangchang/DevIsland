@@ -666,6 +666,7 @@ class AppState: ObservableObject {
         // MARK: Phase 2c: Stop
         case .stop:
             handleStopEvent(h, hookEventId: hookEventId, replayToolName: replayToolName, responseHandler: responseHandler)
+            return
 
         // MARK: Phase 2d: UserPromptSubmit Policy
         case .promptPolicyDenied(let denialReason):
@@ -682,6 +683,7 @@ class AppState: ObservableObject {
                 source: .automatic,
                 reason: denialReason
             )
+            return
 
         // MARK: Phase 2e: Claude user-question follow-up passthrough
         case .userQuestionPassthrough:
@@ -698,6 +700,7 @@ class AppState: ObservableObject {
                 source: .automatic,
                 reason: "Claude user question follow-up passthrough"
             )
+            return
 
         // MARK: Phase 2f: Notification
         case .notification:
@@ -710,6 +713,7 @@ class AppState: ObservableObject {
                 replayToolName: replayToolName,
                 responseHandler: responseHandler
             )
+            return
 
         // MARK: Phase 3: Decision Logic
         case .nonApprovalAutoApprove(let isGeminiNormalMode):
@@ -733,6 +737,7 @@ class AppState: ObservableObject {
                 source: .automatic,
                 reason: isGeminiNormalMode ? "Gemini normal mode notification" : "non-approval h.event"
             )
+            return
 
         case .emptyApprovalAutoApprove:
             print("[DevIsland] ignoring empty approval request")
@@ -748,6 +753,7 @@ class AppState: ObservableObject {
                 source: .automatic,
                 reason: "empty approval request"
             )
+            return
 
         case .claudeQuestion, .approval:
             let request = PendingRequest(
@@ -782,6 +788,7 @@ class AppState: ObservableObject {
                     displayToolName: displayToolName
                 )
             }
+            return
         }
     }
 
