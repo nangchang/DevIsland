@@ -6,6 +6,11 @@ enum BridgeInstaller {
     private static let bridgeHelperFileName = "devisland_bridge.py"
     private static let bridgeManifestFileName = "hook_events.json"
 
+    /// 설치/제거 작업을 백그라운드에서 직렬로 실행한다. 동시 큐를 쓰면 여러
+    /// 메뉴 액션이 같은 브리지 디렉토리·config 파일을 병렬로 변경해
+    /// 파일이 서로의 존재 확인·복사·chmod 사이에 삭제/재생성될 수 있다.
+    private static let installerQueue = DispatchQueue(label: "com.devisland.bridge-installer")
+
     private struct InstallPaths {
         let home: URL
         let bridgeDir: URL
@@ -33,7 +38,7 @@ enum BridgeInstaller {
 
     /// Claude Code, Codex CLI, Gemini CLI, Antigravity CLI 모두 설치
     static func installAll() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             do {
                 try installClaudeHooks()
                 try installCodexHooks()
@@ -49,7 +54,7 @@ enum BridgeInstaller {
 
     /// Claude Code (~/.claude/settings.json)
     static func install() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             do {
                 try installClaudeHooks()
                 let l = L10n.shared
@@ -62,7 +67,7 @@ enum BridgeInstaller {
 
     /// Codex CLI (~/.codex/hooks.json + config.toml)
     static func installCodex() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             do {
                 try installCodexHooks()
                 let l = L10n.shared
@@ -75,7 +80,7 @@ enum BridgeInstaller {
 
     /// Gemini CLI (~/.gemini/settings.json)
     static func installGemini() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             do {
                 try installGeminiHooks()
                 let l = L10n.shared
@@ -88,7 +93,7 @@ enum BridgeInstaller {
 
     /// Antigravity CLI (~/.gemini/config/hooks.json)
     static func installAntigravity() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             do {
                 try installAntigravityHooks()
                 let l = L10n.shared
@@ -442,7 +447,7 @@ enum BridgeInstaller {
     // MARK: Uninstall entry points
 
     static func uninstallAll() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             let home = FileManager.default.homeDirectoryForCurrentUser
             var errors: [String] = []
             let targets: [(URL, String)] = [
@@ -473,7 +478,7 @@ enum BridgeInstaller {
     }
 
     static func uninstall() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
             do {
                 try removeHooks(at: url, fileName: url.lastPathComponent)
@@ -486,7 +491,7 @@ enum BridgeInstaller {
     }
 
     static func uninstallCodex() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/hooks.json")
             do {
                 try removeHooks(at: url, fileName: url.lastPathComponent)
@@ -499,7 +504,7 @@ enum BridgeInstaller {
     }
 
     static func uninstallGemini() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/settings.json")
             do {
                 try removeHooks(at: url, fileName: url.lastPathComponent)
@@ -512,7 +517,7 @@ enum BridgeInstaller {
     }
 
     static func uninstallAntigravity() {
-        DispatchQueue.global(qos: .userInitiated).async {
+        installerQueue.async {
             let home = FileManager.default.homeDirectoryForCurrentUser
             let url = home.appendingPathComponent(".gemini/config/hooks.json")
             let legacyURL = home.appendingPathComponent(".gemini/antigravity-cli/hooks.json")
