@@ -8,6 +8,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -33,8 +34,17 @@ class BridgeShellTest(unittest.TestCase):
             fake_python = f"""
             #!/bin/sh
             cat > /dev/null
-            printf '{{"TERM_APP":"%s","TERM_TITLE":"%s","TERM_TTY":"%s","TERM_WINDOW_ID":"%s","TERM_TMUX_PANE":"%s","TERM_TMUX_SOCKET":"%s","TERM_TMUX_CLIENT":"%s","TERM_MANAGER_SESSION_TITLE":"%s"}}\\n' \\
-              "$TERM_APP" "$TERM_TITLE" "$TERM_TTY" "$TERM_WINDOW_ID" "$TERM_TMUX_PANE" "$TERM_TMUX_SOCKET" "$TERM_TMUX_CLIENT" "$TERM_MANAGER_SESSION_TITLE" > "{capture_path}"
+            "{sys.executable}" -c 'import json, os, pathlib, sys; pathlib.Path(sys.argv[1]).write_text(json.dumps({{
+                "TERM_APP": os.environ.get("TERM_APP", ""),
+                "TERM_TITLE": os.environ.get("TERM_TITLE", ""),
+                "TERM_TTY": os.environ.get("TERM_TTY", ""),
+                "TERM_WINDOW_ID": os.environ.get("TERM_WINDOW_ID", ""),
+                "TERM_TAB_INDEX": os.environ.get("TERM_TAB_INDEX", ""),
+                "TERM_TMUX_PANE": os.environ.get("TERM_TMUX_PANE", ""),
+                "TERM_TMUX_SOCKET": os.environ.get("TERM_TMUX_SOCKET", ""),
+                "TERM_TMUX_CLIENT": os.environ.get("TERM_TMUX_CLIENT", ""),
+                "TERM_MANAGER_SESSION_TITLE": os.environ.get("TERM_MANAGER_SESSION_TITLE", ""),
+            }}) + "\\n", encoding="utf-8")' "{capture_path}"
             printf '{{}}\\n'
             """
             fake_bins = {**fake_bins, "python3": textwrap.dedent(fake_python)}
@@ -97,6 +107,40 @@ class BridgeShellTest(unittest.TestCase):
         self.assertEqual(captured["TERM_APP"], "WezTerm")
         self.assertEqual(captured["TERM_TTY"], "/dev/ttys011")
         self.assertEqual(captured["TERM_WINDOW_ID"], "12")
+
+    def test_cmux_workspace_id_is_passed_to_osascript_as_data(self):
+        malicious_workspace_id = 'workspace-" & do shell script "touch /tmp/dev-island-cmux" & "'
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            argv_capture = tmp_path / "osascript-argv"
+            stdin_capture = tmp_path / "osascript-stdin"
+            captured = self.run_bridge(
+                env={
+                    "CMUX_WORKSPACE_ID": malicious_workspace_id,
+                    "CMUX_SURFACE_ID": "surface-1",
+                },
+                fake_bins={
+                    "tty": "#!/bin/sh\nprintf '/dev/ttys012\\n'\n",
+                    "osascript": f"""
+                        #!/bin/sh
+                        if [ "$1" = "-e" ]; then
+                          printf 'true\\n'
+                          exit 0
+                        fi
+                        printf '%s\\n' "$*" > "{argv_capture}"
+                        cat > "{stdin_capture}"
+                        printf 'Injected Tab\\n'
+                    """,
+                },
+            )
+
+            self.assertEqual(captured["TERM_APP"], "cmux")
+            self.assertEqual(captured["TERM_TITLE"], "Injected Tab")
+            self.assertEqual(captured["TERM_WINDOW_ID"], malicious_workspace_id)
+            self.assertEqual(captured["TERM_TAB_INDEX"], "surface-1")
+
+            self.assertEqual(argv_capture.read_text(encoding="utf-8").strip(), f"- {malicious_workspace_id}")
+            self.assertNotIn(malicious_workspace_id, stdin_capture.read_text(encoding="utf-8"))
 
     def test_wezterm_tmux_client_is_forwarded_as_terminal_source(self):
         captured = self.run_bridge(
