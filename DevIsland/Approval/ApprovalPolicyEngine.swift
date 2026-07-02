@@ -63,7 +63,7 @@ struct ApprovalPolicyEngine {
         case .commandPrefix:
             guard rule.toolName == toolName,
                   let command = toolInput?["command"] as? String else { return false }
-            return commandPrefixMatches(command: command, pattern: rule.pattern)
+            return commandPrefixMatches(command: command, pattern: rule.pattern, action: rule.action)
         case .pathPrefix:
             guard rule.toolName == toolName else { return false }
             let path = (toolInput?["path"] as? String) ?? (toolInput?["file_path"] as? String)
@@ -72,9 +72,10 @@ struct ApprovalPolicyEngine {
         }
     }
 
-    private static func commandPrefixMatches(command: String, pattern: String) -> Bool {
+    private static func commandPrefixMatches(command: String, pattern: String, action: RuleAction) -> Bool {
         guard !pattern.isEmpty, command.hasPrefix(pattern) else { return false }
         guard hasSafeCommandPrefixBoundary(command: command, pattern: pattern) else { return false }
+        if action == .deny { return true }
         return !containsShellControlSyntax(command)
     }
 
@@ -93,7 +94,7 @@ struct ApprovalPolicyEngine {
     }
 
     private static func containsShellControlSyntax(_ command: String) -> Bool {
-        if command.contains("$(") { return true }
+        if command.contains("$(") || command.contains("=(") { return true }
         for scalar in command.unicodeScalars {
             switch scalar {
             case ";", "&", "|", "<", ">", "`", "\n", "\r", "\0":

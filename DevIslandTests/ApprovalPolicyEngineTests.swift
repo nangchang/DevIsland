@@ -171,6 +171,44 @@ final class ApprovalPolicyEngineTests: XCTestCase {
             toolInput: ["command": "gh pr view $(touch /tmp/dev-island-test)"]
         ))
         XCTAssertEqual(commandSubstitution, .prompt)
+
+        let zshProcessSubstitution = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "gh pr view =(touch /tmp/dev-island-test)"]
+        ))
+        XCTAssertEqual(zshProcessSubstitution, .prompt)
+    }
+
+    func testCommandPrefixDenyRulesPreserveShellControlCoverage() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let engine = ApprovalPolicyEngine(store: store)
+
+        try store.insertRule(ApprovalRule(
+            provider: .codex,
+            toolName: "shell",
+            matchKind: .commandPrefix,
+            pattern: "rm",
+            action: .deny,
+            scope: .persistent
+        ))
+
+        let dangerousCommand = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "rm -rf /tmp/dev-island-test; echo done"]
+        ))
+        XCTAssertEqual(dangerousCommand.action, .deny)
+
+        let differentCommand = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "rmdir /tmp/dev-island-test"]
+        ))
+        XCTAssertEqual(differentCommand, .prompt)
     }
 
     func testCommandPrefixAllowsSeededPathPrefixesWithoutShellSyntax() throws {
