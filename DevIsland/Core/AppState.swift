@@ -607,9 +607,9 @@ class AppState: ObservableObject {
     private func handleParsedEvent(_ h: ParsedHookEvent, responseHandler: @escaping (String) -> Void) {
         let ud = self.userDefaults
         let routingSettings = HookRoutingSettings(
-            processVSCode: ud.object(forKey: "processVSCodeEnabled") as? Bool ?? false,
-            processClaudeDesktop: ud.object(forKey: "processClaudeDesktopEnabled") as? Bool ?? false,
-            processCodexDesktop: ud.object(forKey: "processCodexDesktopEnabled") as? Bool ?? false,
+            processVSCode: ud.bool(forKey: "processVSCodeEnabled"),
+            processClaudeDesktop: ud.bool(forKey: "processClaudeDesktopEnabled"),
+            processCodexDesktop: ud.bool(forKey: "processCodexDesktopEnabled"),
             emulateGeminiInteractiveMode: geminiState.emulateInteractiveMode
         )
         let routed = HookEventRouter.route(h, settings: routingSettings)
