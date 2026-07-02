@@ -1,4 +1,4 @@
 interface:
   display_name: "DevIsland Hook Providers"
   short_description: "Handle Claude, Codex, Gemini, and Antigravity hook semantics in DevIsland."
-  default_prompt: "Use this skill when changing DevIsland CLI hook provider behavior."
+  default_prompt: "Use $devisland-hook-providers when changing DevIsland CLI hook provider behavior."

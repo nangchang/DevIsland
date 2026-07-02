@@ -1,6 +1,6 @@
 ---
 name: devisland-hook-providers
-description: Change DevIsland Claude Code, Codex CLI, Gemini CLI, or Antigravity CLI hook handling, hook normalization, provider response JSON, bridge install scripts, source detection, interactive prompt behavior, or provider-specific approval semantics.
+description: Change DevIsland Claude Code, Codex CLI, Gemini CLI, or Antigravity CLI hook handling, hook classification/normalization, provider response JSON, bridge install scripts, source detection, integrated app detection, interactive prompt behavior, or provider-specific approval semantics.
 ---
 
 # DevIsland Hook Providers
@@ -56,15 +56,20 @@ Bridge responsibilities stay thin:
 
 When changing `scripts/install-bridge.sh`, `scripts/devisland-bridge.sh`, or `scripts/devisland_bridge.py`, update README or provider docs if user setup changes.
 
+For source and integration detection, preserve VS Code, Claude Desktop, WezTerm, tmux, and Antigravity payload behavior documented in `docs/agent/hook-providers.md`.
+
 ## Tests
 
 Prefer focused tests:
 
 - `ProviderAdapterTests`
 - `HookEventNormalizerTests`
+- `HookEventClassifierTests`
+- `GoldenResponseTests`
 - `ToolMessageFormatterTests`
 - `ClaudeQuestionRequestTests`
 - `CodexRuleSyncAdapterTests`
+- `ToolKnowledgeTests`
 - `AppStateTests`
 
 Run `./scripts/run-tests.sh` before handoff for behavior changes.

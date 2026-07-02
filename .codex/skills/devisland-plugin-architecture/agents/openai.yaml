@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevIsland Plugins"
+  short_description: "Change DevIsland built-in plugin architecture."
+  default_prompt: "Use $devisland-plugin-architecture when changing DevIsland plugin architecture."
