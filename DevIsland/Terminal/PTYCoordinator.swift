@@ -28,7 +28,7 @@ final class PTYCoordinator {
         responseHandler: (String) -> Void
     ) {
         guard isEnabled(), !content.isEmpty else {
-            responseHandler("{\"response\":\"approved\"}")
+            responseHandler(HookResponse(.approved).jsonString())
             return
         }
         let window = ptyBuffer.appendAndWindow(sessionId: sessionId, content: content)
@@ -70,7 +70,7 @@ final class PTYCoordinator {
                 return
             }
         }
-        responseHandler("{\"response\":\"approved\"}")
+        responseHandler(HookResponse(.approved).jsonString())
     }
 
     func clearBuffer(sessionId: String) {
