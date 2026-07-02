@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevIsland Caffeine"
+  short_description: "Change DevIsland sleep-prevention behavior."
+  default_prompt: "Use $devisland-caffeine-plugin when changing DevIsland Caffeine behavior."

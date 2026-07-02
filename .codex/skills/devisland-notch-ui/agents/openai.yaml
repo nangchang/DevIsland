@@ -1,4 +1,4 @@
 interface:
   display_name: "DevIsland Notch UI"
   short_description: "Change DevIsland notch UI safely."
-  default_prompt: "Use this skill when changing DevIsland notch UI behavior."
+  default_prompt: "Use $devisland-notch-ui when changing DevIsland notch UI behavior."

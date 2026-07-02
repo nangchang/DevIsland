@@ -1,6 +1,6 @@
 ---
 name: devisland-release-packaging
-description: Prepare DevIsland releases, version bumps, changelog entries, DMG packaging, GitHub release notes, release workflow updates, tag-driven releases, or distribution checks. Use for CHANGELOG.md, project.yml version/build values, scripts/create-dmg.sh, .github/workflows/release.yml, bump.yml, and packaging docs.
+description: Prepare DevIsland releases, version bumps, changelog entries, DMG packaging, changelog-derived GitHub release notes, release workflow updates, tag-driven releases, dry-run releases, or distribution checks. Use for CHANGELOG.md, project.yml version/build values, scripts/create-dmg.sh, scripts/extract-release-notes.sh, .github/workflows/release.yml, bump.yml, and packaging docs.
 ---
 
 # DevIsland Release Packaging
@@ -18,6 +18,7 @@ Read:
 - `.github/workflows/release.yml`
 - `.github/workflows/bump.yml`
 - `scripts/create-dmg.sh`
+- `scripts/extract-release-notes.sh`
 
 Check current version values:
 
@@ -43,13 +44,13 @@ Do not rely only on generated GitHub release notes when curated release notes ar
 
 Use the relevant `CHANGELOG.md` section as the source of truth for GitHub Release body text.
 
-When creating or updating the GitHub release manually, fill the release body from that section. When changing automation, prefer wiring the release workflow to read the matching changelog section and pass it as `body_path` to the release action.
+When creating or updating the GitHub release manually, fill the release body from that section. The release workflow extracts the matching changelog section with `scripts/extract-release-notes.sh` and passes it as `body_path`; preserve that behavior when changing automation.
 
 If a package or release artifact is created locally for handoff, include the same changelog-derived notes in the handoff or release draft.
 
 ## Packaging
 
-The release workflow builds on macOS and runs:
+The release workflow is `workflow_dispatch` based, checks out the requested tag, supports dry-run builds, builds on macOS, and runs:
 
 ```bash
 ./scripts/create-dmg.sh

@@ -15,6 +15,7 @@ Read `AGENTS.md` and inspect existing behavior in:
 - `DevIsland/Provider/ToolMessageFormatter.swift`
 - `DevIsland/UI/NotchView.swift`
 - `DevIsland/UI/NotchComponents.swift`
+- `DevIsland/UI/PluginContributionRenderer.swift` when plugin contribution text is involved
 - `DevIslandTests/ToolMessageFormatterTests.swift`
 
 Check recent tests before changing parsing or formatting.
@@ -47,6 +48,7 @@ If changing font size, weight, or spacing, verify readability in both collapsed/
 Use focused tests for formatter behavior:
 
 - `ToolMessageFormatterTests`
+- `PluginContributionRendererTests` when plugin UI text rendering changes
 - Any `MarkdownView` or message rendering tests present in the repo
 
 Run:

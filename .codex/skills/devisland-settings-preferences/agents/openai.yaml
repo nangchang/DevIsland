@@ -1,4 +1,4 @@
 interface:
   display_name: "DevIsland Settings"
   short_description: "Change DevIsland settings safely."
-  default_prompt: "Use this skill when changing DevIsland settings or preferences."
+  default_prompt: "Use $devisland-settings-preferences when changing DevIsland settings or preferences."
