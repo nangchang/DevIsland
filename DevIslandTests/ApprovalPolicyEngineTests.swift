@@ -127,6 +127,90 @@ final class ApprovalPolicyEngineTests: XCTestCase {
         XCTAssertEqual(noInput, .prompt)
     }
 
+    func testCommandPrefixRequiresSafeSuffix() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let engine = ApprovalPolicyEngine(store: store)
+
+        try store.insertRule(ApprovalRule(
+            provider: .codex,
+            toolName: "shell",
+            matchKind: .commandPrefix,
+            pattern: "gh pr view",
+            action: .allow,
+            scope: .persistent
+        ))
+
+        let allowed = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "gh pr view 123 --json title"]
+        ))
+        XCTAssertEqual(allowed.action, .allow)
+
+        let noTokenBoundary = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "gh pr viewer"]
+        ))
+        XCTAssertEqual(noTokenBoundary, .prompt)
+
+        let appendedCommand = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "gh pr view 123; rm -rf /tmp/dev-island-test"]
+        ))
+        XCTAssertEqual(appendedCommand, .prompt)
+
+        let commandSubstitution = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "gh pr view $(touch /tmp/dev-island-test)"]
+        ))
+        XCTAssertEqual(commandSubstitution, .prompt)
+    }
+
+    func testCommandPrefixAllowsSeededPathPrefixesWithoutShellSyntax() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let engine = ApprovalPolicyEngine(store: store)
+
+        try store.insertRule(ApprovalRule(
+            provider: .codex,
+            toolName: "shell",
+            matchKind: .commandPrefix,
+            pattern: "bash scripts/",
+            action: .allow,
+            scope: .persistent
+        ))
+
+        let allowed = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "bash scripts/run-tests.sh"]
+        ))
+        XCTAssertEqual(allowed.action, .allow)
+
+        let pipedCommand = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "bash scripts/run-tests.sh | sh"]
+        ))
+        XCTAssertEqual(pipedCommand, .prompt)
+
+        let newlineCommand = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "bash scripts/run-tests.sh\nwhoami"]
+        ))
+        XCTAssertEqual(newlineCommand, .prompt)
+    }
+
     func testPathPrefixMatchesAgainstToolInput() throws {
         let store = try SQLiteApprovalStore(databaseURL: databaseURL)
         let engine = ApprovalPolicyEngine(store: store)

@@ -298,17 +298,20 @@ detect_cmux() {
   osascript -e 'return (application "cmux" is running)' 2>/dev/null | grep -q "true" || return 1
   TERM_APP="cmux"
   if [ -n "$CMUX_WORKSPACE_ID" ]; then
-    TERM_TITLE=$(osascript 2>/dev/null << ASEOF
-tell application "cmux"
-  repeat with aWindow in windows
-    repeat with aTab in tabs of aWindow
-      if (id of aTab as text) is "$CMUX_WORKSPACE_ID" then
-        return name of aTab
-      end if
+    TERM_TITLE=$(osascript - "$CMUX_WORKSPACE_ID" 2>/dev/null << 'ASEOF'
+on run argv
+  set workspaceID to item 1 of argv
+  tell application "cmux"
+    repeat with aWindow in windows
+      repeat with aTab in tabs of aWindow
+        if (id of aTab as text) is workspaceID then
+          return name of aTab
+        end if
+      end repeat
     end repeat
-  end repeat
-  return ""
-end tell
+    return ""
+  end tell
+end run
 ASEOF
 )
   fi
