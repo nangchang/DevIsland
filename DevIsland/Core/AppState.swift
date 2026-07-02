@@ -594,10 +594,10 @@ class AppState: ObservableObject {
     ) {
         switch HookEventHandler.parse(message, authentication: authentication) {
         case .invalid:
-            responseHandler("{\"response\": \"approved\"}")
+            responseHandler(HookResponse(.approved).jsonString())
             return
         case .denied:
-            responseHandler("{\"response\": \"denied\"}")
+            responseHandler(HookResponse(.denied).jsonString())
             return
         case .parsed(let h):
             handleParsedEvent(h, responseHandler: responseHandler)
@@ -615,13 +615,13 @@ class AppState: ObservableObject {
         // rather, Gemini CLI preserves its own configured approval behavior (interactive prompt or --auto-approve).
         switch h.terminal.app {
         case "VSCode" where !processVSCode:
-            responseHandler("{\"response\": \"pass\"}")
+            responseHandler(HookResponse(.pass).jsonString())
             return
         case "ClaudeDesktop" where !processClaudeDesktop:
-            responseHandler("{\"response\": \"pass\"}")
+            responseHandler(HookResponse(.pass).jsonString())
             return
         case "CodexDesktop" where !processCodexDesktop:
-            responseHandler("{\"response\": \"pass\"}")
+            responseHandler(HookResponse(.pass).jsonString())
             return
         default:
             break
@@ -689,38 +689,18 @@ class AppState: ObservableObject {
            let prompt = h.parsedJSON["prompt"] as? String,
            let denialReason = ClaudePromptPolicy.denialReason(for: prompt) {
             print("[DevIsland] Claude UserPromptSubmit blocked by prompt policy")
-            let responsePayload: [String: Any] = [
-                "response": "denied",
-                "reason": denialReason
-            ]
-            if let data = try? JSONSerialization.data(withJSONObject: responsePayload),
-               let payload = String(data: data, encoding: .utf8) {
-                respondWithReplay(
-                    payload,
-                    responseHandler: responseHandler,
-                    hookEventId: hookEventId,
-                    agentKind: h.agentKind,
-                    sessionId: h.sessionId,
-                    toolName: replayToolName,
-                    workspaceRoot: h.workspaceRoot,
-                    action: .deny,
-                    source: .automatic,
-                    reason: denialReason
-                )
-            } else {
-                respondWithReplay(
-                    "{\"response\":\"denied\"}",
-                    responseHandler: responseHandler,
-                    hookEventId: hookEventId,
-                    agentKind: h.agentKind,
-                    sessionId: h.sessionId,
-                    toolName: replayToolName,
-                    workspaceRoot: h.workspaceRoot,
-                    action: .deny,
-                    source: .automatic,
-                    reason: denialReason
-                )
-            }
+            respondWithReplay(
+                HookResponse(.denied, reason: denialReason).jsonString(),
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
+                toolName: replayToolName,
+                workspaceRoot: h.workspaceRoot,
+                action: .deny,
+                source: .automatic,
+                reason: denialReason
+            )
             return
         }
 
@@ -730,7 +710,7 @@ class AppState: ObservableObject {
            isUserQuestionTool {
             print("[DevIsland] passing Claude user-question \(h.event) without notification: \(h.toolName)")
             respondWithReplay(
-                "{\"response\": \"pass\"}",
+                HookResponse(.pass).jsonString(),
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
                 agentKind: h.agentKind,
@@ -771,7 +751,7 @@ class AppState: ObservableObject {
                 }
             }
             respondWithReplay(
-                "{\"response\": \"approved\"}",
+                HookResponse(.approved).jsonString(),
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
                 agentKind: h.agentKind,
@@ -788,7 +768,7 @@ class AppState: ObservableObject {
         guard !h.toolName.isEmpty || !h.displayMsg.isEmpty else {
             print("[DevIsland] ignoring empty approval request")
             respondWithReplay(
-                "{\"response\": \"approved\"}",
+                HookResponse(.approved).jsonString(),
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
                 agentKind: h.agentKind,
@@ -978,7 +958,7 @@ class AppState: ObservableObject {
                 }
             }
         }
-        responseHandler("{\"response\": \"approved\"}")
+        responseHandler(HookResponse(.approved).jsonString())
     }
 
     // MARK: - Phase 2c handler: Stop
@@ -991,7 +971,7 @@ class AppState: ObservableObject {
     ) {
         guard !h.sessionId.isEmpty else {
             respondWithReplay(
-                "{\"response\": \"approved\"}",
+                HookResponse(.approved).jsonString(),
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
                 agentKind: h.agentKind,
@@ -1010,7 +990,7 @@ class AppState: ObservableObject {
             removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
             removedRequests.forEach {
                 self.respondWithReplay(
-                    "{\"response\": \"denied\"}",
+                    HookResponse(.denied).jsonString(),
                     responseHandler: $0.responseHandler,
                     hookEventId: $0.hookEventId,
                     agentKind: $0.agentKind,
@@ -1038,7 +1018,7 @@ class AppState: ObservableObject {
             }
         }
         respondWithReplay(
-            "{\"response\": \"approved\"}",
+            HookResponse(.approved).jsonString(),
             responseHandler: responseHandler,
             hookEventId: hookEventId,
             agentKind: h.agentKind,
@@ -1065,13 +1045,13 @@ class AppState: ObservableObject {
         let normalizedEvent = HookEventNormalizer.normalizedName(h.event)
         let passClaudeUserQuestion = h.agentKind == .claudeCode && isUserQuestionTool
         let notification = passClaudeUserQuestion
-            ? (response: "pass", action: RuleAction.prompt, reason: "Claude user question passthrough")
-            : (response: "approved", action: RuleAction.allow, reason: "notification")
+            ? (decision: HookDecision.pass, action: RuleAction.prompt, reason: "Claude user question passthrough")
+            : (decision: HookDecision.approved, action: RuleAction.allow, reason: "notification")
 
-        print("[DevIsland] notification event: \(h.event) for \(h.toolName) → \(notification.response)")
+        print("[DevIsland] notification event: \(h.event) for \(h.toolName) → \(notification.decision.rawValue)")
         guard !h.sessionId.isEmpty else {
             respondWithReplay(
-                "{\"response\": \"\(notification.response)\"}",
+                HookResponse(notification.decision).jsonString(),
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
                 agentKind: h.agentKind,
@@ -1087,7 +1067,7 @@ class AppState: ObservableObject {
         if normalizedEvent == "notification",
            h.notificationType == "permission_prompt" || h.displayMsg.lowercased().contains("needs your permission") {
             respondWithReplay(
-                "{\"response\": \"approved\"}",
+                HookResponse(.approved).jsonString(),
                 responseHandler: responseHandler,
                 hookEventId: hookEventId,
                 agentKind: h.agentKind,
@@ -1140,7 +1120,7 @@ class AppState: ObservableObject {
                     }
                     removedRequests.forEach {
                         self.respondWithReplay(
-                            "{\"response\": \"denied\"}",
+                            HookResponse(.denied).jsonString(),
                             responseHandler: $0.responseHandler,
                             hookEventId: $0.hookEventId,
                             agentKind: $0.agentKind,
@@ -1257,7 +1237,7 @@ class AppState: ObservableObject {
         }
 
         respondWithReplay(
-            "{\"response\": \"\(notification.response)\"}",
+            HookResponse(notification.decision).jsonString(),
             responseHandler: responseHandler,
             hookEventId: hookEventId,
             agentKind: h.agentKind,
@@ -1313,7 +1293,7 @@ class AppState: ObservableObject {
         displayToolName: String
     ) {
         respondWithReplay(
-            "{\"response\": \"pass\"}",
+            HookResponse(.pass).jsonString(),
             responseHandler: request.responseHandler,
             hookEventId: hookEventId,
             agentKind: h.agentKind,
@@ -1372,7 +1352,7 @@ class AppState: ObservableObject {
     ) {
         print("[DevIsland] [AUTO-APPROVE] Tool \(h.toolName) is auto-approved for session \(h.sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
         respondWithReplay(
-            "{\"response\": \"approved\"}",
+            HookResponse(.approved).jsonString(),
             responseHandler: request.responseHandler,
             hookEventId: hookEventId,
             agentKind: h.agentKind,
@@ -1625,13 +1605,13 @@ class AppState: ObservableObject {
             }
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
             removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
-            removedRequests.forEach { $0.responseHandler("{\"response\": \"pass\"}") }
+            removedRequests.forEach { $0.responseHandler(HookResponse(.pass).jsonString()) }
             self.sessionStore.removeSession(id: sessionId)
             self.ptyCoordinator.clearBuffer(sessionId: sessionId)
             MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: sessionId) }
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.showingRequestId }) {
-                self.currentResponseHandler?("{\"response\": \"pass\"}")
+                self.currentResponseHandler?(HookResponse(.pass).jsonString())
                 self.clearCurrentRequestDisplay()
             }
 
@@ -1697,7 +1677,7 @@ class AppState: ObservableObject {
                 print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
                 if next.claudeQuestion != nil {
                     self.respondWithReplay(
-                        "{\"response\": \"pass\"}",
+                        HookResponse(.pass).jsonString(),
                         responseHandler: next.responseHandler,
                         hookEventId: next.hookEventId,
                         agentKind: next.agentKind,
@@ -1858,7 +1838,7 @@ class AppState: ObservableObject {
         let invalid = sessionStore.pendingQueue.filter { $0.claudeQuestion == nil && !ApprovalQueuePolicy.isValidApprovalRequest($0) }
         for request in invalid {
             if let removed = sessionStore.removePending(id: request.id) {
-                removed.responseHandler("{\"response\": \"pass\"}")
+                removed.responseHandler(HookResponse(.pass).jsonString())
             }
         }
     }
@@ -1983,7 +1963,7 @@ class AppState: ObservableObject {
     }
 
     private func responsePayload(approved: Bool) -> String {
-        approved ? "{\"response\":\"approved\"}" : "{\"response\":\"denied\"}"
+        HookResponse(approved ? .approved : .denied).jsonString()
     }
 
     func replayLogEntries(limit: Int = 200) throws -> [ReplayLogEntry] {
@@ -2152,19 +2132,13 @@ class AppState: ObservableObject {
         approvalScope: RuleScope? = nil,
         toolInput: [String: AnyJSON]? = nil
     ) {
-        let response = passToTerminal ? "pass" : approved ? "approved" : "denied"
-        var responsePayload: [String: Any] = ["response": response]
-        if let reason {
-            responsePayload["reason"] = reason
-        }
-        if let approvalScope {
-            responsePayload["approval_scope"] = approvalScope.rawValue
-        }
-        if let toolInput {
-            responsePayload["tool_input"] = toolInput.mapValues { $0.rawValue }
-        }
-        let data = try? JSONSerialization.data(withJSONObject: responsePayload)
-        let payload = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{\"response\":\"\(response)\"}"
+        let decision: HookDecision = passToTerminal ? .pass : approved ? .approved : .denied
+        let payload = HookResponse(
+            decision,
+            reason: reason,
+            approvalScope: approvalScope,
+            toolInput: toolInput
+        ).jsonString()
         let hadResponseHandler = currentResponseHandler != nil
         print("[DevIsland] sendDecision approved=\(approved), handler=\(currentResponseHandler != nil ? "SET" : "NIL"), reason=\(reason ?? "none")")
         currentResponseHandler?(payload)
@@ -2383,8 +2357,7 @@ class AppState: ObservableObject {
             return
         }
         guard let request = sessionStore.removePending(id: requestId) else { return }
-        let response = approved ? "{\"response\": \"approved\"}" : "{\"response\": \"denied\"}"
-        request.responseHandler(response)
+        request.responseHandler(HookResponse(approved ? .approved : .denied).jsonString())
     }
 
     private static let alwaysAllowThreshold = 3

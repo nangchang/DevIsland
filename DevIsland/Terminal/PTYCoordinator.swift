@@ -28,7 +28,7 @@ final class PTYCoordinator {
         responseHandler: (String) -> Void
     ) {
         guard isEnabled(), !content.isEmpty else {
-            responseHandler("{\"response\":\"approved\"}")
+            responseHandler(HookResponse(.approved).jsonString())
             return
         }
         let window = ptyBuffer.appendAndWindow(sessionId: sessionId, content: content)
@@ -62,15 +62,7 @@ final class PTYCoordinator {
             }
         }
 
-        if let injection = injectionText {
-            let resp: [String: Any] = ["response": "approved", "injection": injection]
-            if let data = try? JSONSerialization.data(withJSONObject: resp),
-               let str = String(data: data, encoding: .utf8) {
-                responseHandler(str)
-                return
-            }
-        }
-        responseHandler("{\"response\":\"approved\"}")
+        responseHandler(HookResponse(.approved, injection: injectionText).jsonString())
     }
 
     func clearBuffer(sessionId: String) {
