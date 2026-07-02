@@ -110,7 +110,7 @@ enum BridgeInstaller {
 
         try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
         try patchCodexHooks(at: codexHooksURL, bridgePath: paths.destURL.path)
-        ensureCodexFeatureFlag(at: codexConfigURL)
+        try ensureCodexFeatureFlag(at: codexConfigURL)
     }
 
     private static func installGeminiHooks() throws {
@@ -305,13 +305,13 @@ enum BridgeInstaller {
         try out.write(to: url, options: .atomic)
     }
 
-    private static func ensureCodexFeatureFlag(at url: URL) {
+    private static func ensureCodexFeatureFlag(at url: URL) throws {
         let fm = FileManager.default
-        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        
+        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+
         var lines: [String] = []
-        if fm.fileExists(atPath: url.path),
-           let content = try? String(contentsOf: url, encoding: .utf8) {
+        if fm.fileExists(atPath: url.path) {
+            let content = try String(contentsOf: url, encoding: .utf8)
             lines = content.components(separatedBy: .newlines)
         }
 
@@ -365,7 +365,7 @@ enum BridgeInstaller {
         }
 
         let out = newLines.joined(separator: "\n")
-        try? out.write(to: url, atomically: true, encoding: .utf8)
+        try out.write(to: url, atomically: true, encoding: .utf8)
     }
 
     // MARK: Gemini CLI settings patch
