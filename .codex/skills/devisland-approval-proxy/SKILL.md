@@ -20,7 +20,8 @@ The macOS app owns:
 - `SQLiteApprovalStore` persistence.
 - `HookEventClassifier` event classification, `HookEventRouter` routing/auto-approve judgment, and `ApprovalQueuePolicy` pending-queue policy.
 - `ProviderAdapter` provider response JSON.
-- `AppState` pending queue and session state.
+- `ApprovalFlowCoordinator` pending-queue entry, display selection, decision dispatch, and approval timeout.
+- `AppState` session state and notch presentation state (via `ApprovalFlowContext`).
 
 Plugin observation events are best-effort side effects. They must not gate provider responses, approval queue draining, or persistence required for the approval decision.
 
@@ -60,6 +61,7 @@ Choose focused tests based on the touched area:
 - `IPCProtocolTests`
 - `HookSocketServerTests`
 - `GoldenResponseTests` (handleMessage → response JSON behavior lock)
+- `ApprovalFlowCoordinatorTests`
 - `ApprovalQueuePolicyTests`
 - `ApprovalRuleServiceTests`
 - `HookEventClassifierTests`

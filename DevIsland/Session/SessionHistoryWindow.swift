@@ -472,18 +472,6 @@ struct SessionHistoryWindowView: View {
     }
 }
 
-private extension BuddyKind {
-    var providerKind: ProviderKind {
-        switch self {
-        case .claudeCode: return .claude
-        case .codex: return .codex
-        case .gemini: return .gemini
-        case .antigravity: return .antigravity
-        case .island: return .any
-        }
-    }
-}
-
 private extension ProviderKind {
     var buddyKind: BuddyKind {
         switch self {

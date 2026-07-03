@@ -48,8 +48,10 @@ class AppState: ObservableObject {
     @Published var isNotchExpanded = false
     @Published var isExpandingFromRequest = false
     /// The approval/notification currently displayed in the notch. Mutated only
-    /// inside AppState; UI reads it through the forwarding properties below.
-    @Published private(set) var displayState = ApprovalDisplayState()
+    /// by AppState and ApprovalFlowCoordinator (the setter is internal for the
+    /// ApprovalFlowContext conformance); UI reads it through the forwarding
+    /// properties below.
+    @Published var displayState = ApprovalDisplayState()
     var currentMessage: String { displayState.message }
     var currentSessionId: String { displayState.sessionId }
     var currentToolName: String { displayState.toolName }
@@ -96,26 +98,15 @@ class AppState: ObservableObject {
 
     private let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
-    private var suspendedClaudeQuestionAnswers: [UUID: [String: ClaudeQuestionAnswer]] = [:]
     private var claudeQuestionCancellable: AnyCancellable?
-    private var _previousSessionId: String?
-    private var previousSessionId: String? {
-        get {
-            guard let id = _previousSessionId,
-                  sessionStore.activeSessions.contains(where: { $0.id == id }) else { return nil }
-            return id
-        }
-        set { _previousSessionId = newValue }
-    }
-    private let timeoutCountdown = CountdownTimer()
+    /// Pending-approval queue entry, display selection, decision dispatch, and
+    /// timeout machinery (R2-c). Reaches back into AppState's presentation
+    /// state via ApprovalFlowContext.
+    private let approvalFlow: ApprovalFlowCoordinator
     private let notificationCountdown = CountdownTimer()
     private var sessionPruningTimer: Timer?
     private let approvalPersistenceQueue = DispatchQueue(label: "DevIsland.ApprovalPersistence", qos: .utility)
     private let ptyCoordinator: PTYCoordinator
-    private var timeoutDuration: Double {
-        let v = userDefaults.double(forKey: SettingsStore.DefaultsKey.permissionTimeoutSeconds)
-        return v > 0 ? v : 120.0
-    }
     private var notificationAutoCollapseDelay: TimeInterval? {
         guard let rawValue = userDefaults.string(forKey: SettingsStore.DefaultsKey.notchAutoCollapseDelay) else {
             return AppSettings.defaults.notchAutoCollapseDelay.seconds
@@ -180,6 +171,16 @@ class AppState: ObservableObject {
             userDefaults: userDefaults
         )
         self.replayRecorder = ReplayRecorder(proxy: approvalProxy, queue: approvalPersistenceQueue)
+        self.approvalFlow = ApprovalFlowCoordinator(
+            sessionStore: sessionStore,
+            claudeQuestionState: claudeQuestionState,
+            replayRecorder: replayRecorder,
+            approvalProxy: approvalProxy,
+            persistenceQueue: approvalPersistenceQueue,
+            userDefaults: userDefaults,
+            frontmostCheck: frontmostCheck
+        )
+        approvalFlow.context = self
 
         // Forward ClaudeQuestionState changes to AppState.objectWillChange so that
         // views observing AppState re-render when question/answer state changes.
@@ -484,7 +485,7 @@ class AppState: ObservableObject {
             guard isFrontmost else { return }
             if self?.displayState.hasResponseHandler == true {
                 print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
-                self?.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
+                self?.approvalFlow.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
             } else {
                 print("[DevIsland] [AUTO] User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "")")
                 self?.stopNotificationAutoCollapseTimer()
@@ -816,7 +817,7 @@ class AppState: ObservableObject {
             let isLifecycleTracked = self.sessionStore.activeSessions
                 .first { $0.id == request.sessionId }?.isLifecycleTracked
                 ?? (request.agentKind != .claudeCode)
-            self.enqueueManualRequest(request, from: h, isLifecycleTracked: isLifecycleTracked)
+            self.approvalFlow.enqueueManualRequest(request, from: h, isLifecycleTracked: isLifecycleTracked)
         }
     }
 
@@ -897,7 +898,7 @@ class AppState: ObservableObject {
             }
 
             // 5. Manual Approval Fallback: No rules matched, enqueue for user decision in the Notch.
-            self.enqueueManualRequest(request, from: h, isLifecycleTracked: h.agentKind != .claudeCode)
+            self.approvalFlow.enqueueManualRequest(request, from: h, isLifecycleTracked: h.agentKind != .claudeCode)
         }
     }
 
@@ -970,7 +971,7 @@ class AppState: ObservableObject {
         let fullSessionId = h.sessionId
         DispatchQueue.main.async {
             let removedRequests = self.sessionStore.removeAllPending(sessionId: fullSessionId)
-            removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
+            self.approvalFlow.removeSuspendedAnswers(for: removedRequests)
             removedRequests.forEach {
                 self.respondWithReplay(
                     HookResponse(.denied).jsonString(),
@@ -990,14 +991,14 @@ class AppState: ObservableObject {
             MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: fullSessionId) }
 
             if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.displayState.showingRequestId }) {
-                self.clearCurrentRequestDisplay()
+                self.approvalFlow.clearCurrentRequestDisplay()
             }
 
             if self.sessionStore.pendingQueue.isEmpty {
                 self.isNotchExpanded = false
                 self.syncDisplayToSelectedSession()
             } else if !self.displayState.hasResponseHandler {
-                self.showNextRequest()
+                self.approvalFlow.showNextRequest()
             }
         }
         respondWithReplay(
@@ -1097,7 +1098,7 @@ class AppState: ObservableObject {
                 var removedCurrentRequest = false
                 for removedSessionId in removedSessionIds {
                     let removedRequests = self.sessionStore.removeAllPending(sessionId: removedSessionId)
-                    removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
+                    self.approvalFlow.removeSuspendedAnswers(for: removedRequests)
                     if removedRequests.contains(where: { $0.id == self.displayState.showingRequestId }) {
                         removedCurrentRequest = true
                     }
@@ -1120,8 +1121,8 @@ class AppState: ObservableObject {
                 }
 
                 if removedSessionIds.contains(self.currentSessionId) || removedCurrentRequest {
-                    self.clearCurrentRequestDisplay()
-                    self.showNextRequest()
+                    self.approvalFlow.clearCurrentRequestDisplay()
+                    self.approvalFlow.showNextRequest()
                 }
             }
 
@@ -1194,7 +1195,7 @@ class AppState: ObservableObject {
                     guard !hasDetachedWindow else { return }
                     if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
                         self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
-                        self.previousSessionId = self.currentSessionId
+                        self.approvalFlow.previousSessionId = self.currentSessionId
                     }
                     self.displayState.toolName = displayToolName
                     self.displayState.eventName = h.event
@@ -1383,52 +1384,6 @@ class AppState: ObservableObject {
         )
     }
 
-    /// 4-4. 수동 승인 큐잉 — 매칭된 규칙이 없어 사용자 결정을 기다린다.
-    /// isLifecycleTracked는 경로별 의미가 다르므로(승인: 비-Claude는 추적 승격,
-    /// 질문: 기존 추적 상태 보존) 호출부에서 결정해 넘긴다.
-    private func enqueueManualRequest(
-        _ request: PendingRequest,
-        from h: ParsedHookEvent,
-        isLifecycleTracked: Bool
-    ) {
-        let newItem = PendingItem(
-            id: request.id,
-            toolName: request.toolName,
-            message: request.message,
-            sessionId: request.sessionId,
-            terminalTitle: h.terminalTitle,
-            terminalWindowId: h.terminal.windowId,
-            terminalTabIndex: h.terminal.tabIndex,
-            terminalTmuxPane: h.terminal.tmuxPane,
-            terminalTmuxSocket: h.terminal.tmuxSocket,
-            terminalTmuxClient: h.terminal.tmuxClient,
-            receivedAt: request.receivedAt
-        )
-        sessionStore.appendPending(request: request, item: newItem)
-
-        if !request.sessionId.isEmpty {
-            updateActiveSession(
-                from: h,
-                toolName: request.toolName,
-                eventName: request.eventName,
-                message: request.message,
-                isPending: true,
-                isLifecycleTracked: isLifecycleTracked
-            )
-
-            sessionStore.selectedSessionId = request.sessionId
-        }
-
-        if !displayState.hasResponseHandler {
-            showNextRequest()
-        } else if isShowingLowerPriorityPendingRequest(than: request) {
-            preemptCurrentPendingDisplay()
-            showNextRequest()
-        } else {
-            syncDisplayToSelectedSession()
-        }
-    }
-
     static func agentKind(from json: [String: Any], terminalTitle: String) -> BuddyKind {
         HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)
     }
@@ -1581,7 +1536,7 @@ class AppState: ObservableObject {
                 else { return }
             }
             let removedRequests = self.sessionStore.removeAllPending(sessionId: sessionId)
-            removedRequests.forEach { self.suspendedClaudeQuestionAnswers.removeValue(forKey: $0.id) }
+            self.approvalFlow.removeSuspendedAnswers(for: removedRequests)
             removedRequests.forEach { $0.responseHandler(HookResponse(.pass).jsonString()) }
             self.sessionStore.removeSession(id: sessionId)
             self.ptyCoordinator.clearBuffer(sessionId: sessionId)
@@ -1589,7 +1544,7 @@ class AppState: ObservableObject {
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.displayState.showingRequestId }) {
                 self.displayState.responseHandler?(HookResponse(.pass).jsonString())
-                self.clearCurrentRequestDisplay()
+                self.approvalFlow.clearCurrentRequestDisplay()
             }
 
             if self.sessionStore.pendingQueue.isEmpty {
@@ -1599,178 +1554,9 @@ class AppState: ObservableObject {
                 }
                 self.syncDisplayToSelectedSession()
             } else if !self.displayState.hasResponseHandler {
-                self.showNextRequest()
+                self.approvalFlow.showNextRequest()
             }
         }
-    }
-
-    private func showNextRequest() {
-        discardInvalidPendingRequests()
-
-        guard let next = nextPendingRequestToDisplay() else {
-            displayState.clear()
-            timeoutCountdown.cancel()
-            timeoutProgress = 1.0
-            alwaysAllowSuggestion = nil
-            claudeQuestionState.reset()
-            if let prev = previousSessionId {
-                previousSessionId = nil
-                sessionStore.selectedSessionId = prev
-                sessionStore.setUnread(false, sessionId: prev)
-                displayState.sessionId = prev
-                syncDisplayToSelectedSession()
-                isExpandingFromRequest = true
-                let autoExpandEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notchAutoExpandEnabled }
-                if autoExpandEnabled {
-                    isNotchExpanded = true
-                }
-            } else {
-                sessionStore.selectedSessionId = nil
-                isNotchExpanded = false
-            }
-            return
-        }
-
-        if displayState.isShowingRequest { return }
-        displayState.isShowingRequest = true
-        displayState.showingRequestId = next.id
-
-        let session = sessionStore.activeSessions.first { $0.id == next.sessionId }
-        isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
-            guard let self else { return }
-            guard self.displayState.showingRequestId == next.id else { return }
-
-            if isFrontmost && !next.isReplay {
-                print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
-                if next.claudeQuestion != nil {
-                    self.respondWithReplay(
-                        HookResponse(.pass).jsonString(),
-                        responseHandler: next.responseHandler,
-                        hookEventId: next.hookEventId,
-                        agentKind: next.agentKind,
-                        sessionId: next.sessionId,
-                        toolName: next.rawToolName.isEmpty ? next.toolName : next.rawToolName,
-                        workspaceRoot: next.workspaceRoot,
-                        action: .prompt,
-                        source: .automatic,
-                        reason: "terminal focused"
-                    )
-                    _ = self.sessionStore.removePending(id: next.id)
-                    if !next.sessionId.isEmpty {
-                        self.sessionStore.updateActiveSession(
-                            sessionId: next.sessionId,
-                            terminalTitle: session?.terminalTitle ?? "",
-                            agentKind: next.agentKind,
-                            terminal: session?.terminal ?? TerminalContext(),
-                            toolName: next.toolName,
-                            eventName: next.eventName,
-                            message: next.message,
-                            isPending: false,
-                            status: SessionStatus.timeoutBypassed(Date()),
-                            workspaceRoot: next.workspaceRoot
-                        )
-                    }
-                    self.claudeQuestionState.reset()
-                    self.displayState.clearResponseState()
-                    self.timeoutCountdown.cancel()
-                    self.timeoutProgress = 1.0
-                    self.showNextRequest()
-                    return
-                }
-                self.displayState.responseHandler = next.responseHandler
-                self.displayState.sessionId = next.sessionId
-                self.displayState.rawToolName = next.rawToolName
-                self.displayState.agentKind = next.agentKind
-                self.displayState.workspaceRoot = next.workspaceRoot
-                self.displayState.hookEventId = next.hookEventId
-                self.sendDecision(approved: false, reason: "TerminalFocused", status: .timeoutBypassed(Date()), passToTerminal: true)
-                return
-            }
-
-            print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
-            if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != next.sessionId {
-                self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
-                self.previousSessionId = self.currentSessionId
-            }
-            self.displayState.responseHandler = next.responseHandler
-            self.displayState.eventName = next.eventName
-            self.displayState.toolName = next.toolName
-            self.displayState.rawToolName = next.rawToolName
-            self.displayState.agentKind = next.agentKind
-            self.displayState.workspaceRoot = next.workspaceRoot
-            self.displayState.hookEventId = next.hookEventId
-            self.displayState.message = next.message
-            if let claudeQuestion = next.claudeQuestion {
-                let answers = self.suspendedClaudeQuestionAnswers.removeValue(forKey: next.id)
-                    ?? ClaudeQuestionState.defaultAnswers(for: claudeQuestion)
-                self.claudeQuestionState.setQuestion(claudeQuestion, answers: answers)
-            } else {
-                self.claudeQuestionState.reset()
-            }
-            self.displayState.sessionId = next.sessionId
-            let notifEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notificationsEnabled }
-            if notifEnabled && next.claudeQuestion == nil {
-                NotificationManager.shared.sendApprovalRequest(next)
-            }
-            self.checkAlwaysAllowSuggestion(toolName: next.rawToolName.isEmpty ? next.toolName : next.rawToolName)
-
-            self.isExpandingFromRequest = true
-            let isQuestion = next.claudeQuestion != nil
-            let expandEnabled = MainActor.assumeIsolated {
-                let s = SettingsStore.shared.settings
-                guard s.notchAutoExpandEnabled else { return false }
-                return isQuestion ? s.expandOnQuestionResponse : s.expandOnApprovalRequest
-            }
-            // 팝아웃 창이 열린 세션은 노치 확장 억제 — 창이 승인 UI를 표시함
-            let suppressNotch = MainActor.assumeIsolated {
-                SessionMessageWindowManager.shared.hasWindow(for: next.sessionId)
-            }
-            if (expandEnabled || self.isNotchExpanded) && !suppressNotch {
-                self.isNotchExpanded = true
-            }
-            if expandEnabled || self.isNotchExpanded || suppressNotch {
-                self.startTimeout()
-            }
-        }
-    }
-
-    private func nextPendingRequestToDisplay() -> PendingRequest? {
-        // 팝아웃 창이 열린 세션의 요청을 우선 처리하여 창에서 즉시 승인/거부 가능하게 함
-        ApprovalQueuePolicy.nextToDisplay(in: sessionStore.pendingQueue) { sid in
-            MainActor.assumeIsolated { SessionMessageWindowManager.shared.hasWindow(for: sid) }
-        }
-    }
-
-    private func isShowingLowerPriorityPendingRequest(than request: PendingRequest) -> Bool {
-        ApprovalQueuePolicy.showingIsLowerPriority(
-            than: request,
-            showingRequestId: displayState.showingRequestId,
-            queue: sessionStore.pendingQueue
-        )
-    }
-
-    /// Clears the notch's currently-displayed approval/question. Called when the
-    /// session owning the on-screen request is torn down (stopped, dismissed, or
-    /// superseded) so no stale request is left showing. Callers handle their own
-    /// pre-clear response (e.g. pass-to-terminal) and post-clear `showNextRequest`.
-    private func clearCurrentRequestDisplay() {
-        if let showingRequestId = displayState.showingRequestId {
-            NotificationManager.shared.cancelNotification(id: showingRequestId)
-        }
-        displayState.clear()
-        timeoutCountdown.cancel()
-        timeoutProgress = 1.0
-        claudeQuestionState.reset()
-    }
-
-    private func preemptCurrentPendingDisplay() {
-        if let showingRequestId = displayState.showingRequestId, claudeQuestionState.currentClaudeQuestion != nil {
-            suspendedClaudeQuestionAnswers[showingRequestId] = claudeQuestionState.currentClaudeQuestionAnswers
-        }
-        displayState.clearResponseState()
-        claudeQuestionState.reset()
-        timeoutCountdown.cancel()
-        timeoutProgress = 1.0
     }
 
     private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
@@ -1787,15 +1573,6 @@ class AppState: ObservableObject {
             let isFrontmost = frontmostCheck(terminal)
             DispatchQueue.main.async {
                 completion(isFrontmost)
-            }
-        }
-    }
-
-    private func discardInvalidPendingRequests() {
-        let invalid = sessionStore.pendingQueue.filter { $0.claudeQuestion == nil && !ApprovalQueuePolicy.isValidApprovalRequest($0) }
-        for request in invalid {
-            if let removed = sessionStore.removePending(id: request.id) {
-                removed.responseHandler(HookResponse(.pass).jsonString())
             }
         }
     }
@@ -1867,18 +1644,7 @@ class AppState: ObservableObject {
     }
 
     private func providerKind(for agentKind: BuddyKind) -> ProviderKind {
-        switch agentKind {
-        case .claudeCode:
-            return .claude
-        case .codex:
-            return .codex
-        case .gemini:
-            return .gemini
-        case .antigravity:
-            return .antigravity
-        case .island:
-            return .any
-        }
+        agentKind.providerKind
     }
 
     private func policyDecision(
@@ -2016,20 +1782,6 @@ class AppState: ObservableObject {
         return try approvalProxy.ptyMessages(sessionId: sessionId, limit: limit)
     }
 
-    private func startTimeout() {
-        timeoutProgress = 1.0
-        timeoutCountdown.start(
-            duration: timeoutDuration,
-            onProgress: { [weak self] progress in
-                self?.timeoutProgress = progress
-            },
-            onExpire: { [weak self] in
-                guard let self, self.displayState.hasResponseHandler else { return }
-                self.sendDecision(approved: false, reason: "Timeout", status: .timeoutBypassed(Date()), passToTerminal: true)
-            }
-        )
-    }
-
     private func startNotificationAutoCollapseTimer(delay: TimeInterval) {
         stopNotificationAutoCollapseTimer()
         notificationAutoCollapseProgress = 1.0
@@ -2081,174 +1833,6 @@ class AppState: ObservableObject {
         }
     }
 
-    private func sendDecision(
-        approved: Bool,
-        reason: String? = nil,
-        status: SessionStatus? = nil,
-        passToTerminal: Bool = false,
-        approvalScope: RuleScope? = nil,
-        toolInput: [String: AnyJSON]? = nil
-    ) {
-        let decision: HookDecision = passToTerminal ? .pass : approved ? .approved : .denied
-        let payload = HookResponse(
-            decision,
-            reason: reason,
-            approvalScope: approvalScope,
-            toolInput: toolInput
-        ).jsonString()
-        let hadResponseHandler = displayState.hasResponseHandler
-        print("[DevIsland] sendDecision approved=\(approved), handler=\(displayState.hasResponseHandler ? "SET" : "NIL"), reason=\(reason ?? "none")")
-        displayState.responseHandler?(payload)
-        print("[DevIsland] sendDecision: response payload sent")
-        recordReplayDecision(
-            hookEventId: displayState.hookEventId,
-            agentKind: displayState.agentKind,
-            sessionId: displayState.sessionId,
-            toolName: displayState.rawToolName.isEmpty ? displayState.toolName : displayState.rawToolName,
-            workspaceRoot: displayState.workspaceRoot,
-            action: passToTerminal ? .prompt : approved ? .allow : .deny,
-            source: reason == nil ? .user : .automatic,
-            reason: reason
-        )
-        // Observation-only `approval.decided`, emitted after the response is already sent
-        // so plugin work cannot change or delay it. Pass-through outcomes (timeout, dismiss,
-        // terminal-focus) are deferrals, not approve/deny decisions, so they are excluded.
-        // A non-nil `toolInput` is an AskUserQuestion structured reply (submitClaudeQuestion):
-        // a question answer, not a tool approval, so it must not count as an approve decision.
-        if hadResponseHandler, !passToTerminal, toolInput == nil, !displayState.sessionId.isEmpty {
-            let decidedSessionID = displayState.sessionId
-            let decidedToolName = displayState.rawToolName.isEmpty ? displayState.toolName : displayState.rawToolName
-            let decidedScope = approvalScope?.rawValue ?? RuleScope.once.rawValue
-            // Dispatch to the main actor instead of asserting isolation: sendDecision is not
-            // statically main-actor-isolated, so a future off-main caller would crash on
-            // assumeIsolated. The event is best-effort, so a deferred main-actor hop is fine.
-            Task { @MainActor [pluginHost, pluginEventFactory] in
-                pluginHost.enqueue(pluginEventFactory.makeApprovalDecidedEvent(
-                    sessionID: decidedSessionID,
-                    approved: approved,
-                    toolName: decidedToolName,
-                    scope: decidedScope
-                ))
-            }
-        }
-        persistApprovalScope(approved: approved, approvalScope: approvalScope)
-        let completedRequestId = displayState.showingRequestId
-        displayState.clearResponseState()
-        claudeQuestionState.reset()
-        timeoutCountdown.cancel()
-
-        DispatchQueue.main.async {
-            self.timeoutProgress = 1.0
-            var completedSessionId: String?
-            let removedRequest: PendingRequest?
-            if let completedRequestId {
-                removedRequest = self.sessionStore.removePending(id: completedRequestId)
-                self.suspendedClaudeQuestionAnswers.removeValue(forKey: completedRequestId)
-            } else {
-                removedRequest = self.sessionStore.removeFirstPending()
-                if let removedRequest {
-                    self.suspendedClaudeQuestionAnswers.removeValue(forKey: removedRequest.id)
-                }
-            }
-            if let removed = removedRequest {
-                completedSessionId = removed.sessionId
-
-                // Update session state to not pending
-                if !removed.sessionId.isEmpty, let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == removed.sessionId }) {
-                    let stillPending = self.sessionStore.pendingQueue.contains { $0.sessionId == removed.sessionId }
-                    if stillPending {
-                        self.sessionStore.activeSessions[index].isPending = true
-                        self.sessionStore.activeSessions[index].status = .pending
-                    } else if case .timeoutBypassed? = status {
-                        self.sessionStore.activeSessions[index].isPending = false
-                        self.sessionStore.activeSessions[index].hasMissedApproval = true
-                        self.sessionStore.activeSessions[index].status = status ?? .idle
-                        self.sessionStore.activeSessions[index].lastActiveAt = Date()
-                    } else if !self.sessionStore.activeSessions[index].isLifecycleTracked {
-                        self.sessionStore.removeSession(id: removed.sessionId)
-                    } else {
-                        self.sessionStore.activeSessions[index].isPending = false
-                        self.sessionStore.activeSessions[index].status = status ?? .idle
-                        self.sessionStore.activeSessions[index].lastActiveAt = Date()
-                    }
-                }
-            }
-            self.showNextRequest()
-            if status?.isTimeoutBypassed == true, self.sessionStore.pendingQueue.isEmpty, let completedSessionId {
-                if !self.isExpandingFromRequest {
-                    self.sessionStore.selectedSessionId = completedSessionId
-                    self.isNotchExpanded = false
-                }
-            }
-        }
-    }
-
-    private func persistApprovalScope(approved: Bool, approvalScope: RuleScope?) {
-        guard approved,
-              let agentKind = displayState.agentKind,
-              let approvalScope,
-              let approvalProxy,
-              !displayState.sessionId.isEmpty,
-              !displayState.rawToolName.isEmpty else {
-            return
-        }
-
-        let provider = providerKind(for: agentKind)
-        let sessionId = displayState.sessionId
-        let toolName = displayState.rawToolName
-        let workspaceRoot = displayState.workspaceRoot
-        approvalPersistenceQueue.async { [weak self] in
-            self?.persistApprovalScopeOnPersistenceQueue(
-                approvalProxy: approvalProxy,
-                provider: provider,
-                approvalScope: approvalScope,
-                sessionId: sessionId,
-                toolName: toolName,
-                workspaceRoot: workspaceRoot
-            )
-        }
-    }
-
-    private func persistApprovalScopeOnPersistenceQueue(
-        approvalProxy: ApprovalProxyController,
-        provider: ProviderKind,
-        approvalScope: RuleScope,
-        sessionId: String,
-        toolName: String,
-        workspaceRoot: String?
-    ) {
-        do {
-            switch approvalScope {
-            case .session:
-                try approvalProxy.store.upsertSessionApproval(
-                    provider: provider,
-                    sessionId: sessionId,
-                    toolName: toolName,
-                    action: .allow,
-                    expiresAt: nil
-                )
-            case .persistent:
-                try approvalProxy.store.insertRule(ApprovalRule(
-                    id: SQLiteApprovalStore.deterministicRuleID(
-                        provider: provider,
-                        toolName: toolName,
-                        scope: .persistent,
-                        workspaceRoot: workspaceRoot
-                    ),
-                    provider: provider,
-                    toolName: toolName,
-                    action: .allow,
-                    scope: .persistent,
-                    workspaceRoot: workspaceRoot
-                ))
-            case .once:
-                break
-            }
-        } catch {
-            print("[DevIsland] [POLICY] Failed to persist approval scope for \(provider.rawValue): \(error)")
-        }
-    }
-
     func approve(globalAlways: Bool = false, sessionAlways: Bool = false) {
         let tool = displayState.rawToolName.isEmpty ? displayState.toolName : displayState.rawToolName
         let sId = displayState.sessionId
@@ -2276,7 +1860,7 @@ class AppState: ObservableObject {
         }
         
         let approvalScope: RuleScope? = sessionAlways ? .session : globalAlways ? .persistent : nil
-        sendDecision(approved: true, approvalScope: approvalScope)
+        approvalFlow.sendDecision(approved: true, approvalScope: approvalScope)
     }
 
     func setClaudeQuestionOption(questionId: String, optionId: String) {
@@ -2297,12 +1881,12 @@ class AppState: ObservableObject {
 
     func submitClaudeQuestion() {
         guard let updatedInput = claudeQuestionState.buildSubmitInput() else { return }
-        sendDecision(approved: true, toolInput: updatedInput)
+        approvalFlow.sendDecision(approved: true, toolInput: updatedInput)
     }
 
     func deny() {
         print("[DevIsland] deny() called")
-        sendDecision(approved: false)
+        approvalFlow.sendDecision(approved: false)
     }
 
     @MainActor func respondFromNotification(requestId: UUID, approved: Bool) {
@@ -2561,7 +2145,7 @@ class AppState: ObservableObject {
         guard !displayState.hasResponseHandler else { return }
         if isExpandingFromRequest && !currentSessionId.isEmpty && currentSessionId != sessionId {
             sessionStore.setUnread(false, sessionId: currentSessionId)
-            previousSessionId = currentSessionId
+            approvalFlow.previousSessionId = currentSessionId
         }
         sessionStore.selectedSessionId = sessionId
         sessionStore.setUnread(false, sessionId: sessionId)
@@ -2573,20 +2157,20 @@ class AppState: ObservableObject {
 
     func dismissCurrentRequest() {
         if displayState.hasResponseHandler {
-            sendDecision(approved: false, reason: "Dismissed", passToTerminal: true)
+            approvalFlow.sendDecision(approved: false, reason: "Dismissed", passToTerminal: true)
         } else if isExpandingFromRequest {
             if !currentSessionId.isEmpty {
                 sessionStore.setUnread(false, sessionId: currentSessionId)
                 sessionStore.setMissedApproval(false, sessionId: currentSessionId)
             }
             stopNotificationAutoCollapseTimer()
-            if let prev = previousSessionId {
-                previousSessionId = nil
+            if let prev = approvalFlow.previousSessionId {
+                approvalFlow.previousSessionId = nil
                 displayState.clearDisplayText()
                 claudeQuestionState.reset()
                 showSessionDetail(prev)
             } else {
-                showNextRequest()
+                approvalFlow.showNextRequest()
             }
         } else {
             isNotchExpanded = false
@@ -2596,8 +2180,7 @@ class AppState: ObservableObject {
 
     func pauseAutoTimersForUserViewing() {
         if displayState.hasResponseHandler {
-            timeoutCountdown.cancel()
-            timeoutProgress = 1.0
+            approvalFlow.cancelTimeout()
         }
 
         if isExpandingFromRequest {
@@ -2698,5 +2281,34 @@ class AppState: ObservableObject {
                 sessions.map(\.lastActiveAt).max()
             }
             .assign(to: &caffeineCoordinator.$lastSessionActivityAt)
+    }
+}
+
+// MARK: - ApprovalFlowContext
+
+extension AppState: ApprovalFlowContext {
+    // displayState / timeoutProgress / isNotchExpanded / isExpandingFromRequest /
+    // syncDisplayToSelectedSession() already satisfy the protocol requirements.
+
+    func updateAlwaysAllowSuggestion(toolName: String) {
+        checkAlwaysAllowSuggestion(toolName: toolName)
+    }
+
+    func clearAlwaysAllowSuggestion() {
+        alwaysAllowSuggestion = nil
+    }
+
+    func emitApprovalDecided(sessionID: String, approved: Bool, toolName: String, scope: String) {
+        // Dispatch to the main actor instead of asserting isolation: sendDecision is not
+        // statically main-actor-isolated, so a future off-main caller would crash on
+        // assumeIsolated. The event is best-effort, so a deferred main-actor hop is fine.
+        Task { @MainActor [pluginHost, pluginEventFactory] in
+            pluginHost.enqueue(pluginEventFactory.makeApprovalDecidedEvent(
+                sessionID: sessionID,
+                approved: approved,
+                toolName: toolName,
+                scope: scope
+            ))
+        }
     }
 }
