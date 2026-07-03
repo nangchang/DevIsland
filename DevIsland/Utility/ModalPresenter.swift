@@ -6,6 +6,7 @@ import AppKit
 // 모달 기간 동안 완전히 숨긴다.
 enum ModalPresenter {
     @discardableResult
+    @MainActor
     static func run(_ alert: NSAlert) -> NSApplication.ModalResponse {
         AppState.shared.isNotchExpanded = false
         let notch = NotchWindowController.current

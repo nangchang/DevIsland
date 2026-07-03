@@ -223,6 +223,7 @@ final class BridgeTokenManagerTests: XCTestCase {
 
 // MARK: - AppState + Envelope Integration Tests
 
+@MainActor
 final class AppStateEnvelopeTests: XCTestCase {
     var appState: AppState!
     var mockDefaults: UserDefaults!

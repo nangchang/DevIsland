@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 class GlobalShortcutManager {
     static let shared = GlobalShortcutManager()
     private var monitor: Any?
@@ -33,8 +34,8 @@ class GlobalShortcutManager {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard flags == [.command, .shift], AppState.shared.isNotchExpanded else { return }
         switch event.charactersIgnoringModifiers?.lowercased() {
-        case "y": DispatchQueue.main.async { AppState.shared.approve() }
-        case "n": DispatchQueue.main.async { AppState.shared.deny() }
+        case "y": AppState.shared.approve()
+        case "n": AppState.shared.deny()
         default: break
         }
     }

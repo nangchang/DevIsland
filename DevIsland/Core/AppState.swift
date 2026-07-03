@@ -16,6 +16,7 @@ import AppKit
  - `ReplayRecorder`: Manages durable logging of hook events and decisions in SQLite.
  - `ApprovalProxyController`: Evaluates incoming requests against persistent and session-level rules.
  */
+@MainActor
 class AppState: ObservableObject {
     static let shared = AppState(
         startServer: ProcessInfo.processInfo.environment["XCODE_RUNNING_UNIT_TESTS"] != "1",
@@ -40,7 +41,7 @@ class AppState: ObservableObject {
         static let sessionDescriptions = "sessionDescriptions"
     }
 
-    typealias FrontmostCheck = (TerminalContext) -> Bool
+    typealias FrontmostCheck = @Sendable (TerminalContext) -> Bool
 
     private let userDefaults: UserDefaults
     private let frontmostCheck: FrontmostCheck
@@ -97,7 +98,9 @@ class AppState: ObservableObject {
     /// monitors that feed the Caffeine coordinator (R2-d).
     private let wiring = AppWiring()
 
-    private let approvalProxy: ApprovalProxyController?
+    // SQLite 기반 조회(리플레이/세션 인사이트)는 백그라운드 스레드(Task.detached)에서
+    // 호출되므로 MainActor 격리 대상에서 제외한다. init 이후 재할당 없는 불변 참조.
+    private nonisolated(unsafe) let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
     private var claudeQuestionCancellable: AnyCancellable?
     /// Pending-approval queue entry, display selection, decision dispatch, and
@@ -141,9 +144,7 @@ class AppState: ObservableObject {
             codexRuleSyncAdapter: codexRuleSyncAdapter
         )
         self.claudeQuestionState = ClaudeQuestionState()
-        let coordinator = MainActor.assumeIsolated {
-            CaffeineCoordinator()
-        }
+        let coordinator = CaffeineCoordinator()
         self.caffeineCoordinator = coordinator
         let scopedFileBroker = PluginScopedFileBroker(scopesByPluginID: Self.builtInPluginScopedFileScopes(
             userDefaults: userDefaults
@@ -247,10 +248,8 @@ class AppState: ObservableObject {
         // Wire plugins after restoreOpenSessions so restored sessions don't emit
         // spurious events. AppWiring registers plugins before the session callback
         // so they observe every subsequent session/hook event.
-        MainActor.assumeIsolated {
-            wiring.wirePlugins(appState: self)
-            wiring.wireCaffeine(appState: self)
-        }
+        wiring.wirePlugins(appState: self)
+        wiring.wireCaffeine(appState: self)
 
         if startServer {
             BridgeTokenManager.shared.generateIfNeeded()
@@ -309,7 +308,7 @@ class AppState: ObservableObject {
         }
     }
 
-    static func richResponseString(
+    nonisolated static func richResponseString(
         fromLegacyResponse rawResponse: String,
         requestId: String,
         source: String? = nil,
@@ -352,7 +351,7 @@ class AppState: ObservableObject {
         return rawResponse
     }
 
-    static func providerContext(fromEnvelopeMessage message: String) -> (
+    nonisolated static func providerContext(fromEnvelopeMessage message: String) -> (
         source: String?,
         event: String?,
         toolName: String?,
@@ -388,7 +387,7 @@ class AppState: ObservableObject {
         return (envelope.source, event, toolName, ruleContent, toolInput)
     }
 
-    private static func claudePermissionRuleContent(from payload: [String: AnyJSON]) -> String? {
+    private nonisolated static func claudePermissionRuleContent(from payload: [String: AnyJSON]) -> String? {
         guard case .object(let toolInput)? = payload["tool_input"] else { return nil }
         if case .string(let command)? = toolInput["command"], !command.isEmpty {
             return command
@@ -499,26 +498,22 @@ class AppState: ObservableObject {
     /// `app.started` triggers app-level side effects against that restored state.
     /// Called from the main thread (AppDelegate launch block).
     func startPluginPlatform() {
-        MainActor.assumeIsolated {
-            pluginHost.enqueue(pluginEventFactory.makeLifecycleEvent(kind: .pluginStarted))
-            pluginHost.enqueue(pluginEventFactory.makeLifecycleEvent(kind: .appStarted))
-            // Sessions restored before the event seam was wired emitted no session.started,
-            // so session-scoped plugins never observed them. Replay a controlled started
-            // batch here (once, at platform start) so per-session surfaces — row badges and
-            // context actions — cover restored sessions too. (PR #276 Gemini review)
-            for session in sessionStore.activeSessions {
-                pluginHost.enqueue(pluginEventFactory.makeSessionEvent(kind: .sessionStarted, from: session))
-            }
-            pluginHost.startTicking()
+        pluginHost.enqueue(pluginEventFactory.makeLifecycleEvent(kind: .pluginStarted))
+        pluginHost.enqueue(pluginEventFactory.makeLifecycleEvent(kind: .appStarted))
+        // Sessions restored before the event seam was wired emitted no session.started,
+        // so session-scoped plugins never observed them. Replay a controlled started
+        // batch here (once, at platform start) so per-session surfaces — row badges and
+        // context actions — cover restored sessions too. (PR #276 Gemini review)
+        for session in sessionStore.activeSessions {
+            pluginHost.enqueue(pluginEventFactory.makeSessionEvent(kind: .sessionStarted, from: session))
         }
+        pluginHost.startTicking()
     }
 
     /// Stops the plugin platform tick loop on app termination.
     /// Called from the main thread (AppDelegate termination).
     func stopPluginPlatform() {
-        MainActor.assumeIsolated {
-            pluginHost.stopTicking()
-        }
+        pluginHost.stopTicking()
     }
 
     func handleMessage(
@@ -581,12 +576,10 @@ class AppState: ObservableObject {
         )
         // Enqueue on main queue so it serializes before the session mutation dispatched
         // from handleNotificationEvent's DispatchQueue.main.async block.
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else { return }
             let session = self.sessionStore.activeSessions.first { $0.id == h.sessionId }
-            MainActor.assumeIsolated {
-                self.pluginHost.enqueue(self.pluginEventFactory.makeHookReceivedEvent(from: h, session: session))
-            }
+            self.pluginHost.enqueue(self.pluginEventFactory.makeHookReceivedEvent(from: h, session: session))
         }
 
         let classification = routed.classification
@@ -925,7 +918,7 @@ class AppState: ObservableObject {
             }
             self.sessionStore.removeSession(id: fullSessionId)
             self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
-            MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: fullSessionId) }
+            SessionMessageWindowManager.shared.closeWindow(for: fullSessionId)
 
             if self.currentSessionId == fullSessionId || removedRequests.contains(where: { $0.id == self.displayState.showingRequestId }) {
                 self.approvalFlow.clearCurrentRequestDisplay()
@@ -1022,7 +1015,7 @@ class AppState: ObservableObject {
             sessionMessage = h.displayMsg
         }
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             // sessionStore 뮤테이션은 항상 메인 스레드에서 수행 (@Published → SwiftUI 업데이트)
             if isStartEvent &&
                 h.agentKind == .codex &&
@@ -1054,7 +1047,7 @@ class AppState: ObservableObject {
                         )
                     }
                     self.ptyCoordinator.clearBuffer(sessionId: removedSessionId)
-                    MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: removedSessionId) }
+                    SessionMessageWindowManager.shared.closeWindow(for: removedSessionId)
                 }
 
                 if removedSessionIds.contains(self.currentSessionId) || removedCurrentRequest {
@@ -1093,14 +1086,14 @@ class AppState: ObservableObject {
                 self.sessionStore.setUnread(true, sessionId: fullSessionId)
             }
 
-            let expandEnabled = MainActor.assumeIsolated {
+            let expandEnabled: Bool = {
                 let s = SettingsStore.shared.settings
                 guard s.notchAutoExpandEnabled && s.expandOnNotification else { return false }
                 if isTaskCompletion  { return s.expandOnTaskCompletion }
                 if isIdleOrWaiting   { return s.expandOnIdlePrompt }
                 if isNotificationMsg { return s.expandOnNotificationMessage }
                 return false
-            }
+            }()
             if isInformational && !isStartEvent && !hasPendingForSession && !self.displayState.hasResponseHandler {
                 // expandEnabled 여부와 무관하게 포커스된 터미널의 unread 해제는 항상 수행
                 let session = self.sessionStore.activeSessions.first { $0.id == fullSessionId }
@@ -1112,23 +1105,19 @@ class AppState: ObservableObject {
                     }
                     // NOT frontmost: unread dot 유지 확정 → notification.shown 발행
                     if let s = self.sessionStore.activeSessions.first(where: { $0.id == fullSessionId }) {
-                        MainActor.assumeIsolated {
-                            self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: s))
-                        }
+                        self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: s))
                     }
                     if isTaskCompletion {
-                        let enabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notificationsEnabled }
+                        let enabled = SettingsStore.shared.settings.notificationsEnabled
                         if enabled {
                             let title = self.sessionStore.activeSessions.first { $0.id == fullSessionId }?.terminalTitle ?? ""
-                            MainActor.assumeIsolated { NotificationManager.shared.sendTaskCompletion(sessionTitle: title) }
+                            NotificationManager.shared.sendTaskCompletion(sessionTitle: title)
                         }
                     }
                     guard expandEnabled else { return }
                     guard !self.displayState.hasResponseHandler else { return }
                     // 세션의 팝아웃 창이 열려있으면 노치 확장 억제 — 창이 알림을 표시함
-                    let hasDetachedWindow = MainActor.assumeIsolated {
-                        SessionMessageWindowManager.shared.hasWindow(for: fullSessionId)
-                    }
+                    let hasDetachedWindow = SessionMessageWindowManager.shared.hasWindow(for: fullSessionId)
                     guard !hasDetachedWindow else { return }
                     if self.isExpandingFromRequest && !self.currentSessionId.isEmpty && self.currentSessionId != fullSessionId {
                         self.sessionStore.setUnread(false, sessionId: self.currentSessionId)
@@ -1150,9 +1139,7 @@ class AppState: ObservableObject {
                 // hasPendingForSession || hasResponseHandler: frontmost 체크 없이
                 // setUnread(true)가 이미 됐으므로 notification.shown 발행
                 if let s = self.sessionStore.activeSessions.first(where: { $0.id == fullSessionId }) {
-                    MainActor.assumeIsolated {
-                        self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: s))
-                    }
+                    self.pluginHost.enqueue(self.pluginEventFactory.makeSessionEvent(kind: .notificationShown, from: s))
                 }
             }
         }
@@ -1286,10 +1273,8 @@ class AppState: ObservableObject {
         )
 
         // Interactive 툴: 이미 포커스 체크 후 여기 도달했으므로 터미널이 비포커스 상태 → 알림 표시
-        let interactiveExpandEnabled = MainActor.assumeIsolated {
-            SettingsStore.shared.settings.notchAutoExpandEnabled
-                && SettingsStore.shared.settings.expandOnInteractiveTool
-        }
+        let interactiveExpandEnabled = SettingsStore.shared.settings.notchAutoExpandEnabled
+            && SettingsStore.shared.settings.expandOnInteractiveTool
         if isInteractive && !h.isReplayPayload && interactiveExpandEnabled {
             isNotchExpanded = true
             isExpandingFromRequest = true
@@ -1482,7 +1467,7 @@ class AppState: ObservableObject {
             removedRequests.forEach { $0.responseHandler(HookResponse(.pass).jsonString()) }
             self.sessionStore.removeSession(id: sessionId)
             self.ptyCoordinator.clearBuffer(sessionId: sessionId)
-            MainActor.assumeIsolated { SessionMessageWindowManager.shared.closeWindow(for: sessionId) }
+            SessionMessageWindowManager.shared.closeWindow(for: sessionId)
 
             if self.currentSessionId == sessionId || removedRequests.contains(where: { $0.id == self.displayState.showingRequestId }) {
                 self.displayState.responseHandler?(HookResponse(.pass).jsonString())
@@ -1501,19 +1486,22 @@ class AppState: ObservableObject {
         }
     }
 
-    private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
+    private func isTerminalFrontmostAsync(
+        for session: ActiveSession?,
+        completion: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
         isTerminalFrontmostAsync(terminal: session?.terminal ?? TerminalContext(), completion: completion)
     }
 
     private func isTerminalFrontmostAsync(
         terminal: TerminalContext,
-        completion: @escaping (Bool) -> Void
+        completion: @escaping @MainActor @Sendable (Bool) -> Void
     ) {
         let frontmostCheck = self.frontmostCheck
 
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task.detached(priority: .userInitiated) {
             let isFrontmost = frontmostCheck(terminal)
-            DispatchQueue.main.async {
+            await MainActor.run {
                 completion(isFrontmost)
             }
         }
@@ -1631,17 +1619,19 @@ class AppState: ObservableObject {
         HookResponse(approved ? .approved : .denied).jsonString()
     }
 
-    func replayLogEntries(limit: Int = 200) throws -> [ReplayLogEntry] {
+    // 아래 4개 조회 메서드는 Task.detached에서 호출되는 SQLite I/O이므로 nonisolated —
+    // MainActor 전환 시에도 메인 스레드 블로킹 방지 의도를 그대로 유지한다.
+    nonisolated func replayLogEntries(limit: Int = 200) throws -> [ReplayLogEntry] {
         guard let approvalProxy else { return [] }
         return try approvalProxy.replayLog(limit: limit)
     }
 
-    func sessionMessageHistory(sessionId: String, limit: Int = 100) throws -> [ReplayLogEntry] {
+    nonisolated func sessionMessageHistory(sessionId: String, limit: Int = 100) throws -> [ReplayLogEntry] {
         guard let approvalProxy else { return [] }
         return try approvalProxy.replayLog(sessionId: sessionId, limit: limit)
     }
 
-    func sessionInsightsSummary(retentionDays: Int) throws -> SessionInsightsSummary {
+    nonisolated func sessionInsightsSummary(retentionDays: Int) throws -> SessionInsightsSummary {
         guard let approvalProxy else {
             let since = Date().addingTimeInterval(-Double(retentionDays) * 86_400)
             return SessionInsightsSummary(
@@ -1654,7 +1644,7 @@ class AppState: ObservableObject {
         return try approvalProxy.sessionInsightsSummary(since: since)
     }
 
-    func closedSessionRecords(retentionDays: Int) throws -> [ClosedSessionRecord] {
+    nonisolated func closedSessionRecords(retentionDays: Int) throws -> [ClosedSessionRecord] {
         guard let approvalProxy else { return [] }
         let since = Date().addingTimeInterval(-Double(retentionDays) * 86_400)
         return try approvalProxy.closedSessions(since: since)

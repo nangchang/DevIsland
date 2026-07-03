@@ -16,6 +16,7 @@ import XCTest
 //   deny         × claude / codex
 //   policy-deny  × claude-userpromptsubmit
 //   question     × claude-askuserquestion
+@MainActor
 final class GoldenResponseTests: XCTestCase {
 
     private var appState: AppState!

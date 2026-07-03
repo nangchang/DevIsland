@@ -7,6 +7,7 @@ import Combine
 /// built-in plugin registration, plugin host callbacks, session-change → plugin event
 /// forwarding, and Caffeine power/Wi-Fi/settings bindings. The power and Wi-Fi
 /// monitors exist only to feed the Caffeine coordinator, so this type owns them.
+@MainActor
 final class AppWiring {
     private let powerSourceMonitor = PowerSourceMonitor()
     private let wifiMonitor = WifiSSIDMonitor()
@@ -65,18 +66,16 @@ final class AppWiring {
 
         appState.sessionStore.onSessionChanged = { [weak appState] change in
             guard let appState else { return }
-            MainActor.assumeIsolated {
-                let event: PluginEvent
-                switch change {
-                case .started(let session):
-                    event = appState.pluginEventFactory.makeSessionEvent(kind: .sessionStarted, from: session)
-                case .updated(let session):
-                    event = appState.pluginEventFactory.makeSessionEvent(kind: .sessionUpdated, from: session)
-                case .ended(let session):
-                    event = appState.pluginEventFactory.makeSessionEvent(kind: .sessionEnded, from: session)
-                }
-                appState.pluginHost.enqueue(event)
+            let event: PluginEvent
+            switch change {
+            case .started(let session):
+                event = appState.pluginEventFactory.makeSessionEvent(kind: .sessionStarted, from: session)
+            case .updated(let session):
+                event = appState.pluginEventFactory.makeSessionEvent(kind: .sessionUpdated, from: session)
+            case .ended(let session):
+                event = appState.pluginEventFactory.makeSessionEvent(kind: .sessionEnded, from: session)
             }
+            appState.pluginHost.enqueue(event)
         }
     }
 
@@ -87,10 +86,8 @@ final class AppWiring {
         let caffeineCoordinator = appState.caffeineCoordinator
         caffeineCoordinator.onStatusChanged = { [weak appState] status in
             guard let appState else { return }
-            MainActor.assumeIsolated {
-                let event = appState.pluginEventFactory.makePowerStatusEvent(status: status)
-                appState.pluginHost.enqueue(event)
-            }
+            let event = appState.pluginEventFactory.makePowerStatusEvent(status: status)
+            appState.pluginHost.enqueue(event)
         }
 
         powerSourceMonitor.start()
