@@ -297,10 +297,12 @@ class NotchWindowController: NSWindowController {
         
         // 주기적 화면 체크 (마우스/포커스 이동 감지 보완)
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self = self, !AppState.shared.isNotchExpanded else { return }
-            let state = AppState.shared
-            if state.displayPrefs.notchDisplayTarget == .focused || state.displayPrefs.notchDisplayTarget == .mouse {
-                self.updateWindowFrame(animate: false)
+            Task { @MainActor in
+                guard let self = self, !AppState.shared.isNotchExpanded else { return }
+                let state = AppState.shared
+                if state.displayPrefs.notchDisplayTarget == .focused || state.displayPrefs.notchDisplayTarget == .mouse {
+                    self.updateWindowFrame(animate: false)
+                }
             }
         }
 

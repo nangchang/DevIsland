@@ -298,11 +298,13 @@ class AppState: ObservableObject {
             
             // Prune inactive sessions every 10 seconds
             sessionPruningTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-                guard let self else { return }
-                let prunedIds = self.sessionStore.pruneInactiveSessions()
-                for id in prunedIds {
-                    self.ptyCoordinator.clearBuffer(sessionId: id)
-                    Task { @MainActor in SessionMessageWindowManager.shared.closeWindow(for: id) }
+                Task { @MainActor in
+                    guard let self else { return }
+                    let prunedIds = self.sessionStore.pruneInactiveSessions()
+                    for id in prunedIds {
+                        self.ptyCoordinator.clearBuffer(sessionId: id)
+                        SessionMessageWindowManager.shared.closeWindow(for: id)
+                    }
                 }
             }
         }
