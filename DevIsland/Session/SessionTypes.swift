@@ -65,6 +65,19 @@ struct ActiveSession: Identifiable, Equatable {
     var workspaceRoot: String?
 }
 
+extension BuddyKind {
+    /// Approval-store provider recorded for decisions/rules of this agent kind.
+    var providerKind: ProviderKind {
+        switch self {
+        case .claudeCode:  return .claude
+        case .codex:       return .codex
+        case .gemini:      return .gemini
+        case .antigravity: return .antigravity
+        case .island:      return .any
+        }
+    }
+}
+
 extension ActiveSession {
     /// Shell-escaped command to start a fresh session of the given provider kind in this
     /// workspace. Unlike `resumeCommand`, no `--resume` flag is included.
