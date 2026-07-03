@@ -483,7 +483,7 @@ final class ApprovalFlowCoordinator {
 
     // SQLite 쓰기이므로 persistenceQueue(백그라운드)에서 실행 — self를 캡처하지 않는 static으로
     // 선언해 MainActor 격리 대상에서 제외한다. 메인 스레드 논블로킹 의도를 유지한다.
-    private static func persistApprovalScopeOnPersistenceQueue(
+    private nonisolated static func persistApprovalScopeOnPersistenceQueue(
         approvalProxy: ApprovalProxyController,
         provider: ProviderKind,
         approvalScope: RuleScope,

@@ -1,6 +1,9 @@
 import Foundation
 
-final class ApprovalProxyController {
+// SQLiteApprovalStore는 SQLITE_OPEN_FULLMUTEX로 연결을 열어 커넥션 자체가
+// 스레드 간 동시 접근에 내부적으로 안전하다(SQLite의 직렬화 모드). store/policyEngine은
+// init 이후 재할당되지 않는 불변 참조이므로 여러 스레드/큐에서 공유해도 안전하다.
+final class ApprovalProxyController: @unchecked Sendable {
     let store: SQLiteApprovalStore
     private let policyEngine: ApprovalPolicyEngine
 
