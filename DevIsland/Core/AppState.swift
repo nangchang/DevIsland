@@ -99,8 +99,9 @@ class AppState: ObservableObject {
     private let wiring = AppWiring()
 
     // SQLite 기반 조회(리플레이/세션 인사이트)는 백그라운드 스레드(Task.detached)에서
-    // 호출되므로 MainActor 격리 대상에서 제외한다. init 이후 재할당 없는 불변 참조.
-    private nonisolated(unsafe) let approvalProxy: ApprovalProxyController?
+    // 호출되므로 MainActor 격리 대상에서 제외한다. ApprovalProxyController가 Sendable이라
+    // (unsafe) 없이도 안전하게 공유 가능.
+    private nonisolated let approvalProxy: ApprovalProxyController?
     private var server = HookSocketServer()
     private var claudeQuestionCancellable: AnyCancellable?
     /// Pending-approval queue entry, display selection, decision dispatch, and
@@ -1312,18 +1313,22 @@ class AppState: ObservableObject {
         HookEventNormalizer.agentKind(from: json, terminalTitle: terminalTitle)
     }
 
-    private func recordDismissedSession(sessionId: String, agentKind: BuddyKind, completion: @escaping () -> Void) {
+    private func recordDismissedSession(
+        sessionId: String,
+        agentKind: BuddyKind,
+        completion: @escaping @MainActor @Sendable () -> Void
+    ) {
         guard let approvalProxy else {
             completion()
             return
         }
         let payloadJSON = ReplayRecorder.payloadString(from: ["session_id": sessionId, "source": "user_dismissed"])
-        approvalPersistenceQueue.async { [weak self] in
-            guard let self else { return }
+        let provider = providerKind(for: agentKind)
+        approvalPersistenceQueue.async {
             do {
                 try approvalProxy.recordHookEvent(
                     requestId: nil,
-                    provider: self.providerKind(for: agentKind),
+                    provider: provider,
                     sessionId: sessionId,
                     eventName: "devisland_dismissed",
                     toolName: "",
@@ -1332,7 +1337,9 @@ class AppState: ObservableObject {
             } catch {
                 print("[DevIsland] [REPLAY] Failed to record dismissed session: \(error)")
             }
-            DispatchQueue.main.async(execute: completion)
+            Task { @MainActor in
+                completion()
+            }
         }
     }
 
@@ -1575,7 +1582,7 @@ class AppState: ObservableObject {
         )
     }
 
-    private func providerKind(for agentKind: BuddyKind) -> ProviderKind {
+    private nonisolated func providerKind(for agentKind: BuddyKind) -> ProviderKind {
         agentKind.providerKind
     }
 
@@ -1832,7 +1839,7 @@ class AppState: ObservableObject {
         request.responseHandler(HookResponse(approved ? .approved : .denied).jsonString())
     }
 
-    private static let alwaysAllowThreshold = 3
+    private nonisolated static let alwaysAllowThreshold = 3
 
     private func checkAlwaysAllowSuggestion(toolName: String) {
         guard !toolName.isEmpty, let proxy = approvalProxy else {
@@ -1875,7 +1882,9 @@ class AppState: ObservableObject {
                 ))
             } catch {
                 print("[DevIsland] [POLICY] Failed to insert global persistent rule '\(trimmed)': \(error)")
-                DispatchQueue.main.async { self?.globalAutoApproveTypes.remove(trimmed) }
+                Task { @MainActor [weak self] in
+                    self?.globalAutoApproveTypes.remove(trimmed)
+                }
             }
         }
     }
