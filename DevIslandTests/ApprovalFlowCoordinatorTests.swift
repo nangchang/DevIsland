@@ -22,6 +22,7 @@ private final class FlowContextSpy: ApprovalFlowContext {
     }
 }
 
+@MainActor
 final class ApprovalFlowCoordinatorTests: XCTestCase {
     private var coordinator: ApprovalFlowCoordinator!
     private var context: FlowContextSpy!

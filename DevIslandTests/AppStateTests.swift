@@ -1,6 +1,7 @@
 import XCTest
 @testable import DevIsland
 
+@MainActor
 final class AppStateTests: XCTestCase {
     var appState: AppState!
     var mockDefaults: UserDefaults!

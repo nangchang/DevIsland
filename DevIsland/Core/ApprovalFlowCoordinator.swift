@@ -5,6 +5,7 @@ import Foundation
 /// `@Published` there so SwiftUI observation is unchanged, and the coordinator
 /// reaches it through this protocol (which also makes the flow unit-testable
 /// with a fake context).
+@MainActor
 protocol ApprovalFlowContext: AnyObject {
     var displayState: ApprovalDisplayState { get set }
     var timeoutProgress: Double { get set }
@@ -21,6 +22,7 @@ protocol ApprovalFlowContext: AnyObject {
 /// and preemption), decision dispatch (`sendDecision`), and the approval
 /// timeout. Pure selection/validation policy lives in `ApprovalQueuePolicy`;
 /// this type is the stateful machinery around it.
+@MainActor
 final class ApprovalFlowCoordinator {
     typealias FrontmostCheck = (TerminalContext) -> Bool
 
@@ -147,7 +149,7 @@ final class ApprovalFlowCoordinator {
                 context.displayState.sessionId = prev
                 context.syncDisplayToSelectedSession()
                 context.isExpandingFromRequest = true
-                let autoExpandEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notchAutoExpandEnabled }
+                let autoExpandEnabled = SettingsStore.shared.settings.notchAutoExpandEnabled
                 if autoExpandEnabled {
                     context.isNotchExpanded = true
                 }
@@ -234,7 +236,7 @@ final class ApprovalFlowCoordinator {
                 self.claudeQuestionState.reset()
             }
             context.displayState.sessionId = next.sessionId
-            let notifEnabled = MainActor.assumeIsolated { SettingsStore.shared.settings.notificationsEnabled }
+            let notifEnabled = SettingsStore.shared.settings.notificationsEnabled
             if notifEnabled && next.claudeQuestion == nil {
                 NotificationManager.shared.sendApprovalRequest(next)
             }
@@ -242,15 +244,13 @@ final class ApprovalFlowCoordinator {
 
             context.isExpandingFromRequest = true
             let isQuestion = next.claudeQuestion != nil
-            let expandEnabled = MainActor.assumeIsolated {
+            let expandEnabled: Bool = {
                 let s = SettingsStore.shared.settings
                 guard s.notchAutoExpandEnabled else { return false }
                 return isQuestion ? s.expandOnQuestionResponse : s.expandOnApprovalRequest
-            }
+            }()
             // 팝아웃 창이 열린 세션은 노치 확장 억제 — 창이 승인 UI를 표시함
-            let suppressNotch = MainActor.assumeIsolated {
-                SessionMessageWindowManager.shared.hasWindow(for: next.sessionId)
-            }
+            let suppressNotch = SessionMessageWindowManager.shared.hasWindow(for: next.sessionId)
             if (expandEnabled || context.isNotchExpanded) && !suppressNotch {
                 context.isNotchExpanded = true
             }
@@ -286,7 +286,7 @@ final class ApprovalFlowCoordinator {
     private func nextPendingRequestToDisplay() -> PendingRequest? {
         // 팝아웃 창이 열린 세션의 요청을 우선 처리하여 창에서 즉시 승인/거부 가능하게 함
         ApprovalQueuePolicy.nextToDisplay(in: sessionStore.pendingQueue) { sid in
-            MainActor.assumeIsolated { SessionMessageWindowManager.shared.hasWindow(for: sid) }
+            SessionMessageWindowManager.shared.hasWindow(for: sid)
         }
     }
 
@@ -322,9 +322,9 @@ final class ApprovalFlowCoordinator {
         let frontmostCheck = self.frontmostCheck
         let terminal = session?.terminal ?? TerminalContext()
 
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task.detached(priority: .userInitiated) {
             let isFrontmost = frontmostCheck(terminal)
-            DispatchQueue.main.async {
+            await MainActor.run {
                 completion(isFrontmost)
             }
         }
@@ -478,7 +478,9 @@ final class ApprovalFlowCoordinator {
         }
     }
 
-    private func persistApprovalScopeOnPersistenceQueue(
+    // SQLite 쓰기이므로 persistenceQueue(백그라운드)에서 실행 — MainActor 격리 대상에서 제외해
+    // 메인 스레드 논블로킹 의도를 유지한다. self 상태를 참조하지 않는 순수 함수.
+    private nonisolated func persistApprovalScopeOnPersistenceQueue(
         approvalProxy: ApprovalProxyController,
         provider: ProviderKind,
         approvalScope: RuleScope,
