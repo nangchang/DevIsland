@@ -1364,14 +1364,18 @@ class AppState: ObservableObject {
         switch capability {
         case "session.dismiss":
             dismissSessionFromPlugin(sessionID)
+            return
         case "session.copyResumeCommand":
             copyResumeCommandFromPlugin(sessionID)
+            return
         case "session.focusTerminal":
             focusTerminalFromPlugin(sessionID)
+            return
         case "session.openWorkspace":
             openWorkspaceFromPlugin(sessionID)
+            return
         default:
-            break
+            return
         }
     }
 
