@@ -34,9 +34,10 @@ final class SessionMessageHistoryViewModel: ObservableObject {
     func load() {
         // DB I/O를 백그라운드에서 처리하여 메인 스레드 블로킹 방지
         let sid = sessionId
+        let appState = AppState.shared
         Task {
             let loaded = await Task.detached(priority: .userInitiated) {
-                (try? AppState.shared.sessionMessageHistory(sessionId: sid, limit: 100)) ?? []
+                (try? appState.sessionMessageHistory(sessionId: sid, limit: 100)) ?? []
             }.value
             self.entries = loaded.reversed()  // DESC → ASC (오래된 것부터)
             self.currentIndex = max(0, self.entries.count - 1)
@@ -48,9 +49,10 @@ final class SessionMessageHistoryViewModel: ObservableObject {
         let wasAtLatest = isAtLatest
         let prevId = currentEntry?.id
         let sid = sessionId
+        let appState = AppState.shared
         Task {
             let loaded = await Task.detached(priority: .userInitiated) {
-                (try? AppState.shared.sessionMessageHistory(sessionId: sid, limit: 100)) ?? []
+                (try? appState.sessionMessageHistory(sessionId: sid, limit: 100)) ?? []
             }.value
             self.entries = loaded.reversed()
             if wasAtLatest || prevId == nil {

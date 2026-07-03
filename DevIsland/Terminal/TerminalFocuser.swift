@@ -20,6 +20,7 @@ final class TerminalFocuser: Sendable {
         ("com.openai.codex",               "CodexDesktop"),
     ]
 
+    @Sendable
     static func isSessionFrontmost(_ terminal: TerminalContext) -> Bool {
         // TerminalContext는 빈 문자열을 "값 없음"으로 쓰므로 기존 옵셔널 기반 판정 로직에 그대로 매핑한다.
         let appName: String? = terminal.app.isEmpty ? nil : terminal.app

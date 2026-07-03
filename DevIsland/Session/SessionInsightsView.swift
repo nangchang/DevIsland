@@ -10,8 +10,8 @@ final class SessionInsightsViewModel: ObservableObject {
 
     private let appState: AppState
 
-    init(appState: AppState = .shared) {
-        self.appState = appState
+    init(appState: AppState? = nil) {
+        self.appState = appState ?? .shared
     }
 
     func refresh() {
@@ -38,7 +38,7 @@ struct SessionInsightsView: View {
     @StateObject private var viewModel: SessionInsightsViewModel
     @ObservedObject private var l10n = L10n.shared
 
-    init(appState: AppState = .shared) {
+    init(appState: AppState? = nil) {
         _viewModel = StateObject(wrappedValue: SessionInsightsViewModel(appState: appState))
     }
 

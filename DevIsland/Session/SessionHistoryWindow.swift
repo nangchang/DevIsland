@@ -86,8 +86,8 @@ final class SessionHistoryViewModel: ObservableObject {
 
     private let appState: AppState
 
-    init(appState: AppState = .shared) {
-        self.appState = appState
+    init(appState: AppState? = nil) {
+        self.appState = appState ?? .shared
         refresh()
     }
 
@@ -159,7 +159,7 @@ struct SessionHistoryWindowView: View {
     @ObservedObject private var appState = AppState.shared
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
 
-    init(appState: AppState = .shared) {
+    init(appState: AppState? = nil) {
         _viewModel = StateObject(wrappedValue: SessionHistoryViewModel(appState: appState))
     }
 

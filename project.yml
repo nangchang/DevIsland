@@ -5,6 +5,7 @@ options:
   objectVersion: 56
 settings:
   SWIFT_VERSION: "5.9"
+  SWIFT_STRICT_CONCURRENCY: targeted
 packages:
   Textual:
     url: https://github.com/gonzalezreal/textual

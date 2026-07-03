@@ -9,8 +9,8 @@ final class ReplayLogViewModel: ObservableObject {
 
     private let appState: AppState
 
-    init(appState: AppState = .shared) {
-        self.appState = appState
+    init(appState: AppState? = nil) {
+        self.appState = appState ?? .shared
         refresh()
     }
 
@@ -64,7 +64,7 @@ final class ReplayLogViewModel: ObservableObject {
 struct ReplayLogWindowView: View {
     @StateObject private var viewModel: ReplayLogViewModel
 
-    init(appState: AppState = .shared) {
+    init(appState: AppState? = nil) {
         _viewModel = StateObject(wrappedValue: ReplayLogViewModel(appState: appState))
     }
 

@@ -39,6 +39,7 @@ final class UpdateChecker: ObservableObject {
     private let stableAPIURL = URL(string: "https://api.github.com/repos/nangchang/DevIsland/releases/latest")!
     private let nightlyAPIURL = URL(string: "https://api.github.com/repos/nangchang/DevIsland/releases?per_page=20")!
     private let lastCheckKey = "updateLastCheckDate"
+    private var periodicSettingsProvider: (() -> (checkOnStartup: Bool, channel: ReleaseChannel))?
 
     @Published var latestRelease: ReleaseInfo? = nil
     @Published var isChecking = false
@@ -80,6 +81,7 @@ final class UpdateChecker: ObservableObject {
     /// 앱 시작 시 호출 — 1시간 이내 체크했으면 스킵, 이후 매일 반복
     /// settingsProvider는 매 tick마다 호출되어 최신 설정을 반영한다.
     func schedulePeriodicCheck(settingsProvider: @escaping () -> (checkOnStartup: Bool, channel: ReleaseChannel)) {
+        periodicSettingsProvider = settingsProvider
         let initial = settingsProvider()
         if initial.checkOnStartup {
             let last = UserDefaults.standard.object(forKey: lastCheckKey) as? Date ?? .distantPast
@@ -88,11 +90,9 @@ final class UpdateChecker: ObservableObject {
             }
         }
         let timer = Timer(timeInterval: 86400, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                let current = settingsProvider()
-                guard current.checkOnStartup else { return }
-                await self.fetchLatestRelease(silent: true, channel: current.channel)
+            Task { @MainActor in
+                guard let current = self?.periodicSettingsProvider?(), current.checkOnStartup else { return }
+                await self?.fetchLatestRelease(silent: true, channel: current.channel)
             }
         }
         RunLoop.main.add(timer, forMode: .common)

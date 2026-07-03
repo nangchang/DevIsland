@@ -9,8 +9,8 @@ final class PTYTranscriptViewModel: ObservableObject {
 
     private let appState: AppState
 
-    init(appState: AppState = .shared) {
-        self.appState = appState
+    init(appState: AppState? = nil) {
+        self.appState = appState ?? .shared
         refresh()
     }
 
@@ -60,7 +60,7 @@ final class PTYTranscriptViewModel: ObservableObject {
 struct PTYTranscriptWindowView: View {
     @StateObject private var viewModel: PTYTranscriptViewModel
 
-    init(appState: AppState = .shared) {
+    init(appState: AppState? = nil) {
         _viewModel = StateObject(wrappedValue: PTYTranscriptViewModel(appState: appState))
     }
 

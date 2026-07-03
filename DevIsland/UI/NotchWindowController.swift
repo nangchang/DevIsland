@@ -72,11 +72,13 @@ class NotchWindowController: NSWindowController {
     private var pendingSettle: DispatchWorkItem?
     private var mouseMonitor: Any?
     private var isShowingModal = false
+    private var screenCheckTimer: Timer?
 
     deinit {
         if let monitor = mouseMonitor {
             NSEvent.removeMonitor(monitor)
         }
+        screenCheckTimer?.invalidate()
         cancellables.removeAll()
     }
     private var pinnedCenterX: CGFloat?
@@ -296,13 +298,18 @@ class NotchWindowController: NSWindowController {
         }
         
         // 주기적 화면 체크 (마우스/포커스 이동 감지 보완)
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self = self, !AppState.shared.isNotchExpanded else { return }
-            let state = AppState.shared
-            if state.displayPrefs.notchDisplayTarget == .focused || state.displayPrefs.notchDisplayTarget == .mouse {
-                self.updateWindowFrame(animate: false)
+        // .common 모드로 등록해 스크롤/드래그 등 UI 트래킹 중에도 계속 실행되도록 한다.
+        let screenCheckTimer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self, !AppState.shared.isNotchExpanded else { return }
+                let state = AppState.shared
+                if state.displayPrefs.notchDisplayTarget == .focused || state.displayPrefs.notchDisplayTarget == .mouse {
+                    self.updateWindowFrame(animate: false)
+                }
             }
         }
+        RunLoop.main.add(screenCheckTimer, forMode: .common)
+        self.screenCheckTimer = screenCheckTimer
 
         DispatchQueue.main.async { [weak self] in
             self?.updateFullScreenVisibility()
