@@ -45,7 +45,7 @@ Policy and system side effects are intentionally separated:
 | PowerSourceMonitor | Reads AC power and battery level through IOKit and preserves the last valid state on transient failures. |
 | WifiSSIDMonitor | Tracks the connected SSID through CoreWLAN and provides asynchronous nearby-network scans. |
 | SleepAssertion | Owns one idempotent IOPM assertion and releases it on shutdown or deinitialization. |
-| AppState | Connects settings, session activity, monitors, PluginHost, and the coordinator. |
+| AppWiring | Owns the monitors and connects settings, session activity, PluginHost, and the coordinator at AppState init. |
 
 The assertion type is kIOPMAssertionTypePreventUserIdleDisplaySleep with the name DevIsland.Caffeine. Preventing display idle sleep also prevents system idle sleep.
 
@@ -74,7 +74,7 @@ Caffeine does not add a separate menu-bar item or expose a global keyboard short
 
 ## Lifecycle and Failure Handling
 
-- Power and Wi-Fi monitors start during AppState setup.
+- Power and Wi-Fi monitors start during AppState setup (AppWiring.wireCaffeine).
 - Assertion acquisition is idempotent.
 - App shutdown cancels the timeout, removes subscriptions, and releases the assertion.
 - IOKit acquisition failures are returned to the plugin as effect results and displayed as a failure status.
@@ -91,7 +91,7 @@ Caffeine does not add a separate menu-bar item or expose a global keyboard short
 | DevIsland/Plugins/BuiltIn/Caffeine/SleepAssertion.swift | IOPM assertion ownership |
 | DevIsland/Settings/CaffeineSettings.swift | Settings UI |
 | DevIsland/Settings/SettingsStore.swift | Persistence and defaults |
-| DevIsland/Core/AppState.swift | Runtime wiring |
+| DevIsland/Core/AppWiring.swift | Runtime wiring |
 
 ## Verification
 
