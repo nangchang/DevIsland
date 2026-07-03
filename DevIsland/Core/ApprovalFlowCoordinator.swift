@@ -24,7 +24,7 @@ protocol ApprovalFlowContext: AnyObject {
 /// this type is the stateful machinery around it.
 @MainActor
 final class ApprovalFlowCoordinator {
-    typealias FrontmostCheck = (TerminalContext) -> Bool
+    typealias FrontmostCheck = @Sendable (TerminalContext) -> Bool
 
     /// AppState. Weak because AppState owns this coordinator.
     weak var context: ApprovalFlowContext?
@@ -318,7 +318,10 @@ final class ApprovalFlowCoordinator {
         }
     }
 
-    private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
+    private func isTerminalFrontmostAsync(
+        for session: ActiveSession?,
+        completion: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
         let frontmostCheck = self.frontmostCheck
         let terminal = session?.terminal ?? TerminalContext()
 
@@ -466,8 +469,8 @@ final class ApprovalFlowCoordinator {
         let sessionId = context.displayState.sessionId
         let toolName = context.displayState.rawToolName
         let workspaceRoot = context.displayState.workspaceRoot
-        persistenceQueue.async { [weak self] in
-            self?.persistApprovalScopeOnPersistenceQueue(
+        persistenceQueue.async {
+            Self.persistApprovalScopeOnPersistenceQueue(
                 approvalProxy: approvalProxy,
                 provider: provider,
                 approvalScope: approvalScope,
@@ -478,9 +481,9 @@ final class ApprovalFlowCoordinator {
         }
     }
 
-    // SQLite 쓰기이므로 persistenceQueue(백그라운드)에서 실행 — MainActor 격리 대상에서 제외해
-    // 메인 스레드 논블로킹 의도를 유지한다. self 상태를 참조하지 않는 순수 함수.
-    private nonisolated func persistApprovalScopeOnPersistenceQueue(
+    // SQLite 쓰기이므로 persistenceQueue(백그라운드)에서 실행 — self를 캡처하지 않는 static으로
+    // 선언해 MainActor 격리 대상에서 제외한다. 메인 스레드 논블로킹 의도를 유지한다.
+    private static func persistApprovalScopeOnPersistenceQueue(
         approvalProxy: ApprovalProxyController,
         provider: ProviderKind,
         approvalScope: RuleScope,

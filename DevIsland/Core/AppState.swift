@@ -41,7 +41,7 @@ class AppState: ObservableObject {
         static let sessionDescriptions = "sessionDescriptions"
     }
 
-    typealias FrontmostCheck = (TerminalContext) -> Bool
+    typealias FrontmostCheck = @Sendable (TerminalContext) -> Bool
 
     private let userDefaults: UserDefaults
     private let frontmostCheck: FrontmostCheck
@@ -1486,13 +1486,16 @@ class AppState: ObservableObject {
         }
     }
 
-    private func isTerminalFrontmostAsync(for session: ActiveSession?, completion: @escaping (Bool) -> Void) {
+    private func isTerminalFrontmostAsync(
+        for session: ActiveSession?,
+        completion: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
         isTerminalFrontmostAsync(terminal: session?.terminal ?? TerminalContext(), completion: completion)
     }
 
     private func isTerminalFrontmostAsync(
         terminal: TerminalContext,
-        completion: @escaping (Bool) -> Void
+        completion: @escaping @MainActor @Sendable (Bool) -> Void
     ) {
         let frontmostCheck = self.frontmostCheck
 

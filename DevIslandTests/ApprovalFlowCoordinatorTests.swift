@@ -29,7 +29,9 @@ final class ApprovalFlowCoordinatorTests: XCTestCase {
     private var sessionStore: SessionStore!
     private var claudeQuestionState: ClaudeQuestionState!
     private var mockDefaults: UserDefaults!
-    private var isTerminalFrontmost = false
+    // frontmostCheck는 @Sendable로 백그라운드 스레드(Task.detached)에서 호출되므로
+    // nonisolated(unsafe) — 테스트가 값을 설정한 뒤 읽기만 하고 동시 변경은 없다.
+    private nonisolated(unsafe) var isTerminalFrontmost = false
 
     override func setUp() {
         super.setUp()
