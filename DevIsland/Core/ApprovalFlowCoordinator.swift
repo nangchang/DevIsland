@@ -496,6 +496,7 @@ final class ApprovalFlowCoordinator {
                     action: .allow,
                     expiresAt: nil
                 )
+                return
             case .persistent:
                 try approvalProxy.store.insertRule(ApprovalRule(
                     id: SQLiteApprovalStore.deterministicRuleID(
@@ -510,8 +511,9 @@ final class ApprovalFlowCoordinator {
                     scope: .persistent,
                     workspaceRoot: workspaceRoot
                 ))
+                return
             case .once:
-                break
+                return
             }
         } catch {
             print("[DevIsland] [POLICY] Failed to persist approval scope for \(provider.rawValue): \(error)")
