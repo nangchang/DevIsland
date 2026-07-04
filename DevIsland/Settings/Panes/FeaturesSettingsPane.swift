@@ -217,7 +217,9 @@ private struct OpenPeonSettingsPane: View {
     }
 
     private func openPacksFolder() {
-        let url = URL(fileURLWithPath: NSString(string: store.settings.openPeonPacksDirectory).expandingTildeInPath, isDirectory: true)
+        let path = store.settings.openPeonPacksDirectory
+        guard !path.isEmpty else { return }
+        let url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         NSWorkspace.shared.open(url)
     }
