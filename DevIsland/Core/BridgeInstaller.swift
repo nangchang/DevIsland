@@ -34,6 +34,45 @@ enum BridgeInstaller {
         }
     }
 
+    /// hook_events.json 매니페스트에서 provider별 이벤트 이름 목록을 읽는다.
+    /// **이벤트 이름 membership만** 여기서 온다 — config 형태·타임아웃·matcher 규칙은
+    /// 각 patch 함수에 남긴다(provider마다 형태가 달라 active/lifecycle 축으로 표현 불가).
+    /// 현재 Claude/Codex만 매니페스트 구동이고 Gemini/Antigravity는 축이 어긋나 하드코딩 유지.
+    struct HookEventManifest {
+        struct Provider {
+            let active: [String]
+            let lifecycle: [String]
+            let retired: [String]
+        }
+
+        private let providers: [String: Provider]
+
+        static func load(from url: URL) throws -> HookEventManifest {
+            let data = try Data(contentsOf: url)
+            guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw BridgeInstallerError.missingBridgeManifest
+            }
+            var providers: [String: Provider] = [:]
+            for (key, value) in root {
+                // `_bridge_extras` 같은 비-provider 항목(배열)은 건너뛴다.
+                guard let dict = value as? [String: Any] else { continue }
+                providers[key] = Provider(
+                    active: (dict["active"] as? [String]) ?? [],
+                    lifecycle: (dict["lifecycle"] as? [String]) ?? [],
+                    retired: (dict["retired"] as? [String]) ?? []
+                )
+            }
+            return HookEventManifest(providers: providers)
+        }
+
+        func provider(_ name: String) throws -> Provider {
+            guard let provider = providers[name] else {
+                throw BridgeInstallerError.missingBridgeManifest
+            }
+            return provider
+        }
+    }
+
     // MARK: Public entry points
 
     /// Claude Code, Codex CLI, Gemini CLI, Antigravity CLI 모두 설치
@@ -108,23 +147,25 @@ enum BridgeInstaller {
         let bridgeURL = try bridgeScriptURL()
         let helperURL = try bridgeHelperURL()
         let manifestURL = try bridgeManifestURL()
+        let manifest = try HookEventManifest.load(from: manifestURL)
         let paths = installPaths()
         let settingsURL = paths.home.appendingPathComponent(".claude/settings.json")
 
         try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
-        try patchClaudeSettings(at: settingsURL, bridgePath: paths.destURL.path)
+        try patchClaudeSettings(at: settingsURL, bridgePath: paths.destURL.path, events: try manifest.provider("claude"))
     }
 
     private static func installCodexHooks() throws {
         let bridgeURL = try bridgeScriptURL()
         let helperURL = try bridgeHelperURL()
         let manifestURL = try bridgeManifestURL()
+        let manifest = try HookEventManifest.load(from: manifestURL)
         let paths = installPaths()
         let codexHooksURL  = paths.home.appendingPathComponent(".codex/hooks.json")
         let codexConfigURL = paths.home.appendingPathComponent(".codex/config.toml")
 
         try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
-        try patchCodexHooks(at: codexHooksURL, bridgePath: paths.destURL.path)
+        try patchCodexHooks(at: codexHooksURL, bridgePath: paths.destURL.path, events: try manifest.provider("codex"))
         try ensureCodexFeatureFlag(at: codexConfigURL)
     }
 
@@ -206,7 +247,7 @@ enum BridgeInstaller {
 
     // MARK: Claude Code settings patch
 
-    private static func patchClaudeSettings(at url: URL, bridgePath: String) throws {
+    static func patchClaudeSettings(at url: URL, bridgePath: String, events: HookEventManifest.Provider) throws {
         let fm = FileManager.default
         let bridgeCommand = "\"\(bridgePath)\" --source claude"
         var settings: [String: Any] = [:]
@@ -229,21 +270,11 @@ enum BridgeInstaller {
         let lifecycleConfig: [String: Any] = [
             "hooks": [["type": "command", "command": bridgeCommand]]
         ]
-        let entries: [(String, [String: Any])] = [
-            ("SessionStart",      lifecycleConfig),
-            ("SessionEnd",        lifecycleConfig),
-            ("Notification",      lifecycleConfig),
-            ("Stop",              lifecycleConfig),
-            ("PreToolUse",        lifecycleConfig),
-            ("PostToolUse",       lifecycleConfig),
-            ("PostToolUseFailure", lifecycleConfig),
-            ("UserPromptSubmit",  lifecycleConfig),
-            ("Elicitation",       lifecycleConfig),
-            ("PermissionRequest", approvalConfig),
-        ]
-        let retiredEntries = [
-            "SubagentStop", "PreCompact", "StopFailure"
-        ]
+        // 매니페스트: lifecycle 이벤트는 기본 config, active(승인) 이벤트는 긴 타임아웃 config.
+        let entries: [(String, [String: Any])] =
+            events.lifecycle.map { ($0, lifecycleConfig) } +
+            events.active.map { ($0, approvalConfig) }
+        let retiredEntries = events.retired
 
         for (key, config) in entries {
             var list = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
@@ -262,7 +293,7 @@ enum BridgeInstaller {
 
     // MARK: Codex CLI hooks patch
 
-    private static func patchCodexHooks(at url: URL, bridgePath: String) throws {
+    static func patchCodexHooks(at url: URL, bridgePath: String, events eventList: HookEventManifest.Provider) throws {
         let fm = FileManager.default
         let bridgeCommand = "\"\(bridgePath)\" --source codex"
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -277,13 +308,14 @@ enum BridgeInstaller {
         var hooks = (data["hooks"] as? [String: Any]) ?? [:]
         
         // 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-        let events = ["SessionStart", "PreToolUse", "PostToolUse", "Stop", "PermissionRequest"]
+        // 매니페스트의 lifecycle + active 이벤트 모두 등록하고, active(승인) 이벤트만 긴 타임아웃.
+        let events = eventList.lifecycle + eventList.active
         for event in events {
             var eventConfigs = (hooks[event] as? [[String: Any]]) ?? []
-            
-            // PermissionRequest만 실제 승인 대기 이벤트이므로 타임아웃을 길게 설정함 (86400초 = 24시간)
+
+            // 승인 대기 이벤트만 타임아웃을 길게 설정함 (86400초 = 24시간)
             var hCmd: [String: Any] = ["type": "command", "command": bridgeCommand]
-            if event == "PermissionRequest" {
+            if eventList.active.contains(event) {
                 hCmd["timeout"] = 86400
             }
 
@@ -309,7 +341,7 @@ enum BridgeInstaller {
             }
             hooks[event] = eventConfigs
         }
-        for event in ["SessionEnd"] {
+        for event in eventList.retired {
             let cleaned = removingBridgeHooksFrom(list: (hooks[event] as? [[String: Any]]) ?? [])
             if cleaned.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = cleaned }
         }
@@ -398,6 +430,8 @@ enum BridgeInstaller {
         }
 
         // Gemini CLI: hooks는 { "EventName": [ { "matcher": "*", "hooks": [...] } ] } 형태
+        // TODO(R5-b): Gemini는 hook_events.json에 키가 없고 이벤트 이름·ms 타임아웃이
+        // 달라 아직 하드코딩 유지. 매니페스트에 gemini 키를 추가하면 membership만 이관 가능.
         var hooks = (data["hooks"] as? [String: Any]) ?? [:]
 
         for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent", "Notification"] {
@@ -580,6 +614,9 @@ enum BridgeInstaller {
         var devisland = (data["devisland"] as? [String: Any]) ?? [:]
         devisland["enabled"] = true
 
+        // TODO(R5-b): Antigravity는 matcher-기반/direct-list 두 config 형태로 나뉘는데
+        // 이 구분이 매니페스트의 active/lifecycle 축과 어긋나(PostToolUse가 매니페스트는
+        // lifecycle인데 여기선 matcher-기반) membership만으론 config 형태를 못 뽑아 하드코딩 유지.
         // 1. Matcher-based events
         for event in ["PreToolUse", "PostToolUse"] {
             let bridgeCommand = "\"\(bridgePath)\" --source antigravity --event \(event)"
