@@ -70,6 +70,29 @@ enum BridgeTransportKind: String, CaseIterable, Identifiable {
     }
 }
 
+enum AoESessionFocusMode: String, CaseIterable, Identifiable {
+    case tmuxClient
+    case managerSearch
+
+    var id: String { rawValue }
+
+    var label: String {
+        let l = L10n.shared
+        switch self {
+        case .tmuxClient:    return l.aoeFocusTmuxClient
+        case .managerSearch: return l.aoeFocusManagerSearch
+        }
+    }
+
+    var detail: String {
+        let l = L10n.shared
+        switch self {
+        case .tmuxClient:    return l.detailAoEFocusTmuxClient
+        case .managerSearch: return l.detailAoEFocusManagerSearch
+        }
+    }
+}
+
 enum ApprovalFallbackPolicy: String, CaseIterable, Identifiable {
     case pass
     case deny
@@ -261,6 +284,7 @@ struct AppSettings: Equatable {
     var expandOnApprovalRequest: Bool
     var expandOnQuestionResponse: Bool
     var preferredTerminal: String?
+    var aoeSessionFocusMode: AoESessionFocusMode
     var checkForUpdatesOnStartup: Bool
     var processVSCodeEnabled: Bool
     var processClaudeDesktopEnabled: Bool
@@ -357,6 +381,7 @@ struct AppSettings: Equatable {
         expandOnApprovalRequest: true,
         expandOnQuestionResponse: true,
         preferredTerminal: nil,
+        aoeSessionFocusMode: .managerSearch,
         checkForUpdatesOnStartup: true,
         processVSCodeEnabled: false,
         processClaudeDesktopEnabled: false,
@@ -449,6 +474,7 @@ final class SettingsStore: ObservableObject {
         static let expandOnApprovalRequest = "expandOnApprovalRequest"
         static let expandOnQuestionResponse = "expandOnQuestionResponse"
         static let preferredTerminal = "preferredTerminal"
+        static let aoeSessionFocusMode = "aoeSessionFocusMode"
         static let checkForUpdatesOnStartup = "checkForUpdatesOnStartup"
         static let processVSCodeEnabled = "processVSCodeEnabled"
         static let processClaudeDesktopEnabled = "processClaudeDesktopEnabled"
@@ -538,6 +564,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.expandOnApprovalRequest, forKey: DefaultsKey.expandOnApprovalRequest)
         userDefaults.set(settings.expandOnQuestionResponse, forKey: DefaultsKey.expandOnQuestionResponse)
         userDefaults.set(settings.preferredTerminal, forKey: DefaultsKey.preferredTerminal)
+        userDefaults.set(settings.aoeSessionFocusMode.rawValue, forKey: DefaultsKey.aoeSessionFocusMode)
         userDefaults.set(settings.checkForUpdatesOnStartup, forKey: DefaultsKey.checkForUpdatesOnStartup)
         userDefaults.set(settings.processVSCodeEnabled, forKey: DefaultsKey.processVSCodeEnabled)
         userDefaults.set(settings.processClaudeDesktopEnabled, forKey: DefaultsKey.processClaudeDesktopEnabled)
@@ -861,6 +888,12 @@ final class SettingsStore: ObservableObject {
                 default: defaults.expandOnQuestionResponse
             ),
             preferredTerminal: userDefaults.string(forKey: DefaultsKey.preferredTerminal),
+            aoeSessionFocusMode: enumValue(
+                AoESessionFocusMode.self,
+                key: DefaultsKey.aoeSessionFocusMode,
+                from: userDefaults,
+                default: defaults.aoeSessionFocusMode
+            ),
             checkForUpdatesOnStartup: bool(
                 key: DefaultsKey.checkForUpdatesOnStartup,
                 from: userDefaults,

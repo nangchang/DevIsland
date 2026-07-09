@@ -1417,7 +1417,8 @@ class AppState: ObservableObject {
         TerminalFocuser.focusTerminal(
             session.terminal,
             title: session.terminalTitle,
-            workspaceRoot: session.workspaceRoot
+            workspaceRoot: session.workspaceRoot,
+            aoeSessionFocusMode: SettingsStore.shared.settings.aoeSessionFocusMode
         )
     }
 
@@ -2143,7 +2144,8 @@ class AppState: ObservableObject {
         TerminalFocuser.focusTerminal(
             session?.terminal ?? TerminalContext(),
             title: session?.terminalTitle,
-            workspaceRoot: session?.workspaceRoot
+            workspaceRoot: session?.workspaceRoot,
+            aoeSessionFocusMode: SettingsStore.shared.settings.aoeSessionFocusMode
         ) { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.terminalFocusRecheckDelay) {
                 self?.passIfTerminalFocused()

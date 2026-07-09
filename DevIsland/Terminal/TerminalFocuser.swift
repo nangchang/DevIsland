@@ -630,6 +630,7 @@ final class TerminalFocuser: Sendable {
         _ terminal: TerminalContext = TerminalContext(),
         title: String? = nil,
         workspaceRoot: String? = nil,
+        aoeSessionFocusMode: AoESessionFocusMode = AppSettings.defaults.aoeSessionFocusMode,
         completion: (() -> Void)? = nil
     ) {
         // TerminalContext는 빈 문자열을 "값 없음"으로 쓰므로 기존 옵셔널 기반 포커스 로직에 그대로 매핑한다.
@@ -745,7 +746,9 @@ final class TerminalFocuser: Sendable {
                 }
             }
             // Manager TUI session navigation (e.g. AoE "/" search)
-            if let managerTitle = managerSessionTitle, !managerTitle.isEmpty {
+            if aoeSessionFocusMode == .managerSearch,
+               let managerTitle = managerSessionTitle,
+               !managerTitle.isEmpty {
                 if let cli = wezTermNavCli, let paneId = wezTermNavPaneId {
                     // WezTerm: use send-text to avoid triggering WezTerm's activity-focus behavior
                     let navEnv = wezTermNavEnv

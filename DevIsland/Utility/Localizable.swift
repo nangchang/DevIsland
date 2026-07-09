@@ -291,6 +291,13 @@ extension L10n {
     var lblPreferredTerminal:         String { s("Open sessions in",                        "세션 열기") }
     var optTerminalSessionDefault:    String { s("Session's terminal (automatic)",           "세션 터미널 자동 선택") }
     var hintPreferredTerminal:        String { s("Used when opening a session in a new terminal window. Falls back to the session's original terminal app if not set.", "새 터미널 창에서 세션을 열 때 사용합니다. 설정하지 않으면 세션이 실행된 터미널 앱을 사용합니다.") }
+    var secAoEFocus:                  String { s("AoE Session Focus",                       "AoE 세션 포커스") }
+    var lblAoEFocusMode:              String { s("Focus mode",                              "포커스 방식") }
+    var hintAoEFocusMode:             String { s("The safer tmux mode avoids sending /session text into AoE. Use manager search only if you want dashboard row navigation.", "안전한 tmux 방식은 AoE에 /session 텍스트를 보내지 않습니다. 대시보드 행 이동이 필요할 때만 검색 방식을 사용하세요.") }
+    var aoeFocusTmuxClient:           String { s("tmux client switch",                      "tmux 클라이언트 전환") }
+    var aoeFocusManagerSearch:        String { s("AoE dashboard search",                    "AoE 대시보드 검색") }
+    var detailAoEFocusTmuxClient:     String { s("Focus the terminal and switch the tmux client/pane without typing into AoE.", "터미널을 포커스하고 AoE에 입력하지 않은 채 tmux 클라이언트/패널을 전환합니다.") }
+    var detailAoEFocusManagerSearch:  String { s("Send Ctrl+Q, /, the session title, and Enter to the AoE dashboard after focusing.", "포커스 후 AoE 대시보드에 Ctrl+Q, /, 세션 이름, Enter를 보냅니다.") }
     var secStartup:                   String { s("Startup",                                 "시작") }
     var lblLaunchAtLogin:             String { s("Launch at Login",                         "로그인 시 자동 시작") }
     var lblLaunchAtLoginApproval:     String { s("Approval required in System Settings",    "시스템 설정에서 승인 필요") }

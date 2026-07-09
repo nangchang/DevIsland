@@ -74,6 +74,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.settings.expandOnInteractiveTool)
         XCTAssertTrue(store.settings.expandOnApprovalRequest)
         XCTAssertTrue(store.settings.expandOnQuestionResponse)
+        XCTAssertEqual(store.settings.aoeSessionFocusMode, .managerSearch)
         XCTAssertTrue(store.settings.checkForUpdatesOnStartup)
         XCTAssertTrue(store.settings.notchAnimationEnabled)
     }
@@ -148,6 +149,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.expandOnInteractiveTool = false
         store.settings.expandOnApprovalRequest = false
         store.settings.expandOnQuestionResponse = false
+        store.settings.aoeSessionFocusMode = .managerSearch
         store.settings.checkForUpdatesOnStartup = false
         store.settings.notchAnimationEnabled = false
 
@@ -196,6 +198,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.settings.expandOnInteractiveTool)
         XCTAssertFalse(reloaded.settings.expandOnApprovalRequest)
         XCTAssertFalse(reloaded.settings.expandOnQuestionResponse)
+        XCTAssertEqual(reloaded.settings.aoeSessionFocusMode, .managerSearch)
         XCTAssertFalse(reloaded.settings.checkForUpdatesOnStartup)
         XCTAssertFalse(reloaded.settings.notchAnimationEnabled)
     }
@@ -253,6 +256,7 @@ final class SettingsStoreTests: XCTestCase {
         defaults.set("bad-mode", forKey: SettingsStore.DefaultsKey.notchRightCharacterMode)
         defaults.set("bad-kind", forKey: SettingsStore.DefaultsKey.notchRightCharacterKind)
         defaults.set([], forKey: SettingsStore.DefaultsKey.notchRightRandomCharacterKinds)
+        defaults.set("bad-mode", forKey: SettingsStore.DefaultsKey.aoeSessionFocusMode)
 
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
 
