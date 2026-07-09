@@ -131,6 +131,9 @@ private extension NSCursor {
     /// macOS 창 우하단 모서리 리사이즈 커서 (↖↘). 공개 API 부재로 private selector 사용, 실패 시 crosshair 폴백.
     static var resizeNorthWestSouthEast: NSCursor {
         let sel = NSSelectorFromString("_windowResizeNorthWestSouthEastCursor")
+        // perform(_:)은 셀렉터 미응답 시 nil이 아니라 unrecognized selector NSException으로
+        // 크래시하므로, 옵셔널/타입 폴백에 앞서 클래스 레벨 responds(to:)로 먼저 가드한다.
+        guard NSCursor.responds(to: sel) else { return .crosshair }
         return (NSCursor.perform(sel)?.takeUnretainedValue() as? NSCursor) ?? .crosshair
     }
 }
