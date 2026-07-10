@@ -141,7 +141,7 @@ class HookSocketServer {
             source.resume()
             Log.bridge.info("Server listening on Unix socket \(path, privacy: .private)")
         } catch {
-            Log.bridge.error("Failed to start Unix socket server: \(error, privacy: .public)")
+            Log.bridge.error("Failed to start Unix socket server: \(error, privacy: .private)")
             DispatchQueue.main.async { self.onServerFailed?(error) }
         }
     }
