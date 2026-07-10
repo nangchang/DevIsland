@@ -69,7 +69,7 @@ jobs:
       - name: Python bridge tests (T1)
         run: |
           cd scripts
-          python3 -m unittest test_devisland_bridge test_devisland_bridge_shell -v
+          python3 -m unittest test_devisland_bridge test_devisland_bridge_shell test_install_hooks -v
 
       - name: Generate Xcode project
         run: xcodegen generate

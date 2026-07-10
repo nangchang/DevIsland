@@ -1,0 +1,30 @@
+{
+  "devisland": {
+    "enabled": false,
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/x/Library/Application Support/DevIsland/devisland-bridge.sh\" --source antigravity --event PreToolUse"
+          },
+          {
+            "type": "command",
+            "command": "/usr/local/bin/other-hook.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "\"/Users/x/Library/Application Support/DevIsland/devisland-bridge.sh\" --source antigravity --event Stop"
+      },
+      {
+        "type": "command",
+        "command": "/usr/local/bin/other-hook.sh"
+      }
+    ]
+  }
+}

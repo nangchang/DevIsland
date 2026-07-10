@@ -1,0 +1,45 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/x/Library/Application Support/DevIsland/devisland-bridge.sh\" --source OLD"
+          },
+          {
+            "type": "command",
+            "command": "/usr/local/bin/other-hook.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "other",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/other-hook.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/x/Library/Application Support/DevIsland/devisland-bridge.sh\" --source OLD"
+          },
+          {
+            "type": "command",
+            "command": "/usr/local/bin/other-hook.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "devisland": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source antigravity --event PreToolUse",
+            "timeout": 86400
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source antigravity --event PostToolUse"
+          }
+        ]
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "\"/BRIDGE\" --source antigravity --event PreInvocation"
+      }
+    ],
+    "PostInvocation": [
+      {
+        "type": "command",
+        "command": "\"/BRIDGE\" --source antigravity --event PostInvocation"
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "\"/BRIDGE\" --source antigravity --event Stop"
+      }
+    ]
+  }
+}
