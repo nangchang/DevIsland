@@ -149,7 +149,7 @@ final class SettingsStoreTests: XCTestCase {
         store.settings.expandOnInteractiveTool = false
         store.settings.expandOnApprovalRequest = false
         store.settings.expandOnQuestionResponse = false
-        store.settings.aoeSessionFocusMode = .managerSearch
+        store.settings.aoeSessionFocusMode = .tmuxClient
         store.settings.checkForUpdatesOnStartup = false
         store.settings.notchAnimationEnabled = false
 
@@ -198,7 +198,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.settings.expandOnInteractiveTool)
         XCTAssertFalse(reloaded.settings.expandOnApprovalRequest)
         XCTAssertFalse(reloaded.settings.expandOnQuestionResponse)
-        XCTAssertEqual(reloaded.settings.aoeSessionFocusMode, .managerSearch)
+        XCTAssertEqual(reloaded.settings.aoeSessionFocusMode, .tmuxClient)
         XCTAssertFalse(reloaded.settings.checkForUpdatesOnStartup)
         XCTAssertFalse(reloaded.settings.notchAnimationEnabled)
     }
