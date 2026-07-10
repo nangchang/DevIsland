@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import os
 
 // 인스턴스 상태 없이 static 메서드만 제공하는 네임스페이스 — isSessionFrontmost가
 // AppState의 @Sendable FrontmostCheck 기본값으로 쓰이므로 Sendable을 명시한다.
@@ -37,12 +38,12 @@ final class TerminalFocuser: Sendable {
         } ?? candidates.first(where: {
             !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleId).isEmpty
         })
-        print("[DevIsland] isSessionFrontmost: appName=\(appName ?? "nil") → targetName=\(targetName ?? "nil") → match=\(match?.name ?? "none")")
+        Log.terminal.debug("isSessionFrontmost: appName=\(appName ?? "nil", privacy: .private) → targetName=\(targetName ?? "nil", privacy: .private) → match=\(match?.name ?? "none", privacy: .private)")
         guard let match else { return false }
 
         let frontBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let isActive = frontBundleId == match.bundleId
-        print("[DevIsland] isSessionFrontmost: \(match.name) frontmost=\(frontBundleId ?? "nil") expected=\(match.bundleId) isActive=\(isActive)")
+        Log.terminal.debug("isSessionFrontmost: \(match.name, privacy: .private) frontmost=\(frontBundleId ?? "nil", privacy: .public) expected=\(match.bundleId, privacy: .public) isActive=\(isActive, privacy: .public)")
         guard isActive else { return false }
 
         let (resultStr, error) = executeAppleScript(frontmostCheckScript(
@@ -54,30 +55,30 @@ final class TerminalFocuser: Sendable {
         let passed = resultStr == "true" || resultStr.hasPrefix("true|")
         
         if let error = error {
-            print("[DevIsland] isSessionFrontmost: AppleScript error for \(match.name): \(error)")
+            Log.terminal.error("isSessionFrontmost: AppleScript error for \(match.name, privacy: .private): \(error, privacy: .private)")
         }
         
-        print("[DevIsland] isSessionFrontmost: app=\(match.name) tty=\(tty ?? "nil") → \(passed ? "YES" : "NO") (\(resultStr))")
+        Log.terminal.debug("isSessionFrontmost: app=\(match.name, privacy: .private) tty=\(tty ?? "nil", privacy: .private) → \(passed ? "YES" : "NO", privacy: .public) (\(resultStr, privacy: .private))")
         guard passed else { return false }
 
         if let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
             // tmux pane identity only makes sense after the terminal tab's outer TTY is frontmost.
             // Otherwise another tab attached to the same tmux server could make the pane check look valid.
             guard isValidTmuxPane(tmuxPane) else {
-                print("[DevIsland] isSessionFrontmost: invalid tmux pane format: \(tmuxPane)")
+                Log.terminal.error("isSessionFrontmost: invalid tmux pane format: \(tmuxPane, privacy: .private)")
                 return false
             }
 
             let currentPane = currentTmuxPane(socket: tmuxSocket, client: tmuxClient)
             guard !currentPane.isEmpty else {
-                print("[DevIsland] isSessionFrontmost: tmux pane unavailable for client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
+                Log.terminal.debug("isSessionFrontmost: tmux pane unavailable for client=\(tmuxClient ?? "nil", privacy: .private) socket=\(tmuxSocket ?? "nil", privacy: .private)")
                 return false
             }
 
             if currentPane == tmuxPane {
                 return true
             } else {
-                print("[DevIsland] isSessionFrontmost: tmux pane mismatch (current=\(currentPane) expected=\(tmuxPane))")
+                Log.terminal.debug("isSessionFrontmost: tmux pane mismatch (current=\(currentPane, privacy: .private) expected=\(tmuxPane, privacy: .private))")
                 return false
             }
         }
@@ -117,7 +118,7 @@ final class TerminalFocuser: Sendable {
         )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         guard completed else {
-            print("[DevIsland] AppleScript timed out after \(appleScriptTimeout)s")
+            Log.terminal.error("AppleScript timed out after \(appleScriptTimeout, privacy: .public)s")
             return (
                 "nil",
                 [
@@ -260,7 +261,7 @@ final class TerminalFocuser: Sendable {
             guard process.terminationStatus == 0 else { return "" }
             return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         } catch {
-            print("[DevIsland] Failed to run process: \(executable.path) \(arguments.joined(separator: " ")), error: \(error)")
+            Log.terminal.error("Failed to run process: \(executable.path, privacy: .private) \(arguments.joined(separator: " "), privacy: .private), error: \(error, privacy: .private)")
             return ""
         }
     }
@@ -285,7 +286,7 @@ final class TerminalFocuser: Sendable {
             process.waitUntilExit()
             return process.terminationStatus == 0
         } catch {
-            print("[DevIsland] Failed to run process: \(executable.path) \(arguments.joined(separator: " ")), error: \(error)")
+            Log.terminal.error("Failed to run process: \(executable.path, privacy: .private) \(arguments.joined(separator: " "), privacy: .private), error: \(error, privacy: .private)")
             return false
         }
     }
@@ -308,7 +309,7 @@ final class TerminalFocuser: Sendable {
             try process.run()
             return true
         } catch {
-            print("[DevIsland] Failed to launch process: \(executable.path) \(arguments.joined(separator: " ")), error: \(error)")
+            Log.terminal.error("Failed to launch process: \(executable.path, privacy: .private) \(arguments.joined(separator: " "), privacy: .private), error: \(error, privacy: .private)")
             return false
         }
     }
@@ -316,7 +317,7 @@ final class TerminalFocuser: Sendable {
     private static func terminateProcess(_ process: Process, after timeout: TimeInterval) {
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) {
             if process.isRunning {
-                print("[DevIsland] tmux command timed out, terminating pid=\(process.processIdentifier)")
+                Log.terminal.error("tmux command timed out, terminating pid=\(process.processIdentifier, privacy: .public)")
                 process.terminate()
             }
         }
@@ -375,7 +376,7 @@ final class TerminalFocuser: Sendable {
     @discardableResult
     private static func switchTmuxClient(socket: String?, client: String?, pane: String) -> Bool {
         guard isValidTmuxPane(pane) else {
-            print("[DevIsland] focusTerminal: invalid tmux pane format: \(pane)")
+            Log.terminal.error("focusTerminal: invalid tmux pane format: \(pane, privacy: .private)")
             return false
         }
 
@@ -386,7 +387,7 @@ final class TerminalFocuser: Sendable {
             arguments: tmuxArguments(socket: socket, command: ["select-window", "-t", pane])
         )
         if !selectWindowSucceeded {
-            print("[DevIsland] tmux select-window failed for pane=\(pane) socket=\(socket ?? "nil")")
+            Log.terminal.error("tmux select-window failed for pane=\(pane, privacy: .private) socket=\(socket ?? "nil", privacy: .private)")
         }
 
         let selectPaneSucceeded = runProcess(
@@ -394,7 +395,7 @@ final class TerminalFocuser: Sendable {
             arguments: tmuxArguments(socket: socket, command: ["select-pane", "-t", pane])
         )
         if !selectPaneSucceeded {
-            print("[DevIsland] tmux select-pane failed for pane=\(pane) socket=\(socket ?? "nil")")
+            Log.terminal.error("tmux select-pane failed for pane=\(pane, privacy: .private) socket=\(socket ?? "nil", privacy: .private)")
         }
 
         var switchCommand = ["switch-client"]
@@ -408,7 +409,7 @@ final class TerminalFocuser: Sendable {
             arguments: tmuxArguments(socket: socket, command: switchCommand)
         )
         if !switchSucceeded {
-            print("[DevIsland] tmux switch-client failed for pane=\(pane) client=\(client ?? "nil") target=\(targetSession.isEmpty ? pane : targetSession) socket=\(socket ?? "nil")")
+            Log.terminal.error("tmux switch-client failed for pane=\(pane, privacy: .private) client=\(client ?? "nil", privacy: .private) target=\(targetSession.isEmpty ? pane : targetSession, privacy: .private) socket=\(socket ?? "nil", privacy: .private)")
         }
 
         return selectWindowSucceeded && selectPaneSucceeded && switchSucceeded
@@ -671,7 +672,7 @@ final class TerminalFocuser: Sendable {
             if name == "VSCode", let path = workspaceRoot, !path.isEmpty {
                 let ok = runProcess(executable: URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", "Visual Studio Code", path])
                 if !ok {
-                    print("[DevIsland] open VS Code failed for path: \(path)")
+                    Log.terminal.error("open VS Code failed for path: \(path, privacy: .private)")
                 }
             } else if name == "WezTerm" {
                 // WezTerm doesn't support AppleScript — use the CLI to focus the exact pane by TTY.
@@ -712,15 +713,15 @@ final class TerminalFocuser: Sendable {
 
                         if let client, !client.isEmpty {
                             // Client found: switch it to the target session
-                            print("[DevIsland] WezTerm tmux switch: client=\(client) pane=\(tmuxPane)")
+                            Log.terminal.debug("WezTerm tmux switch: client=\(client, privacy: .private) pane=\(tmuxPane, privacy: .private)")
                             if !switchTmuxClient(socket: tmuxSocket, client: client, pane: tmuxPane) {
-                                print("[DevIsland] WezTerm tmux switch-client failed pane=\(tmuxPane)")
+                                Log.terminal.error("WezTerm tmux switch-client failed pane=\(tmuxPane, privacy: .private)")
                             }
                         } else {
                             // No client attached (e.g. AoE fully detached sessions).
                             // The windowId pane (WEZTERM_PANE) is the tool's own TUI pane which already
                             // shows the agent output — activating it is sufficient; no new pane needed.
-                            print("[DevIsland] WezTerm: no tmux client for pane=\(tmuxPane), relying on windowId pane activation")
+                            Log.terminal.debug("WezTerm: no tmux client for pane=\(tmuxPane, privacy: .private), relying on windowId pane activation")
                         }
                     }
 
@@ -742,7 +743,7 @@ final class TerminalFocuser: Sendable {
             } else {
                 let (_, error) = executeAppleScript(focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))
                 if let error {
-                    print("[DevIsland] terminal focus AppleScript error: \(error)")
+                    Log.terminal.error("terminal focus AppleScript error: \(error, privacy: .private)")
                 }
             }
             // Manager TUI session navigation (e.g. AoE "/" search)
@@ -778,9 +779,9 @@ final class TerminalFocuser: Sendable {
                 }
             }
             if !tmuxHandled, let tmuxPane = tmuxPane, !tmuxPane.isEmpty {
-                print("[DevIsland] tmux pane detected: \(tmuxPane), switching client=\(tmuxClient ?? "nil") socket=\(tmuxSocket ?? "nil")")
+                Log.terminal.debug("tmux pane detected: \(tmuxPane, privacy: .private), switching client=\(tmuxClient ?? "nil", privacy: .private) socket=\(tmuxSocket ?? "nil", privacy: .private)")
                 if !switchTmuxClient(socket: tmuxSocket, client: tmuxClient, pane: tmuxPane) {
-                    print("[DevIsland] tmux switch failed for pane=\(tmuxPane)")
+                    Log.terminal.error("tmux switch failed for pane=\(tmuxPane, privacy: .private)")
                 }
             }
             if let completion {
@@ -840,7 +841,7 @@ final class TerminalFocuser: Sendable {
             end tell
             """)
             if let error {
-                print("[DevIsland] iTerm manager navigation AppleScript error: \(error)")
+                Log.terminal.error("iTerm manager navigation AppleScript error: \(error, privacy: .private)")
                 return
             }
         }
@@ -1050,7 +1051,7 @@ final class TerminalFocuser: Sendable {
                 end tell
                 """
                 let (_, err) = executeAppleScript(script)
-                if let err { print("[DevIsland] openNewWindow iTerm error: \(err)") }
+                if let err { Log.terminal.error("openNewWindow iTerm error: \(err, privacy: .private)") }
 
             case "Terminal":
                 let script = """
@@ -1060,7 +1061,7 @@ final class TerminalFocuser: Sendable {
                 end tell
                 """
                 let (_, err) = executeAppleScript(script)
-                if let err { print("[DevIsland] openNewWindow Terminal error: \(err)") }
+                if let err { Log.terminal.error("openNewWindow Terminal error: \(err, privacy: .private)") }
 
             case "Ghostty":
                 // --initial-command: 새 창 셸에 명령을 타이핑한 것처럼 전달 (&&도 그대로 동작).
@@ -1088,7 +1089,7 @@ final class TerminalFocuser: Sendable {
                 end tell
                 """
                 let (_, cmuxErr) = executeAppleScript(cmuxScript)
-                if let cmuxErr { print("[DevIsland] openNewWindow cmux error: \(cmuxErr)") }
+                if let cmuxErr { Log.terminal.error("openNewWindow cmux error: \(cmuxErr, privacy: .private)") }
 
             case "WezTerm":
                 // NSWorkspace.openApplication ignores arguments when WezTerm is already running.
@@ -1111,7 +1112,7 @@ final class TerminalFocuser: Sendable {
                         )
                     }
                     if !ok {
-                        print("[DevIsland] openNewWindow WezTerm error: \(cli.path)")
+                        Log.terminal.error("openNewWindow WezTerm error: \(cli.path, privacy: .private)")
                     }
                 }
 
