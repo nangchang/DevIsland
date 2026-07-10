@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Manages the shared secret token used to authenticate bridge → app IPC connections.
 ///
@@ -35,7 +36,7 @@ final class BridgeTokenManager: @unchecked Sendable {
                 withIntermediateDirectories: true
             )
         } catch {
-            print("BridgeTokenManager: failed to create directory – \(error)")
+            Log.bridge.error("BridgeTokenManager: failed to create directory – \(error, privacy: .private)")
             return
         }
 
@@ -47,14 +48,14 @@ final class BridgeTokenManager: @unchecked Sendable {
         let token = UUID().uuidString
         let attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
         guard FileManager.default.createFile(atPath: tokenURL.path, contents: Data(token.utf8), attributes: attributes) else {
-            print("BridgeTokenManager: failed to write token")
+            Log.bridge.error("BridgeTokenManager: failed to write token")
             return
         }
         lock.lock()
         _cachedToken = token
         _tokenFileExists = true
         lock.unlock()
-        print("BridgeTokenManager: token generated")
+        Log.bridge.info("BridgeTokenManager: token generated")
     }
 
     /// True when the token file is absent and any incoming token is accepted.
