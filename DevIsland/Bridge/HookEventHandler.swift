@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // Parsed fields extracted from a raw hook message string.
 struct ParsedHookEvent {
@@ -46,18 +47,18 @@ enum HookEventHandler {
         if let envelope = try? JSONDecoder().decode(IPCEnvelope.self, from: rawData) {
             guard envelope.protocol == IPCEnvelope.protocolName,
                   envelope.version == IPCEnvelope.currentVersion else {
-                print("[DevIsland] Invalid IPC envelope protocol or version – denying request")
+                Log.bridge.error("Invalid IPC envelope protocol or version – denying request")
                 return .denied
             }
             guard validateToken(envelope.token) else {
-                print("[DevIsland] IPC token validation failed – denying request")
+                Log.bridge.error("IPC token validation failed – denying request")
                 return .denied
             }
             parsedJSON = envelope.payload.mapValues { $0.rawValue } as [String: Any]
             requestId = envelope.requestId
         } else {
             guard authentication == .legacyAllowed else {
-                print("[DevIsland] Authenticated IPC envelope required – denying request")
+                Log.bridge.error("Authenticated IPC envelope required – denying request")
                 return .denied
             }
             guard let json = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any] else {
@@ -78,7 +79,7 @@ enum HookEventHandler {
             parentSessionId = pid
         }
 
-        print("[DevIsland] [MSG] Parsed JSON from \(sessionId.prefix(8))")
+        Log.bridge.debug("Parsed JSON from \(sessionId.prefix(8), privacy: .private)")
 
         var terminalTitle = parsedJSON["terminal_title"] as? String ?? "Terminal"
         let terminal = TerminalContext(from: parsedJSON)
@@ -106,7 +107,7 @@ enum HookEventHandler {
             ? toolName + " (Plan)"
             : toolName
 
-        print("Parsed Hook: event=\(event), session=\(sessionId), title=\(terminalTitle)")
+        Log.bridge.debug("Parsed Hook: event=\(event, privacy: .public), session=\(sessionId, privacy: .private), title=\(terminalTitle, privacy: .private)")
 
         let displayMsg = ToolMessageFormatter.displayMessage(
             for: toolName,

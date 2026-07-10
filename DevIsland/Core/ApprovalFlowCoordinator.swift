@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Notch-facing state and effects the approval flow drives but does not own.
 /// `AppState` is the production implementation: presentation state stays
@@ -170,7 +171,7 @@ final class ApprovalFlowCoordinator {
             guard context.displayState.showingRequestId == next.id else { return }
 
             if isFrontmost && !next.isReplay {
-                print("[DevIsland] [AUTO] Terminal focused, bypassing pending request for \(next.sessionId.prefix(8))")
+                Log.approval.info("Terminal focused, bypassing pending request for \(next.sessionId.prefix(8), privacy: .private)")
                 if next.claudeQuestion != nil {
                     next.responseHandler(HookResponse(.pass).jsonString())
                     self.recordReplayDecision(
@@ -215,7 +216,7 @@ final class ApprovalFlowCoordinator {
                 return
             }
 
-            print("[DevIsland] showNextRequest: showing \(next.eventName)/\(next.toolName) id=\(next.id)")
+            Log.approval.debug("showNextRequest: showing \(next.eventName, privacy: .public)/\(next.toolName, privacy: .private) id=\(next.id, privacy: .public)")
             if context.isExpandingFromRequest && !context.displayState.sessionId.isEmpty && context.displayState.sessionId != next.sessionId {
                 self.sessionStore.setUnread(false, sessionId: context.displayState.sessionId)
                 self.previousSessionId = context.displayState.sessionId
@@ -375,9 +376,9 @@ final class ApprovalFlowCoordinator {
             toolInput: toolInput
         ).jsonString()
         let hadResponseHandler = context.displayState.hasResponseHandler
-        print("[DevIsland] sendDecision approved=\(approved), handler=\(context.displayState.hasResponseHandler ? "SET" : "NIL"), reason=\(reason ?? "none")")
+        Log.approval.debug("sendDecision approved=\(approved, privacy: .public), handler=\(context.displayState.hasResponseHandler ? "SET" : "NIL", privacy: .public), reason=\(reason ?? "none", privacy: .private)")
         context.displayState.responseHandler?(payload)
-        print("[DevIsland] sendDecision: response payload sent")
+        Log.approval.debug("sendDecision: response payload sent")
         recordReplayDecision(
             hookEventId: context.displayState.hookEventId,
             agentKind: context.displayState.agentKind,
@@ -521,7 +522,7 @@ final class ApprovalFlowCoordinator {
                 return
             }
         } catch {
-            print("[DevIsland] [POLICY] Failed to persist approval scope for \(provider.rawValue): \(error)")
+            Log.approval.error("Failed to persist approval scope for \(provider.rawValue, privacy: .public): \(error, privacy: .private)")
         }
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import os
 
 enum BridgeInstaller {
     private static let sharedBridgePath = "Library/Application Support/DevIsland"
@@ -402,7 +403,7 @@ enum BridgeInstaller {
         do {
             try removeAntigravityHooks(at: url)
         } catch {
-            print("[DevIsland] Failed to remove legacy Antigravity hooks: \(error)")
+            Log.bridge.error("Failed to remove legacy Antigravity hooks: \(error, privacy: .private)")
         }
         let fm = FileManager.default
         let antigravityDir = url.deletingLastPathComponent()

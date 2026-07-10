@@ -2,6 +2,7 @@ import Foundation
 import Network
 import Combine
 import Darwin
+import os
 
 enum HookIPCTransport: Equatable {
     case tcp(port: UInt16)
@@ -54,9 +55,9 @@ class HookSocketServer {
             listener?.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    print("Server listening on 127.0.0.1:\(port)")
+                    Log.bridge.info("TCP server listening on 127.0.0.1:\(port.rawValue, privacy: .public)")
                 case .failed(let error):
-                    print("Server failed: \(error)")
+                    Log.bridge.error("TCP server failed: \(error, privacy: .public)")
                     DispatchQueue.main.async { self.onServerFailed?(error) }
                 default:
                     break
@@ -69,7 +70,7 @@ class HookSocketServer {
 
             listener?.start(queue: .global())
         } catch {
-            print("Failed to start server: \(error)")
+            Log.bridge.error("Failed to start TCP server: \(error, privacy: .public)")
             DispatchQueue.main.async { self.onServerFailed?(error) }
         }
     }
@@ -138,9 +139,9 @@ class HookSocketServer {
             }
             unixAcceptSource = source
             source.resume()
-            print("Server listening on Unix socket \(path)")
+            Log.bridge.info("Server listening on Unix socket \(path, privacy: .private)")
         } catch {
-            print("Failed to start Unix socket server: \(error)")
+            Log.bridge.error("Failed to start Unix socket server: \(error, privacy: .public)")
             DispatchQueue.main.async { self.onServerFailed?(error) }
         }
     }
@@ -168,7 +169,7 @@ class HookSocketServer {
             let clientFD = accept(unixListenFD, nil, nil)
             if clientFD < 0 {
                 if errno == EWOULDBLOCK || errno == EAGAIN { return }
-                print("Unix accept failed: \(errno)")
+                Log.bridge.error("Unix accept failed: errno=\(errno, privacy: .public)")
                 return
             }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -309,7 +310,7 @@ class HookSocketServer {
                 // Raw JSON on TCP: reject when a token file is present (envelope required).
                 // Legacy raw-JSON clients should connect via the Unix socket instead.
                 if self.rejectsRawJSONOnTCP() {
-                    print("[HookSocketServer] Rejected raw JSON on TCP: token file present")
+                    Log.bridge.error("Rejected raw JSON on TCP: token file present")
                     self.closeConnection(id: id, connection: connection)
                     return
                 }
@@ -329,7 +330,7 @@ class HookSocketServer {
             if let data { payload.append(data) }
 
             if payload.count > (self?.maxPayloadSize ?? 0) {
-                print("Payload exceeds size limit")
+                Log.bridge.error("Payload exceeds size limit")
                 self?.closeConnection(id: id, connection: connection)
                 return
             }
@@ -375,7 +376,7 @@ class HookSocketServer {
 
     private func receiveFramedBody(on connection: NWConnection, id: UUID, expectedLength: Int, accumulated: Data) {
         guard expectedLength <= maxPayloadSize else {
-            print("Framed payload length \(expectedLength) exceeds limit")
+            Log.bridge.error("Framed payload length \(expectedLength, privacy: .public) exceeds limit")
             closeConnection(id: id, connection: connection)
             return
         }
