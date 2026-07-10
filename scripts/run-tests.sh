@@ -21,6 +21,7 @@ echo "Running bridge script tests..."
 python3 scripts/test_devisland_bridge.py
 python3 scripts/test_devisland_bridge_shell.py
 python3 scripts/test_install_hooks.py
+python3 scripts/test_install_equivalence.py
 
 # 1. Ensure project is generated
 xcodegen generate

@@ -1,0 +1,131 @@
+{
+  "hooks" : {
+    "Elicitation" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "Notification" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\/usr\/local\/bin\/other-hook.sh",
+            "type" : "command"
+          }
+        ]
+      },
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "timeout" : 86400,
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "PostToolUse" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "SessionEnd" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\/usr\/local\/bin\/other-hook.sh",
+            "type" : "command"
+          }
+        ]
+      },
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "Stop" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\/usr\/local\/bin\/other-hook.sh",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "hooks" : {
+    "AfterAgent" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source gemini",
+            "type" : "command"
+          }
+        ],
+        "matcher" : "*"
+      }
+    ],
+    "AfterTool" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\/usr\/local\/bin\/other-hook.sh",
+            "type" : "command"
+          }
+        ],
+        "matcher" : "*"
+      }
+    ],
+    "BeforeTool" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\/usr\/local\/bin\/other-hook.sh",
+            "type" : "command"
+          },
+          {
+            "command" : "\"\/BRIDGE\" --source gemini",
+            "timeout" : 86400000,
+            "type" : "command"
+          }
+        ],
+        "matcher" : "*"
+      }
+    ],
+    "Notification" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source gemini",
+            "type" : "command"
+          }
+        ],
+        "matcher" : "*"
+      }
+    ],
+    "SessionEnd" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source gemini",
+            "type" : "command"
+          }
+        ],
+        "matcher" : "*"
+      }
+    ],
+    "SessionStart" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source gemini",
+            "type" : "command"
+          }
+        ],
+        "matcher" : "*"
+      }
+    ]
+  }
+}
