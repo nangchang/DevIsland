@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Hook-installer logic extracted verbatim from install-bridge.sh.
+"""Hook-installer logic — single source of truth for hook installation.
 
-각 provider는 서브커맨드로 호출되며, 예전 install-bridge.sh의 inline Python
-블록과 바이트 단위로 동일한 출력을 낸다(순수 이동 — scripts/test_install_hooks.py의
-골든이 이를 고정). 이벤트 목록·타임아웃·matcher는 아직 하드코딩 유지(매니페스트 구동
-전환은 후속 PR2에서 semantic-equivalence 검증과 함께 진행).
+앱(BridgeInstaller)과 install-bridge.sh가 공통으로 호출한다. 각 provider는
+서브커맨드로 호출된다. claude/codex의 이벤트 이름 membership은 hook_events.json
+매니페스트에서 읽어 런타임 브리지(devisland_bridge.py)와 단일 소스를 공유한다.
+gemini/antigravity는 config 형태 축(matcher-기반 vs direct-list)이 매니페스트의
+active/lifecycle 축과 어긋나 하드코딩을 유지한다(config 형태·타임아웃·matcher는
+어느 provider든 여기 코드에 남는다 — 매니페스트는 membership만 제공).
 
 Usage:
     install_hooks.py claude       <settings.json> <bridge_dest>
@@ -17,9 +19,27 @@ import json
 import os
 import sys
 
+# 매니페스트는 이 스크립트와 같은 디렉토리에 있다(scripts/ 또는 앱 Resources/).
+MANIFEST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hook_events.json")
+
+
+def _manifest_provider(name):
+    """hook_events.json에서 provider의 (lifecycle, active, retired) 이벤트 목록을 읽는다."""
+    with open(MANIFEST_PATH, encoding="utf-8") as f:
+        manifest = json.load(f)
+    prov = manifest.get(name)
+    if not isinstance(prov, dict):
+        raise SystemExit(f"install_hooks: manifest에 provider '{name}' 없음 ({MANIFEST_PATH})")
+    return (
+        prov.get("lifecycle", []),
+        prov.get("active", []),
+        prov.get("retired", []),
+    )
+
 
 def install_claude(path, bridge_path):
     bridge_command = f'"{bridge_path}" --source claude'
+    lifecycle, active, retired = _manifest_provider("claude")
 
     with open(path) as f:
         data = json.load(f)
@@ -39,23 +59,15 @@ def install_claude(path, bridge_path):
                 cleaned.append(updated)
         return cleaned
 
-    for key, config in [
-        ('SessionStart',      lifecycle_config),
-        ('SessionEnd',        lifecycle_config),
-        ('Notification',      lifecycle_config),
-        ('Stop',              lifecycle_config),
-        ('PreToolUse',        lifecycle_config),
-        ('PostToolUse',       lifecycle_config),
-        ('PostToolUseFailure', lifecycle_config),
-        ('UserPromptSubmit',  lifecycle_config),
-        ('Elicitation',       lifecycle_config),
-        ('PermissionRequest', approval_config),
-    ]:
+    # 매니페스트: lifecycle 이벤트는 기본 config, active(승인) 이벤트는 긴 타임아웃 config.
+    entries = [(key, lifecycle_config) for key in lifecycle] + \
+              [(key, approval_config) for key in active]
+    for key, config in entries:
         data['hooks'].setdefault(key, [])
         data['hooks'][key] = remove_bridge_hooks(data['hooks'][key])
         data['hooks'][key].append(config)
 
-    for key in ['SubagentStop', 'PreCompact', 'StopFailure']:
+    for key in retired:
         entries = remove_bridge_hooks(data['hooks'].get(key, []))
         if entries:
             data['hooks'][key] = entries
@@ -68,6 +80,7 @@ def install_claude(path, bridge_path):
 
 def install_codex_hooks(path, bridge_path):
     bridge_command = f'"{bridge_path}" --source codex'
+    lifecycle, active, retired_events = _manifest_provider("codex")
 
     data = {}
     if os.path.exists(path):
@@ -80,19 +93,14 @@ def install_codex_hooks(path, bridge_path):
     data.setdefault('hooks', {})
 
     # 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-    events_lifecycle = ["SessionStart", "PostToolUse", "Stop"]
-    events_status = ["PreToolUse"]
-    events_approval = ["PermissionRequest"]
-    retired_events = ["SessionEnd"]
-
-    for event in events_lifecycle + events_status + events_approval:
+    for event in lifecycle + active:
         event_configs = data['hooks'].get(event, [])
         if not isinstance(event_configs, list):
             event_configs = []
 
-        # PermissionRequest만 실제 승인 대기 이벤트이므로 타임아웃을 길게 설정함 (86400초 = 24시간)
+        # active(승인 대기) 이벤트만 타임아웃을 길게 설정함 (86400초 = 24시간)
         h_cmd = {"type": "command", "command": bridge_command}
-        if event in events_approval:
+        if event in active:
             h_cmd["timeout"] = 86400
 
         found = False

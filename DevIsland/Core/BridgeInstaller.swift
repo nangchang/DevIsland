@@ -21,6 +21,7 @@ enum BridgeInstaller {
         case missingBridgeScript
         case missingBridgeHelper
         case missingBridgeManifest
+        case missingInstaller
 
         var errorDescription: String? {
             switch self {
@@ -30,46 +31,9 @@ enum BridgeInstaller {
                 return L10n.shared.alertBundleNoHelper
             case .missingBridgeManifest:
                 return L10n.shared.alertBundleNoManifest
+            case .missingInstaller:
+                return L10n.shared.alertBundleNoInstaller
             }
-        }
-    }
-
-    /// hook_events.json 매니페스트에서 provider별 이벤트 이름 목록을 읽는다.
-    /// **이벤트 이름 membership만** 여기서 온다 — config 형태·타임아웃·matcher 규칙은
-    /// 각 patch 함수에 남긴다(provider마다 형태가 달라 active/lifecycle 축으로 표현 불가).
-    /// 현재 Claude/Codex만 매니페스트 구동이고 Gemini/Antigravity는 축이 어긋나 하드코딩 유지.
-    struct HookEventManifest {
-        struct Provider {
-            let active: [String]
-            let lifecycle: [String]
-            let retired: [String]
-        }
-
-        private let providers: [String: Provider]
-
-        static func load(from url: URL) throws -> HookEventManifest {
-            let data = try Data(contentsOf: url)
-            guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw BridgeInstallerError.missingBridgeManifest
-            }
-            var providers: [String: Provider] = [:]
-            for (key, value) in root {
-                // `_bridge_extras` 같은 비-provider 항목(배열)은 건너뛴다.
-                guard let dict = value as? [String: Any] else { continue }
-                providers[key] = Provider(
-                    active: (dict["active"] as? [String]) ?? [],
-                    lifecycle: (dict["lifecycle"] as? [String]) ?? [],
-                    retired: (dict["retired"] as? [String]) ?? []
-                )
-            }
-            return HookEventManifest(providers: providers)
-        }
-
-        func provider(_ name: String) throws -> Provider {
-            guard let provider = providers[name] else {
-                throw BridgeInstallerError.missingBridgeManifest
-            }
-            return provider
         }
     }
 
@@ -144,55 +108,40 @@ enum BridgeInstaller {
     }
 
     private static func installClaudeHooks() throws {
-        let bridgeURL = try bridgeScriptURL()
-        let helperURL = try bridgeHelperURL()
-        let manifestURL = try bridgeManifestURL()
-        let manifest = try HookEventManifest.load(from: manifestURL)
-        let paths = installPaths()
+        let paths = try prepareBridge()
         let settingsURL = paths.home.appendingPathComponent(".claude/settings.json")
-
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
-        try patchClaudeSettings(at: settingsURL, bridgePath: paths.destURL.path, events: try manifest.provider("claude"))
+        // install_hooks.py claude는 파일이 존재해야 하므로(json.load) 셸 설치와 동일하게 빈 {}로 시딩.
+        try seedIfMissing(settingsURL, contents: "{}")
+        try runInstaller("claude", [settingsURL.path, paths.destURL.path])
     }
 
     private static func installCodexHooks() throws {
-        let bridgeURL = try bridgeScriptURL()
-        let helperURL = try bridgeHelperURL()
-        let manifestURL = try bridgeManifestURL()
-        let manifest = try HookEventManifest.load(from: manifestURL)
-        let paths = installPaths()
+        let paths = try prepareBridge()
         let codexHooksURL  = paths.home.appendingPathComponent(".codex/hooks.json")
         let codexConfigURL = paths.home.appendingPathComponent(".codex/config.toml")
-
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
-        try patchCodexHooks(at: codexHooksURL, bridgePath: paths.destURL.path, events: try manifest.provider("codex"))
-        try ensureCodexFeatureFlag(at: codexConfigURL)
+        try ensureParentDir(codexHooksURL)
+        try runInstaller("codex-hooks", [codexHooksURL.path, paths.destURL.path])
+        try runInstaller("codex-config", [codexConfigURL.path, paths.destURL.path])
     }
 
     private static func installGeminiHooks() throws {
-        let bridgeURL = try bridgeScriptURL()
-        let helperURL = try bridgeHelperURL()
-        let manifestURL = try bridgeManifestURL()
-        let paths = installPaths()
+        let paths = try prepareBridge()
         let geminiSettingsURL = paths.home.appendingPathComponent(".gemini/settings.json")
-
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
-        try patchGeminiSettings(at: geminiSettingsURL, bridgePath: paths.destURL.path)
+        try ensureParentDir(geminiSettingsURL)
+        try runInstaller("gemini", [geminiSettingsURL.path, paths.destURL.path])
     }
 
     private static func installAntigravityHooks() throws {
-        let bridgeURL = try bridgeScriptURL()
-        let helperURL = try bridgeHelperURL()
-        let manifestURL = try bridgeManifestURL()
-        let paths = installPaths()
+        let paths = try prepareBridge()
         let antigravityHooksURL = paths.home.appendingPathComponent(".gemini/config/hooks.json")
         let legacyAntigravityHooksURL = paths.home.appendingPathComponent(".gemini/antigravity-cli/hooks.json")
-
-        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
-        try patchAntigravityHooks(at: antigravityHooksURL, bridgePath: paths.destURL.path)
-        if !sameHookFile(antigravityHooksURL, legacyAntigravityHooksURL) {
-            try removeLegacyAntigravityHooks(at: legacyAntigravityHooksURL)
-        }
+        let legacyAntigravityDir = paths.home.appendingPathComponent(".gemini/antigravity-cli")
+        try ensureParentDir(antigravityHooksURL)
+        // install_hooks.py antigravity가 레거시 파일 정리(devisland 키 제거 + stray 파일 삭제)까지 내부 수행.
+        try runInstaller("antigravity", [
+            antigravityHooksURL.path, paths.destURL.path,
+            legacyAntigravityHooksURL.path, legacyAntigravityDir.path,
+        ])
     }
 
     // MARK: Shared helpers
@@ -245,237 +194,76 @@ enum BridgeInstaller {
         try fm.setAttributes([.posixPermissions: 0o755 as NSNumber], ofItemAtPath: helperDestURL.path)
     }
 
-    // MARK: Claude Code settings patch
-
-    static func patchClaudeSettings(at url: URL, bridgePath: String, events: HookEventManifest.Provider) throws {
-        let fm = FileManager.default
-        let bridgeCommand = "\"\(bridgePath)\" --source claude"
-        var settings: [String: Any] = [:]
-        if fm.fileExists(atPath: url.path) {
-            let data = try Data(contentsOf: url)
-            guard let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw NSError(domain: "BridgeInstaller", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBadJSON])
-            }
-            settings = parsed
-        } else {
-            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        }
-
-        var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
-
-        let approvalConfig: [String: Any] = [
-            "hooks": [["type": "command", "command": bridgeCommand, "timeout": 86400]]
-        ]
-        let lifecycleConfig: [String: Any] = [
-            "hooks": [["type": "command", "command": bridgeCommand]]
-        ]
-        // 매니페스트: lifecycle 이벤트는 기본 config, active(승인) 이벤트는 긴 타임아웃 config.
-        let entries: [(String, [String: Any])] =
-            events.lifecycle.map { ($0, lifecycleConfig) } +
-            events.active.map { ($0, approvalConfig) }
-        let retiredEntries = events.retired
-
-        for (key, config) in entries {
-            var list = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
-            list.append(config)
-            hooks[key] = list
-        }
-        for key in retiredEntries {
-            let list = removingBridgeHooksFrom(list: (hooks[key] as? [[String: Any]]) ?? [])
-            if list.isEmpty { hooks.removeValue(forKey: key) } else { hooks[key] = list }
-        }
-
-        settings["hooks"] = hooks
-        let out = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
-        try out.write(to: url, options: .atomic)
+    /// 번들 브리지 리소스를 bridgeDir에 배치하고 설치 경로를 돌려준다.
+    /// 모든 provider 설치가 공통으로 먼저 호출한다.
+    private static func prepareBridge() throws -> InstallPaths {
+        let bridgeURL = try bridgeScriptURL()
+        let helperURL = try bridgeHelperURL()
+        let manifestURL = try bridgeManifestURL()
+        let paths = installPaths()
+        try prepare(bridgeURL: bridgeURL, helperURL: helperURL, manifestURL: manifestURL, destURL: paths.destURL, hooksDir: paths.bridgeDir)
+        return paths
     }
 
-    // MARK: Codex CLI hooks patch
-
-    static func patchCodexHooks(at url: URL, bridgePath: String, events eventList: HookEventManifest.Provider) throws {
-        let fm = FileManager.default
-        let bridgeCommand = "\"\(bridgePath)\" --source codex"
-        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-        var data: [String: Any] = [:]
-        if fm.fileExists(atPath: url.path),
-           let raw = try? Data(contentsOf: url),
-           let parsed = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] {
-            data = parsed
-        }
-
-        var hooks = (data["hooks"] as? [String: Any]) ?? [:]
-        
-        // 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-        // 매니페스트의 lifecycle + active 이벤트 모두 등록하고, active(승인) 이벤트만 긴 타임아웃.
-        let events = eventList.lifecycle + eventList.active
-        for event in events {
-            var eventConfigs = (hooks[event] as? [[String: Any]]) ?? []
-
-            // 승인 대기 이벤트만 타임아웃을 길게 설정함 (86400초 = 24시간)
-            var hCmd: [String: Any] = ["type": "command", "command": bridgeCommand]
-            if eventList.active.contains(event) {
-                hCmd["timeout"] = 86400
-            }
-
-            var found = false
-            for i in 0..<eventConfigs.count {
-                var config = eventConfigs[i]
-                if (config["matcher"] as? String) == "*" {
-                    var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
-                    subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgeFileName) }
-                    subHooks.append(hCmd)
-                    config["hooks"] = subHooks
-                    eventConfigs[i] = config
-                    found = true
-                    break
-                }
-            }
-
-            if !found {
-                eventConfigs.append([
-                    "matcher": "*",
-                    "hooks": [hCmd]
-                ])
-            }
-            hooks[event] = eventConfigs
-        }
-        for event in eventList.retired {
-            let cleaned = removingBridgeHooksFrom(list: (hooks[event] as? [[String: Any]]) ?? [])
-            if cleaned.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = cleaned }
-        }
-        
-        data["hooks"] = hooks
-
-        let out = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
-        try out.write(to: url, options: .atomic)
+    private static func ensureParentDir(_ url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     }
 
-    private static func ensureCodexFeatureFlag(at url: URL) throws {
+    /// 대상 파일이 없으면 부모 디렉토리 생성 후 초기 내용으로 시딩한다.
+    private static func seedIfMissing(_ url: URL, contents: String) throws {
         let fm = FileManager.default
-        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-        var lines: [String] = []
-        if fm.fileExists(atPath: url.path) {
-            let content = try String(contentsOf: url, encoding: .utf8)
-            lines = content.components(separatedBy: .newlines)
-        }
-
-        // 기존 [hooks] 또는 [[hooks.]] 관련 설정 제거 및 hooks feature 활성화 (hooks.json으로 일원화)
-        var newLines: [String] = []
-        var skip = false
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("[hooks]") || trimmed.hasPrefix("[[hooks.") {
-                skip = true
-                continue
-            }
-            if skip && trimmed.hasPrefix("[") && !trimmed.hasPrefix("[[hooks.") {
-                skip = false
-            }
-            if !skip {
-                newLines.append(line)
-            }
-        }
-
-        if let featuresIndex = newLines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "[features]" }) {
-            var featuresEnd = featuresIndex + 1
-            while featuresEnd < newLines.count {
-                if newLines[featuresEnd].trimmingCharacters(in: .whitespaces).hasPrefix("[") {
-                    break
-                }
-                featuresEnd += 1
-            }
-
-            var foundHooks = false
-            var featureLines: [String] = []
-            for line in newLines[(featuresIndex + 1)..<featuresEnd] {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                let key = trimmed.split(separator: "=", maxSplits: 1).first?.trimmingCharacters(in: .whitespaces) ?? ""
-                switch key {
-                case "hooks":
-                    featureLines.append("hooks = true")
-                    foundHooks = true
-                case "codex_hooks":
-                    continue
-                default:
-                    featureLines.append(line)
-                }
-            }
-            if !foundHooks {
-                featureLines.append("hooks = true")
-            }
-            newLines.replaceSubrange((featuresIndex + 1)..<featuresEnd, with: featureLines)
-        } else {
-            newLines.append("\n[features]\nhooks = true\n")
-        }
-
-        let out = newLines.joined(separator: "\n")
-        try out.write(to: url, atomically: true, encoding: .utf8)
+        guard !fm.fileExists(atPath: url.path) else { return }
+        try ensureParentDir(url)
+        try contents.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    // MARK: Gemini CLI settings patch
+    // MARK: install_hooks.py subprocess
 
-    private static func patchGeminiSettings(at url: URL, bridgePath: String) throws {
+    private static func installerScriptURL() throws -> URL {
+        guard let url = Bundle.main.url(forResource: "install_hooks", withExtension: "py") else {
+            throw BridgeInstallerError.missingInstaller
+        }
+        return url
+    }
+
+    /// python3 인터프리터를 찾는다. Finder에서 실행된 GUI 앱은 셸 PATH를 상속하지 않아
+    /// 후보 경로를 직접 탐색한다. 런타임 브리지(devisland-bridge.sh)는 PATH의 python3를
+    /// 쓰므로 homebrew 설치를 먼저 보고, 마지막에 시스템/CLT 경로로 폴백한다
+    /// (`/usr/bin/python3`는 CLT 미설치 시 stub이라 후순위).
+    private static func pythonInterpreterURL() -> URL {
+        let candidates = ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
         let fm = FileManager.default
-        let bridgeCommand = "\"\(bridgePath)\" --source gemini"
-        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-        var data: [String: Any] = [:]
-        if fm.fileExists(atPath: url.path),
-           let raw = try? Data(contentsOf: url),
-           let parsed = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] {
-            data = parsed
+        for path in candidates where fm.isExecutableFile(atPath: path) {
+            return URL(fileURLWithPath: path)
         }
+        return URL(fileURLWithPath: "/usr/bin/python3")
+    }
 
-        // Gemini CLI: hooks는 { "EventName": [ { "matcher": "*", "hooks": [...] } ] } 형태
-        // TODO(R5-b): Gemini는 hook_events.json에 키가 없고 이벤트 이름·ms 타임아웃이
-        // 달라 아직 하드코딩 유지. 매니페스트에 gemini 키를 추가하면 membership만 이관 가능.
-        var hooks = (data["hooks"] as? [String: Any]) ?? [:]
-
-        for event in ["BeforeTool", "SessionStart", "SessionEnd", "AfterAgent", "Notification"] {
-            var eventConfigs = (hooks[event] as? [[String: Any]]) ?? []
-            
-            var found = false
-            for i in 0..<eventConfigs.count {
-                var config = eventConfigs[i]
-                if (config["matcher"] as? String) == "*" {
-                    var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
-                    subHooks.removeAll { ($0["command"] as? String ?? "").contains(bridgeFileName) }
-                    var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
-                    if event == "BeforeTool" {
-                        hookEntry["timeout"] = 86400000
-                    }
-                    subHooks.append(hookEntry)
-                    config["hooks"] = subHooks
-                    eventConfigs[i] = config
-                    found = true
-                    break
-                }
-            }
-            
-            if !found {
-                var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
-                if event == "BeforeTool" {
-                    hookEntry["timeout"] = 86400000
-                }
-                eventConfigs.append([
-                    "matcher": "*",
-                    "hooks": [hookEntry]
-                ])
-            }
-            hooks[event] = eventConfigs
+    /// 번들 install_hooks.py를 python3로 실행한다. install_hooks.py는 hook_events.json
+    /// 매니페스트를 자기 위치(앱 Resources) 기준으로 읽는다.
+    private static func runInstaller(_ subcommand: String, _ arguments: [String]) throws {
+        let script = try installerScriptURL()
+        let process = Process()
+        process.executableURL = pythonInterpreterURL()
+        process.arguments = [script.path, subcommand] + arguments
+        let errPipe = Pipe()
+        // stdout은 쓰지 않지만 파이프로 두면 버퍼가 차 교착될 수 있어 폐기한다.
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = errPipe
+        do {
+            try process.run()
+        } catch {
+            throw NSError(domain: "BridgeInstaller", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertInstallScriptFailed(error.localizedDescription)])
         }
-        for event in ["AfterTool", "BeforeAgent", "BeforeModel", "BeforeToolSelection", "AfterModel", "PreCompress"] {
-            let cleaned = removingBridgeHooksFrom(list: (hooks[event] as? [[String: Any]]) ?? [])
-            if cleaned.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = cleaned }
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let stderr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let detail = stderr.isEmpty ? "exit \(process.terminationStatus)" : stderr
+            throw NSError(domain: "BridgeInstaller", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertInstallScriptFailed(detail)])
         }
-
-        data["hooks"] = hooks
-
-        let out = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
-        try out.write(to: url, options: .atomic)
     }
 
     // MARK: Uninstall entry points
@@ -597,75 +385,6 @@ enum BridgeInstaller {
         }
     }
 
-    private static func patchAntigravityHooks(at url: URL, bridgePath: String) throws {
-        let fm = FileManager.default
-        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-        var data: [String: Any] = [:]
-        if fm.fileExists(atPath: url.path) {
-            let raw = try Data(contentsOf: url)
-            guard let parsed = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else {
-                throw NSError(domain: "BridgeInstaller", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: L10n.shared.alertBadFile("hooks.json")])
-            }
-            data = parsed
-        }
-
-        var devisland = (data["devisland"] as? [String: Any]) ?? [:]
-        devisland["enabled"] = true
-
-        // TODO(R5-b): Antigravity는 matcher-기반/direct-list 두 config 형태로 나뉘는데
-        // 이 구분이 매니페스트의 active/lifecycle 축과 어긋나(PostToolUse가 매니페스트는
-        // lifecycle인데 여기선 matcher-기반) membership만으론 config 형태를 못 뽑아 하드코딩 유지.
-        // 1. Matcher-based events
-        for event in ["PreToolUse", "PostToolUse"] {
-            let bridgeCommand = "\"\(bridgePath)\" --source antigravity --event \(event)"
-            var eventConfigs = (devisland[event] as? [[String: Any]]) ?? []
-            var found = false
-            for i in 0..<eventConfigs.count {
-                var config = eventConfigs[i]
-                if (config["matcher"] as? String) == "*" {
-                    var subHooks = (config["hooks"] as? [[String: Any]]) ?? []
-                    subHooks.removeAll { isBridgeCommand($0["command"] as? String ?? "") }
-                    var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
-                    if event == "PreToolUse" {
-                        hookEntry["timeout"] = 86400
-                    }
-                    subHooks.append(hookEntry)
-                    config["hooks"] = subHooks
-                    eventConfigs[i] = config
-                    found = true
-                    break
-                }
-            }
-            if !found {
-                var hookEntry: [String: Any] = ["type": "command", "command": bridgeCommand]
-                if event == "PreToolUse" {
-                    hookEntry["timeout"] = 86400
-                }
-                eventConfigs.append([
-                    "matcher": "*",
-                    "hooks": [hookEntry]
-                ])
-            }
-            devisland[event] = eventConfigs
-        }
-
-        // 2. Direct list events
-        for event in ["PreInvocation", "PostInvocation", "Stop"] {
-            let bridgeCommand = "\"\(bridgePath)\" --source antigravity --event \(event)"
-            var eventConfigs = (devisland[event] as? [[String: Any]]) ?? []
-            eventConfigs.removeAll { isBridgeCommand($0["command"] as? String ?? "") }
-            eventConfigs.append(["type": "command", "command": bridgeCommand])
-            devisland[event] = eventConfigs
-        }
-
-        data["devisland"] = devisland
-
-        let out = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
-        try out.write(to: url, options: .atomic)
-    }
-
     private static func removeAntigravityHooks(at url: URL) throws {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else { return }
@@ -694,16 +413,6 @@ enum BridgeInstaller {
         if fm.fileExists(atPath: spaceFreeBridgeURL.path) { try fm.removeItem(at: spaceFreeBridgeURL) }
         if fm.fileExists(atPath: spaceFreeHelperURL.path) { try fm.removeItem(at: spaceFreeHelperURL) }
         if fm.fileExists(atPath: spaceFreeManifestURL.path) { try fm.removeItem(at: spaceFreeManifestURL) }
-    }
-
-    private static func isBridgeCommand(_ command: String) -> Bool {
-        command.contains(bridgeFileName) || command.contains("devisland-bridge-antigravity.sh")
-    }
-
-    private static func sameHookFile(_ lhs: URL, _ rhs: URL) -> Bool {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: lhs.path), fm.fileExists(atPath: rhs.path) else { return false }
-        return lhs.resolvingSymlinksInPath().path == rhs.resolvingSymlinksInPath().path
     }
 
     // MARK: Alert helper

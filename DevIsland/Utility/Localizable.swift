@@ -116,6 +116,11 @@ extension L10n {
                                               "앱 번들에서 브리지 helper를 찾을 수 없습니다.") }
     var alertBundleNoManifest:     String { s("Hook event manifest not found in app bundle.",
                                               "앱 번들에서 훅 이벤트 manifest를 찾을 수 없습니다.") }
+    var alertBundleNoInstaller:    String { s("Hook installer script not found in app bundle.",
+                                              "앱 번들에서 훅 설치 스크립트를 찾을 수 없습니다.") }
+    func alertInstallScriptFailed(_ detail: String) -> String {
+        s("Hook installer failed: \(detail)", "훅 설치 스크립트 실패: \(detail)")
+    }
     var alertBadJSON:              String { s("Failed to parse settings.json: invalid JSON format.",
                                               "settings.json 파싱 실패: 유효하지 않은 JSON 형식입니다.") }
     func alertBadFile(_ name: String) -> String { s("Failed to parse \(name)", "\(name) 파싱 실패") }
