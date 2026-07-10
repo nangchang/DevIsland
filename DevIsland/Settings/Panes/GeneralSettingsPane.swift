@@ -34,6 +34,21 @@ struct GeneralSettingsPane: View {
                     .foregroundColor(.secondary)
             }
 
+            Section(l10n.secAoEFocus) {
+                Picker(l10n.lblAoEFocusMode, selection: store.binding(\.aoeSessionFocusMode)) {
+                    ForEach(AoESessionFocusMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                Text(store.settings.aoeSessionFocusMode.detail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(l10n.hintAoEFocusMode)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             Section(l10n.secStartup) {
                 Toggle(l10n.lblLaunchAtLogin, isOn: Binding(
                     get: { launchManager.isEnabled },
