@@ -1,0 +1,10 @@
+[features]
+hooks = false
+codex_hooks = true
+other = 1
+
+[[hooks.pre]]
+command = "old"
+
+[server]
+port = 8080

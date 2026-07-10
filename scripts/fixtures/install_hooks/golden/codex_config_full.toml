@@ -1,0 +1,6 @@
+[features]
+hooks = true
+other = 1
+
+[server]
+port = 8080
