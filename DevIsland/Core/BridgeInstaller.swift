@@ -226,17 +226,29 @@ enum BridgeInstaller {
         return url
     }
 
-    /// 번들 install_hooks.py를 `/usr/bin/python3`로 실행한다.
-    /// Finder에서 실행된 GUI 앱은 셸 PATH를 상속하지 않아 `python3`(homebrew 등)를
-    /// 못 찾을 수 있으므로 인터프리터 경로를 명시한다. install_hooks.py는
-    /// hook_events.json 매니페스트를 자기 위치(앱 Resources) 기준으로 읽는다.
+    /// python3 인터프리터를 찾는다. Finder에서 실행된 GUI 앱은 셸 PATH를 상속하지 않아
+    /// 후보 경로를 직접 탐색한다. 런타임 브리지(devisland-bridge.sh)는 PATH의 python3를
+    /// 쓰므로 homebrew 설치를 먼저 보고, 마지막에 시스템/CLT 경로로 폴백한다
+    /// (`/usr/bin/python3`는 CLT 미설치 시 stub이라 후순위).
+    private static func pythonInterpreterURL() -> URL {
+        let candidates = ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
+        let fm = FileManager.default
+        for path in candidates where fm.isExecutableFile(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
+        return URL(fileURLWithPath: "/usr/bin/python3")
+    }
+
+    /// 번들 install_hooks.py를 python3로 실행한다. install_hooks.py는 hook_events.json
+    /// 매니페스트를 자기 위치(앱 Resources) 기준으로 읽는다.
     private static func runInstaller(_ subcommand: String, _ arguments: [String]) throws {
         let script = try installerScriptURL()
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.executableURL = pythonInterpreterURL()
         process.arguments = [script.path, subcommand] + arguments
         let errPipe = Pipe()
-        process.standardOutput = Pipe()
+        // stdout은 쓰지 않지만 파이프로 두면 버퍼가 차 교착될 수 있어 폐기한다.
+        process.standardOutput = FileHandle.nullDevice
         process.standardError = errPipe
         do {
             try process.run()
