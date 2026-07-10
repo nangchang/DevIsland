@@ -29,6 +29,9 @@ targets:
       - path: scripts/install-bridge.sh
         group: Resources
         type: resource
+      - path: scripts/install_hooks.py
+        group: Resources
+        type: resource
       - path: scripts/install-launch-agent.sh
         group: Resources
         type: resource
