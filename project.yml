@@ -3,6 +3,10 @@ options:
   bundleIdPrefix: kr.or.nes
   xcodeVersion: "15.0"
   objectVersion: 56
+  developmentLanguage: en
+  knownRegions:
+    - en
+    - ko
 settings:
   SWIFT_VERSION: "5.9"
   SWIFT_STRICT_CONCURRENCY: targeted
