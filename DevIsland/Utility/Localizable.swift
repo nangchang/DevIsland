@@ -34,7 +34,7 @@ enum AppLanguage: String, CaseIterable, Identifiable, Codable, Sendable {
 final class L10n: ObservableObject {
     static let shared = L10n()
 
-    private static let defaultsKey = "appLanguage"
+    static let defaultsKey = "appLanguage"
 
     @Published var language: AppLanguage {
         didSet { UserDefaults.standard.set(language.rawValue, forKey: Self.defaultsKey) }

@@ -5,7 +5,7 @@ import Foundation
 //
 struct ProviderAdapter {
     static var denialMessage: String {
-        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "system"
+        let lang = UserDefaults.standard.string(forKey: L10n.defaultsKey) ?? "system"
         let isKorean: Bool
         if lang == "korean" {
             isKorean = true
