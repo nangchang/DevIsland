@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import AppKit
+import os
 
 // MARK: - App State
 
@@ -28,7 +29,7 @@ class AppState: ObservableObject {
         do {
             return try ApprovalProxyController()
         } catch {
-            print("[DevIsland] ApprovalProxyController init failed: \(error)")
+            Log.core.error("ApprovalProxyController init failed: \(error, privacy: .private)")
             return nil
         }
     }
@@ -212,7 +213,7 @@ class AppState: ObservableObject {
                         ))
                         migratedTools.append(toolName)
                     } catch {
-                        print("[DevIsland] [MIGRATE] Failed to migrate rule '\(trimmed)': \(error)")
+                        Log.core.error("Failed to migrate rule '\(trimmed, privacy: .private)': \(error, privacy: .private)")
                     }
                 }
                 if migratedTools.count == savedAutoApprove.filter({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }).count {
@@ -237,7 +238,7 @@ class AppState: ObservableObject {
                 do {
                     try proxy.pruneOldLogs(replayRetentionDays: replayDays, ptyRetentionDays: ptyDays)
                 } catch {
-                    print("[DevIsland] [PRUNE] Failed to prune old logs: \(error)")
+                    Log.core.error("Failed to prune old logs: \(error, privacy: .private)")
                 }
             }
         }
@@ -279,7 +280,7 @@ class AppState: ObservableObject {
                 self?.handleMessage(message, authentication: authentication, responseHandler: effectiveHandler)
             }
             server.onServerFailed = { [weak self] error in
-                print("[DevIsland] [ERROR] Socket server failed: \(error.localizedDescription)")
+                Log.bridge.error("Socket server failed: \(error.localizedDescription, privacy: .private)")
                 DispatchQueue.main.async {
                     let alert = NSAlert()
                     alert.messageText = "Server Error"
@@ -438,10 +439,10 @@ class AppState: ObservableObject {
         isTerminalFrontmostAsync(for: session) { [weak self] isFrontmost in
             guard isFrontmost else { return }
             if self?.displayState.hasResponseHandler == true {
-                print("[DevIsland] [AUTO] User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "")")
+                Log.approval.debug("User moved focus to terminal, auto-passing request for \(self?.currentSessionId.prefix(8) ?? "", privacy: .private)")
                 self?.approvalFlow.sendDecision(approved: false, reason: "ManualFocus", status: .timeoutBypassed(Date()), passToTerminal: true)
             } else {
-                print("[DevIsland] [AUTO] User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "")")
+                Log.approval.debug("User moved focus to terminal, auto-dismissing notification for \(self?.currentSessionId.prefix(8) ?? "", privacy: .private)")
                 self?.stopNotificationAutoCollapseTimer()
                 self?.isNotchExpanded = false
                 self?.isExpandingFromRequest = false
@@ -600,7 +601,7 @@ class AppState: ObservableObject {
 
         // MARK: Phase 2d: UserPromptSubmit Policy
         case .promptPolicyDenied(let denialReason):
-            print("[DevIsland] Claude UserPromptSubmit blocked by prompt policy")
+            Log.approval.debug("Claude UserPromptSubmit blocked by prompt policy")
             respondWithReplay(
                 HookResponse(.denied, reason: denialReason).jsonString(),
                 responseHandler: responseHandler,
@@ -617,7 +618,7 @@ class AppState: ObservableObject {
 
         // MARK: Phase 2e: Claude user-question follow-up passthrough
         case .userQuestionPassthrough:
-            print("[DevIsland] passing Claude user-question \(h.event) without notification: \(h.toolName)")
+            Log.approval.debug("passing Claude user-question \(h.event, privacy: .public) without notification: \(h.toolName, privacy: .private)")
             respondWithReplay(
                 HookResponse(.pass).jsonString(),
                 responseHandler: responseHandler,
@@ -647,7 +648,7 @@ class AppState: ObservableObject {
 
         // MARK: Phase 3: Decision Logic
         case .nonApprovalAutoApprove(let isGeminiNormalMode):
-            print("[DevIsland] ignoring non-approval h.event (or Gemini normal mode): \(h.event)")
+            Log.approval.debug("ignoring non-approval h.event (or Gemini normal mode): \(h.event, privacy: .public)")
             if isGeminiNormalMode && h.toolName == "enter_plan_mode" {
                 DispatchQueue.main.async {
                     if let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
@@ -670,7 +671,7 @@ class AppState: ObservableObject {
             return
 
         case .emptyApprovalAutoApprove:
-            print("[DevIsland] ignoring empty approval request")
+            Log.approval.debug("ignoring empty approval request")
             respondWithReplay(
                 HookResponse(.approved).jsonString(),
                 responseHandler: responseHandler,
@@ -735,7 +736,7 @@ class AppState: ObservableObject {
         isTerminalFrontmostAsync(terminal: h.terminal) { [weak self] isFrontmost in
             guard let self else { return }
             if !h.isReplayPayload && isFrontmost {
-                print("[DevIsland] [PASS] Terminal is frontmost, passing Claude question for session \(h.sessionId.prefix(8))")
+                Log.approval.debug("Terminal is frontmost, passing Claude question for session \(h.sessionId.prefix(8), privacy: .private)")
                 self.passRequestToFocusedTerminal(
                     h,
                     request: request,
@@ -774,7 +775,7 @@ class AppState: ObservableObject {
         )
         let routing = HookEventRouter.approvalRouting(h, settings: settings, state: approvalState)
         if routing.isEmulationForced {
-            print("[DevIsland] [EMULATION] \(h.agentKind.accessibilityName) interactive emulation forced for tool: \(h.toolName)")
+            Log.approval.debug("\(h.agentKind.accessibilityName, privacy: .public) interactive emulation forced for tool: \(h.toolName, privacy: .private)")
         }
 
         // MARK: Phase 4: Evaluation Hierarchy
@@ -784,7 +785,7 @@ class AppState: ObservableObject {
 
             // 1. 터미널 포커스 최우선 — 사용자가 이미 터미널에 있으면 CLI가 자체 처리하도록 pass
             if !h.isReplayPayload && isFrontmost {
-                print("[DevIsland] [PASS] Terminal is frontmost, responding with 'pass' for session \(h.sessionId.prefix(8))")
+                Log.approval.debug("Terminal is frontmost, responding with 'pass' for session \(h.sessionId.prefix(8), privacy: .private)")
                 self.passRequestToFocusedTerminal(
                     h,
                     request: request,
@@ -827,7 +828,7 @@ class AppState: ObservableObject {
             if h.toolName == "enter_plan_mode",
                let index = self.sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
                 self.sessionStore.activeSessions[index].isAutoEditActive = false
-                print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Plan mode")
+                Log.approval.info("Session \(h.sessionId.prefix(8), privacy: .private) switched to Plan mode")
             }
 
             // 5. Manual Approval Fallback: No rules matched, enqueue for user decision in the Notch.
@@ -965,7 +966,7 @@ class AppState: ObservableObject {
             ? (decision: HookDecision.pass, action: RuleAction.prompt, reason: "Claude user question passthrough")
             : (decision: HookDecision.approved, action: RuleAction.allow, reason: "notification")
 
-        print("[DevIsland] notification event: \(h.event) for \(h.toolName) → \(notification.decision.rawValue)")
+        Log.approval.debug("notification event: \(h.event, privacy: .public) for \(h.toolName, privacy: .private) → \(notification.decision.rawValue, privacy: .public)")
         guard !h.sessionId.isEmpty else {
             respondWithReplay(
                 HookResponse(notification.decision).jsonString(),
@@ -1235,7 +1236,7 @@ class AppState: ObservableObject {
         displayToolName: String
     ) {
         let provider = providerKind(for: h.agentKind)
-        print("[DevIsland] [POLICY] \(provider.rawValue) \(h.toolName) matched \(policyDecision.source.rawValue): \(policyDecision.action.rawValue)")
+        Log.approval.debug("\(provider.rawValue, privacy: .public) \(h.toolName, privacy: .private) matched \(policyDecision.source.rawValue, privacy: .public): \(policyDecision.action.rawValue, privacy: .public)")
         request.responseHandler(responsePayload(approved: policyDecision.action == .allow))
         updateActiveSession(
             from: h,
@@ -1261,7 +1262,7 @@ class AppState: ObservableObject {
         isAutoEditActive: Bool,
         isSafeAutoApprove: Bool
     ) {
-        print("[DevIsland] [AUTO-APPROVE] Tool \(h.toolName) is auto-approved for session \(h.sessionId.prefix(8)) (AutoEdit: \(isAutoEditActive), SafeBypass: \(isSafeAutoApprove))")
+        Log.approval.debug("Tool \(h.toolName, privacy: .private) is auto-approved for session \(h.sessionId.prefix(8), privacy: .private) (AutoEdit: \(isAutoEditActive, privacy: .public), SafeBypass: \(isSafeAutoApprove, privacy: .public))")
         respondWithReplay(
             HookResponse(.approved).jsonString(),
             responseHandler: request.responseHandler,
@@ -1288,12 +1289,12 @@ class AppState: ObservableObject {
         if h.toolName == "exit_plan_mode",
            let index = sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
             sessionStore.activeSessions[index].isAutoEditActive = true
-            print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Auto-Edit mode")
+            Log.approval.info("Session \(h.sessionId.prefix(8), privacy: .private) switched to Auto-Edit mode")
         }
         if h.toolName == "enter_plan_mode",
            let index = sessionStore.activeSessions.firstIndex(where: { $0.id == h.sessionId }) {
             sessionStore.activeSessions[index].isAutoEditActive = false
-            print("[DevIsland] [MODE] Session \(h.sessionId.prefix(8)) switched to Plan mode")
+            Log.approval.info("Session \(h.sessionId.prefix(8), privacy: .private) switched to Plan mode")
         }
 
         guard !h.sessionId.isEmpty else { return }
@@ -1335,7 +1336,7 @@ class AppState: ObservableObject {
                     payloadJSON: payloadJSON
                 )
             } catch {
-                print("[DevIsland] [REPLAY] Failed to record dismissed session: \(error)")
+                Log.approval.error("Failed to record dismissed session: \(error, privacy: .private)")
             }
             Task { @MainActor in
                 completion()
@@ -1380,7 +1381,7 @@ class AppState: ObservableObject {
     @MainActor
     private func openWorkspaceFromPlugin(_ sessionID: String) {
         guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }) else {
-            print("[DevIsland] [plugin-cmd] openWorkspace: no session \(sessionID.prefix(8))")
+            Log.plugin.debug("openWorkspace: no session \(sessionID.prefix(8), privacy: .private)")
             return
         }
         guard let root = session.workspaceRoot, !root.isEmpty else { return }
@@ -1407,11 +1408,11 @@ class AppState: ObservableObject {
         // Even without the focusTerminal(for:) completion callback, making the terminal frontmost
         // would let the window observers auto-pass a shown approval. Refuse while one is on screen.
         guard canPluginFocusTerminal else {
-            print("[DevIsland] [plugin-cmd] focusTerminal: refused while a request is shown")
+            Log.plugin.debug("focusTerminal: refused while a request is shown")
             return
         }
         guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }) else {
-            print("[DevIsland] [plugin-cmd] focusTerminal: no session \(sessionID.prefix(8))")
+            Log.plugin.debug("focusTerminal: no session \(sessionID.prefix(8), privacy: .private)")
             return
         }
         TerminalFocuser.focusTerminal(
@@ -1429,7 +1430,7 @@ class AppState: ObservableObject {
     @MainActor
     private func copyResumeCommandFromPlugin(_ sessionID: String) {
         guard let session = sessionStore.activeSessions.first(where: { $0.id == sessionID }) else {
-            print("[DevIsland] [plugin-cmd] copyResumeCommand: no session \(sessionID.prefix(8))")
+            Log.plugin.debug("copyResumeCommand: no session \(sessionID.prefix(8), privacy: .private)")
             return
         }
         let command = session.resumeCommand
@@ -1615,12 +1616,12 @@ class AppState: ObservableObject {
                         reason: "matched \(decision.source.rawValue)"
                     )
                 } catch {
-                    print("[DevIsland] [REPLAY] Failed to record policy decision: \(error)")
+                    Log.approval.error("Failed to record policy decision: \(error, privacy: .private)")
                 }
             }
             return decision
         } catch {
-            print("[DevIsland] [POLICY] \(provider.rawValue) policy evaluation failed: \(error)")
+            Log.approval.error("\(provider.rawValue, privacy: .public) policy evaluation failed: \(error, privacy: .private)")
             return nil
         }
     }
@@ -1711,7 +1712,7 @@ class AppState: ObservableObject {
         }
 
         handleMessage(replayMessage) { response in
-            print("[DevIsland] [REPLAY] Replayed event \(entry.id) completed with response: \(response)")
+            Log.approval.debug("Replayed event \(entry.id, privacy: .public) completed with response: \(response, privacy: .private)")
         }
     }
 
@@ -1791,13 +1792,13 @@ class AppState: ObservableObject {
             sessionStore.sessionAutoApproveTypes[sId]?.insert(tool)
         }
 
-        print("[DevIsland] approve() called, handler=\(displayState.hasResponseHandler ? "SET" : "NIL")")
+        Log.approval.debug("approve() called, handler=\(self.displayState.hasResponseHandler ? "SET" : "NIL", privacy: .public)")
 
         // exit_plan_mode를 수동으로 승인했을 때도 Auto-Edit 모드 활성화
         if tool == "exit_plan_mode" {
             if let index = sessionStore.activeSessions.firstIndex(where: { $0.id == sId }) {
                 sessionStore.activeSessions[index].isAutoEditActive = true
-                print("[DevIsland] [MODE] Session \(sId.prefix(8)) switched to Auto-Edit mode via manual approval")
+                Log.approval.info("Session \(sId.prefix(8), privacy: .private) switched to Auto-Edit mode via manual approval")
             }
         }
         
@@ -1827,7 +1828,7 @@ class AppState: ObservableObject {
     }
 
     func deny() {
-        print("[DevIsland] deny() called")
+        Log.approval.debug("deny() called")
         approvalFlow.sendDecision(approved: false)
     }
 
@@ -1882,7 +1883,7 @@ class AppState: ObservableObject {
                     scope: .persistent
                 ))
             } catch {
-                print("[DevIsland] [POLICY] Failed to insert global persistent rule '\(trimmed)': \(error)")
+                Log.approval.error("Failed to insert global persistent rule '\(trimmed, privacy: .private)': \(error, privacy: .private)")
                 Task { @MainActor [weak self] in
                     self?.globalAutoApproveTypes.remove(trimmed)
                 }
@@ -2053,11 +2054,11 @@ class AppState: ObservableObject {
         do {
             records = try proxy.openSessions(since: since)
         } catch {
-            print("[DevIsland] [RESTORE] Failed to query open sessions: \(error)")
+            Log.core.error("Failed to query open sessions: \(error, privacy: .private)")
             return
         }
         guard !records.isEmpty else { return }
-        print("[DevIsland] [RESTORE] Restoring \(records.count) open session(s)")
+        Log.core.info("Restoring \(records.count, privacy: .public) open session(s)")
         for record in records {
             guard let data = record.lastPayloadJSON.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
