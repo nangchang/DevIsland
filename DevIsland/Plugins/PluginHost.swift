@@ -2,6 +2,8 @@ import Combine
 import Foundation
 import os
 
+// SwiftLint type_body_length grandfather — DoD §6 축소 대상 (docs/refactoring-plan.md).
+// swiftlint:disable type_body_length
 @MainActor
 final class PluginHost: ObservableObject {
     @Published private(set) var contributions: [PluginUISlot: [PluginUIContribution]] = [:] {

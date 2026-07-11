@@ -17,6 +17,8 @@ import os
  - `ReplayRecorder`: Manages durable logging of hook events and decisions in SQLite.
  - `ApprovalProxyController`: Evaluates incoming requests against persistent and session-level rules.
  */
+// SwiftLint file_length/type_body_length grandfather — DoD §6 축소 대상 (docs/refactoring-plan.md).
+// swiftlint:disable file_length type_body_length
 @MainActor
 class AppState: ObservableObject {
     static let shared = AppState(
@@ -1559,6 +1561,7 @@ class AppState: ObservableObject {
         )
     }
 
+    // swiftlint:disable:next function_parameter_count
     private func respondWithReplay(
         _ payload: String,
         responseHandler: (String) -> Void,

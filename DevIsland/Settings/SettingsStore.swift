@@ -2,6 +2,9 @@ import Foundation
 import Combine
 import os
 
+// SwiftLint file_length grandfather — DoD §6 축소 대상 (docs/refactoring-plan.md).
+// swiftlint:disable file_length
+
 // MARK: - Approval Proxy Settings
 
 enum ClaudeSessionApprovalMode: String, CaseIterable, Identifiable {

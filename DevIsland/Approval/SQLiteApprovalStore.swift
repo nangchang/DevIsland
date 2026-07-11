@@ -1,6 +1,8 @@
 import Foundation
 import SQLite3
 
+// SwiftLint file_length/type_body_length grandfather — DoD §6는 DAO 특성상 이 파일을 축소 대상에서 제외.
+// swiftlint:disable file_length type_body_length
 final class SQLiteApprovalStore {
     enum StoreError: Error {
         case openFailed(String)
