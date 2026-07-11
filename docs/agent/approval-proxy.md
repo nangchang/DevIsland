@@ -125,6 +125,7 @@ Codex:
 
 - Codex has no native session-permission mutation.
 - DevIsland manages session and persistent rules in SQLite.
+- Sessions launched with `DEVISLAND_CODEX_APPROVAL_OWNER=codex` carry a bridge-added `devisland_approval_owner` marker. Their Codex `PermissionRequest` events are recorded and returned as `pass` before DevIsland policy evaluation so Codex Auto-review remains the decision owner.
 
 ## SQLite Storage
 

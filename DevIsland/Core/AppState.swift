@@ -566,7 +566,7 @@ class AppState: ObservableObject {
                 responseHandler: responseHandler
             )
             return
-        case .stop, .promptPolicyDenied, .userQuestionPassthrough, .notification,
+        case .stop, .promptPolicyDenied, .userQuestionPassthrough, .codexApprovalPassthrough, .notification,
              .nonApprovalAutoApprove, .emptyApprovalAutoApprove, .claudeQuestion, .approval:
             break
         }
@@ -632,6 +632,23 @@ class AppState: ObservableObject {
                 action: .prompt,
                 source: .automatic,
                 reason: "Claude user question follow-up passthrough"
+            )
+            return
+
+        // MARK: Phase 2e-2: Codex-owned approval passthrough
+        case .codexApprovalPassthrough:
+            Log.approval.debug("delegating Codex approval to native Auto-review: \(h.toolName, privacy: .private)")
+            respondWithReplay(
+                HookResponse(.pass).jsonString(),
+                responseHandler: responseHandler,
+                hookEventId: hookEventId,
+                agentKind: h.agentKind,
+                sessionId: h.sessionId,
+                toolName: replayToolName,
+                workspaceRoot: h.workspaceRoot,
+                action: .prompt,
+                source: .automatic,
+                reason: "Codex approval owner passthrough"
             )
             return
 

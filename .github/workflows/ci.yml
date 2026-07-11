@@ -74,6 +74,7 @@ jobs:
         run: |
           shellcheck --severity=warning \
             scripts/devisland-bridge.sh \
+            scripts/codex-devisland-auto.sh \
             scripts/install-bridge.sh \
             scripts/install-launch-agent.sh \
             scripts/build_and_run.sh \
