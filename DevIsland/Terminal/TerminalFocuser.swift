@@ -251,7 +251,7 @@ final class TerminalFocuser: Sendable {
             process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         }
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -277,8 +277,8 @@ final class TerminalFocuser: Sendable {
         if let environment {
             process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         }
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -302,8 +302,8 @@ final class TerminalFocuser: Sendable {
         if let environment {
             process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         }
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
