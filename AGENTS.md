@@ -69,7 +69,9 @@ xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
 | File | Responsibility |
 |---|---|
 | `DevIslandApp.swift` | `@main` entry, `MenuBarExtra`, `AppDelegate` |
-| `AppState.swift` | Socket lifecycle, session state, pending queue, event classification, approval flow |
+| `AppState.swift` | Socket lifecycle and session state; assembles and delegates event classification, approval flow, and plugin/Caffeine wiring |
+| `ApprovalFlowCoordinator.swift` | Pending queue, display selection, decision dispatch, approval timeout (extracted from `AppState`, R2-c) |
+| `HookEventRouter.swift` / `HookEventClassifier.swift` | Pure, side-effect-free event classification and `handleParsedEvent` phase dispatch (R2-a) |
 | `HookSocketServer.swift` | Loopback TCP + Unix socket listener, one-connection-per-hook event handling |
 | `PluginHost.swift` | Plugin lifecycle, event dispatch, host command/effect execution |
 | `ApprovalProxyController.swift` | Policy lookup, persistence, and rich IPC response orchestration |
