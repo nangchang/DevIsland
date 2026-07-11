@@ -567,6 +567,7 @@ extension L10n {
     var menuOpenInTerminal: String { t("menuOpenInTerminal") }
     func menuTerminalAuto(_ name: String) -> String { tf("menuTerminalAuto", name) }
     var menuStartNewSession: String { t("menuStartNewSession") }
+    var menuTerminalInfo: String { t("menuTerminalInfo") }
     var helpDismissPending: String { t("helpDismissPending") }
     func tasksQueued(_ n: Int) -> String { tf("tasksQueued", n) }
     func timeJustNow() -> String { t("timeJustNow") }

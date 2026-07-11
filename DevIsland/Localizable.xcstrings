@@ -4753,6 +4753,22 @@
         }
       }
     },
+    "menuTerminalInfo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal Info"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "터미널 정보"
+          }
+        }
+      }
+    },
     "menuTerminalAuto": {
       "localizations": {
         "en": {

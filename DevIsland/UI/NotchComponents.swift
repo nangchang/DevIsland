@@ -729,10 +729,80 @@ struct SessionRowView: View {
             newSessionMenu
         }
 
+        terminalInfoMenu
+
         // "Copy Resume Command" is contributed by SessionActionsPlugin via the
         // session.copyResumeCommand host command (rendered below), so the core item was
         // removed to avoid a duplicate entry. Disabling the plugin removes this action.
         PluginSessionMenuItemsView(contributions: contextMenuContributions)
+    }
+
+    @ViewBuilder
+    private var terminalInfoMenu: some View {
+        let t = session.terminal
+        let hasAdditionalInfo = !t.app.isEmpty || !t.tty.isEmpty || !t.windowId.isEmpty
+            || !t.tmuxPane.isEmpty || !t.managerSessionTitle.isEmpty
+        Menu {
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(session.id, forType: .string)
+            } label: {
+                Label("ID: \(session.id)", systemImage: "doc.on.clipboard")
+            }
+
+            if hasAdditionalInfo {
+                Divider()
+
+                if !t.app.isEmpty {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(t.app, forType: .string)
+                    } label: {
+                        Label("App: \(t.app)", systemImage: "doc.on.clipboard")
+                    }
+                }
+
+                if !t.tty.isEmpty {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(t.tty, forType: .string)
+                    } label: {
+                        Label("TTY: \(t.tty)", systemImage: "doc.on.clipboard")
+                    }
+                }
+
+                if !t.windowId.isEmpty {
+                    let label = t.tabIndex.isEmpty ? t.windowId : "\(t.windowId) / tab \(t.tabIndex)"
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(label, forType: .string)
+                    } label: {
+                        Label("Win: \(label)", systemImage: "doc.on.clipboard")
+                    }
+                }
+
+                if !t.tmuxPane.isEmpty {
+                    let pane = [t.tmuxPane, t.tmuxSocket].filter { !$0.isEmpty }.joined(separator: " @ ")
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(pane, forType: .string)
+                    } label: {
+                        Label("tmux: \(pane)", systemImage: "doc.on.clipboard")
+                    }
+                }
+
+                if !t.managerSessionTitle.isEmpty {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(t.managerSessionTitle, forType: .string)
+                    } label: {
+                        Label("Session: \(t.managerSessionTitle)", systemImage: "doc.on.clipboard")
+                    }
+                }
+            }
+        } label: {
+            Label(l10n.menuTerminalInfo, systemImage: "info.circle")
+        }
     }
 
     @ViewBuilder
