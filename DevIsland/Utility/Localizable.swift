@@ -55,21 +55,34 @@ final class L10n: ObservableObject {
 
     func s(_ en: String, _ ko: String) -> String { isKorean ? ko : en }
 
+    /// Per-language `.lproj` bundle, resolved once and cached. `static let` is
+    /// lazily and thread-safely initialized. Falls back to `.main` if the bundle
+    /// is somehow absent (never expected in a built app).
+    private static let enBundle = lprojBundle("en")
+    private static let koBundle = lprojBundle("ko")
+
+    private static func lprojBundle(_ lproj: String) -> Bundle {
+        if let path = Bundle.main.path(forResource: lproj, ofType: "lproj"),
+           let bundle = Bundle(path: path) {
+            return bundle
+        }
+        return .main
+    }
+
     /// Looks up `key` in the compiled `Localizable.xcstrings` for the currently
     /// resolved language. Reads the per-language `.lproj` bundle directly instead
     /// of `String(localized:)` so live language switching keeps working without a
     /// relaunch (the OS resolves the main bundle's localization only at launch).
     func t(_ key: String) -> String {
-        let lproj = isKorean ? "ko" : "en"
-        guard let path = Bundle.main.path(forResource: lproj, ofType: "lproj"),
-              let bundle = Bundle(path: path) else {
-            return NSLocalizedString(key, comment: "")
-        }
+        let bundle = isKorean ? Self.koBundle : Self.enBundle
         return bundle.localizedString(forKey: key, value: key, table: nil)
     }
 
     /// `t(key)` with `String(format:)` arguments applied (for entries with
     /// interpolated values). The catalog value carries the format specifiers.
+    /// Intentionally non-localized (no `locale:`) to match the pre-migration
+    /// `\(interpolation)` byte-for-byte — passing a language `Locale` would inject
+    /// thousands separators for numbers ≥ 1000 (e.g. pixel/count values).
     func tf(_ key: String, _ args: CVarArg...) -> String {
         String(format: t(key), arguments: args)
     }
