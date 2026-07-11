@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import os
 
 struct PluginScopedFileScope: Equatable, Sendable {
     static let defaultMaxReadBytes: Int64 = 1_000_000
@@ -311,7 +312,7 @@ final class PluginScopedAudioPlayer: NSObject, @preconcurrency AVAudioPlayerDele
                 players.append(player)
             }
         } catch {
-            print("[DevIsland] Plugin audio playback failed for \(url.path): \(error)")
+            Log.plugin.error("Plugin audio playback failed for \(url.path, privacy: .private): \(error, privacy: .private)")
         }
     }
 

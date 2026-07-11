@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import os
 
 @MainActor
 final class PluginHost: ObservableObject {
@@ -363,8 +364,7 @@ final class PluginHost: ObservableObject {
                 guard runner.manifest.permissions.contains(descriptor.requiredPermission),
                       let sessionID = action.payload["sessionID"], !sessionID.isEmpty
                 else { return }
-                print("[DevIsland] [plugin-cmd] \(pluginID) → \(descriptor.capability) " +
-                      "session=\(sessionID.prefix(8)) destructive=\(descriptor.isDestructive)")
+                Log.plugin.debug("\(pluginID, privacy: .public) → \(descriptor.capability, privacy: .public) session=\(sessionID.prefix(8), privacy: .private) destructive=\(descriptor.isDestructive, privacy: .public)")
                 sessionCommandHandler?(descriptor.capability, sessionID)
                 return
             }

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Records hook events and approval decisions to the replay log (SQLite via ApprovalProxyController).
 ///
@@ -42,7 +43,7 @@ final class ReplayRecorder {
                     payloadJSON: payloadJSON
                 )
             } catch {
-                print("[DevIsland] [REPLAY] Failed to record hook event: \(error)")
+                Log.session.error("Failed to record hook event: \(error, privacy: .private)")
             }
         }
         return eventId
@@ -77,7 +78,7 @@ final class ReplayRecorder {
                     reason: reason
                 )
             } catch {
-                print("[DevIsland] [REPLAY] Failed to record decision: \(error)")
+                Log.session.error("Failed to record decision: \(error, privacy: .private)")
                 if hookEventId != nil {
                     do {
                         try proxy.recordDecision(
@@ -87,7 +88,7 @@ final class ReplayRecorder {
                             reason: reason
                         )
                     } catch {
-                        print("[DevIsland] [REPLAY] Failed to record decision without hook event: \(error)")
+                        Log.session.error("Failed to record decision without hook event: \(error, privacy: .private)")
                     }
                 }
             }

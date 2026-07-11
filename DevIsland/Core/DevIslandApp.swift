@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 @main
 struct DevIslandApp: App {
@@ -212,9 +213,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return app.processIdentifier != myPID && managedBundleIds.contains(bundleID)
             }
         if !others.isEmpty {
-            print("[DevIsland] Found \(others.count) other instances. Terminating them.")
+            Log.core.info("Found \(others.count, privacy: .public) other instances. Terminating them.")
             others.forEach { 
-                print("[DevIsland] Terminating other instance: pid=\($0.processIdentifier)")
+                Log.core.info("Terminating other instance: pid=\($0.processIdentifier, privacy: .public)")
                 $0.terminate() 
             }
         }

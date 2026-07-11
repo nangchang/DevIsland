@@ -1,5 +1,6 @@
 import Foundation
 import SQLite3
+import os
 
 /// SQLite copies bound text immediately when given this destructor, so passing a
 /// transient Swift String pointer is safe.
@@ -195,7 +196,7 @@ actor PluginStorageProvider {
         do {
             return try store(for: pluginID).snapshot(limit: PluginStorageLimits.snapshotLimit)
         } catch {
-            print("[DevIsland] [PluginStorage] snapshot failed for \(pluginID): \(error)")
+            Log.plugin.error("snapshot failed for \(pluginID, privacy: .public): \(error, privacy: .private)")
             return [:]
         }
     }
@@ -220,7 +221,7 @@ actor PluginStorageProvider {
                 break
             }
         } catch {
-            print("[DevIsland] [PluginStorage] effect \(effect.capability) failed for \(pluginID): \(error)")
+            Log.plugin.error("effect \(effect.capability, privacy: .public) failed for \(pluginID, privacy: .public): \(error, privacy: .private)")
         }
     }
 
@@ -260,7 +261,7 @@ actor PluginStorageProvider {
                 try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
                 try fileManager.moveItem(at: source, to: target)
             } catch {
-                print("[DevIsland] [PluginStorage] migration failed \(legacyID) -> \(currentID): \(error)")
+                Log.plugin.error("migration failed \(legacyID, privacy: .public) -> \(currentID, privacy: .public): \(error, privacy: .private)")
             }
         }
     }

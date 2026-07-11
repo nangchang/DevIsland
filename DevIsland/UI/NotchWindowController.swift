@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Combine
 import CoreGraphics
+import os
 
 // MARK: - Window Controller
 
@@ -272,7 +273,7 @@ class NotchWindowController: NSWindowController {
                 guard count > 0, AppState.shared.isNotchExpanded else { return }
                 // 새로운 요청이 추가되었을 때, 설정된 요청 표시 위치로 이동
                 let override = ScreenTargeting.requestTargetScreen()
-                print("[DevIsland] PendingCount changed (\(count)), requesting move to: \(override?.displayId.description ?? "default")")
+                Log.ui.debug("PendingCount changed (\(count, privacy: .public)), requesting move to: \(override?.displayId.description ?? "default", privacy: .public)")
                 self?.resetPinnedPosition()
                 self?.updateWindowFrame(animate: false, targetScreenOverride: override)
             }
