@@ -406,12 +406,12 @@ class AppState: ObservableObject {
     }
 
     private static func currentClaudeSessionApprovalMode() -> ClaudeSessionApprovalMode {
-        let raw = UserDefaults.standard.string(forKey: "claudeSessionApprovalMode")
+        let raw = UserDefaults.standard.string(forKey: SettingsStore.DefaultsKey.claudeSessionApprovalMode)
         return raw.flatMap(ClaudeSessionApprovalMode.init(rawValue:)) ?? AppSettings.defaults.claudeSessionApprovalMode
     }
 
     private static func currentClaudePersistentApprovalDestination() -> ClaudePersistentApprovalDestination {
-        let raw = UserDefaults.standard.string(forKey: "claudePersistentApprovalDestination")
+        let raw = UserDefaults.standard.string(forKey: SettingsStore.DefaultsKey.claudePersistentApprovalDestination)
         return raw.flatMap(ClaudePersistentApprovalDestination.init(rawValue:)) ?? AppSettings.defaults.claudePersistentApprovalDestination
     }
 
@@ -540,9 +540,9 @@ class AppState: ObservableObject {
     private func handleParsedEvent(_ h: ParsedHookEvent, responseHandler: @escaping (String) -> Void) {
         let ud = self.userDefaults
         let routingSettings = HookRoutingSettings(
-            processVSCode: ud.bool(forKey: "processVSCodeEnabled"),
-            processClaudeDesktop: ud.bool(forKey: "processClaudeDesktopEnabled"),
-            processCodexDesktop: ud.bool(forKey: "processCodexDesktopEnabled"),
+            processVSCode: ud.bool(forKey: SettingsStore.DefaultsKey.processVSCodeEnabled),
+            processClaudeDesktop: ud.bool(forKey: SettingsStore.DefaultsKey.processClaudeDesktopEnabled),
+            processCodexDesktop: ud.bool(forKey: SettingsStore.DefaultsKey.processCodexDesktopEnabled),
             emulateGeminiInteractiveMode: geminiState.emulateInteractiveMode
         )
         let routed = HookEventRouter.route(h, settings: routingSettings)
