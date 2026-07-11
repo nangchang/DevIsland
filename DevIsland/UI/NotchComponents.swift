@@ -740,6 +740,8 @@ struct SessionRowView: View {
     @ViewBuilder
     private var terminalInfoMenu: some View {
         let t = session.terminal
+        let hasAdditionalInfo = !t.app.isEmpty || !t.tty.isEmpty || !t.windowId.isEmpty
+            || !t.tmuxPane.isEmpty || !t.managerSessionTitle.isEmpty
         Menu {
             Button {
                 NSPasteboard.general.clearContents()
@@ -748,7 +750,7 @@ struct SessionRowView: View {
                 Label("ID: \(session.id)", systemImage: "doc.on.clipboard")
             }
 
-            if !t.tty.isEmpty || !t.app.isEmpty || !t.tmuxPane.isEmpty {
+            if hasAdditionalInfo {
                 Divider()
 
                 if !t.app.isEmpty {
