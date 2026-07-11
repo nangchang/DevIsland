@@ -7,14 +7,27 @@ DevIsland acts as a policy-based Approval Proxy daemon. The macOS app is both da
 ```text
 DevIsland macOS app
   ├─ HookSocketServer / HookIPCServer   — TCP + Unix domain socket listeners
+  ├─ AppState                           — socket lifecycle + session state; assembles and delegates to:
+  │    ├─ HookEventClassifier           — classifies a parsed event (stop/notification/approval/question/…)
+  │    ├─ HookEventRouter               — pure dispatch: picks which handleParsedEvent phase runs (no side effects)
+  │    ├─ ApprovalFlowCoordinator       — pending queue, display selection, decision dispatch, timeout (R2-c)
+  │    ├─ ApprovalDisplayState          — bundled notch display state, reset atomically via clear() (R2-b)
+  │    └─ AppWiring                      — plugin/Caffeine post-construction wiring; owns power/Wi-Fi monitors (R2-d)
   ├─ ApprovalProxyController            — orchestrates policy lookup, DB writes, response
   ├─ ProviderAdapter                    — formats decision into per-CLI hook response JSON
+  ├─ HookResponse                       — single build point for legacy `{"response": …}` hook JSON (R1-b)
   ├─ HookEventNormalizer                — normalizes event names across CLI dialects
   ├─ ApprovalPolicyEngine               — 5-priority rule evaluation against SQLite (persistent deny > session deny > persistent allow > session allow > prompt)
   ├─ SQLiteApprovalStore                — rules, session_cache, hook_events, decisions, pty_messages
   ├─ AppSettings / SettingsStore        — UserDefaults-backed settings
   └─ SwiftUI windows                    — Settings, Approval Rules, Replay Log, PTY Transcript
 ```
+
+`AppState` is the assembly/delegation layer: it owns the socket lifecycle and
+`@Published` session state, but the pending-approval flow, event classification,
+and post-construction wiring were extracted into the types above (refactoring-plan
+R1–R2) so each is unit-testable in isolation. `AppState`'s public API
+(`AppState.shared.approve()` etc.) is unchanged — the UI still calls it directly.
 
 Bridge responsibilities:
 
@@ -75,15 +88,26 @@ If `providerOutput` is present, the bridge writes it to stdout verbatim. Otherwi
 
 - `ActiveSession`: one per full `session_id`, displayed by first 8 chars. Tracks last event/tool/message, pending state, terminal metadata, lifecycle state, Gemini auto-edit mode, and `parentSessionId` for sub-agent hierarchy.
 - `PendingRequest`: queued manual response with a `responseHandler` closure for the open TCP connection. Approval requests display before notification-priority requests, and each category is processed FIFO. Claude `AskUserQuestion` replies use notification priority. Timeout auto-denies/passes the displayed request.
+- `ApprovalDisplayState`: the notch's currently displayed approval/notification bundled into one value, held by `AppState` as a single `@Published` property so every mutation notifies SwiftUI and the repeated reset blocks collapse into `clear()` / `clearResponseState()` (refactoring-plan R2-b).
 - `selectedSessionId`: controls which session appears in the expanded notch. It does not affect pending queue order.
 
 ## Hook Event Handling
 
-`AppState.handleMessage()` classifies events into:
+`AppState.handleMessage()` parses the payload, then delegates classification to
+`HookEventClassifier` and dispatch to `HookEventRouter`. Both are pure — they read
+no `AppState` instance state and perform no side effects, so they are unit-testable
+without a socket or UI (refactoring-plan R2-a). The router selects which
+`handleParsedEvent` phase runs; the phases group events into:
 
 1. Session-close events: `exit`, `shutdown`, and `sessionend` remove sessions, clean pending requests, and respond approved.
 2. Notification events: update session state, respond approved.
-3. Approval events: enqueue pending request and show approval UI.
+3. Approval events: enqueue via `ApprovalFlowCoordinator` and show approval UI.
+
+`ApprovalFlowCoordinator` (R2-c) owns the pending queue entry, display selection,
+decision dispatch, and approval timeout; it reaches `AppState`'s display state
+through the `ApprovalFlowContext` protocol, which also lets the flow be tested with
+a fake context. Response strings are produced through `HookResponse.jsonString()`
+(R1-b) rather than hardcoded literals.
 
 Provider `Stop` hooks are handled as lifecycle/status notifications in the current app flow. OpenPeon may map `Stop` to `task.complete` for sound feedback, but that mapping does not change AppState session pruning behavior.
 
