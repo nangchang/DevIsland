@@ -10,9 +10,9 @@ import os
 /// only structural text and non-sensitive scalars stay `.public`.
 ///
 /// Categories are added as `print()` sites are migrated. The refactoring plan's
-/// illustrative set is `bridge`, `approval`, `ui`, `plugin`; `terminal` is added
-/// for terminal-focus/tmux logging that fits none of those, and the remaining
-/// categories are introduced by their own follow-up PRs.
+/// illustrative set is `bridge`, `approval`, `ui`, `plugin`; `terminal` (focus/
+/// tmux) and `core` (app lifecycle/persistence) are added for logging that fits
+/// none of those, and the remaining categories are introduced by follow-up PRs.
 enum Log {
     private static let subsystem = "kr.or.nes.DevIsland"
 
@@ -24,4 +24,10 @@ enum Log {
 
     /// Terminal focusing, tmux navigation, AppleScript/process execution.
     static let terminal = Logger(subsystem: subsystem, category: "terminal")
+
+    /// Plugin host command handling.
+    static let plugin = Logger(subsystem: subsystem, category: "plugin")
+
+    /// App lifecycle: init, rule migration, log pruning, session restore.
+    static let core = Logger(subsystem: subsystem, category: "core")
 }
