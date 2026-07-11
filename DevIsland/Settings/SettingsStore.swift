@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os
 
 // MARK: - Approval Proxy Settings
 
@@ -613,7 +614,7 @@ final class SettingsStore: ObservableObject {
                 )
             }
         } catch {
-            print("SettingsStore: failed to write bridge config – \(error)")
+            Log.core.error("SettingsStore: failed to write bridge config – \(error, privacy: .private)")
         }
     }
 

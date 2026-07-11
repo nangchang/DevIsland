@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import os
 
 // Keep debounce state, retained players, and delegate cleanup in one actor.
 // AVAudioPlayer is also safest when created and played on a run-loop thread.
@@ -45,7 +46,7 @@ final class CESPAudioPlayer: NSObject, @preconcurrency AVAudioPlayerDelegate {
                 players.append(player)
             }
         } catch {
-            print("[DevIsland] OpenPeon playback failed for \(url.path): \(error)")
+            Log.plugin.error("OpenPeon playback failed for \(url.path, privacy: .private): \(error, privacy: .private)")
         }
     }
 

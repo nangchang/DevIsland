@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import os
 
 // MARK: - Screen Targeting
 
@@ -112,7 +113,7 @@ enum ScreenTargeting {
         }
         
         let appName = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Unknown"
-        print("[DevIsland] Finding screen for frontmost app: \(appName) (pid: \(frontmostPID))")
+        Log.ui.debug("Finding screen for frontmost app: \(appName, privacy: .private) (pid: \(frontmostPID, privacy: .public))")
 
         let frontmostWindows = windows.compactMap { windowInfo -> CGRect? in
             guard (windowInfo[kCGWindowOwnerPID as String] as? Int32) == frontmostPID,
@@ -143,11 +144,11 @@ enum ScreenTargeting {
         let bestDisplayId = screenAreas.max { $0.value < $1.value }?.key
 
         if let bestDisplayId, bestDisplayId != 0 {
-            print("[DevIsland] Best display found: \(bestDisplayId)")
+            Log.ui.debug("Best display found: \(bestDisplayId, privacy: .public)")
             return NSScreen.screens.first { $0.displayId == bestDisplayId }
         }
         
-        print("[DevIsland] No suitable display found for frontmost app windows.")
+        Log.ui.debug("No suitable display found for frontmost app windows.")
         return nil
     }
 

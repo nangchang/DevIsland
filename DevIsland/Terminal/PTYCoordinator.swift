@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Handles PTY hook events: pattern matching, auto-injection, and persistence.
 ///
@@ -58,7 +59,7 @@ final class PTYCoordinator {
                     )
                 }
             } catch {
-                print("[DevIsland] [PTY] Failed to record PTY message: \(error)")
+                Log.session.error("Failed to record PTY message: \(error, privacy: .private)")
             }
         }
 

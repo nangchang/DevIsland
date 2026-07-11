@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import os
 
 enum AppRelocator {
     static func checkAndPrompt() {
@@ -72,7 +73,7 @@ enum AppRelocator {
             let configuration = NSWorkspace.OpenConfiguration()
             NSWorkspace.shared.openApplication(at: destinationURL, configuration: configuration) { _, error in
                 if let error = error {
-                    print("새 위치에서 앱 실행 실패: \(error)")
+                    Log.core.error("새 위치에서 앱 실행 실패: \(error, privacy: .private)")
                     return
                 }
                 // 새 인스턴스가 실행될 시간을 확보한 후 종료

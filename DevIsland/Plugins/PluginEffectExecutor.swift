@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 actor PluginEffectExecutor {
     typealias NotificationHandler = @Sendable (_ title: String, _ body: String?) async -> Void
@@ -69,7 +70,7 @@ actor PluginEffectExecutor {
                 )
                 await audioPlayHandler(url, normalizedVolume(effect.payload["volume"]))
             } catch {
-                print("[DevIsland] Plugin audio effect rejected for \(pluginID): \(error)")
+                Log.plugin.error("Plugin audio effect rejected for \(pluginID, privacy: .public): \(error, privacy: .private)")
             }
             return
         }
