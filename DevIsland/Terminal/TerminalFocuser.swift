@@ -4,6 +4,8 @@ import os
 
 // 인스턴스 상태 없이 static 메서드만 제공하는 네임스페이스 — isSessionFrontmost가
 // AppState의 @Sendable FrontmostCheck 기본값으로 쓰이므로 Sendable을 명시한다.
+// SwiftLint file_length/type_body_length grandfather — DoD §6 축소 대상 (docs/refactoring-plan.md).
+// swiftlint:disable file_length type_body_length
 final class TerminalFocuser: Sendable {
     private static let tmuxCommandTimeout: TimeInterval = 1.0
     private static let appleScriptTimeout: TimeInterval = 1.5

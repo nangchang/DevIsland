@@ -57,6 +57,19 @@ jobs:
         if: steps.cache-shellcheck.outputs.cache-hit != 'true'
         run: brew install shellcheck
 
+      - name: Cache SwiftLint
+        id: cache-swiftlint
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew/bin/swiftlint
+            /opt/homebrew/Cellar/swiftlint
+          key: ${{ runner.os }}-swiftlint-${{ hashFiles('.github/workflows/ci.yml') }}
+
+      - name: Install SwiftLint
+        if: steps.cache-swiftlint.outputs.cache-hit != 'true'
+        run: brew install swiftlint
+
       - name: Lint shell scripts (T3)
         run: |
           shellcheck --severity=warning \
@@ -70,6 +83,9 @@ jobs:
         run: |
           cd scripts
           python3 -m unittest test_devisland_bridge test_devisland_bridge_shell test_install_hooks -v
+
+      - name: Lint Swift (SwiftLint, R6 structural gate)
+        run: swiftlint lint
 
       - name: Generate Xcode project
         run: xcodegen generate

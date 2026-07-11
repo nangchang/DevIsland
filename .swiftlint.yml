@@ -1,0 +1,23 @@
+# SwiftLint — 구조 룰만 활성화해 파일/타입 재비대화를 CI가 막게 한다 (docs/refactoring-plan.md R6).
+# 세 룰 전부 warning==error: SwiftLint는 warning엔 exit 0이라 warning만으로는 게이트가 안 되므로
+# error 심각도로만 두고, 임계값을 현재 건강한 파일보다 높게(그러나 무한대가 아니게) 설정한다.
+# 기존 초과 파일은 파일 상단 `// swiftlint:disable`로 grandfather 처리 — 각 주석이 DoD §6 축소 대상 마커.
+only_rules:
+  - file_length
+  - type_body_length
+  - function_parameter_count
+
+included:
+  - DevIsland
+
+file_length:
+  warning: 1000
+  error: 1000
+
+type_body_length:
+  warning: 600
+  error: 600
+
+function_parameter_count:
+  warning: 8
+  error: 8
