@@ -74,8 +74,13 @@ struct ApprovalPolicyEngine {
 
     private static func commandPrefixMatches(command: String, pattern: String, action: RuleAction) -> Bool {
         guard !pattern.isEmpty, command.hasPrefix(pattern) else { return false }
+        // Allow and deny need opposite safety directions at the prefix boundary:
+        // over-matching is safe for deny (block more), under-matching is safe for
+        // allow (auto-grant less). They must not share one boundary rule.
+        if action == .deny {
+            return hasDenyCommandBoundary(command: command, pattern: pattern)
+        }
         guard hasSafeCommandPrefixBoundary(command: command, pattern: pattern) else { return false }
-        if action == .deny { return true }
         return !containsShellControlSyntax(command)
     }
 
@@ -91,6 +96,31 @@ struct ApprovalPolicyEngine {
         return command[nextIndex].unicodeScalars.allSatisfy {
             CharacterSet.whitespacesAndNewlines.contains($0)
         }
+    }
+
+    /// Deny boundary: the only legitimate reason to skip a deny after a prefix hit
+    /// is that the prefix is part of a longer *command word* (rm → rmdir). So the
+    /// prefix matches unless the next character continues the command word.
+    /// Anything else — whitespace, a shell metacharacter, `$`/`${`/`$(` expansion —
+    /// means the denied command actually runs and must be blocked. This over-blocks
+    /// on purpose (deny is a safe direction), and touching only this path keeps the
+    /// allow auto-grant logic unchanged.
+    private static func hasDenyCommandBoundary(command: String, pattern: String) -> Bool {
+        guard command.count > pattern.count else { return true }
+        guard let patternEnd = pattern.unicodeScalars.last else { return false }
+
+        if CharacterSet.whitespacesAndNewlines.contains(patternEnd) || patternEnd == "/" {
+            return true
+        }
+
+        let nextIndex = command.index(command.startIndex, offsetBy: pattern.count)
+        let continuesWord = command[nextIndex].unicodeScalars.allSatisfy(isCommandWordScalar)
+        return !continuesWord
+    }
+
+    /// Characters that extend a command word so `rm` does not match `rmdir`/`rm-rf`.
+    private static func isCommandWordScalar(_ scalar: Unicode.Scalar) -> Bool {
+        CharacterSet.alphanumerics.contains(scalar) || scalar == "_" || scalar == "-" || scalar == "."
     }
 
     private static func containsShellControlSyntax(_ command: String) -> Bool {

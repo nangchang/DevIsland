@@ -211,6 +211,92 @@ final class ApprovalPolicyEngineTests: XCTestCase {
         XCTAssertEqual(differentCommand, .prompt)
     }
 
+    func testCommandPrefixDenyBlocksMetacharacterAndExpansionBypasses() throws {
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let engine = ApprovalPolicyEngine(store: store)
+
+        try store.insertRule(ApprovalRule(
+            provider: .codex,
+            toolName: "shell",
+            matchKind: .commandPrefix,
+            pattern: "rm",
+            action: .deny,
+            scope: .persistent
+        ))
+
+        // `rm` immediately followed by a shell metacharacter or an expansion still
+        // runs `rm`; the deny rule must block each instead of falling back to prompt.
+        let bypasses = [
+            "rm;echo hi",
+            "rm&",
+            "rm|cat",
+            "rm<in",
+            "rm>out",
+            "rm`id`",
+            "rm$(echo dir)",              // $() → empty substitution → bare `rm`
+            "rm${IFS}-rf${IFS}/tmp/x"     // ${IFS} → whitespace → `rm -rf /tmp/x`
+        ]
+        for command in bypasses {
+            let decision = try engine.evaluate(ApprovalPolicyRequest(
+                provider: .codex,
+                sessionId: "s1",
+                toolName: "shell",
+                toolInput: ["command": command]
+            ))
+            XCTAssertEqual(decision.action, .deny, "expected deny for \(command)")
+        }
+    }
+
+    func testCommandPrefixDenyStillIgnoresLongerCommandWords() throws {
+        // Guards the deny-boundary intent: `rm` must not block a separate command
+        // whose name merely starts with the prefix.
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let engine = ApprovalPolicyEngine(store: store)
+
+        try store.insertRule(ApprovalRule(
+            provider: .codex,
+            toolName: "shell",
+            matchKind: .commandPrefix,
+            pattern: "rm",
+            action: .deny,
+            scope: .persistent
+        ))
+
+        for command in ["rmdir /tmp/x", "rm-rf", "rm.bak"] {
+            let decision = try engine.evaluate(ApprovalPolicyRequest(
+                provider: .codex,
+                sessionId: "s1",
+                toolName: "shell",
+                toolInput: ["command": command]
+            ))
+            XCTAssertEqual(decision, .prompt, "expected prompt for \(command)")
+        }
+    }
+
+    func testCommandPrefixAllowDoesNotAutoGrantExpansionSuffix() throws {
+        // The deny-boundary change must not loosen allow auto-grant: `ls$HOME` is a
+        // different word (ls + expansion), not the allowed bare `ls` prefix.
+        let store = try SQLiteApprovalStore(databaseURL: databaseURL)
+        let engine = ApprovalPolicyEngine(store: store)
+
+        try store.insertRule(ApprovalRule(
+            provider: .codex,
+            toolName: "shell",
+            matchKind: .commandPrefix,
+            pattern: "ls",
+            action: .allow,
+            scope: .persistent
+        ))
+
+        let decision = try engine.evaluate(ApprovalPolicyRequest(
+            provider: .codex,
+            sessionId: "s1",
+            toolName: "shell",
+            toolInput: ["command": "ls$HOME"]
+        ))
+        XCTAssertEqual(decision, .prompt)
+    }
+
     func testCommandPrefixAllowsSeededPathPrefixesWithoutShellSyntax() throws {
         let store = try SQLiteApprovalStore(databaseURL: databaseURL)
         let engine = ApprovalPolicyEngine(store: store)
