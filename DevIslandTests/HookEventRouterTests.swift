@@ -120,6 +120,45 @@ final class HookEventRouterTests: XCTestCase {
         XCTAssertTrue(r.classification.isCodexStatusOnlyLifecycleEvent)
     }
 
+    func testWrappedCodexPermissionRequestRoutesToNativeApproval() throws {
+        let r = try route("""
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "s1",
+            "cli_source": "codex",
+            "devisland_approval_owner": "codex",
+            "tool_name": "Bash"
+        }
+        """)
+        XCTAssertEqual(r.route, .codexApprovalPassthrough)
+    }
+
+    func testWrappedCodexLifecycleEventStillRoutesToNotification() throws {
+        let r = try route("""
+        {
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "cli_source": "codex",
+            "devisland_approval_owner": "codex",
+            "tool_name": "Bash"
+        }
+        """)
+        XCTAssertEqual(r.route, .notification)
+    }
+
+    func testCodexOwnerMarkerDoesNotAffectClaudeApproval() throws {
+        let r = try route("""
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "s1",
+            "cli_source": "claude",
+            "devisland_approval_owner": "codex",
+            "tool_name": "Bash"
+        }
+        """)
+        XCTAssertEqual(r.route, .approval)
+    }
+
     // MARK: - Gemini normal mode / empty approval
 
     func testGeminiNormalModeBeforeToolRoutesToNonApproval() throws {

@@ -2,8 +2,10 @@
 """Regression tests for devisland_bridge.py event-allow-list normalization."""
 
 import json
+import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from devisland_bridge import (
     _FALLBACK_PASSIVE_EVENTS,
@@ -176,6 +178,30 @@ class TestAntigravityPayloadNormalization(unittest.TestCase):
         self.assertEqual(enriched["hook_event_name"], "PreInvocation")
         self.assertEqual(enriched["session_id"], "ec33ebf9-0cba-4100-8142-c61503f6c587")
         self.assertEqual(enriched["cwd"], "/workspace/project")
+
+
+class TestCodexApprovalOwnership(unittest.TestCase):
+    def test_explicit_codex_owner_is_forwarded(self):
+        with patch.dict(os.environ, {"DEVISLAND_CODEX_APPROVAL_OWNER": "codex"}, clear=False):
+            enriched = enrich_payload({}, "codex", "PermissionRequest")
+
+        self.assertEqual(enriched["devisland_approval_owner"], "codex")
+
+    def test_owner_is_not_forwarded_for_other_providers(self):
+        with patch.dict(os.environ, {"DEVISLAND_CODEX_APPROVAL_OWNER": "codex"}, clear=False):
+            enriched = enrich_payload({}, "claude", "PermissionRequest")
+
+        self.assertNotIn("devisland_approval_owner", enriched)
+
+    def test_provider_payload_cannot_spoof_owner(self):
+        with patch.dict(os.environ, {"DEVISLAND_CODEX_APPROVAL_OWNER": ""}, clear=False):
+            enriched = enrich_payload(
+                {"devisland_approval_owner": "codex"},
+                "codex",
+                "PermissionRequest",
+            )
+
+        self.assertNotIn("devisland_approval_owner", enriched)
 
 
 class TestHookEventsManifest(unittest.TestCase):

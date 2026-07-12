@@ -76,6 +76,8 @@ _TOKEN_PATH = _APP_SUPPORT / "bridge-token"
 _CONFIG_PATH = _APP_SUPPORT / "bridge-config.json"
 
 _DENIAL_MESSAGE = "DevIsland에서 거절되었습니다."
+_APPROVAL_OWNER_ENV = "DEVISLAND_CODEX_APPROVAL_OWNER"
+_APPROVAL_OWNER_FIELD = "devisland_approval_owner"
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +304,11 @@ def enrich_payload(payload: dict[str, Any], cli_source_arg: str, event_arg: str 
     set_if_present("terminal_tmux_socket", "TERM_TMUX_SOCKET", "")
     set_if_present("terminal_tmux_client", "TERM_TMUX_CLIENT", "")
     set_if_present("terminal_manager_session_title", "TERM_MANAGER_SESSION_TITLE", "")
+    # Never trust a provider-supplied ownership marker. Only the explicit Codex
+    # launcher environment may delegate approval handling back to Codex.
+    payload.pop(_APPROVAL_OWNER_FIELD, None)
+    if cli_source_arg == "codex" and os.environ.get(_APPROVAL_OWNER_ENV) == "codex":
+        payload[_APPROVAL_OWNER_FIELD] = "codex"
     payload["cli_source"] = cli_source_arg
     _get_adapter(cli_source_arg).normalize_payload(payload, event_arg)
     return payload

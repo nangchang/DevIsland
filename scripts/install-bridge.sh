@@ -10,6 +10,7 @@ BRIDGE_SRC="$SCRIPT_DIR/devisland-bridge.sh"
 PY_BRIDGE_SRC="$SCRIPT_DIR/devisland_bridge.py"
 MANIFEST_SRC="$SCRIPT_DIR/hook_events.json"
 INSTALL_HOOKS_SRC="$SCRIPT_DIR/install_hooks.py"
+CODEX_AUTO_WRAPPER_SRC="$SCRIPT_DIR/codex-devisland-auto.sh"
 if [ ! -f "$BRIDGE_SRC" ]; then
     BUNDLE_SRC="/Applications/DevIsland.app/Contents/Resources/devisland-bridge.sh"
     if [ -f "$BUNDLE_SRC" ]; then
@@ -17,6 +18,7 @@ if [ ! -f "$BRIDGE_SRC" ]; then
         PY_BRIDGE_SRC="/Applications/DevIsland.app/Contents/Resources/devisland_bridge.py"
         MANIFEST_SRC="/Applications/DevIsland.app/Contents/Resources/hook_events.json"
         INSTALL_HOOKS_SRC="/Applications/DevIsland.app/Contents/Resources/install_hooks.py"
+        CODEX_AUTO_WRAPPER_SRC="/Applications/DevIsland.app/Contents/Resources/codex-devisland-auto.sh"
     else
         echo "오류: devisland-bridge.sh 를 찾을 수 없습니다."
         echo "DevIsland.app 이 /Applications 에 설치되어 있는지 확인해주세요."
@@ -132,7 +134,13 @@ fi
 if $INSTALL_CODEX; then
     CODEX_CONFIG="$HOME/.codex/config.toml"
     CODEX_HOOKS="$HOME/.codex/hooks.json"
+    CODEX_AUTO_WRAPPER_DEST="$HOOKS_DIR/codex-devisland-auto"
     mkdir -p "$(dirname "$CODEX_HOOKS")"
+
+    if [ ! -f "$CODEX_AUTO_WRAPPER_SRC" ]; then
+        echo "오류: codex-devisland-auto 를 찾을 수 없습니다."
+        exit 1
+    fi
 
     echo "✓ Codex CLI 훅 등록 중 (~/.codex/hooks.json)..."
     
@@ -142,7 +150,16 @@ if $INSTALL_CODEX; then
     echo "✓ Codex CLI config.toml 패치 중 (hooks feature 활성화 및 정리)..."
     python3 "$INSTALL_HOOKS_SRC" codex-config "$CODEX_CONFIG" "$BRIDGE_DEST"
 
+    rm -f "$CODEX_AUTO_WRAPPER_DEST"
+    if [[ "$SCRIPT_DIR" == *.app/Contents/Resources* ]]; then
+        cp "$CODEX_AUTO_WRAPPER_SRC" "$CODEX_AUTO_WRAPPER_DEST"
+    else
+        ln -sf "$CODEX_AUTO_WRAPPER_SRC" "$CODEX_AUTO_WRAPPER_DEST"
+    fi
+    chmod +x "$CODEX_AUTO_WRAPPER_DEST"
+
     echo "✓ Codex CLI 설치 완료."
+    echo "  Auto-review 실행: \"$CODEX_AUTO_WRAPPER_DEST\" --profile <profile>"
 fi
 
 # -------------------------------------------------------------------

@@ -57,6 +57,9 @@ struct RoutedHookEvent {
         /// Claude user-question follow-up (PermissionRequest/PostToolUse) — pass
         /// without notification.
         case userQuestionPassthrough
+        /// An explicitly wrapped Codex session owns its approval review. Record
+        /// the request, then pass so Codex Auto-review can make the decision.
+        case codexApprovalPassthrough
         /// Status/notification event — update session state and respond.
         case notification
         /// Non-approval event, or Gemini normal mode where BeforeTool is not
@@ -118,6 +121,10 @@ enum HookEventRouter {
            (c.normalizedEvent == "permissionrequest" || c.normalizedEvent == "posttooluse"),
            c.isUserQuestionTool {
             return RoutedHookEvent(route: .userQuestionPassthrough, classification: c)
+        }
+
+        if h.delegatesApprovalToCodex && c.isApproval {
+            return RoutedHookEvent(route: .codexApprovalPassthrough, classification: c)
         }
 
         if c.isNotification {

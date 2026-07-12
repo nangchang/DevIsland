@@ -21,6 +21,10 @@ struct ParsedHookEvent {
     let isPlanAction: Bool
     let sessionStartSource: String
     let notificationType: String
+
+    var delegatesApprovalToCodex: Bool {
+        agentKind == .codex && parsedJSON["devisland_approval_owner"] as? String == "codex"
+    }
 }
 
 enum HookParseResult {

@@ -67,6 +67,16 @@ Xcode 없이 빠르게 빌드만 확인하려면 다음 스크립트를 사용�
 
 브릿지 설치와 provider별 응답 형식은 [docs/agent/hook-providers.md](docs/agent/hook-providers.md)에 정리되어 있습니다.
 
+Codex Auto-review가 승인을 담당하도록 실행하면서 DevIsland의 세션/상태 추적을 유지하려면
+설치된 래퍼에 Auto-review 프로필을 전달합니다.
+
+```bash
+"$HOME/Library/Application Support/DevIsland/codex-devisland-auto" --profile auto-review
+```
+
+이 실행 경로에서는 Codex `PermissionRequest`만 Codex에 pass-through하며, lifecycle 훅은
+계속 DevIsland로 전달됩니다. 자주 사용한다면 위 명령을 셸 alias로 등록할 수 있습니다.
+
 ### 3. 테스트
 
 기존 앱 인스턴스를 방해하지 않는 격리 모드 테스트 스크립트를 사용하세요.

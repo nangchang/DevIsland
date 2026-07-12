@@ -61,6 +61,12 @@ hooks = true
 DevIsland uses `PermissionRequest` for approval. `PreToolUse` is status tracking only and returns `{}` so Codex continues without a DevIsland prompt.
 Codex does not emit `SessionEnd`; `SessionStart` may have `source` values `startup`, `resume`, or `clear`. DevIsland treats a new Codex `SessionStart` in the same terminal identity as an implicit end for older Codex sessions only. Claude, Gemini, and sub-agent sessions sharing the same tty are preserved.
 
+Codex Auto-review still emits `PermissionRequest` before its reviewer runs. Launching Codex through the installed `codex-devisland-auto` wrapper sets an explicit approval-owner marker. The bridge forwards that marker as metadata, and the app records then passes only Codex approval requests so the native reviewer can decide. Lifecycle/status events continue through DevIsland normally.
+
+```bash
+"$HOME/Library/Application Support/DevIsland/codex-devisland-auto" --profile auto-review
+```
+
 Deny output:
 
 ```json

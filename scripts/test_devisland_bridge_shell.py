@@ -16,9 +16,47 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "scripts" / "devisland-bridge.sh"
+CODEX_AUTO_WRAPPER = ROOT / "scripts" / "codex-devisland-auto.sh"
 
 
 class BridgeShellTest(unittest.TestCase):
+    def test_codex_auto_wrapper_marks_approval_owner_and_forwards_arguments(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            capture_path = tmp_path / "capture.json"
+            fake_codex = bin_dir / "codex"
+            fake_codex.write_text(
+                textwrap.dedent(
+                    f"""
+                    #!/bin/sh
+                    "{sys.executable}" -c 'import json, os, pathlib, sys; pathlib.Path(sys.argv[1]).write_text(json.dumps({{
+                        "owner": os.environ.get("DEVISLAND_CODEX_APPROVAL_OWNER"),
+                        "args": sys.argv[2:],
+                    }}), encoding="utf-8")' "{capture_path}" "$@"
+                    """
+                ).lstrip(),
+                encoding="utf-8",
+            )
+            fake_codex.chmod(fake_codex.stat().st_mode | stat.S_IXUSR)
+            env = os.environ.copy()
+            env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+
+            proc = subprocess.run(
+                [str(CODEX_AUTO_WRAPPER), "--profile", "auto-review", "hello"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            captured = json.loads(capture_path.read_text(encoding="utf-8"))
+            self.assertEqual(captured["owner"], "codex")
+            self.assertEqual(captured["args"], ["--profile", "auto-review", "hello"])
+
     def run_bridge(self, env: dict[str, str], fake_bins: dict[str, str]) -> dict[str, str]:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

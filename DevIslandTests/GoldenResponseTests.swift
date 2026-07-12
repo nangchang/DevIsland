@@ -183,6 +183,19 @@ final class GoldenResponseTests: XCTestCase {
         wait(for: [exp], timeout: 2)
     }
 
+    func testWrappedCodexPermissionRequestYieldsPass() {
+        let exp = expectation(description: #function)
+        appState.handleMessage(
+            #"{"hook_event_name":"PermissionRequest","session_id":"pass-codex-auto-review","cli_source":"codex","devisland_approval_owner":"codex","tool_name":"Bash"}"#
+        ) { [self] r in
+            assertGolden(r, expected: ["response": "pass"])
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 2)
+        XCTAssertEqual(appState.sessionStore.pendingCount, 0)
+        XCTAssertFalse(appState.hasResponseHandler)
+    }
+
     // MARK: - Gemini normal mode (non-interactive, BeforeTool auto-approved)
 
     func testGeminiNormalModeBeforeToolYieldsApproved() {
