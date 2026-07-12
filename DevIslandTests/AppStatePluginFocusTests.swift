@@ -206,16 +206,15 @@ extension AppStateTests {
     }
 
     func testQueuedClaudeAskUserQuestionPassesWithoutMissedBadgeWhenTerminalBecomesFocused() {
-        let lock = NSLock()
-        var frontmostCheckCount = 0
+        let frontmostCheckCount = LockIsolated(0)
         appState = AppState(
             startServer: false,
             userDefaults: mockDefaults,
             frontmostCheck: { _ in
-                lock.lock()
-                defer { lock.unlock() }
-                frontmostCheckCount += 1
-                return frontmostCheckCount >= 2
+                frontmostCheckCount.withValue { count in
+                    count += 1
+                    return count >= 2
+                }
             }
         )
 
