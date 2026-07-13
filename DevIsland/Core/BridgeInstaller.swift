@@ -6,6 +6,8 @@ enum BridgeInstaller {
     private static let bridgeFileName = "devisland-bridge.sh"
     private static let bridgeHelperFileName = "devisland_bridge.py"
     private static let bridgeManifestFileName = "hook_events.json"
+    /// install-bridge.sh의 $HOOKS_DIR/codex-devisland-auto와 같은 설치 이름.
+    private static let codexAutoWrapperFileName = "codex-devisland-auto"
 
     /// 설치/제거 작업을 백그라운드에서 직렬로 실행한다. 동시 큐를 쓰면 여러
     /// 메뉴 액션이 같은 브리지 디렉토리·config 파일을 병렬로 변경해
@@ -23,6 +25,7 @@ enum BridgeInstaller {
         case missingBridgeHelper
         case missingBridgeManifest
         case missingInstaller
+        case missingCodexWrapper
 
         var errorDescription: String? {
             switch self {
@@ -34,6 +37,8 @@ enum BridgeInstaller {
                 return L10n.shared.alertBundleNoManifest
             case .missingInstaller:
                 return L10n.shared.alertBundleNoInstaller
+            case .missingCodexWrapper:
+                return L10n.shared.alertBundleNoCodexWrapper
             }
         }
     }
@@ -123,6 +128,23 @@ enum BridgeInstaller {
         try ensureParentDir(codexHooksURL)
         try runInstaller("codex-hooks", [codexHooksURL.path, paths.destURL.path])
         try runInstaller("codex-config", [codexConfigURL.path, paths.destURL.path])
+        try installCodexAutoWrapper(bridgeDir: paths.bridgeDir)
+    }
+
+    /// Codex Auto-review 위임 래퍼(codex-devisland-auto)를 bridgeDir에 배치한다.
+    /// install-bridge.sh와 같은 위치/이름으로 설치해 앱 메뉴 설치만으로도
+    /// Auto-review 위임 실행 경로를 쓸 수 있게 한다.
+    private static func installCodexAutoWrapper(bridgeDir: URL) throws {
+        guard let wrapperURL = Bundle.main.url(forResource: "codex-devisland-auto", withExtension: "sh") else {
+            throw BridgeInstallerError.missingCodexWrapper
+        }
+        let fm = FileManager.default
+        let destURL = bridgeDir.appendingPathComponent(codexAutoWrapperFileName)
+        // install-bridge.sh가 dev 모드에서 심링크로 설치할 수 있어 rm -f처럼 무조건 제거.
+        // fileExists는 심링크를 따라가므로 dangling 심링크를 놓친다.
+        try? fm.removeItem(at: destURL)
+        try fm.copyItem(at: wrapperURL, to: destURL)
+        try fm.setAttributes([.posixPermissions: 0o755 as NSNumber], ofItemAtPath: destURL.path)
     }
 
     private static func installGeminiHooks() throws {
@@ -285,6 +307,7 @@ enum BridgeInstaller {
                     errors.append("\(name): \(error.localizedDescription)")
                 }
             }
+            removeCodexAutoWrapper()
             do {
                 try removeAntigravityHooks(at: home.appendingPathComponent(".gemini/config/hooks.json"))
                 try removeLegacyAntigravityHooks(at: home.appendingPathComponent(".gemini/antigravity-cli/hooks.json"))
@@ -318,6 +341,7 @@ enum BridgeInstaller {
             let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/hooks.json")
             do {
                 try removeHooks(at: url, fileName: url.lastPathComponent)
+                removeCodexAutoWrapper()
                 let l = L10n.shared
                 showAlert(title: l.alertCodexRemoved, message: l.alertCodexHooksRemoved, isError: false)
             } catch {
@@ -384,6 +408,13 @@ enum BridgeInstaller {
             updated["hooks"] = subHooks
             return updated
         }
+    }
+
+    /// Codex Auto-review 래퍼를 제거한다. config.toml의 `hooks = true` 플래그는
+    /// 사용자가 직접 추가한 다른 훅에도 영향을 주므로 의도적으로 되돌리지 않는다.
+    private static func removeCodexAutoWrapper() {
+        let destURL = installPaths().bridgeDir.appendingPathComponent(codexAutoWrapperFileName)
+        try? FileManager.default.removeItem(at: destURL)
     }
 
     private static func removeAntigravityHooks(at url: URL) throws {

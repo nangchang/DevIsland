@@ -321,6 +321,22 @@
         }
       }
     },
+    "alertBundleNoCodexWrapper": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex Auto-review wrapper not found in app bundle."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 번들에서 Codex Auto-review 래퍼를 찾을 수 없습니다."
+          }
+        }
+      }
+    },
     "alertBundleNoManifest": {
       "localizations": {
         "en": {

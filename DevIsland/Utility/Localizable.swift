@@ -140,6 +140,7 @@ extension L10n {
     var alertBundleNoHelper: String { t("alertBundleNoHelper") }
     var alertBundleNoManifest: String { t("alertBundleNoManifest") }
     var alertBundleNoInstaller: String { t("alertBundleNoInstaller") }
+    var alertBundleNoCodexWrapper: String { t("alertBundleNoCodexWrapper") }
     func alertInstallScriptFailed(_ detail: String) -> String { tf("alertInstallScriptFailed", detail) }
     var alertBadJSON: String { t("alertBadJSON") }
     func alertBadFile(_ name: String) -> String { tf("alertBadFile", name) }
