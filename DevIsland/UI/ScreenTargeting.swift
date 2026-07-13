@@ -7,8 +7,10 @@ import os
 /// 노치 윈도우가 표시될 화면 선정과 최전면 앱의 전체화면 감지 로직.
 /// 순수 계산 위주로 NotchWindowController에서 추출됨(행동 변화 없음).
 enum ScreenTargeting {
+    /// 화면 구성 전환(클램셸, 디스플레이 절전 등) 중에는 `NSScreen.screens`가
+    /// 비어 있을 수 있어 nil을 반환한다 — 호출부는 프레임 갱신을 건너뛴다.
     @MainActor
-    static func targetScreen(for window: NSWindow) -> NSScreen {
+    static func targetScreen(for window: NSWindow) -> NSScreen? {
         let state = AppState.shared
 
         // 만약 요청 표시 중(확장 상태 + 대기 아이템 존재)이라면 requestDisplayTarget 설정을 먼저 확인
@@ -20,17 +22,17 @@ enum ScreenTargeting {
 
         switch state.displayPrefs.notchDisplayTarget {
         case .main:
-            return NSScreen.screens.first!
+            return NSScreen.screens.first
         case .mouse:
-            return Self.mouseScreen() ?? NSScreen.main ?? NSScreen.screens.first!
+            return Self.mouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
         case .focused:
             // 키보드 포커스가 있는 화면(NSScreen.main)을 최우선으로 하되, 보조적으로 마우스 위치 참고
-            return NSScreen.main ?? Self.mouseScreen() ?? NSScreen.screens.first!
+            return NSScreen.main ?? Self.mouseScreen() ?? NSScreen.screens.first
         case .specific:
             if let screen = NSScreen.screens.first(where: { $0.displayId == state.displayPrefs.selectedDisplayId }) {
                 return screen
             }
-            return NSScreen.main ?? NSScreen.screens.first!
+            return NSScreen.main ?? NSScreen.screens.first
         case .automatic:
             break
         }
@@ -43,7 +45,7 @@ enum ScreenTargeting {
             return mouseScreen
         }
 
-        return NSScreen.screens.first!
+        return NSScreen.screens.first
     }
 
     /// 요청 표시 위치 설정에 따라 override할 화면을 반환한다.

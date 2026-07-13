@@ -411,7 +411,8 @@ class NotchWindowController: NSWindowController {
 
     func updateWindowFrame(animate: Bool = true, sizeOverride: NSSize? = nil, targetScreenOverride: NSScreen? = nil) {
         guard let window = window else { return }
-        let screen = targetScreenOverride ?? ScreenTargeting.targetScreen(for: window)
+        // 화면 구성 전환 중 screens가 비면 이번 갱신은 건너뛴다(다음 화면 체크에서 복구).
+        guard let screen = targetScreenOverride ?? ScreenTargeting.targetScreen(for: window) else { return }
         let settings = SettingsStore.shared.settings
         let collapsedWindowSize = NotchLayout.windowSize(expanded: false, settings: settings)
         let expandedWindowSize = NotchLayout.windowSize(expanded: true, settings: settings)
