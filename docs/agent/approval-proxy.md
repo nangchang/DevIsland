@@ -127,6 +127,25 @@ Codex:
 - DevIsland manages session and persistent rules in SQLite.
 - Sessions launched with `DEVISLAND_CODEX_APPROVAL_OWNER=codex` carry a bridge-added `devisland_approval_owner` marker. Their Codex `PermissionRequest` events are recorded and returned as `pass` before DevIsland policy evaluation so Codex Auto-review remains the decision owner.
 
+## Rule Matching
+
+`commandPrefix` rules compare the literal string prefix of `tool_input.command`.
+Allow and deny use opposite safety directions at the prefix boundary
+(`ApprovalPolicyEngine.commandPrefixMatches`):
+
+- **allow** under-matches on purpose: the character after the prefix must be
+  whitespace, and commands containing shell control syntax (`;`, `&`, `|`,
+  redirects, backticks, `$(`, newlines) are never auto-approved.
+- **deny** over-matches on purpose: a prefix hit blocks unless the next
+  character merely extends the command word (`rm` does not match `rmdir`).
+
+Known limitation: deny matching is literal. String variants that still run the
+denied command — doubled spaces (`git  push`), env-var assignments
+(`FOO=1 git push`), absolute paths (`/usr/bin/git push`) — do not match the
+prefix, so the request falls through to the rest of the evaluation hierarchy
+(normally the manual approval prompt). Deny rules are a convenience guard on
+top of the interactive approval flow, not a standalone security boundary.
+
 ## SQLite Storage
 
 DB path: `~/Library/Application Support/DevIsland/approval-proxy.sqlite3`
