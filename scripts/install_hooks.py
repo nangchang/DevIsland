@@ -78,18 +78,35 @@ def install_claude(path, bridge_path):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def _load_json_config(path):
+    """기존 설정 파일을 읽는다. 없으면 빈 dict, 손상됐으면 실패한다.
+
+    손상된 JSON을 조용히 {}로 대체하면 hooks 외 사용자 설정이 통째로
+    유실되므로(특히 gemini settings.json), 원본을 보존한 채 fail-fast한다.
+    """
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+        except ValueError as e:
+            raise SystemExit(
+                f"install_hooks: {path} 파싱 실패 — 손상된 JSON입니다. "
+                f"파일을 고치거나 삭제한 뒤 다시 실행하세요. ({e})"
+            )
+    if not isinstance(data, dict):
+        raise SystemExit(
+            f"install_hooks: {path} 최상위가 JSON 객체가 아닙니다. "
+            f"파일을 고치거나 삭제한 뒤 다시 실행하세요."
+        )
+    return data
+
+
 def install_codex_hooks(path, bridge_path):
     bridge_command = f'"{bridge_path}" --source codex'
     lifecycle, active, retired_events = _manifest_provider("codex")
 
-    data = {}
-    if os.path.exists(path):
-        try:
-            with open(path) as f:
-                data = json.load(f)
-        except Exception:
-            pass
-
+    data = _load_json_config(path)
     data.setdefault('hooks', {})
 
     # 공식 JSON 규격: {"EventName": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
@@ -200,14 +217,7 @@ def patch_codex_config(path, bridge_path):
 def install_gemini(path, bridge_path):
     bridge_command = f'"{bridge_path}" --source gemini'
 
-    data = {}
-    if os.path.exists(path):
-        try:
-            with open(path) as f:
-                data = json.load(f)
-        except Exception:
-            pass
-
+    data = _load_json_config(path)
     hooks = data.get('hooks', {})
     if not isinstance(hooks, dict):
         hooks = {}

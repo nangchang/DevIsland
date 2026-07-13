@@ -68,6 +68,49 @@ class InstallHooksGoldenTest(unittest.TestCase):
             with self.subTest(provider=provider, fixture=fixture):
                 self._run_case(provider, fixture, extra)
 
+    def test_corrupt_json_fails_without_overwriting(self) -> None:
+        """손상된 JSON 설정은 fail-fast하고 원본을 보존해야 한다.
+
+        예전 inline Python은 파싱 실패를 삼키고 {}에서 재작성해 hooks 외
+        사용자 설정(특히 gemini settings.json)을 유실시켰다.
+        """
+        corrupt = '{"hooks": broken'
+        for provider in ["codex-hooks", "gemini"]:
+            with self.subTest(provider=provider):
+                with tempfile.TemporaryDirectory() as tmp:
+                    work = Path(tmp) / "config.json"
+                    work.write_text(corrupt, encoding="utf-8")
+
+                    result = subprocess.run(
+                        [sys.executable, str(INSTALLER), provider, str(work), BRIDGE],
+                        capture_output=True, text=True,
+                    )
+
+                    self.assertNotEqual(result.returncode, 0, msg=f"{provider}: 손상 JSON인데 성공")
+                    self.assertIn("손상된 JSON", result.stderr)
+                    self.assertEqual(
+                        work.read_text(encoding="utf-8"), corrupt,
+                        msg=f"{provider}: 손상 파일이 덮어써짐",
+                    )
+
+    def test_non_dict_json_fails_without_overwriting(self) -> None:
+        """최상위가 객체가 아닌 JSON도 traceback 없이 명확한 오류로 실패해야 한다."""
+        non_dict = '["not", "a", "dict"]'
+        for provider in ["codex-hooks", "gemini"]:
+            with self.subTest(provider=provider):
+                with tempfile.TemporaryDirectory() as tmp:
+                    work = Path(tmp) / "config.json"
+                    work.write_text(non_dict, encoding="utf-8")
+
+                    result = subprocess.run(
+                        [sys.executable, str(INSTALLER), provider, str(work), BRIDGE],
+                        capture_output=True, text=True,
+                    )
+
+                    self.assertNotEqual(result.returncode, 0, msg=f"{provider}: 비객체 JSON인데 성공")
+                    self.assertIn("JSON 객체가 아닙니다", result.stderr)
+                    self.assertEqual(work.read_text(encoding="utf-8"), non_dict)
+
     def test_antigravity_legacy_cleanup(self) -> None:
         """레거시 hooks.json에서 devisland 키 제거 + 레거시 파일 삭제 분기.
 
