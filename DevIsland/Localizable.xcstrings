@@ -3217,6 +3217,22 @@
         }
       }
     },
+    "historyTabFleet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fleet"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fleet"
+          }
+        }
+      }
+    },
     "historyTabInsights": {
       "localizations": {
         "en": {
@@ -5606,13 +5622,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Session History…"
+            "value": "Session Center…"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "세션 기록…"
+            "value": "세션 센터…"
           }
         }
       }
@@ -8230,13 +8246,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Session History"
+            "value": "Session Center"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "세션 기록"
+            "value": "세션 센터"
           }
         }
       }

@@ -667,7 +667,8 @@ extension L10n {
     func timeSecsAgo(_ n: Int) -> String { tf("timeSecsAgo", n) }
     func timeMinsAgo(_ n: Int) -> String { tf("timeMinsAgo", n) }
 
-    // Session History Window tabs
+    // Session Center tabs
+    var historyTabFleet: String { t("historyTabFleet") }
     var historyTabSessions: String { t("historyTabSessions") }
     var historyTabInsights: String { t("historyTabInsights") }
 

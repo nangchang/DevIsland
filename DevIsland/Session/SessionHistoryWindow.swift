@@ -10,6 +10,36 @@ enum SessionHistoryFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum SessionCenterTab: String, CaseIterable, Identifiable {
+    case fleet
+    case sessions
+    case insights
+
+    static let defaultTab: SessionCenterTab = .fleet
+
+    var id: String { rawValue }
+}
+
+@MainActor
+final class SessionCenterPresentationState: ObservableObject {
+    @Published private(set) var isPresented: Bool
+    @Published private(set) var presentationGeneration: UInt64
+
+    init(isPresented: Bool = false, presentationGeneration: UInt64 = 0) {
+        self.isPresented = isPresented
+        self.presentationGeneration = presentationGeneration
+    }
+
+    func present() {
+        isPresented = true
+        presentationGeneration += 1
+    }
+
+    func dismiss() {
+        isPresented = false
+    }
+}
+
 enum SessionHistoryEntry: Identifiable {
     case live(ActiveSession)
     case closed(ClosedSessionRecord)
@@ -155,22 +185,56 @@ final class SessionHistoryViewModel: ObservableObject {
 
 struct SessionHistoryWindowView: View {
     @StateObject private var viewModel: SessionHistoryViewModel
+    @StateObject private var fleetViewModel: FleetRadarViewModel
     @ObservedObject private var l10n = L10n.shared
-    @ObservedObject private var appState = AppState.shared
-    @ObservedObject private var sessionStore = AppState.shared.sessionStore
+    @ObservedObject private var appState: AppState
+    @ObservedObject private var sessionStore: SessionStore
+    @ObservedObject private var presentationState: SessionCenterPresentationState
+    @State private var selectedTab: SessionCenterTab
 
-    init(appState: AppState? = nil) {
-        _viewModel = StateObject(wrappedValue: SessionHistoryViewModel(appState: appState))
+    @MainActor
+    init(
+        appState: AppState? = nil,
+        scanner: any GitContextScanning = GitContextService.shared,
+        presentationState: SessionCenterPresentationState? = nil,
+        fleetViewModel: FleetRadarViewModel? = nil
+    ) {
+        let resolved = appState ?? .shared
+        let resolvedPresentationState = presentationState
+            ?? SessionCenterPresentationState(isPresented: true)
+        _viewModel = StateObject(wrappedValue: SessionHistoryViewModel(appState: resolved))
+        _fleetViewModel = StateObject(
+            wrappedValue: fleetViewModel ?? FleetRadarViewModel(scanner: scanner)
+        )
+        _appState = ObservedObject(wrappedValue: resolved)
+        _sessionStore = ObservedObject(wrappedValue: resolved.sessionStore)
+        _presentationState = ObservedObject(wrappedValue: resolvedPresentationState)
+        _selectedTab = State(initialValue: .defaultTab)
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
+            FleetRadarView(
+                viewModel: fleetViewModel,
+                sessions: sessionStore.activeSessions,
+                labels: appState.sessionLabels,
+                onShowDetail: { appState.showSessionDetail($0) },
+                onFocusTerminal: { appState.focusTerminal(for: $0) },
+                isPresented: presentationState.isPresented,
+                presentationGeneration: presentationState.presentationGeneration
+            )
+            .tabItem { Label(l10n.historyTabFleet, systemImage: "rectangle.stack") }
+            .tag(SessionCenterTab.fleet)
+
             sessionsTab
                 .tabItem { Label(l10n.historyTabSessions, systemImage: "list.bullet") }
-            SessionInsightsView()
+                .tag(SessionCenterTab.sessions)
+
+            SessionInsightsView(appState: appState)
                 .tabItem { Label(l10n.historyTabInsights, systemImage: "chart.bar") }
+                .tag(SessionCenterTab.insights)
         }
-        .frame(minWidth: 760, minHeight: 440)
+        .frame(minWidth: 900, minHeight: 560)
     }
 
     private var sessionsTab: some View {
@@ -340,7 +404,7 @@ struct SessionHistoryWindowView: View {
             if let id = ids.first,
                let entry = entries.first(where: { $0.id == id }) {
                 Button {
-                    AppState.shared.promptRenameSession(
+                    appState.promptRenameSession(
                         entry.sessionId,
                         currentLabel: appState.sessionLabels[entry.sessionId]
                     )
@@ -349,7 +413,7 @@ struct SessionHistoryWindowView: View {
                 }
 
                 Button {
-                    AppState.shared.promptEditSessionDescription(
+                    appState.promptEditSessionDescription(
                         entry.sessionId,
                         currentDescription: appState.sessionDescriptions[entry.sessionId]
                     )
@@ -358,7 +422,7 @@ struct SessionHistoryWindowView: View {
                 }
 
                 Button {
-                    AppState.shared.toggleSessionFavorite(entry.sessionId)
+                    appState.toggleSessionFavorite(entry.sessionId)
                 } label: {
                     Label(
                         appState.isSessionFavorite(entry.sessionId) ? l10n.menuRemoveFavorite : l10n.menuAddFavorite,

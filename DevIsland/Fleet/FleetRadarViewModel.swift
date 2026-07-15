@@ -32,6 +32,14 @@ final class FleetRadarViewModel: ObservableObject {
         refreshTask?.cancel()
     }
 
+    func cancelRefresh() {
+        generation = UUID()
+        refreshTask?.cancel()
+        refreshTask = nil
+        pendingForceRefresh = false
+        isRefreshing = false
+    }
+
     func update(
         sessions: [ActiveSession],
         labels: [String: String],

@@ -327,6 +327,64 @@ final class FleetRadarViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.lastCompletedAt)
     }
 
+    func testCancelRefreshPreservesCardsAndDiscardsInFlightResult() async {
+        let gate = AsyncGate()
+        let discardSignal = FleetRadarDiscardSignal()
+        let cachedSnapshot = snapshot(worktree: "/repo/cached", branch: "cached")
+        let replacementSnapshot = snapshot(worktree: "/repo/replacement", branch: "new")
+        let scanner = FleetRadarScannerFake(
+            responses: [
+                ["/repo/cached": .ready(cachedSnapshot)],
+                ["/repo/replacement": .ready(replacementSnapshot)],
+                ["/repo/replacement": .ready(replacementSnapshot)],
+            ],
+            gates: [nil, gate, nil]
+        )
+        let viewModel = makeViewModel(
+            scanner: scanner,
+            refreshDiscardObserver: {
+                Task { await discardSignal.signal() }
+            }
+        )
+
+        viewModel.update(
+            sessions: [makeSession(id: "cached", workspaceRoot: "/repo/cached")],
+            labels: [:]
+        )
+        await scanner.waitForCallCount(1)
+        await waitUntilRefreshCompletes(viewModel)
+        let cachedCards = viewModel.cards
+        let cachedCompletion = viewModel.lastCompletedAt
+
+        viewModel.update(
+            sessions: [makeSession(id: "replacement", workspaceRoot: "/repo/replacement")],
+            labels: [:],
+            forceRefresh: true
+        )
+        await gate.waitUntilEntered()
+        XCTAssertTrue(viewModel.isRefreshing)
+
+        viewModel.cancelRefresh()
+        XCTAssertFalse(viewModel.isRefreshing)
+        XCTAssertEqual(viewModel.cards, cachedCards)
+        XCTAssertEqual(viewModel.lastCompletedAt, cachedCompletion)
+
+        await gate.resume()
+        await discardSignal.wait()
+        XCTAssertEqual(viewModel.cards, cachedCards)
+        XCTAssertEqual(viewModel.lastCompletedAt, cachedCompletion)
+
+        viewModel.update(
+            sessions: [makeSession(id: "replacement", workspaceRoot: "/repo/replacement")],
+            labels: [:]
+        )
+        await scanner.waitForCallCount(3)
+        await waitUntilRefreshCompletes(viewModel)
+        let postCancelCall = await scanner.call(at: 2)
+        XCTAssertFalse(postCancelCall.forceRefresh)
+        XCTAssertEqual(viewModel.cards.map(\.id), ["replacement"])
+    }
+
     func testInFlightScanDoesNotKeepViewModelAlive() async {
         let gate = AsyncGate()
         let scanner = FleetRadarScannerFake(responses: [[:]], gates: [gate])

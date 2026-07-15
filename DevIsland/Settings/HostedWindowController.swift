@@ -2,8 +2,16 @@ import SwiftUI
 import AppKit
 
 @MainActor
-final class HostedWindowController: NSWindowController {
-    init(title: String, size: NSSize, rootView: AnyView) {
+final class HostedWindowController: NSWindowController, NSWindowDelegate {
+    private let onWindowWillClose: (() -> Void)?
+
+    init(
+        title: String,
+        size: NSSize,
+        rootView: AnyView,
+        onWindowWillClose: (() -> Void)? = nil
+    ) {
+        self.onWindowWillClose = onWindowWillClose
         let hostingController = NSHostingController(rootView: rootView)
         let window = NSWindow(contentViewController: hostingController)
         window.title = title
@@ -12,6 +20,7 @@ final class HostedWindowController: NSWindowController {
         window.isReleasedWhenClosed = false
         window.center()
         super.init(window: window)
+        window.delegate = self
     }
 
     @available(*, unavailable)
@@ -23,6 +32,10 @@ final class HostedWindowController: NSWindowController {
         window?.centerIfNotVisible()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onWindowWillClose?()
     }
 }
 

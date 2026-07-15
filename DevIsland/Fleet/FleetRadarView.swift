@@ -9,19 +9,25 @@ struct FleetRadarView: View {
     let labels: [String: String]
     let onShowDetail: (String) -> Void
     let onFocusTerminal: (String) -> Void
+    let isPresented: Bool
+    let presentationGeneration: UInt64
 
     init(
         viewModel: FleetRadarViewModel,
         sessions: [ActiveSession],
         labels: [String: String],
         onShowDetail: @escaping (String) -> Void,
-        onFocusTerminal: @escaping (String) -> Void
+        onFocusTerminal: @escaping (String) -> Void,
+        isPresented: Bool = true,
+        presentationGeneration: UInt64 = 0
     ) {
         self.viewModel = viewModel
         self.sessions = sessions
         self.labels = labels
         self.onShowDetail = onShowDetail
         self.onFocusTerminal = onFocusTerminal
+        self.isPresented = isPresented
+        self.presentationGeneration = presentationGeneration
     }
 
     var body: some View {
@@ -82,13 +88,24 @@ struct FleetRadarView: View {
             }
         }
         .onAppear {
+            guard isPresented else { return }
             refresh(forceRefresh: false)
         }
         .onChange(of: sessions) { _, _ in
+            guard isPresented else { return }
             refresh(forceRefresh: false)
         }
         .onChange(of: labels) { _, _ in
+            guard isPresented else { return }
             refresh(forceRefresh: false)
+        }
+        .onChange(of: presentationGeneration) { _, _ in
+            guard isPresented else { return }
+            refresh(forceRefresh: false)
+        }
+        .onChange(of: isPresented) { _, isPresented in
+            guard !isPresented else { return }
+            viewModel.cancelRefresh()
         }
     }
 
