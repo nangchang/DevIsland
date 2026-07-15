@@ -33,8 +33,20 @@ final class FleetRadarModelsTests: XCTestCase {
             FleetCardModel(
                 group: first.group,
                 gitStates: first.gitStates,
+                primaryGitState: first.primaryGitState,
                 overlaps: first.overlaps,
                 primaryAttention: .blocked,
+                secondaryAttention: first.secondaryAttention
+            )
+        )
+        XCTAssertNotEqual(
+            first,
+            FleetCardModel(
+                group: first.group,
+                gitStates: first.gitStates,
+                primaryGitState: nil,
+                overlaps: first.overlaps,
+                primaryAttention: first.primaryAttention,
                 secondaryAttention: first.secondaryAttention
             )
         )
@@ -138,6 +150,7 @@ final class FleetRadarModelsTests: XCTestCase {
         return FleetCardModel(
             group: group,
             gitStates: ["/repo/worktree-a": .ready(makeSnapshot())],
+            primaryGitState: .ready(makeSnapshot()),
             overlaps: [makeOverlapPeer()],
             primaryAttention: .unread,
             secondaryAttention: [.overlapRisk]

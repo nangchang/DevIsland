@@ -93,6 +93,7 @@ struct FleetSessionGroup: Identifiable, Equatable {
 struct FleetCardModel: Identifiable, Equatable {
     let group: FleetSessionGroup
     let gitStates: [String: GitSnapshotState]
+    let primaryGitState: GitSnapshotState?
     let overlaps: [FleetOverlapPeer]
     let primaryAttention: FleetAttentionKind
     let secondaryAttention: Set<FleetAttentionKind>

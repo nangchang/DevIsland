@@ -434,6 +434,7 @@ struct FleetSessionGroup: Identifiable, Equatable {
 struct FleetCardModel: Identifiable, Equatable {
     let group: FleetSessionGroup
     let gitStates: [String: GitSnapshotState]
+    let primaryGitState: GitSnapshotState?
     let overlaps: [FleetOverlapPeer]
     let primaryAttention: FleetAttentionKind
     let secondaryAttention: Set<FleetAttentionKind>
@@ -806,6 +807,7 @@ final class FleetRadarViewModel: ObservableObject {
 
 - root workspace snapshot을 primary로 표시한다.
 - root에 workspace가 없으면 첫 child workspace snapshot을 primary로 사용한다.
+- `primaryGitState`는 ViewModel이 표준화한 root key로 미리 계산해 View에서 파일 I/O 없이 읽는다.
 - 그룹에 canonical worktree가 두 개 이상이면 “N worktrees” badge를 표시한다.
 - overlap은 그룹이 참조하는 모든 worktree의 peer 결과를 합치고 중복 ID를 제거한다.
 
