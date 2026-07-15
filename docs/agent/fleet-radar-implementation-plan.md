@@ -819,7 +819,7 @@ root와 child 전체에서 attention condition을 평가한다.
 - 하나라도 policy denied/timeout bypass 또는 snapshot unmerged면 `blocked`
 - 그룹 worktree 중 하나라도 overlap이면 `overlapRisk`
 - 하나라도 unread면 `unread`
-- 항상 `live`를 fallback으로 포함
+- 위 조건이 하나도 없을 때만 `live`를 fallback으로 포함
 
 primary는 raw priority 최솟값이다.
 

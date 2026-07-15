@@ -135,7 +135,7 @@ final class FleetRadarViewModelTests: XCTestCase {
         XCTAssertEqual(card.primaryAttention, .needsDecision)
         XCTAssertEqual(
             card.secondaryAttention,
-            [.blocked, .overlapRisk, .unread, .live]
+            [.blocked, .overlapRisk, .unread]
         )
         XCTAssertEqual(card.overlaps.count, 2)
     }
@@ -190,9 +190,9 @@ final class FleetRadarViewModelTests: XCTestCase {
             viewModel.cards.map(\.primaryAttention),
             [.needsDecision, .overlapRisk, .overlapRisk, .unread, .live]
         )
-        XCTAssertEqual(viewModel.cards[0].secondaryAttention, [.live])
-        XCTAssertEqual(viewModel.cards[1].secondaryAttention, [.live])
-        XCTAssertEqual(viewModel.cards[3].secondaryAttention, [.live])
+        XCTAssertEqual(viewModel.cards[0].secondaryAttention, [])
+        XCTAssertEqual(viewModel.cards[1].secondaryAttention, [])
+        XCTAssertEqual(viewModel.cards[3].secondaryAttention, [])
         XCTAssertEqual(viewModel.cards[4].secondaryAttention, [])
     }
 

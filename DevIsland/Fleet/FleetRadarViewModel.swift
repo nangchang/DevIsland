@@ -314,7 +314,7 @@ final class FleetRadarViewModel: ObservableObject {
         hasOverlap: Bool
     ) -> Set<FleetAttentionKind> {
         let sessions = [group.root] + group.children
-        var attentions: Set<FleetAttentionKind> = [.live]
+        var attentions: Set<FleetAttentionKind> = []
 
         if sessions.contains(where: { $0.isPending || $0.hasMissedApproval }) {
             attentions.insert(.needsDecision)
@@ -336,6 +336,9 @@ final class FleetRadarViewModel: ObservableObject {
         }
         if sessions.contains(where: \.isUnread) {
             attentions.insert(.unread)
+        }
+        if attentions.isEmpty {
+            attentions.insert(.live)
         }
         return attentions
     }

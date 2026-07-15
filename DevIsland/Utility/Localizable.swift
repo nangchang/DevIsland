@@ -521,6 +521,98 @@ extension L10n {
     var fallbackPass: String { t("fallbackPass") }
     var fallbackDeny: String { t("fallbackDeny") }
 
+    // Fleet Radar
+    var fleetTitle: String { t("fleetTitle") }
+    var fleetEmptyState: String { t("fleetEmptyState") }
+    var fleetRefreshing: String { t("fleetRefreshing") }
+    func fleetActiveCardsCount(_ n: Int) -> String {
+        n == 1 ? t("fleetActiveCardsCountOne") : tf("fleetActiveCardsCount", n)
+    }
+    func fleetWorktreesCount(_ n: Int) -> String {
+        n == 1 ? t("fleetWorktreesCountOne") : tf("fleetWorktreesCount", n)
+    }
+    func fleetOverlapPairsCount(_ n: Int) -> String {
+        n == 1 ? t("fleetOverlapPairsCountOne") : tf("fleetOverlapPairsCount", n)
+    }
+    var fleetUpdated: String { t("fleetUpdated") }
+    var fleetRefresh: String { t("fleetRefresh") }
+    var fleetRefreshHelp: String { t("fleetRefreshHelp") }
+    var fleetAttentionNeedsDecision: String { t("fleetAttentionNeedsDecision") }
+    var fleetAttentionBlocked: String { t("fleetAttentionBlocked") }
+    var fleetAttentionOverlapRisk: String { t("fleetAttentionOverlapRisk") }
+    var fleetAttentionUnread: String { t("fleetAttentionUnread") }
+    var fleetAttentionLive: String { t("fleetAttentionLive") }
+    func fleetAttention(_ kind: FleetAttentionKind) -> String {
+        switch kind {
+        case .needsDecision: return fleetAttentionNeedsDecision
+        case .blocked: return fleetAttentionBlocked
+        case .overlapRisk: return fleetAttentionOverlapRisk
+        case .unread: return fleetAttentionUnread
+        case .live: return fleetAttentionLive
+        }
+    }
+    var fleetClean: String { t("fleetClean") }
+    func fleetDirtyCount(_ n: Int) -> String {
+        n == 1 ? t("fleetDirtyCountOne") : tf("fleetDirtyCount", n)
+    }
+    var fleetUnmerged: String { t("fleetUnmerged") }
+    var fleetStale: String { t("fleetStale") }
+    var fleetUnavailable: String { t("fleetUnavailable") }
+    var fleetWorkspaceUnavailable: String { t("fleetWorkspaceUnavailable") }
+    var fleetNotRepository: String { t("fleetNotRepository") }
+    var fleetGitContextUnavailable: String { t("fleetGitContextUnavailable") }
+    var fleetRetry: String { t("fleetRetry") }
+    var fleetOverlapRisk: String { t("fleetOverlapRisk") }
+    func fleetOverlapCount(_ n: Int) -> String {
+        n == 1 ? t("fleetOverlapCountOne") : tf("fleetOverlapCount", n)
+    }
+    func fleetFilesCount(_ n: Int) -> String {
+        n == 1 ? t("fleetFilesCountOne") : tf("fleetFilesCount", n)
+    }
+    var fleetOverlapDetails: String { t("fleetOverlapDetails") }
+    var fleetOverlapDetailsHelp: String { t("fleetOverlapDetailsHelp") }
+    func fleetMoreOverlaps(_ n: Int) -> String {
+        n == 1 ? t("fleetMoreOverlapsOne") : tf("fleetMoreOverlaps", n)
+    }
+    func fleetMoreFiles(_ n: Int) -> String {
+        n == 1 ? t("fleetMoreFilesOne") : tf("fleetMoreFiles", n)
+    }
+    var fleetOverlapDisclaimer: String { t("fleetOverlapDisclaimer") }
+    var fleetRecentActivity: String { t("fleetRecentActivity") }
+    var fleetNoRecentActivity: String { t("fleetNoRecentActivity") }
+    var fleetSubagents: String { t("fleetSubagents") }
+    var fleetOrphanSubagent: String { t("fleetOrphanSubagent") }
+    func fleetMoreSubagents(_ n: Int) -> String {
+        n == 1 ? t("fleetMoreSubagentsOne") : tf("fleetMoreSubagents", n)
+    }
+    var fleetShowFewer: String { t("fleetShowFewer") }
+    var fleetShowDetail: String { t("fleetShowDetail") }
+    var fleetShowDetailHelp: String { t("fleetShowDetailHelp") }
+    var fleetFocusTerminal: String { t("fleetFocusTerminal") }
+    var fleetFocusTerminalHelp: String { t("fleetFocusTerminalHelp") }
+    var fleetOpenInFinder: String { t("fleetOpenInFinder") }
+    var fleetOpenInFinderHelp: String { t("fleetOpenInFinderHelp") }
+    var fleetCopyPath: String { t("fleetCopyPath") }
+    var fleetCopyPathHelp: String { t("fleetCopyPathHelp") }
+    func fleetCardAccessibility(
+        _ title: String,
+        _ provider: String,
+        _ attention: String,
+        _ branch: String,
+        _ dirty: String,
+        _ overlap: String
+    ) -> String {
+        tf(
+            "fleetCardAccessibility",
+            title,
+            provider,
+            attention,
+            branch,
+            dirty,
+            overlap
+        )
+    }
+
     // Pop-out window
     var popOutWindow: String { t("popOutWindow") }
     var sessionEnded: String { t("sessionEnded") }
