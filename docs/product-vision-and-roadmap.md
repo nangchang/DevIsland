@@ -5,6 +5,7 @@
   - [project-review-and-roadmap.md](project-review-and-roadmap.md) — 기술 부채·보안 로드맵 (v0.12~v1.0)
   - [refactoring-plan.md](refactoring-plan.md) — 구조 개선 실행 계획
   - [agent/plugin-architecture.md](agent/plugin-architecture.md) — 플러그인 v1/v2 설계
+  - [agent/fleet-radar-implementation-plan.md](agent/fleet-radar-implementation-plan.md) — OpenAI Build Week용 Fleet/Git 상세 구현 계획
 
 이 문서는 "무엇을 고칠 것인가"(기술 로드맵)가 아니라 **"무엇을 만들 것인가"**를 다룬다.
 
@@ -115,6 +116,10 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 ## 4. Horizon 2 — "1대에서 N대 관제로" (v0.16~v1.0, 3~9개월)
 
 병렬 에이전트 운용을 1급 시나리오로 승격하는 단계. v1.0의 정체성을 결정한다.
+
+> H2-1 Fleet 보드와 H2-2 Git 컨텍스트의 해커톤 MVP 범위, 데이터 모델,
+> Git path overlap 알고리즘, UI/테스트/검증 순서는
+> [Fleet Radar 구현 계획](agent/fleet-radar-implementation-plan.md)에 상세화되어 있다.
 
 ### H2-1. Fleet 보드
 
