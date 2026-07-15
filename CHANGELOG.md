@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.14.0 - 2026-07-16
+
+이번 릴리즈는 Codex Auto-review와 DevIsland 승인 UI가 충돌하지 않도록 승인 소유권을 명확히 하고, 터미널 세션을 식별하고 포커스하는 흐름을 강화한 기능 업데이트입니다. 명령 prefix 승인 규칙과 bridge 설치 경로의 보안을 보강하고, UI·동시성·프로세스 실행 안정화와 대규모 내부 구조 정리도 함께 담았습니다.
+
+### Highlights
+
+- `codex-devisland-auto` 실행 경로를 추가해 Codex Auto-review가 승인 판단을 맡는 동안 DevIsland는 세션 수명주기와 상태 추적을 계속 유지합니다.
+- 세션 행의 Terminal Info 메뉴에서 세션 ID, 앱, TTY, 윈도우/탭, tmux pane과 매니저 세션 제목을 확인하고 복사할 수 있게 했습니다.
+- AoE 세션 포커스 방식을 설정에서 선택할 수 있게 하고, dashboard 검색과 tmux client 전환을 환경에 맞게 사용할 수 있도록 했습니다.
+
+### Approval & Hooks
+
+- `commandPrefix` allow 규칙이 shell 제어 문자, 명령 치환과 zsh process substitution을 자동 승인하지 않도록 하고, deny 규칙은 메타문자와 확장 구문을 통한 우회를 차단하도록 강화했습니다.
+- cmux workspace ID를 AppleScript source에 삽입하지 않고 인자로 전달해 터미널 포커스 경로의 명령 주입 가능성을 제거했습니다.
+- Claude/Codex hook 설치 로직을 manifest와 `install_hooks.py` 중심으로 통합하고, 앱 메뉴에서도 Codex Auto-review wrapper를 함께 설치·제거하도록 맞췄습니다.
+- 손상된 Codex/Gemini JSON 설정은 덮어쓰지 않고 명확한 오류로 중단해 기존 사용자 설정을 보존합니다.
+
+### UI/UX
+
+- 노치 모서리 리사이즈 커서를 macOS 15의 공식 `NSCursor.frameResize` API로 전환했습니다.
+- 일시적으로 사용 가능한 화면이 없을 때 노치 frame 갱신을 건너뛰어 강제 언랩 크래시를 방지했습니다.
+- 비어 있는 OpenPeon packs 폴더를 Finder에서 열 때 발생할 수 있는 오류를 방지했습니다.
+
+### Stability & Performance
+
+- 읽지 않는 process pipe를 폐기해 터미널 포커스 보조 프로세스의 출력이 많을 때 교착될 수 있는 문제를 해결했습니다.
+- hook 설치·제거 파일 I/O를 메인 스레드 밖에서 실행하고 설정 패치 실패를 전파해 UI 정지와 잘못된 성공 알림을 줄였습니다.
+- AppState의 hook routing, 승인 표시/큐, 앱 wiring을 독립 컴포넌트로 분리하고 actor/Sendable 경계를 정리해 동시성 안정성을 높였습니다.
+- 반복적인 localization bundle 조회를 캐시하고 앱 로그를 `os.Logger`로 통합했습니다.
+
+### Internal & CI
+
+- 설정과 터미널 포커스, Notch/Settings UI 파일을 역할별로 분리해 변경 범위와 테스트 가능성을 개선했습니다.
+- 기존 localization 구현을 String Catalog로 이전하고 영어/한국어 문자열 검증을 유지했습니다.
+- SwiftLint structural gate와 분리된 테스트 fixture를 추가해 파일·타입 비대화를 CI에서 감지하도록 했습니다.
+- bridge 설치 동등성, 승인 경계, Codex Auto-review와 손상된 설정 파일에 대한 회귀 테스트를 확충했습니다.
+
+**Full Changelog**: https://github.com/nangchang/DevIsland/compare/v0.13.0...v0.14.0
+
 ## v0.13.0 - 2026-06-30
 
 이번 릴리즈는 세션을 다시 찾고 이어가는 흐름을 강화하고, 승인 요청과 터미널 포커스 경험을 더 똑똑하게 다듬은 기능 업데이트입니다. Compact notch 영역을 플러그인으로 확장할 수 있게 되었고, 세션 히스토리/인사이트, macOS 알림, Always allow 제안, AoE 터미널 탐색과 bridge 성능 개선도 함께 담았습니다.
