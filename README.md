@@ -12,6 +12,14 @@
 - **터미널 포커스 복원**: 터미널 확인이 필요한 작업은 알림으로 안내하고, 선택 후 원래 터미널 흐름으로 돌아갑니다.
 - **OpenPeon CESP 사운드팩**: 승인 요청, 작업 완료, 오류, 리소스 제한 같은 hook 이벤트에 오디오 피드백을 매핑할 수 있습니다.
 
+## OpenAI Build Week 2026 작업 기준
+
+- 구현 착수 시각: 2026-07-16 04:40 KST
+- Fleet Radar 구현 전 기준: `1fc23ce` (`v0.14.1-dev`). 위의 기존 DevIsland 기능은 이 기준에 포함됩니다.
+- Fleet Radar 구현 시작점: `ab847ba`. Fleet 탭, 로컬 Git worktree 상태, 변경 경로 중첩 분석,
+  attention ranking과 관련 테스트·문서를 Build Week 신규 범위로 구분합니다. 상세 범위는
+  [Fleet Radar 구현 계획](docs/agent/fleet-radar-implementation-plan.md)에 고정되어 있습니다.
+
 ## 작동 방식
 
 DevIsland는 별도 백그라운드 daemon 없이 macOS 앱 안에서 승인 프록시와 UI를 함께 실행합니다.
