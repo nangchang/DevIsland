@@ -28,7 +28,8 @@ After cloning, run these once to configure the development environment:
 
 ```bash
 # XcodeGen — generate .xcodeproj from project.yml
-brew install xcodegen
+# SwiftLint — run the same structural gate used by CI
+brew install xcodegen swiftlint
 xcodegen generate
 
 # xcode-build-server — gives SourceKit-LSP full project context
@@ -41,12 +42,19 @@ xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
 
 ## Mandatory Checks
 
+- Run SwiftLint before committing Swift source changes:
+
+```bash
+swiftlint lint --no-cache
+```
+
 - Run the existing unit tests before committing any code change:
 
 ```bash
 ./scripts/run-tests.sh
 ```
 
+- Use the repository `.swiftlint.yml`; it enforces structural limits such as file length, type body length, and function parameter count.
 - Use `./scripts/run-tests.sh` instead of ad hoc test commands unless there is a strong reason. It runs in isolated mode and will not interfere with a running DevIsland instance.
 - If you touch `project.yml`, regenerate the Xcode project with `xcodegen generate`.
 - For quick compile verification without interrupting a live app, use:
