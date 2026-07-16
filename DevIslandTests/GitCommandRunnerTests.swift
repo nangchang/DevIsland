@@ -113,9 +113,10 @@ final class GitCommandRunnerTests: XCTestCase {
         XCTAssertEqual(environment["GIT_OPTIONAL_LOCKS"], "0")
     }
 
-    func testCallerCancellationReturnsBeforeInjectedOperationCompletes() async {
+    func testCallerCancellationWaitsForInjectedOperationCleanup() async {
         let gate = AsyncGate()
         let cancellationSignal = AsyncSignal()
+        let completionSignal = AsyncSignal()
         let executor = FoundationGitProcessExecutor { _, cancellation in
             cancellation.register {
                 cancellationSignal.signal()
@@ -125,25 +126,32 @@ final class GitCommandRunnerTests: XCTestCase {
         }
         let runner = FoundationGitCommandRunner(executor: executor)
         let task = Task {
-            await self.run(runner)
+            let result = await self.run(runner)
+            completionSignal.signal()
+            return result
         }
 
         await gate.waitUntilEntered()
         task.cancel()
         await cancellationSignal.wait()
-        let result = await task.value
+        XCTAssertFalse(completionSignal.hasSignalled)
 
-        XCTAssertEqual(result, .timedOut)
         await gate.resume()
+        let result = await task.value
+        XCTAssertEqual(result, .timedOut)
+        XCTAssertTrue(completionSignal.hasSignalled)
     }
 
-    func testCallerTimeoutReturnsBeforeInjectedOperationCompletes() async {
+    func testCallerTimeoutWaitsForInjectedOperationCleanup() async {
         let gate = AsyncGate()
         let cancellationSignal = AsyncSignal()
+        let cancellationCount = LockIsolated(0)
+        let completionSignal = AsyncSignal()
         let timeoutScheduler = ManualTimeoutScheduler()
         let executor = FoundationGitProcessExecutor(
             operation: { _, cancellation in
                 cancellation.register {
+                    cancellationCount.withValue { $0 += 1 }
                     cancellationSignal.signal()
                 }
                 await gate.enterAndWaitForResume()
@@ -155,16 +163,45 @@ final class GitCommandRunnerTests: XCTestCase {
         )
         let runner = FoundationGitCommandRunner(executor: executor)
         let task = Task {
-            await self.run(runner)
+            let result = await self.run(runner)
+            completionSignal.signal()
+            return result
         }
 
         await gate.waitUntilEntered()
         timeoutScheduler.fire()
+        task.cancel()
         await cancellationSignal.wait()
-        let result = await task.value
+        XCTAssertFalse(completionSignal.hasSignalled)
+        XCTAssertEqual(cancellationCount.value, 1)
 
-        XCTAssertEqual(result, .timedOut)
         await gate.resume()
+        let result = await task.value
+        XCTAssertEqual(result, .timedOut)
+        XCTAssertTrue(completionSignal.hasSignalled)
+    }
+
+    func testCompletedOperationIgnoresLateTimeout() async {
+        let cancellationSignal = AsyncSignal()
+        let timeoutScheduler = ManualTimeoutScheduler()
+        let executor = FoundationGitProcessExecutor(
+            operation: { _, cancellation in
+                cancellation.register {
+                    cancellationSignal.signal()
+                }
+                return .exited(status: 0, stdout: Data("done".utf8), stderr: Data())
+            },
+            timeoutScheduler: { timeout, action in
+                timeoutScheduler.schedule(timeout, action)
+            }
+        )
+        let runner = FoundationGitCommandRunner(executor: executor)
+
+        let result = await run(runner)
+        timeoutScheduler.fire()
+
+        XCTAssertEqual(result, .success(Data("done".utf8)))
+        XCTAssertFalse(cancellationSignal.hasSignalled)
     }
 
     func testStdoutAccumulatorAcceptsExactLimit() {
@@ -313,6 +350,32 @@ final class GitCommandRunnerTests: XCTestCase {
         XCTAssertEqual(recorder.snapshot.terminateCount, 1)
     }
 
+    func testCleanupWaitsForExitAndEscalatesAfterTerminationGrace() async {
+        let forceSignal = AsyncSignal()
+        let completionSignal = AsyncSignal()
+        let recorder = CleanupRecorder(
+            terminateSucceeds: true,
+            forceTerminateSucceeds: true,
+            onForceTerminate: { forceSignal.signal() }
+        )
+        let cleanup = recorder.makeCoordinator()
+        cleanup.begin()
+
+        let waiter = Task.detached {
+            cleanup.waitForProcessExit(terminationGrace: 0)
+            completionSignal.signal()
+        }
+        await forceSignal.wait()
+        XCTAssertFalse(completionSignal.hasSignalled)
+
+        cleanup.processDidExit()
+        await completionSignal.wait()
+        _ = await waiter.value
+
+        XCTAssertEqual(recorder.snapshot.forceTerminateAttemptCount, 1)
+        XCTAssertEqual(recorder.snapshot.forceTerminateCount, 1)
+    }
+
     private func run(_ runner: FoundationGitCommandRunner) async -> GitCommandResult {
         await runner.run(
             arguments: ["status"],
@@ -329,12 +392,26 @@ private final class CleanupRecorder: @unchecked Sendable {
         var terminateAttemptCount = 0
         var terminateCount = 0
         var terminateSucceeds: Bool
+        var forceTerminateAttemptCount = 0
+        var forceTerminateCount = 0
+        var forceTerminateSucceeds: Bool
     }
 
     private let state: LockIsolated<Snapshot>
+    private let onForceTerminate: @Sendable () -> Void
 
-    init(terminateSucceeds: Bool) {
-        state = LockIsolated(Snapshot(terminateSucceeds: terminateSucceeds))
+    init(
+        terminateSucceeds: Bool,
+        forceTerminateSucceeds: Bool = false,
+        onForceTerminate: @escaping @Sendable () -> Void = {}
+    ) {
+        state = LockIsolated(
+            Snapshot(
+                terminateSucceeds: terminateSucceeds,
+                forceTerminateSucceeds: forceTerminateSucceeds
+            )
+        )
+        self.onForceTerminate = onForceTerminate
     }
 
     var snapshot: Snapshot { state.value }
@@ -354,6 +431,17 @@ private final class CleanupRecorder: @unchecked Sendable {
                     $0.terminateAttemptCount += 1
                     if $0.terminateSucceeds {
                         $0.terminateCount += 1
+                        return true
+                    }
+                    return false
+                }
+            },
+            forceTerminateIfRunning: {
+                self.onForceTerminate()
+                return self.state.withValue {
+                    $0.forceTerminateAttemptCount += 1
+                    if $0.forceTerminateSucceeds {
+                        $0.forceTerminateCount += 1
                         return true
                     }
                     return false
@@ -413,6 +501,12 @@ private final class AsyncSignal: @unchecked Sendable {
     private let lock = NSLock()
     private var isSignalled = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    var hasSignalled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isSignalled
+    }
 
     func signal() {
         lock.lock()

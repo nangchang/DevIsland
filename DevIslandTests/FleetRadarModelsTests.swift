@@ -105,6 +105,31 @@ final class FleetRadarModelsTests: XCTestCase {
         XCTAssertEqual(FleetAttentionKind.live.rawValue, 4)
     }
 
+    func testCardReportsStaleOverlapEvidenceFromEitherDirection() {
+        let peer = makeOverlapPeer()
+        let localStale = FleetOverlapPeer(
+            repositoryID: peer.repositoryID,
+            localWorktreeID: peer.localWorktreeID,
+            peerWorktreeID: peer.peerWorktreeID,
+            peerBranch: peer.peerBranch,
+            paths: peer.paths,
+            localIsStale: true
+        )
+        let peerStale = FleetOverlapPeer(
+            repositoryID: peer.repositoryID,
+            localWorktreeID: peer.localWorktreeID,
+            peerWorktreeID: peer.peerWorktreeID,
+            peerBranch: peer.peerBranch,
+            paths: peer.paths,
+            peerIsStale: true
+        )
+
+        XCTAssertFalse(makeCard(overlaps: [peer]).hasStaleOverlapEvidence)
+        XCTAssertTrue(makeCard(overlaps: [localStale]).hasStaleOverlapEvidence)
+        XCTAssertTrue(makeCard(overlaps: [peerStale]).hasStaleOverlapEvidence)
+        XCTAssertNotEqual(localStale, peerStale)
+    }
+
     private func makeSnapshot() -> GitWorktreeSnapshot {
         GitWorktreeSnapshot(
             repositoryID: GitRepositoryID(commonGitDirectory: "/repo/.git"),
@@ -128,7 +153,7 @@ final class FleetRadarModelsTests: XCTestCase {
         )
     }
 
-    private func makeCard() -> FleetCardModel {
+    private func makeCard(overlaps: [FleetOverlapPeer]? = nil) -> FleetCardModel {
         let root = FleetSessionDescriptor(
             id: "session-root",
             parentSessionID: nil,
@@ -151,7 +176,7 @@ final class FleetRadarModelsTests: XCTestCase {
             group: group,
             gitStates: ["/repo/worktree-a": .ready(makeSnapshot())],
             primaryGitState: .ready(makeSnapshot()),
-            overlaps: [makeOverlapPeer()],
+            overlaps: overlaps ?? [makeOverlapPeer()],
             primaryAttention: .unread,
             secondaryAttention: [.overlapRisk]
         )

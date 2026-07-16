@@ -219,6 +219,10 @@ final class FleetRadarViewModel: ObservableObject {
     ) -> [FleetCardModel] {
         let snapshots = states.values.compactMap(snapshot(from:))
         let overlapsByWorktree = FleetOverlapAnalyzer.analyze(snapshots: snapshots)
+        let staleWorktrees = Set(states.values.compactMap { state -> GitWorktreeID? in
+            guard case let .stale(snapshot, _) = state else { return nil }
+            return snapshot.worktreeID
+        })
 
         return groups.map { group in
             let groupKeys: Set<String> = Set(
@@ -231,7 +235,8 @@ final class FleetRadarViewModel: ObservableObject {
             let groupSnapshots = groupStates.values.compactMap(snapshot(from:))
             let overlaps = mergedOverlaps(
                 for: groupSnapshots,
-                overlapsByWorktree: overlapsByWorktree
+                overlapsByWorktree: overlapsByWorktree,
+                staleWorktrees: staleWorktrees
             )
             let attentions = attentionKinds(
                 group: group,
@@ -289,12 +294,21 @@ final class FleetRadarViewModel: ObservableObject {
 
     private static func mergedOverlaps(
         for snapshots: [GitWorktreeSnapshot],
-        overlapsByWorktree: [GitWorktreeID: [FleetOverlapPeer]]
+        overlapsByWorktree: [GitWorktreeID: [FleetOverlapPeer]],
+        staleWorktrees: Set<GitWorktreeID>
     ) -> [FleetOverlapPeer] {
         var peersByID: [FleetOverlapID: FleetOverlapPeer] = [:]
         for snapshot in snapshots {
             for peer in overlapsByWorktree[snapshot.worktreeID, default: []] {
-                peersByID[peer.id] = peer
+                peersByID[peer.id] = FleetOverlapPeer(
+                    repositoryID: peer.repositoryID,
+                    localWorktreeID: peer.localWorktreeID,
+                    peerWorktreeID: peer.peerWorktreeID,
+                    peerBranch: peer.peerBranch,
+                    paths: peer.paths,
+                    localIsStale: staleWorktrees.contains(peer.localWorktreeID),
+                    peerIsStale: staleWorktrees.contains(peer.peerWorktreeID)
+                )
             }
         }
         return peersByID.values.sorted(by: overlapComesBefore)

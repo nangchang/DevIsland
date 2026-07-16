@@ -519,6 +519,50 @@ final class FleetRadarViewModelTests: XCTestCase {
         XCTAssertEqual(cards["unavailable"]?.primaryAttention, .live)
     }
 
+    func testRootReadyChildStaleOverlapPreservesDirectionalFreshness() async {
+        let rootReady = snapshot(worktree: "/repo/root", paths: [])
+        let childStale = snapshot(
+            worktree: "/repo/child",
+            branch: "feature/child",
+            paths: ["Sources/Shared.swift"]
+        )
+        let peerReady = snapshot(
+            worktree: "/repo/peer",
+            branch: "feature/peer",
+            paths: ["Sources/Shared.swift"]
+        )
+        let scanner = FleetRadarScannerFake(responses: [[
+            "/repo/root": .ready(rootReady),
+            "/repo/child": .stale(childStale, .timedOut),
+            "/repo/peer": .ready(peerReady),
+        ]])
+        let viewModel = makeViewModel(scanner: scanner)
+        let root = makeSession(id: "root", workspaceRoot: "/repo/root")
+        let child = makeSession(
+            id: "child",
+            parentSessionID: root.id,
+            workspaceRoot: "/repo/child"
+        )
+        let peer = makeSession(id: "peer", workspaceRoot: "/repo/peer")
+
+        viewModel.update(sessions: [root, child, peer], labels: [:])
+        await scanner.waitForCallCount(1)
+        await waitUntilRefreshCompletes(viewModel)
+
+        let cards = Dictionary(uniqueKeysWithValues: viewModel.cards.map { ($0.id, $0) })
+        let rootCard = try! XCTUnwrap(cards["root"])
+        let peerCard = try! XCTUnwrap(cards["peer"])
+        XCTAssertEqual(rootCard.primaryGitState, .ready(rootReady))
+        XCTAssertEqual(rootCard.overlaps.count, 1)
+        XCTAssertTrue(rootCard.overlaps[0].localIsStale)
+        XCTAssertFalse(rootCard.overlaps[0].peerIsStale)
+        XCTAssertTrue(rootCard.hasStaleOverlapEvidence)
+        XCTAssertEqual(peerCard.overlaps.count, 1)
+        XCTAssertFalse(peerCard.overlaps[0].localIsStale)
+        XCTAssertTrue(peerCard.overlaps[0].peerIsStale)
+        XCTAssertTrue(peerCard.hasStaleOverlapEvidence)
+    }
+
     func testEachCardExcludesGitStatesFromOtherGroups() async {
         let firstState = GitSnapshotState.ready(
             snapshot(repository: "/first/.git", worktree: "/first")

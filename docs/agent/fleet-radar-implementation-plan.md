@@ -568,7 +568,7 @@ actor는 `input root → canonical top-level` alias map을 캐시해 다음 갱�
 식별 성공 후 canonical top-level에서 실행한다.
 
 ```bash
-/usr/bin/git status --porcelain=v2 --branch -z --untracked-files=all --no-ahead-behind
+/usr/bin/git -c core.fsmonitor=false status --porcelain=v2 --branch -z --untracked-files=all --no-ahead-behind
 ```
 
 선택 이유:
@@ -578,6 +578,7 @@ actor는 `input root → canonical top-level` alias map을 캐시해 다음 갱�
 - `-z`: 공백, 따옴표, 줄바꿈 escape에 의존하지 않는 NUL 구분
 - `--untracked-files=all`: untracked 디렉터리 아래 실제 파일 경로까지 비교
 - `--no-ahead-behind`: 해커톤 MVP에서 필요 없는 graph walk 제거
+- `-c core.fsmonitor=false`: 저장소별 fsmonitor hook/daemon을 실행하지 않고 읽기 전용 경계를 유지
 
 ignored 파일은 비교하지 않는다. submodule 내부 파일은 재귀 스캔하지 않고 상위 저장소가
 보고한 submodule path 하나만 변경 경로로 취급한다.

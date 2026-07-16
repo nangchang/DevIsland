@@ -47,6 +47,26 @@ struct FleetOverlapPeer: Equatable, Identifiable, Sendable {
     let peerWorktreeID: GitWorktreeID
     let peerBranch: String
     let paths: [String]
+    let localIsStale: Bool
+    let peerIsStale: Bool
+
+    init(
+        repositoryID: GitRepositoryID,
+        localWorktreeID: GitWorktreeID,
+        peerWorktreeID: GitWorktreeID,
+        peerBranch: String,
+        paths: [String],
+        localIsStale: Bool = false,
+        peerIsStale: Bool = false
+    ) {
+        self.repositoryID = repositoryID
+        self.localWorktreeID = localWorktreeID
+        self.peerWorktreeID = peerWorktreeID
+        self.peerBranch = peerBranch
+        self.paths = paths
+        self.localIsStale = localIsStale
+        self.peerIsStale = peerIsStale
+    }
 
     var id: FleetOverlapID {
         FleetOverlapID(
@@ -99,4 +119,7 @@ struct FleetCardModel: Identifiable, Equatable {
     let secondaryAttention: Set<FleetAttentionKind>
 
     var id: String { group.id }
+    var hasStaleOverlapEvidence: Bool {
+        overlaps.contains { $0.localIsStale || $0.peerIsStale }
+    }
 }

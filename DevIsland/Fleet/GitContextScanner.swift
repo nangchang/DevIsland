@@ -135,21 +135,21 @@ struct FoundationGitProcessExecutor: GitProcessExecuting {
                 completion.install(continuation)
 
                 timeoutScheduler(timeout) {
-                    if completion.resolve(.timedOut) {
+                    if completion.requestTimeout() {
                         cancellation.cancel()
                     }
                 }
                 Task.detached(priority: .utility) {
                     let result = await operation(request, cancellation)
-                    completion.resolve(result)
+                    completion.completeOperation(result)
                 }
 
-                if Task.isCancelled, completion.resolve(.timedOut) {
+                if Task.isCancelled, completion.requestTimeout() {
                     cancellation.cancel()
                 }
             }
         } onCancel: {
-            if completion.resolve(.timedOut) {
+            if completion.requestTimeout() {
                 cancellation.cancel()
             }
         }
@@ -178,33 +178,39 @@ struct FoundationGitProcessExecutor: GitProcessExecuting {
 private final class GitProcessExecutionCompletion: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<GitProcessExecutionResult, Never>?
-    private var result: GitProcessExecutionResult?
+    private var timeoutRequested = false
+    private var operationCompleted = false
 
     func install(_ continuation: CheckedContinuation<GitProcessExecutionResult, Never>) {
         lock.lock()
-        if let result {
-            lock.unlock()
-            continuation.resume(returning: result)
-        } else {
-            self.continuation = continuation
-            lock.unlock()
-        }
+        self.continuation = continuation
+        lock.unlock()
     }
 
-    @discardableResult
-    func resolve(_ result: GitProcessExecutionResult) -> Bool {
+    func requestTimeout() -> Bool {
         lock.lock()
-        guard self.result == nil else {
+        guard !operationCompleted, !timeoutRequested else {
             lock.unlock()
             return false
         }
-        self.result = result
+        timeoutRequested = true
+        lock.unlock()
+        return true
+    }
+
+    func completeOperation(_ result: GitProcessExecutionResult) {
+        lock.lock()
+        guard !operationCompleted else {
+            lock.unlock()
+            return
+        }
+        operationCompleted = true
+        let finalResult: GitProcessExecutionResult = timeoutRequested ? .timedOut : result
         let continuation = continuation
         self.continuation = nil
         lock.unlock()
 
-        continuation?.resume(returning: result)
-        return true
+        continuation?.resume(returning: finalResult)
     }
 }
 
@@ -302,18 +308,23 @@ final class GitProcessOutcomeState: @unchecked Sendable {
 
 final class GitProcessCleanupCoordinator: @unchecked Sendable {
     private let lock = NSLock()
+    private let processExit = DispatchSemaphore(value: 0)
     private let stopDrains: @Sendable () -> Void
     private let terminateIfRunning: @Sendable () -> Bool
+    private let forceTerminateIfRunning: @Sendable () -> Bool
     private var hasBegun = false
     private var hasSentTerminate = false
+    private var hasSentForceTerminate = false
     private var hasExited = false
 
     init(
         stopDrains: @escaping @Sendable () -> Void,
-        terminateIfRunning: @escaping @Sendable () -> Bool
+        terminateIfRunning: @escaping @Sendable () -> Bool,
+        forceTerminateIfRunning: @escaping @Sendable () -> Bool = { false }
     ) {
         self.stopDrains = stopDrains
         self.terminateIfRunning = terminateIfRunning
+        self.forceTerminateIfRunning = forceTerminateIfRunning
     }
 
     func begin() {
@@ -335,8 +346,21 @@ final class GitProcessCleanupCoordinator: @unchecked Sendable {
 
     func processDidExit() {
         lock.lock()
+        guard !hasExited else {
+            lock.unlock()
+            return
+        }
         hasExited = true
         lock.unlock()
+        processExit.signal()
+    }
+
+    func waitForProcessExit(terminationGrace: TimeInterval) {
+        if processExit.wait(timeout: .now() + max(0, terminationGrace)) == .success {
+            return
+        }
+        sendForceTerminateIfNeeded()
+        processExit.wait()
     }
 
     private func sendTerminateIfNeeded() {
@@ -344,6 +368,13 @@ final class GitProcessCleanupCoordinator: @unchecked Sendable {
         defer { lock.unlock() }
         guard hasBegun, !hasExited, !hasSentTerminate else { return }
         hasSentTerminate = terminateIfRunning()
+    }
+
+    private func sendForceTerminateIfNeeded() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !hasExited, !hasSentForceTerminate else { return }
+        hasSentForceTerminate = forceTerminateIfRunning()
     }
 }
 
@@ -414,6 +445,7 @@ private enum FoundationProcessOperation {
     private static let readChunkSize = 32 * 1024
     private static let pollIntervalMilliseconds: Int32 = 25
     private static let drainGrace: TimeInterval = 0.2
+    private static let terminationGrace: TimeInterval = 0.2
 
     static func run(
         _ request: GitProcessRequest,
@@ -441,6 +473,10 @@ private enum FoundationProcessOperation {
                 guard process.isRunning else { return false }
                 process.terminate()
                 return true
+            },
+            forceTerminateIfRunning: {
+                guard process.isRunning else { return false }
+                return Darwin.kill(process.processIdentifier, SIGKILL) == 0
             }
         )
         let state = GitProcessOutcomeState(cleanup: cleanup)
@@ -500,6 +536,10 @@ private enum FoundationProcessOperation {
         let outcome = state.waitForOutcome(until: .distantFuture)
 
         guard case .exited = outcome else {
+            cleanup.waitForProcessExit(terminationGrace: terminationGrace)
+            let drainDeadline = DispatchTime.now() + drainGrace
+            _ = stdoutDrainer.waitForResult(until: drainDeadline)
+            _ = stderrDrainer.waitForResult(until: drainDeadline)
             return GitProcessResultResolver.resolve(
                 outcome: outcome,
                 stdout: .readFailed,
@@ -770,6 +810,8 @@ actor GitContextService: GitContextScanning {
         "--git-common-dir",
     ]
     private static let statusArguments = [
+        "-c",
+        "core.fsmonitor=false",
         "status",
         "--porcelain=v2",
         "--branch",

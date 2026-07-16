@@ -109,30 +109,10 @@ To build and test without launching or terminating a running DevIsland instance:
 
 ### Reproduce the worktree-overlap demo
 
-Run these commands from a clean DevIsland checkout. Use different branch/path names if they already
-exist on your machine.
-
-```bash
-git worktree add -b demo/fleet-a /tmp/devisland-fleet-a HEAD
-git worktree add -b demo/fleet-b /tmp/devisland-fleet-b HEAD
-printf '\nFleet A demo change\n' >> /tmp/devisland-fleet-a/README.md
-printf '\nFleet B demo change\n' >> /tmp/devisland-fleet-b/README.md
-```
-
-Start a supported agent session in each `/tmp/devisland-fleet-*` worktree, open **Session Center >
-Fleet**, and choose **Refresh**. Both cards should show dirty Git state and an **Overlap risk** for
-`README.md`. Editing different tracked files should keep both cards dirty without an overlap badge.
-The analysis stays local and does not modify either repository.
-
-After closing those agent sessions, clean up the demo without preserving its uncommitted edits:
-
-```bash
-git -C /tmp/devisland-fleet-a restore README.md
-git -C /tmp/devisland-fleet-b restore README.md
-git worktree remove /tmp/devisland-fleet-a
-git worktree remove /tmp/devisland-fleet-b
-git branch -d demo/fleet-a demo/fleet-b
-```
+Use the fixed English [Fleet Radar Build Week demo runbook](docs/agent/fleet-radar-demo.md). It
+defines three exact branch, worktree, file, and session-label fixtures; the pending-approval cue;
+the Detail-versus-Focus sequence; and complete cleanup commands. The overlap analysis stays local
+and does not modify any repository.
 
 ## 작동 방식
 

@@ -545,7 +545,7 @@ final class GitContextScannerTests: XCTestCase, @unchecked Sendable {
 
     private var statusArguments: [String] {
         [
-            "status", "--porcelain=v2", "--branch", "-z",
+            "-c", "core.fsmonitor=false", "status", "--porcelain=v2", "--branch", "-z",
             "--untracked-files=all", "--no-ahead-behind",
         ]
     }
@@ -630,7 +630,9 @@ private struct ScannerGitCall: Sendable {
     let maxOutputBytes: Int
 
     var isRevParse: Bool { arguments.first == "rev-parse" }
-    var isStatus: Bool { arguments.first == "status" }
+    var isStatus: Bool {
+        arguments.starts(with: ["-c", "core.fsmonitor=false", "status"])
+    }
 }
 
 private actor ScannerFakeRunner: GitCommandRunning {

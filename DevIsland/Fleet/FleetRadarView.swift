@@ -525,19 +525,45 @@ private struct FleetCardView: View {
             dirty = l10n.fleetUnavailable
         }
 
+        var overlapDescription = l10n.fleetOverlapCount(overlapSections.count)
+        let staleDescriptions = staleOverlapDescriptions
+        if !staleDescriptions.isEmpty {
+            overlapDescription += ", \(staleDescriptions.joined(separator: "; "))"
+        }
+
         return l10n.fleetCardAccessibility(
             root.displayTitle,
             root.provider.accessibilityName,
             l10n.fleetAttention(card.primaryAttention),
             branch,
             dirty,
-            l10n.fleetOverlapCount(overlapSections.count)
+            overlapDescription
         )
     }
 
     private func nonempty(_ value: String?) -> String? {
         guard let value, !value.isEmpty else { return nil }
         return value
+    }
+
+    private var staleOverlapDescriptions: [String] {
+        var descriptions: Set<String> = []
+        for overlap in card.overlaps {
+            if overlap.localIsStale {
+                let localName = overlap.localWorktreeID.topLevelPath.fleetLastPathComponent
+                descriptions.insert("\(localName): \(l10n.fleetStale)")
+            }
+            if overlap.peerIsStale {
+                let key = FleetPeerKey(
+                    repositoryID: overlap.repositoryID,
+                    worktreeID: overlap.peerWorktreeID
+                )
+                let peerName = peerTitles[key]
+                    ?? overlap.peerWorktreeID.topLevelPath.fleetLastPathComponent
+                descriptions.insert("\(peerName): \(l10n.fleetStale)")
+            }
+        }
+        return descriptions.sorted()
     }
 }
 
@@ -686,9 +712,20 @@ private struct FleetOverlapSummary: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(l10n.fleetOverlapRisk, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.orange)
+            HStack(spacing: 6) {
+                Label(l10n.fleetOverlapRisk, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+
+                if let localStaleContext {
+                    staleBadge(
+                        accessibilityContext: localStaleContext,
+                        showsContext: true
+                    )
+                } else if sections.contains(where: \.peerIsStale) {
+                    staleBadge(accessibilityContext: l10n.fleetOverlapRisk)
+                }
+            }
 
             if let first = sections.first {
                 HStack(spacing: 8) {
@@ -696,10 +733,15 @@ private struct FleetOverlapSummary: View {
                         Text(first.peerTitle)
                             .font(.callout.weight(.medium))
                             .lineLimit(1)
-                        Text("\(first.peerBranch) • \(first.peerWorktreeName)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        HStack(spacing: 4) {
+                            Text("\(first.peerBranch) • \(first.peerWorktreeName)")
+                                .lineLimit(1)
+                            if first.peerIsStale {
+                                staleBadge(accessibilityContext: first.peerTitle)
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
 
                     Spacer(minLength: 4)
@@ -729,6 +771,25 @@ private struct FleetOverlapSummary: View {
             FleetOverlapPopover(sections: sections)
         }
     }
+
+    private var localStaleContext: String? {
+        let names = Set(sections.flatMap(\.localStaleWorktreeNames)).sorted()
+        return names.isEmpty ? nil : names.joined(separator: ", ")
+    }
+
+    private func staleBadge(
+        accessibilityContext: String,
+        showsContext: Bool = false
+    ) -> some View {
+        let title = showsContext
+            ? "\(accessibilityContext): \(l10n.fleetStale)"
+            : l10n.fleetStale
+        return Label(title, systemImage: "clock.badge.exclamationmark")
+            .font(.caption2)
+            .foregroundStyle(.orange)
+            .fixedSize()
+            .accessibilityLabel("\(accessibilityContext), \(l10n.fleetStale)")
+    }
 }
 
 private struct FleetOverlapPopover: View {
@@ -745,11 +806,25 @@ private struct FleetOverlapPopover: View {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     ForEach(sections) { section in
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(section.peerTitle)
-                                .font(.callout.weight(.semibold))
-                            Text("\(section.peerBranch) • \(section.peerWorktreeName)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                Text(section.peerTitle)
+                                    .font(.callout.weight(.semibold))
+                                if section.peerIsStale {
+                                    staleBadge(accessibilityContext: section.peerTitle)
+                                }
+                            }
+                            HStack(spacing: 6) {
+                                Text("\(section.peerBranch) • \(section.peerWorktreeName)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if !section.localStaleWorktreeNames.isEmpty {
+                                    staleBadge(
+                                        accessibilityContext: section.localStaleWorktreeNames
+                                            .joined(separator: ", "),
+                                        showsContext: true
+                                    )
+                                }
+                            }
 
                             ForEach(Array(section.paths.prefix(20)), id: \.self) { path in
                                 Text(path)
@@ -778,6 +853,20 @@ private struct FleetOverlapPopover: View {
         }
         .padding(16)
         .frame(width: 420, height: 460, alignment: .topLeading)
+    }
+
+    private func staleBadge(
+        accessibilityContext: String,
+        showsContext: Bool = false
+    ) -> some View {
+        let title = showsContext
+            ? "\(accessibilityContext): \(l10n.fleetStale)"
+            : l10n.fleetStale
+        return Label(title, systemImage: "clock.badge.exclamationmark")
+            .font(.caption2)
+            .foregroundStyle(.orange)
+            .fixedSize()
+            .accessibilityLabel("\(accessibilityContext), \(l10n.fleetStale)")
     }
 }
 
@@ -897,6 +986,10 @@ private struct FleetOverlapSection: Identifiable {
     let peerBranch: String
     let peerWorktreeName: String
     let paths: [String]
+    let localStaleWorktreeNames: [String]
+    let peerIsStale: Bool
+
+    var localIsStale: Bool { !localStaleWorktreeNames.isEmpty }
 
     var id: FleetPeerKey { peerKey }
 
@@ -907,6 +1000,8 @@ private struct FleetOverlapSection: Identifiable {
         struct Accumulator {
             let branch: String
             var paths: Set<String>
+            var localStaleWorktreeNames: Set<String>
+            var peerIsStale: Bool
         }
 
         var byPeer: [FleetPeerKey: Accumulator] = [:]
@@ -915,10 +1010,21 @@ private struct FleetOverlapSection: Identifiable {
                 repositoryID: overlap.repositoryID,
                 worktreeID: overlap.peerWorktreeID
             )
-            if byPeer[key] == nil {
-                byPeer[key] = Accumulator(branch: overlap.peerBranch, paths: [])
+            var accumulator = byPeer[key]
+                ?? Accumulator(
+                    branch: overlap.peerBranch,
+                    paths: [],
+                    localStaleWorktreeNames: [],
+                    peerIsStale: false
+                )
+            accumulator.paths.formUnion(overlap.paths)
+            if overlap.localIsStale {
+                accumulator.localStaleWorktreeNames.insert(
+                    overlap.localWorktreeID.topLevelPath.fleetLastPathComponent
+                )
             }
-            byPeer[key]?.paths.formUnion(overlap.paths)
+            accumulator.peerIsStale = overlap.peerIsStale || accumulator.peerIsStale
+            byPeer[key] = accumulator
         }
 
         return byPeer.map { key, accumulator in
@@ -927,7 +1033,9 @@ private struct FleetOverlapSection: Identifiable {
                 peerTitle: peerTitles[key] ?? key.worktreePath.fleetLastPathComponent,
                 peerBranch: accumulator.branch,
                 peerWorktreeName: key.worktreePath.fleetLastPathComponent,
-                paths: accumulator.paths.sorted()
+                paths: accumulator.paths.sorted(),
+                localStaleWorktreeNames: accumulator.localStaleWorktreeNames.sorted(),
+                peerIsStale: accumulator.peerIsStale
             )
         }.sorted { lhs, rhs in
             let titleOrder = lhs.peerTitle.localizedStandardCompare(rhs.peerTitle)
