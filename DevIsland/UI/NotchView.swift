@@ -531,10 +531,31 @@ struct NotchView: View {
 
     private var sessionsContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(l10n.notchAgentSessions)
-                .font(.system(size: 9, weight: .black))
-                .foregroundColor(.white.opacity(0.3))
-                .padding(.horizontal, 20)
+            HStack(spacing: 12) {
+                Text(l10n.notchAgentSessions)
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundColor(.white.opacity(0.3))
+
+                Spacer(minLength: 8)
+
+                Button {
+                    state.isNotchExpanded = false
+                    AppWindowRouter.showSessionHistory()
+                } label: {
+                    Label(l10n.menuSessionHistory, systemImage: "rectangle.stack")
+                        .font(.system(size: 10, weight: .semibold))
+                        .lineLimit(1)
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .frame(minHeight: 24)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .help(l10n.menuSessionHistory)
+                .accessibilityLabel(l10n.menuSessionHistory)
+            }
+            .padding(.horizontal, 20)
 
             NotchActivityContributionsView()
 

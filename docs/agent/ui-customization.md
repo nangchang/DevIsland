@@ -40,6 +40,11 @@ expanded notch session list may also render a compact cached summary on each Fle
 branch or detached HEAD, clean/changed count, unmerged state, overlap risk, and stale evidence. The
 approval/notification compact session list does not show these summaries.
 
+The normal expanded **Agent Sessions** section header includes a direct Session Center button. It
+collapses the regular notch before routing through the existing cached Session Center controller,
+so repeated opens reuse the same window and its view models. The button is not rendered in the
+approval/notification compact screen and does not change approval ownership or queue behavior.
+
 Each presentation owns a `FleetRadarViewModel` that turns active sessions into scan descriptors,
 while both share the `GitContextService` actor. The service performs bounded, read-only Git commands
 and caches snapshots off the main thread. Session Center refreshes when its window appears, sessions
