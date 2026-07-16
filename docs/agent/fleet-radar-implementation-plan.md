@@ -1,6 +1,6 @@
 # Fleet Radar 구현 계획
 
-- 상태: 설계 완료, 구현 전
+- 상태: 프로덕션 구현 완료; 수동 GUI·클린 Mac 검증 및 공개 제출 절차는 별도 진행
 - 작성일: 2026-07-16
 - 대상: OpenAI Build Week 2026 — Developer Tools
 - 공식 페이지: [OpenAI Build Week](https://openai.devpost.com/)
