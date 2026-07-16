@@ -50,7 +50,7 @@ enum AppWindowRouter {
         sessionCenterPresentationState.present()
         let controller = cachedController(&sessionHistoryController) {
             HostedWindowController(
-                title: L10n.shared.winSessionHistory,
+                localizedTitleKey: "winSessionHistory",
                 size: NSSize(width: 960, height: 640),
                 rootView: AnyView(SessionHistoryWindowView(
                     presentationState: sessionCenterPresentationState

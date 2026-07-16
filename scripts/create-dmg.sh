@@ -72,21 +72,47 @@ xattr -cr "$EXPORT_DIR/$APP_NAME.app"
 # 중복 복사 제거
 
 echo "DMG 생성 중 (create-dmg 사용)..."
-rm -f "$DMG_PATH"
+rm -f "$DMG_PATH" "$ROOT_DIR"/rw.*."${DMG_NAME}.dmg"
 
 # Resources/DMG/dmg_background.png 를 배경으로 사용
-create-dmg \
-  --volname "$APP_NAME" \
-  --background "$ROOT_DIR/Resources/DMG/dmg_background.png" \
-  --window-pos 200 120 \
-  --window-size 600 400 \
-  --icon-size 120 \
-  --icon "$APP_NAME.app" 150 200 \
-  --hide-extension "$APP_NAME.app" \
-  --app-drop-link 450 200 \
-  --no-internet-enable \
-  "$DMG_PATH" \
-  "$EXPORT_DIR/"
+CREATE_DMG_OPTIONS=(
+  --volname "$APP_NAME"
+  --background "$ROOT_DIR/Resources/DMG/dmg_background.png"
+  --window-pos 200 120
+  --window-size 600 400
+  --icon-size 120
+  --icon "$APP_NAME.app" 150 200
+  --hide-extension "$APP_NAME.app"
+  --app-drop-link 450 200
+  --no-internet-enable
+)
+
+run_create_dmg() {
+  create-dmg \
+    "${CREATE_DMG_OPTIONS[@]}" \
+    "$@" \
+    "$DMG_PATH" \
+    "$EXPORT_DIR/"
+}
+
+if run_create_dmg; then
+  :
+else
+  create_dmg_status=$?
+  # create-dmg 1.2.3 uses exit 64 when its Finder AppleScript fails.
+  if [[ "$create_dmg_status" -ne 64 ]]; then
+    echo "오류: create-dmg가 실패했습니다(종료 코드: ${create_dmg_status}). 자동 재시도를 건너뜁니다." >&2
+    exit "$create_dmg_status"
+  fi
+
+  echo "경고: Finder DMG 레이아웃 생성에 실패했습니다." >&2
+  echo "경고: Finder 자동화를 건너뛴 기본 레이아웃으로 다시 시도합니다." >&2
+  rm -f "$DMG_PATH" "$ROOT_DIR"/rw.*."${DMG_NAME}.dmg"
+  run_create_dmg --skip-jenkins
+fi
+
+echo "DMG 무결성 확인 중..."
+hdiutil verify "$DMG_PATH"
 
 echo ""
 echo "완료: $DMG_PATH"

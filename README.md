@@ -20,6 +20,120 @@
   attention ranking과 관련 테스트·문서를 Build Week 신규 범위로 구분합니다. 상세 범위는
   [Fleet Radar 구현 계획](docs/agent/fleet-radar-implementation-plan.md)에 고정되어 있습니다.
 
+## What was built during Build Week
+
+DevIsland now includes **Fleet Radar**, a local-first dashboard for deciding which active coding
+agent needs attention and spotting when parallel Git worktrees are modifying the same paths.
+Choose **Session Center…** from the menu bar app and select the default **Fleet** tab; the existing
+**Sessions** and **Insights** tabs remain available in the same standard macOS window.
+
+| Before Build Week (`1fc23ce`) | Added during Build Week |
+|---|---|
+| Notch activity and approval UI | Attention-ranked cards for active parent sessions |
+| Session tracking and sub-agent relationships | Sub-agents nested under their parent Fleet card |
+| Session History and Insights | Session Center with Fleet, Sessions, and Insights tabs |
+| Workspace paths attached to sessions | Read-only branch, detached HEAD, clean/dirty, and unmerged status |
+| Explicit terminal focus and session detail actions | Separate Show Detail and Focus Terminal actions on each card |
+| No cross-worktree Git analysis | Same-repository, different-worktree changed-path overlap warnings |
+
+The overlap badge is an early warning, **not merge-conflict detection**. It compares changed paths
+only when active worktrees share a repository identity and have different worktree roots. Scanning
+uses bounded `/usr/bin/git` reads behind an actor cache. Fleet performs no Git writes, network
+requests, automatic agent orchestration, or background polling; ahead/behind, pull request, and CI
+status are intentionally outside this MVP.
+
+### Codex workflow and submission evidence
+
+Codex was used to turn the implementation plan into staged, testable work. Each stage was
+implemented in a separate Codex sub-task, reviewed from correctness, concurrency, UX, localization,
+regression, privacy, and packaging angles, then verified and committed before the next stage. The
+parser, scanner/cache, overlap analyzer, view model, SwiftUI dashboard, Session Center lifecycle,
+and English/Korean catalog all have automated coverage.
+
+The following external submission values are not available in this checkout. They are explicit
+Stage 10/submission blockers and must be completed before publishing the Build Week entry; the
+placeholders remain so no false identifiers or broken media links are published:
+
+- [ ] Use `/feedback` to capture the core Codex task's Session ID and independently confirm its model
+  provenance. Only then add the submission statement that GPT-5.6 was used for design,
+  implementation, and verification; this checkout does not expose enough provenance to assert it.
+- [ ] Insert the final public demo GIF or screenshot here after the asset is captured and committed.
+- [ ] Add the public video and downloadable-build URLs after upload; do not replace these items with
+  private or temporary links.
+
+### Install the Build Week DMG (macOS 15+)
+
+The locally generated, checksum-verified handoff artifact is
+`DevIsland-0.14.1-dev-arm64.dmg`. It is an arm64 development build with an ad-hoc signature but no
+Developer ID signature or notarization, and is intentionally ignored by Git. Launch on a separate
+clean Mac has not yet been verified.
+
+1. Open the DMG and drag `DevIsland.app` to `/Applications`.
+2. Try to open `/Applications/DevIsland.app` once and let macOS block the unnotarized app.
+3. Choose **Apple menu > System Settings > Privacy & Security**. In the **Security** section, select
+   **Open Anyway** for DevIsland. This option is available for about one hour after the blocked
+   launch attempt.
+4. Authenticate when prompted, then confirm **Open**. See
+   [Apple's official external guide to overriding app security settings](https://support.apple.com/guide/mac-help/open-an-app-by-overriding-security-settings-mh40617/mac).
+5. Open **Settings** to choose the language and other preferences, install the desired provider
+   bridge from the menu bar app's hook-install actions, then choose **Session Center…**.
+
+To reproduce the DMG from source (requires Xcode 16+, XcodeGen, and `create-dmg`):
+
+```bash
+brew install xcodegen create-dmg
+./scripts/create-dmg.sh
+```
+
+On the Build Week verification Mac, repeated official packaging attempts—including a run with GUI
+automation privileges—completed the Release archive, but Finder automation was unavailable while
+`create-dmg` applied its window layout:
+
+```text
+execution error: Finder에 오류 발생: AppleEvent 시간이 초과되었습니다. (-1712)
+Failed running AppleScript
+```
+
+If that environment-specific error recurs, `scripts/create-dmg.sh` now cleans the partial output and
+automatically retries the same official `create-dmg` flow with `--skip-jenkins`, then requires
+`hdiutil verify` to pass. The fallback skips Finder's custom icon positions and window layout, but
+the resulting read-only DMG remains installable and contains both `DevIsland.app` and the
+Applications link.
+
+To build and test without launching or terminating a running DevIsland instance:
+
+```bash
+./scripts/run-tests.sh
+./scripts/build_and_run.sh --no-kill --no-run
+```
+
+### Reproduce the worktree-overlap demo
+
+Run these commands from a clean DevIsland checkout. Use different branch/path names if they already
+exist on your machine.
+
+```bash
+git worktree add -b demo/fleet-a /tmp/devisland-fleet-a HEAD
+git worktree add -b demo/fleet-b /tmp/devisland-fleet-b HEAD
+printf '\nFleet A demo change\n' >> /tmp/devisland-fleet-a/README.md
+printf '\nFleet B demo change\n' >> /tmp/devisland-fleet-b/README.md
+```
+
+Start a supported agent session in each `/tmp/devisland-fleet-*` worktree, open **Session Center >
+Fleet**, and choose **Refresh**. Both cards should show dirty Git state and an **Overlap risk** for
+`README.md`. Editing different tracked files should keep both cards dirty without an overlap badge.
+The analysis stays local and does not modify either repository.
+
+After closing those agent sessions, clean up the demo without preserving its uncommitted edits:
+
+```bash
+git -C /tmp/devisland-fleet-a restore README.md
+git -C /tmp/devisland-fleet-b restore README.md
+git worktree remove /tmp/devisland-fleet-a
+git worktree remove /tmp/devisland-fleet-b
+git branch -d demo/fleet-a demo/fleet-b
+```
+
 ## 작동 방식
 
 DevIsland는 별도 백그라운드 daemon 없이 macOS 앱 안에서 승인 프록시와 UI를 함께 실행합니다.

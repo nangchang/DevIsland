@@ -23,7 +23,7 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 | 시기 | 패턴 | DevIsland의 역할 |
 |---|---|---|
 | 과거 | 터미널 1개, 에이전트 1개를 지켜보며 사용 | 승인 알림 + 포커스 복원 (현재 핵심 기능) |
-| 현재 | 워크트리 N개에 에이전트 N개를 병렬 운용 | 세션 추적·서브에이전트 그룹화 (부분 지원) |
+| 현재 | 워크트리 N개에 에이전트 N개를 병렬 운용 | Fleet 관제·Git 경로 겹침 조기 경고 (Build Week MVP 완료) |
 | 다가옴 | 자리를 비운 사이에도 에이전트가 작업, 사람은 승인·방향만 결정 | **fleet 관제 + 원격 승인 + 정책 자동화** (미지원 — 기회) |
 
 이 변화의 각 단계에서 사용자가 잃는 것은 **"지금 무슨 일이 벌어지고 있고, 어디에 내 결정이 필요한가"에 대한 감각**이다. DevIsland의 모든 기능은 이 감각을 되돌려주는 방향으로 수렴해야 한다.
@@ -52,8 +52,8 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 | 노치에서 프롬프트 회신 (PTY 주입 정식화) | ★★★ | 중간 | `devisland_pty.py` + `injection` 응답 필드 (실험 기능) | H1 | 미완 |
 | 노치에서 새 세션 시작 (Quick Launch) | ★★ | 낮음 | `TerminalFocuser.openNewWindow` 이미 구현됨 | H1 | ✅ v0.12.1 |
 | 세션 인사이트 v1 (승인·세션 통계) | ★★ | 중간 | `approval.decided` 관찰 이벤트와 `SessionStatsPlugin` 기초 통계 구현 완료 | H1 | ✅ v0.13.0 |
-| Fleet 보드 (멀티 세션 관제 뷰) | ★★★ | 중간 | SessionStore, 서브에이전트 그룹화, 세션 히스토리 창 | H2 | 미완 |
-| Git 컨텍스트 (브랜치·워크트리·PR 상태 표시) | ★★★ | 중간 | `workspaceRoot` 이미 전 세션에 전파됨 | H2 | 미완 |
+| Fleet 보드 (멀티 세션 관제 뷰) | ★★★ | 중간 | SessionStore, 서브에이전트 그룹화, Session Center | H2 | ✅ Build Week MVP |
+| Git 컨텍스트 (브랜치·clean/dirty·path overlap; ahead/behind·PR·CI 후속) | ★★★ | 중간 | `workspaceRoot`, read-only actor cache | H2 | 🟡 로컬 MVP 완료 |
 | 승인 정책 프로파일 (워크스페이스별/시간제한 자동 승인) | ★★★ | 중간 | `workspaceRoot` 스코프 룰, `ToolKnowledge` 위험도 | H2 | 미완 |
 | 외부 알림 채널 (Slack/Discord/webhook) | ★★ | 중간 | 플러그인 v2 `networkAccess` 설계 필요 | H2 | 미완 |
 | 비용·토큰 추적 | ★★ | 중간 | 훅 페이로드 파싱 확장 필요 (provider별 가용성 상이) | H2 | 미완 |
@@ -121,18 +121,24 @@ AI 코딩 에이전트 사용 패턴은 빠르게 바뀌고 있다:
 > Git path overlap 알고리즘, UI/테스트/검증 순서는
 > [Fleet Radar 구현 계획](agent/fleet-radar-implementation-plan.md)에 상세화되어 있다.
 
-### H2-1. Fleet 보드
+### H2-1. Fleet 보드 ✅ Build Week MVP 완료
 
-확장 노치(또는 분리 창)를 세션 카드 그리드로: 워크스페이스·브랜치·상태(작업 중/승인 대기/idle/오류)·경과 시간을 한 화면에. 정렬 기준은 "내 결정이 필요한 순". 서브에이전트는 부모 카드에 중첩.
+Session Center의 표준 `NSWindow`에 Fleet 카드 그리드를 추가했다. 워크스페이스·provider·브랜치·Git 상태·최근 활동을 한 화면에 표시하고, 정렬 기준은 "내 결정이 필요한 순"이다. 서브에이전트는 부모 카드에 중첩되며 자식의 승인 대기도 부모 attention에 반영된다.
 
-- 현재 세션 리스트는 단일 컬럼 행 구조라 5개 이상이면 인지 한계. fleet 보드가 이를 대체.
+- 기존 Sessions 목록은 검색·즐겨찾기·Quick Launch를 위해 그대로 유지하고, Fleet가 다중 활성 세션 관제 역할을 보완한다.
 - 원칙 3(1초 인지)의 N세션 버전: 카드 색·정렬만으로 "어디 봐야 하는지"가 보여야 한다.
 
-### H2-2. Git 컨텍스트
+### H2-2. Git 컨텍스트 🟡 로컬 MVP 완료
 
-세션 카드에 브랜치명, dirty 여부, ahead/behind, (옵션) PR 번호·CI 상태를 표시. `workspaceRoot`가 이미 모든 세션에 있으므로 로컬 git 읽기는 즉시 가능. PR/CI는 `gh` CLI 호출 opt-in.
+완료된 MVP는 세션 카드에 branch/detached HEAD와 clean/dirty/unmerged 상태를 표시하고,
+**같은 저장소의 서로 다른 worktree가 동일한 변경 경로를 포함하는지** 양방향으로 경고한다.
+이 경고는 실제 merge conflict 탐지나 충돌 확정이 아니라, 여러 에이전트가 같은 파일을
+건드리는 상황을 일찍 드러내는 결정론적 path-overlap 신호다. 모든 Git 명령은 로컬에서
+read-only로 실행되며 네트워크를 사용하지 않는다.
 
-- 여러 워크트리를 굴릴 때 "이 세션이 어떤 작업이더라"를 해결 — fleet 보드의 식별성을 완성하는 기능.
+- 완료: branch/detached HEAD, clean/dirty/unmerged, changed path, same-repo/different-worktree path overlap.
+- 미완(후속 범위): ahead/behind, PR 번호, CI 상태. PR/CI는 향후 `gh` opt-in과 별도 네트워크 권한·timeout 설계가 필요하다.
+- 여러 워크트리를 굴릴 때 "이 세션이 어떤 작업이더라"를 해결해 Fleet 보드의 식별성을 완성한다.
 
 ### H2-3. 승인 정책 프로파일
 
@@ -221,9 +227,9 @@ Slack/Discord/일반 webhook으로 "승인 대기 5분 초과", "세션 오류",
   ┌─────────────┬──────────────────┬─────────────────────┬──────────────────┐
 보안│ S1~S4 하드닝 │ S5 서명·공증      │ grace mode 제거      │ 원격 채널 보안 설계 │
 구조│ R0 안전망    │ R1~R3 AppState   │ R4~R6 UI·설치 단일화  │ —                │
-기능│ (동결)      │ H1: 규칙제안·진단· │ H2: Fleet·Git·정책   │ H3: 원격 승인·     │
+기능│ (동결)      │ H1: 규칙제안·진단· │ H2: Fleet/Git MVP ✓ │ H3: 원격 승인·     │
     │             │ 알림센터·PTY회신· │ 프로파일·외부알림·    │ 플러그인 v2·       │
-    │             │ QuickLaunch·인사이트│ 비용추적·SDK화      │ 에셋 생태계·팀 정책 │
+    │             │ QuickLaunch·인사이트│ 정책·PR/CI·비용·SDK │ 에셋 생태계·팀 정책 │
 배포│ —           │ 영문 README·GIF   │ Homebrew cask       │ 확장 개발자 문서    │
   └─────────────┴──────────────────┴─────────────────────┴──────────────────┘
 ```

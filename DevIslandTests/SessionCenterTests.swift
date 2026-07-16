@@ -65,6 +65,23 @@ final class SessionCenterTests: XCTestCase {
         XCTAssertEqual(closeCount, 1)
     }
 
+    func testSessionCenterWindowTitleFollowsLiveLanguageChanges() {
+        let originalLanguage = L10n.shared.language
+        addTeardownBlock { L10n.shared.language = originalLanguage }
+        L10n.shared.language = .english
+        let controller = HostedWindowController(
+            localizedTitleKey: "winSessionHistory",
+            size: NSSize(width: 900, height: 560),
+            rootView: AnyView(EmptyView())
+        )
+
+        XCTAssertEqual(controller.window?.title, "Session Center")
+
+        L10n.shared.language = .korean
+
+        XCTAssertEqual(controller.window?.title, "세션 센터")
+    }
+
     func testActiveFleetRendersAtSupportedSizesAndAppearances() async throws {
         let workspaceRoot = "/tmp/session-center-render"
         addOrUpdateSession(workspaceRoot: workspaceRoot, message: "Rendering")

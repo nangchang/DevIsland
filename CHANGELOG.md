@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+여러 에이전트 세션에서 지금 개입할 작업과 서로 겹치는 작업을 한눈에 찾을 수 있도록
+Session Center에 로컬 우선 Fleet Radar를 추가하는 다음 개발 버전 변경입니다.
+
+### Highlights
+
+- Fleet Radar가 주의가 필요한 활성 세션을 우선 정렬하고, 같은 Git 저장소의 서로 다른
+  worktree가 동일한 경로를 수정할 때 로컬·읽기 전용 조기 경고를 표시합니다.
+- Session History를 Fleet, Sessions, Insights 탭이 있는 Session Center로 확장하면서 기존
+  검색, 즐겨찾기, Quick Launch와 인사이트 흐름을 그대로 유지합니다.
+
 ## v0.14.0 - 2026-07-16
 
 이번 릴리즈는 Codex Auto-review와 DevIsland 승인 UI가 충돌하지 않도록 승인 소유권을 명확히 하고, 터미널 세션을 식별하고 포커스하는 흐름을 강화한 기능 업데이트입니다. 명령 prefix 승인 규칙과 bridge 설치 경로의 보안을 보강하고, UI·동시성·프로세스 실행 안정화와 대규모 내부 구조 정리도 함께 담았습니다.

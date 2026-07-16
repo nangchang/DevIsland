@@ -74,7 +74,14 @@ final class L10n: ObservableObject {
     /// of `String(localized:)` so live language switching keeps working without a
     /// relaunch (the OS resolves the main bundle's localization only at launch).
     func t(_ key: String) -> String {
-        let bundle = isKorean ? Self.koBundle : Self.enBundle
+        t(key, language: language)
+    }
+
+    /// Resolves a catalog key for an explicit language value. This is useful for
+    /// non-SwiftUI surfaces that receive `@Published`'s new value before
+    /// `language` itself is updated.
+    func t(_ key: String, language: AppLanguage) -> String {
+        let bundle = language.isKoreanResolved ? Self.koBundle : Self.enBundle
         return bundle.localizedString(forKey: key, value: key, table: nil)
     }
 

@@ -24,6 +24,34 @@ User-facing settings are grouped as:
 - **Integrations**: opt-in app integrations.
 - **Advanced**: provider, Bridge / IPC, and experimental PTY settings.
 
+## Session Center And Fleet Radar
+
+The menu item formerly named Session History opens **Session Center**, a cached standard
+`NSWindow` with three tabs in this order:
+
+1. **Fleet** (default): active parent sessions as attention-ranked cards, with sub-agents nested
+   under their parent.
+2. **Sessions**: the existing live/closed session table, search, favorites, and Quick Launch
+   actions.
+3. **Insights**: the existing durable session and approval summaries.
+
+Fleet is not part of the notch `NSPanel`. Its larger adaptive grid and Git inspection stay in the
+standard window, while the notch continues to own time-sensitive activity and approval UI. Fleet
+renders cached card state only. `FleetRadarViewModel` turns active sessions into scan descriptors,
+and the `GitContextService` actor performs bounded, read-only Git commands and caches snapshots off
+the main thread. Fleet performs no network access, Git writes, or background polling; it refreshes
+when the window appears, sessions or labels change, or the user explicitly chooses Refresh.
+
+Closing Session Center marks its cached view as hidden and cancels presentation-owned Fleet refresh
+work. Session/label changes while hidden do not start scans. Reopening the cached controller advances
+the presentation generation and refreshes current session and Git state without reconstructing the
+Sessions or Insights view models. The cached `NSWindow` title and all tab/card strings follow live
+English/Korean language changes.
+
+Fleet does not mutate `AppState` approval ownership, queue order, provider responses, notification
+timers, or notch expansion. Informational notification auto-collapse remains governed by
+`notchAutoCollapseDelay`; approval requests still never auto-collapse.
+
 ## Appearance Settings
 
 These settings are managed in `SettingsStore` and applied in `NotchView` / `NotchWindowController`.
