@@ -122,4 +122,50 @@ struct FleetCardModel: Identifiable, Equatable {
     var hasStaleOverlapEvidence: Bool {
         overlaps.contains { $0.localIsStale || $0.peerIsStale }
     }
+
+    var notchSummary: FleetNotchSummary? {
+        let snapshot: GitWorktreeSnapshot
+        let primaryIsStale: Bool
+        switch primaryGitState {
+        case let .ready(value):
+            snapshot = value
+            primaryIsStale = false
+        case let .stale(value, _):
+            snapshot = value
+            primaryIsStale = true
+        case .unavailable, nil:
+            return nil
+        }
+
+        return FleetNotchSummary(
+            branchHead: snapshot.branchHead,
+            changedEntryCount: snapshot.changedEntryCount,
+            hasUnmergedEntries: snapshot.hasUnmergedEntries,
+            hasOverlap: !overlaps.isEmpty,
+            isPrimaryStale: primaryIsStale,
+            hasStaleOverlapEvidence: hasStaleOverlapEvidence
+        )
+    }
+}
+
+struct FleetNotchSummary: Equatable, Sendable {
+    let branchHead: String
+    let changedEntryCount: Int
+    let hasUnmergedEntries: Bool
+    let hasOverlap: Bool
+    let isPrimaryStale: Bool
+    let hasStaleOverlapEvidence: Bool
+}
+
+enum FleetNotchSummaryPresentation {
+    static func summariesBySessionID(
+        from cards: [FleetCardModel],
+        compact: Bool
+    ) -> [String: FleetNotchSummary] {
+        guard !compact else { return [:] }
+        return Dictionary(uniqueKeysWithValues: cards.compactMap { card in
+            guard let summary = card.notchSummary else { return nil }
+            return (card.group.root.id, summary)
+        })
+    }
 }

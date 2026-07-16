@@ -385,6 +385,7 @@ struct SessionRowView: View {
     let isCurrent: Bool
     var isSubAgent: Bool = false
     var compact: Bool = false
+    var fleetSummary: FleetNotchSummary? = nil
 
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var appState = AppState.shared
@@ -618,12 +619,19 @@ struct SessionRowView: View {
                                 .truncationMode(.tail)
                         }
 
-                        if !compact, !isSubAgent, let root = session.workspaceRoot {
-                            Text((root as NSString).abbreviatingWithTildeInPath)
-                                .font(.system(size: metaFont, weight: .regular, design: .monospaced))
-                                .foregroundColor(.white.opacity(0.25))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                        if !compact {
+                            if let fleetSummary {
+                                SessionRowFleetSummaryView(
+                                    summary: fleetSummary,
+                                    fontSize: metaFont
+                                )
+                            } else if !isSubAgent, let root = session.workspaceRoot {
+                                Text((root as NSString).abbreviatingWithTildeInPath)
+                                    .font(.system(size: metaFont, weight: .regular, design: .monospaced))
+                                    .foregroundColor(.white.opacity(0.25))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
                         }
                     }
                 }
@@ -868,6 +876,90 @@ struct SessionRowView: View {
         isRenaming = false
     }
 
+}
+
+private struct SessionRowFleetSummaryView: View {
+    let summary: FleetNotchSummary
+    let fontSize: CGFloat
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Label(summary.branchHead, systemImage: "arrow.triangle.branch")
+                .font(.system(size: fontSize, weight: .medium, design: .monospaced))
+                .foregroundColor(.white.opacity(0.4))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(summary.branchHead)
+
+            Spacer(minLength: 4)
+
+            if summary.changedEntryCount == 0 {
+                statusIcon(
+                    "checkmark.circle.fill",
+                    color: .green,
+                    label: l10n.fleetClean
+                )
+            } else {
+                HStack(spacing: 2) {
+                    Image(systemName: "pencil.circle.fill")
+                    Text("\(summary.changedEntryCount)")
+                }
+                .foregroundColor(.orange)
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(l10n.fleetDirtyCount(summary.changedEntryCount))
+                .help(l10n.fleetDirtyCount(summary.changedEntryCount))
+            }
+
+            if summary.hasUnmergedEntries {
+                statusIcon(
+                    "exclamationmark.triangle.fill",
+                    color: .red,
+                    label: l10n.fleetUnmerged
+                )
+            }
+
+            if summary.hasOverlap {
+                statusIcon(
+                    "arrow.triangle.branch",
+                    color: .orange,
+                    label: l10n.fleetOverlapRisk
+                )
+            }
+
+            if summary.isPrimaryStale || summary.hasStaleOverlapEvidence {
+                statusIcon(
+                    "clock.badge.exclamationmark",
+                    color: .orange,
+                    label: staleLabel
+                )
+            }
+        }
+        .font(.system(size: fontSize, weight: .bold))
+    }
+
+    private var staleLabel: String {
+        if summary.isPrimaryStale, summary.hasStaleOverlapEvidence {
+            return "\(l10n.fleetStale); \(l10n.fleetOverlapRisk): \(l10n.fleetStale)"
+        }
+        if summary.hasStaleOverlapEvidence {
+            return "\(l10n.fleetOverlapRisk): \(l10n.fleetStale)"
+        }
+        return l10n.fleetStale
+    }
+
+    private func statusIcon(
+        _ systemName: String,
+        color: Color,
+        label: String
+    ) -> some View {
+        Image(systemName: systemName)
+            .foregroundColor(color)
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityLabel(label)
+            .help(label)
+    }
 }
 
 /// "N seconds/minutes ago" label in its own view so its per-second self-refresh re-renders

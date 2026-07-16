@@ -130,15 +130,117 @@ final class FleetRadarModelsTests: XCTestCase {
         XCTAssertNotEqual(localStale, peerStale)
     }
 
-    private func makeSnapshot() -> GitWorktreeSnapshot {
+    func testNotchSummaryUsesPrimarySnapshotAndOverlapState() throws {
+        let summary = try XCTUnwrap(makeCard().notchSummary)
+
+        XCTAssertEqual(summary.branchHead, "main")
+        XCTAssertEqual(summary.changedEntryCount, 2)
+        XCTAssertFalse(summary.hasUnmergedEntries)
+        XCTAssertTrue(summary.hasOverlap)
+        XCTAssertFalse(summary.isPrimaryStale)
+        XCTAssertFalse(summary.hasStaleOverlapEvidence)
+    }
+
+    func testNotchSummaryKeepsPrimaryAndOverlapStalenessDistinct() throws {
+        let snapshot = makeSnapshot()
+        let primaryStale = replacingPrimaryState(
+            in: makeCard(overlaps: []),
+            with: .stale(snapshot, .timedOut)
+        )
+        let overlapStale = replacingPrimaryState(
+            in: makeCard(overlaps: [
+                FleetOverlapPeer(
+                    repositoryID: GitRepositoryID(commonGitDirectory: "/repo/.git"),
+                    localWorktreeID: snapshot.worktreeID,
+                    peerWorktreeID: GitWorktreeID(topLevelPath: "/repo/worktree-b"),
+                    peerBranch: "feature/b",
+                    paths: ["README.md"],
+                    peerIsStale: true
+                ),
+            ]),
+            with: .ready(snapshot)
+        )
+
+        let primarySummary = try XCTUnwrap(primaryStale.notchSummary)
+        XCTAssertTrue(primarySummary.isPrimaryStale)
+        XCTAssertFalse(primarySummary.hasStaleOverlapEvidence)
+
+        let overlapSummary = try XCTUnwrap(overlapStale.notchSummary)
+        XCTAssertFalse(overlapSummary.isPrimaryStale)
+        XCTAssertTrue(overlapSummary.hasStaleOverlapEvidence)
+    }
+
+    func testNotchSummaryPreservesCleanUnmergedAndDetachedValues() throws {
+        let cleanSnapshot = makeSnapshot(
+            branchHead: "detached@01234567",
+            changedPaths: [],
+            changedEntryCount: 0
+        )
+        let unmergedSnapshot = makeSnapshot(hasUnmergedEntries: true)
+
+        let cleanSummary = try XCTUnwrap(
+            replacingPrimaryState(in: makeCard(), with: .ready(cleanSnapshot)).notchSummary
+        )
+        XCTAssertEqual(cleanSummary.branchHead, "detached@01234567")
+        XCTAssertEqual(cleanSummary.changedEntryCount, 0)
+
+        let unmergedSummary = try XCTUnwrap(
+            replacingPrimaryState(in: makeCard(), with: .ready(unmergedSnapshot)).notchSummary
+        )
+        XCTAssertTrue(unmergedSummary.hasUnmergedEntries)
+    }
+
+    func testNotchSummaryIsUnavailableWithoutUsablePrimarySnapshot() {
+        XCTAssertNil(replacingPrimaryState(in: makeCard(), with: nil).notchSummary)
+        XCTAssertNil(
+            replacingPrimaryState(
+                in: makeCard(),
+                with: .unavailable(.notRepository)
+            ).notchSummary
+        )
+    }
+
+    func testNotchPresentationMapsOnlyRootsAndHidesCompactSummaries() {
+        let root = makeCard(rootID: "root")
+        let child = makeDescriptor(id: "child", parentSessionID: "root")
+        let grouped = replacingGroup(
+            in: root,
+            with: FleetSessionGroup(root: root.group.root, children: [child], isOrphan: false)
+        )
+        let orphan = makeCard(
+            rootID: "orphan",
+            parentSessionID: "missing-parent",
+            isOrphan: true
+        )
+
+        let expanded = FleetNotchSummaryPresentation.summariesBySessionID(
+            from: [grouped, orphan],
+            compact: false
+        )
+        XCTAssertEqual(Set(expanded.keys), ["root", "orphan"])
+        XCTAssertNil(expanded["child"])
+        XCTAssertTrue(
+            FleetNotchSummaryPresentation.summariesBySessionID(
+                from: [grouped, orphan],
+                compact: true
+            ).isEmpty
+        )
+    }
+
+    private func makeSnapshot(
+        branchHead: String = "main",
+        changedPaths: Set<String> = ["Sources/App.swift", "README.md"],
+        changedEntryCount: Int = 2,
+        hasUnmergedEntries: Bool = false
+    ) -> GitWorktreeSnapshot {
         GitWorktreeSnapshot(
             repositoryID: GitRepositoryID(commonGitDirectory: "/repo/.git"),
             worktreeID: GitWorktreeID(topLevelPath: "/repo/worktree-a"),
-            branchHead: "main",
+            branchHead: branchHead,
             headOID: "0123456789abcdef",
-            changedPaths: ["Sources/App.swift", "README.md"],
-            changedEntryCount: 2,
-            hasUnmergedEntries: false,
+            changedPaths: changedPaths,
+            changedEntryCount: changedEntryCount,
+            hasUnmergedEntries: hasUnmergedEntries,
             capturedAt: Date(timeIntervalSince1970: 1_000)
         )
     }
@@ -153,10 +255,13 @@ final class FleetRadarModelsTests: XCTestCase {
         )
     }
 
-    private func makeCard(overlaps: [FleetOverlapPeer]? = nil) -> FleetCardModel {
-        let root = FleetSessionDescriptor(
-            id: "session-root",
-            parentSessionID: nil,
+    private func makeDescriptor(
+        id: String,
+        parentSessionID: String?
+    ) -> FleetSessionDescriptor {
+        FleetSessionDescriptor(
+            id: id,
+            parentSessionID: parentSessionID,
             provider: .codex,
             displayTitle: "Fleet task",
             terminalTitle: "codex",
@@ -170,7 +275,16 @@ final class FleetRadarModelsTests: XCTestCase {
             isUnread: true,
             status: .idle
         )
-        let group = FleetSessionGroup(root: root, children: [], isOrphan: false)
+    }
+
+    private func makeCard(
+        overlaps: [FleetOverlapPeer]? = nil,
+        rootID: String = "session-root",
+        parentSessionID: String? = nil,
+        isOrphan: Bool = false
+    ) -> FleetCardModel {
+        let root = makeDescriptor(id: rootID, parentSessionID: parentSessionID)
+        let group = FleetSessionGroup(root: root, children: [], isOrphan: isOrphan)
 
         return FleetCardModel(
             group: group,
@@ -179,6 +293,34 @@ final class FleetRadarModelsTests: XCTestCase {
             overlaps: overlaps ?? [makeOverlapPeer()],
             primaryAttention: .unread,
             secondaryAttention: [.overlapRisk]
+        )
+    }
+
+    private func replacingGroup(
+        in card: FleetCardModel,
+        with group: FleetSessionGroup
+    ) -> FleetCardModel {
+        FleetCardModel(
+            group: group,
+            gitStates: card.gitStates,
+            primaryGitState: card.primaryGitState,
+            overlaps: card.overlaps,
+            primaryAttention: card.primaryAttention,
+            secondaryAttention: card.secondaryAttention
+        )
+    }
+
+    private func replacingPrimaryState(
+        in card: FleetCardModel,
+        with primaryGitState: GitSnapshotState?
+    ) -> FleetCardModel {
+        FleetCardModel(
+            group: card.group,
+            gitStates: card.gitStates,
+            primaryGitState: primaryGitState,
+            overlaps: card.overlaps,
+            primaryAttention: card.primaryAttention,
+            secondaryAttention: card.secondaryAttention
         )
     }
 }

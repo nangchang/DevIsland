@@ -35,12 +35,18 @@ The menu item formerly named Session History opens **Session Center**, a cached 
    actions.
 3. **Insights**: the existing durable session and approval summaries.
 
-Fleet is not part of the notch `NSPanel`. Its larger adaptive grid and Git inspection stay in the
-standard window, while the notch continues to own time-sensitive activity and approval UI. Fleet
-renders cached card state only. `FleetRadarViewModel` turns active sessions into scan descriptors,
-and the `GitContextService` actor performs bounded, read-only Git commands and caches snapshots off
-the main thread. Fleet performs no network access, Git writes, or background polling; it refreshes
-when the window appears, sessions or labels change, or the user explicitly chooses Refresh.
+Fleet's larger adaptive grid and detailed Git inspection stay in the standard window. The normal
+expanded notch session list may also render a compact cached summary on each Fleet group root:
+branch or detached HEAD, clean/changed count, unmerged state, overlap risk, and stale evidence. The
+approval/notification compact session list does not show these summaries.
+
+Each presentation owns a `FleetRadarViewModel` that turns active sessions into scan descriptors,
+while both share the `GitContextService` actor. The service performs bounded, read-only Git commands
+and caches snapshots off the main thread. Session Center refreshes when its window appears, sessions
+or labels change, or the user explicitly chooses Refresh. The notch view model refreshes only while
+the normal expanded session content is visible and cancels presentation-owned work when that content
+disappears. Fleet performs no network access, Git writes, background polling, or Git work on the main
+thread or hook response path.
 
 Closing Session Center marks its cached view as hidden and cancels presentation-owned Fleet refresh
 work. Session/label changes while hidden do not start scans. Reopening the cached controller advances

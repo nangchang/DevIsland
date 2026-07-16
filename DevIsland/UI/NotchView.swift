@@ -9,10 +9,18 @@ struct NotchView: View {
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var settingsStore = SettingsStore.shared
     @ObservedObject private var l10n = L10n.shared
+    @StateObject private var notchFleetViewModel: FleetRadarViewModel
     @State private var buddyPulse = false
     @State private var isExpanded = false
     @State private var liveHeight: Double? = nil
     @State private var liveWidth: Double? = nil
+
+    @MainActor
+    init(fleetViewModel: FleetRadarViewModel? = nil) {
+        _notchFleetViewModel = StateObject(
+            wrappedValue: fleetViewModel ?? FleetRadarViewModel()
+        )
+    }
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
@@ -546,6 +554,24 @@ struct NotchView: View {
         }
         .padding(.top, 18)
         .padding(.bottom, 20)
+        .onAppear {
+            refreshNotchFleet(forceRefresh: true)
+        }
+        .onDisappear {
+            notchFleetViewModel.cancelRefresh()
+        }
+        .onReceive(sessionStore.$activeSessions) { sessions in
+            notchFleetViewModel.update(
+                sessions: sessions,
+                labels: state.sessionLabels
+            )
+        }
+        .onChange(of: state.sessionLabels) { _, labels in
+            notchFleetViewModel.update(
+                sessions: sessionStore.activeSessions,
+                labels: labels
+            )
+        }
     }
 
     // MARK: Session List
@@ -582,20 +608,34 @@ struct NotchView: View {
     }
 
     private func sessionList(compact: Bool) -> some View {
-        ScrollView {
+        let fleetSummaries = FleetNotchSummaryPresentation.summariesBySessionID(
+            from: notchFleetViewModel.cards,
+            compact: compact
+        )
+
+        return ScrollView {
             VStack(spacing: 8) {
                 ForEach(groupedSessions, id: \.session.id) { item in
                     SessionRowView(
                         session: item.session,
                         isCurrent: item.session.id == displayedSessionId,
                         isSubAgent: item.isSubAgent,
-                        compact: compact
+                        compact: compact,
+                        fleetSummary: fleetSummaries[item.session.id]
                     )
                 }
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
         }
+    }
+
+    private func refreshNotchFleet(forceRefresh: Bool) {
+        notchFleetViewModel.update(
+            sessions: sessionStore.activeSessions,
+            labels: state.sessionLabels,
+            forceRefresh: forceRefresh
+        )
     }
 
     private func progressColor(for progress: Double) -> Color {
