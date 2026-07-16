@@ -1453,22 +1453,22 @@ scanner/cache/view model 진단은 이 category만 사용한다.
 
 - [ ] Devpost 등록과 Official Rules/참가 자격 재확인
 - [ ] Developer Tools category 선택
-- [ ] 신규 기능 commit이 2026-07-13 이후임을 확인
-- [ ] Build Week 이전/이후 범위가 README에 분리됨
+- [x] 신규 기능 commit이 2026-07-13 이후임을 확인
+- [x] Build Week 이전/이후 범위가 README에 분리됨
 - [ ] 핵심 구현 Codex task의 `/feedback` Session ID 확보
 - [ ] 3분 미만 공개 YouTube 영상과 음성 설명
 - [ ] 영상에서 실제 동작, Codex 사용, GPT-5.6 사용을 모두 설명
 - [ ] 허가 없는 저작권 음악/제3자 상표 소재 없음
 - [ ] 영어 narration 또는 영어 자막
-- [ ] 공개 저장소면 관련 license 포함
+- [x] 공개 저장소면 관련 license 포함
 - [ ] private 저장소면 `testing@devpost.com`, `build-week-event@openai.com`에 access 부여
-- [ ] Project description과 설치/실행/테스트 방법
-- [ ] macOS 15+ 지원과 설치 방법
+- [x] Project description과 설치/실행/테스트 방법
+- [x] macOS 15+ 지원과 설치 방법
 - [ ] 심사위원이 rebuild 없이 실행할 DMG/ZIP
 - [ ] unsigned build라면 최초 실행 절차를 정확히 검증/기재
-- [ ] sample/demo worktree 생성 방법
-- [ ] `./scripts/run-tests.sh` 결과
-- [ ] build-only 결과
+- [x] sample/demo worktree 생성 방법
+- [x] `./scripts/run-tests.sh` 결과
+- [x] build-only 결과
 - [ ] 라이선스와 third-party attribution
 
 ---
@@ -1518,32 +1518,32 @@ docs: document Fleet Radar and Build Week demo
 
 ### 기능
 
-- [ ] 최상위 세션 카드와 sub-agent 중첩
-- [ ] branch/detached/clean/dirty/unmerged 표시
-- [ ] 같은 repo, 다른 worktree만 비교
-- [ ] 양방향 overlap 표시
-- [ ] attention 정렬
-- [ ] Detail과 Focus 동작 분리
-- [ ] non-Git/failure/stale UI
+- [x] 최상위 세션 카드와 sub-agent 중첩
+- [x] branch/detached/clean/dirty/unmerged 표시
+- [x] 같은 repo, 다른 worktree만 비교
+- [x] 양방향 overlap 표시
+- [x] attention 정렬
+- [x] Detail과 Focus 동작 분리
+- [x] non-Git/failure/stale UI
 
 ### 경계
 
-- [ ] approval queue와 provider response 변경 없음
-- [ ] Git I/O main thread 없음
-- [ ] hook response path Git I/O 없음
-- [ ] shell 실행 없음
-- [ ] Git 쓰기 없음
-- [ ] network 없음
-- [ ] polling timer 없음
+- [x] approval queue와 provider response 변경 없음
+- [x] Git I/O main thread 없음
+- [x] hook response path Git I/O 없음
+- [x] shell 실행 없음
+- [x] Git 쓰기 없음
+- [x] network 없음
+- [x] polling timer 없음
 
 ### 품질
 
-- [ ] parser/analyzer/scanner/view model 테스트
-- [ ] 영문/한글 golden
-- [ ] 전체 테스트
-- [ ] build-only
+- [x] parser/analyzer/scanner/view model 테스트
+- [x] 영문/한글 golden
+- [x] 전체 테스트
+- [x] build-only
 - [ ] 수동 12개 시나리오
-- [ ] 문서 동기화
+- [x] 문서 동기화
 - [ ] 3분 데모 리허설
 
 ---
