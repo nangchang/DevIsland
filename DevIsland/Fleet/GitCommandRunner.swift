@@ -442,7 +442,6 @@ enum GitProcessResultResolver {
 private enum FoundationProcessOperation {
     private static let stderrCaptureLimit = 8 * 1024
     private static let readChunkSize = 32 * 1024
-    private static let pollIntervalMilliseconds: Int32 = 25
     private static let drainGrace: TimeInterval = 0.2
     private static let terminationGrace: TimeInterval = 0.2
 
@@ -509,21 +508,13 @@ private enum FoundationProcessOperation {
         try? stdoutPipe.fileHandleForWriting.close()
         try? stderrPipe.fileHandleForWriting.close()
 
-        Task.detached(priority: .utility) {
-            stdoutDrainer.run(
-                readChunkSize: readChunkSize,
-                pollIntervalMilliseconds: pollIntervalMilliseconds,
-                onTooLarge: {
-                    state.finish(.outputTooLarge)
-                }
-            )
-        }
-        Task.detached(priority: .utility) {
-            stderrDrainer.run(
-                readChunkSize: readChunkSize,
-                pollIntervalMilliseconds: pollIntervalMilliseconds
-            )
-        }
+        stdoutDrainer.start(
+            readChunkSize: readChunkSize,
+            onTooLarge: {
+                state.finish(.outputTooLarge)
+            }
+        )
+        stderrDrainer.start(readChunkSize: readChunkSize)
         Task.detached(priority: .utility) {
             process.waitUntilExit()
             let status = process.terminationStatus
@@ -552,7 +543,7 @@ private enum FoundationProcessOperation {
         if stdout == nil || stderr == nil {
             stdoutDrainer.requestStop()
             stderrDrainer.requestStop()
-            let stopDeadline = DispatchTime.now() + Double(pollIntervalMilliseconds) / 500.0
+            let stopDeadline = DispatchTime.now() + drainGrace
             if stdout == nil {
                 stdout = stdoutDrainer.waitForResult(until: stopDeadline)
             }
@@ -581,94 +572,88 @@ final class GitPipeDrainer: @unchecked Sendable {
     }
 
     private let handle: FileHandle
-    private let mode: Mode
+    private let queue = DispatchQueue(label: "com.devisland.fleet.git-pipe-drainer")
     private let lock = NSLock()
     private let completion = DispatchSemaphore(value: 0)
     private var shouldStop = false
+    private var hasStarted = false
+    private var hasClosedHandle = false
+    private var source: DispatchSourceRead?
+    private var pendingResult: GitProcessDrainResult?
     private var result: GitProcessDrainResult?
+    private var stdoutAccumulator: GitStdoutAccumulator?
+    private var stderrAccumulator: GitStderrAccumulator?
 
     init(handle: FileHandle, mode: Mode) {
         self.handle = handle
-        self.mode = mode
-    }
-
-    func requestStop() {
-        lock.lock()
-        shouldStop = true
-        lock.unlock()
-    }
-
-    func run(
-        readChunkSize: Int,
-        pollIntervalMilliseconds: Int32,
-        onTooLarge: @escaping @Sendable () -> Void = {},
-        onData: @escaping @Sendable () -> Void = {}
-    ) {
-        let fileDescriptor = handle.fileDescriptor
-        var stdoutAccumulator: GitStdoutAccumulator?
-        var stderrAccumulator: GitStderrAccumulator?
         switch mode {
         case let .stdout(limit):
             stdoutAccumulator = GitStdoutAccumulator(limit: limit)
         case let .stderr(limit):
             stderrAccumulator = GitStderrAccumulator(limit: limit)
         }
+    }
 
-        var readFailed = false
-        var reachedEOF = false
-        var buffer = [UInt8](repeating: 0, count: readChunkSize)
-        while !stopRequested {
-            var descriptor = pollfd(
-                fd: fileDescriptor,
-                events: Int16(POLLIN | POLLHUP | POLLERR),
-                revents: 0
+    func requestStop() {
+        lock.lock()
+        shouldStop = true
+        if result == nil, pendingResult == nil {
+            pendingResult = .readFailed
+        }
+        let source = source
+        lock.unlock()
+
+        source?.cancel()
+    }
+
+    func start(
+        readChunkSize: Int,
+        onTooLarge: @escaping @Sendable () -> Void = {},
+        onData: @escaping @Sendable () -> Void = {}
+    ) {
+        lock.lock()
+        guard !hasStarted else {
+            lock.unlock()
+            return
+        }
+        hasStarted = true
+        let stoppedBeforeStart = pendingResult != nil
+        lock.unlock()
+
+        guard !stoppedBeforeStart else {
+            closeAndPublishPendingResult()
+            return
+        }
+
+        let fileDescriptor = handle.fileDescriptor
+        guard Self.configureNonBlocking(fileDescriptor: fileDescriptor) else {
+            requestFinish(.readFailed)
+            closeAndPublishPendingResult()
+            return
+        }
+
+        let source = DispatchSource.makeReadSource(fileDescriptor: fileDescriptor, queue: queue)
+        source.setEventHandler { [weak self] in
+            self?.drainAvailableBytes(
+                fileDescriptor: fileDescriptor,
+                readChunkSize: readChunkSize,
+                onTooLarge: onTooLarge,
+                onData: onData
             )
-            let pollResult = Darwin.poll(&descriptor, 1, pollIntervalMilliseconds)
-            if pollResult == 0 { continue }
-            if pollResult < 0 {
-                if errno == EINTR { continue }
-                readFailed = true
-                break
-            }
-
-            let count = buffer.withUnsafeMutableBytes { bytes in
-                Darwin.read(fileDescriptor, bytes.baseAddress, bytes.count)
-            }
-            if count == 0 {
-                reachedEOF = true
-                break
-            }
-            if count < 0 {
-                if errno == EINTR || errno == EAGAIN { continue }
-                readFailed = true
-                break
-            }
-
-            let chunk = Data(buffer.prefix(Int(count)))
-            if var accumulator = stdoutAccumulator {
-                if accumulator.append(chunk) {
-                    onTooLarge()
-                }
-                stdoutAccumulator = accumulator
-            } else if var accumulator = stderrAccumulator {
-                accumulator.append(chunk)
-                stderrAccumulator = accumulator
-            }
-            onData()
+        }
+        source.setCancelHandler { [weak self] in
+            self?.closeAndPublishPendingResult()
         }
 
-        let finalResult: GitProcessDrainResult
-        if let accumulator = stdoutAccumulator, accumulator.exceededLimit {
-            finalResult = .tooLarge
-        } else if readFailed || !reachedEOF {
-            finalResult = .readFailed
-        } else if let accumulator = stdoutAccumulator {
-            finalResult = .data(accumulator.data)
-        } else {
-            finalResult = .data(stderrAccumulator?.data ?? Data())
+        lock.lock()
+        self.source = source
+        source.resume()
+        let shouldCancel = pendingResult != nil
+        lock.unlock()
+
+        if shouldCancel {
+            source.cancel()
         }
-        try? handle.close()
-        finish(finalResult)
     }
 
     func waitForResult(until deadline: DispatchTime) -> GitProcessDrainResult? {
@@ -684,14 +669,102 @@ final class GitPipeDrainer: @unchecked Sendable {
         return shouldStop
     }
 
-    private func finish(_ result: GitProcessDrainResult) {
+    private func drainAvailableBytes(
+        fileDescriptor: Int32,
+        readChunkSize: Int,
+        onTooLarge: @escaping @Sendable () -> Void,
+        onData: @escaping @Sendable () -> Void
+    ) {
+        var buffer = [UInt8](repeating: 0, count: max(1, readChunkSize))
+        while !stopRequested {
+            let count = buffer.withUnsafeMutableBytes { bytes in
+                Darwin.read(fileDescriptor, bytes.baseAddress, bytes.count)
+            }
+            if count == 0 {
+                requestFinish(successfulResult())
+                return
+            }
+            if count < 0 {
+                if errno == EINTR { continue }
+                if errno == EAGAIN || errno == EWOULDBLOCK { return }
+                requestFinish(.readFailed)
+                return
+            }
+
+            let chunk = Data(buffer.prefix(Int(count)))
+            if var accumulator = stdoutAccumulator {
+                if accumulator.append(chunk) {
+                    stdoutAccumulator = accumulator
+                    requestFinish(.tooLarge)
+                    onTooLarge()
+                    return
+                }
+                stdoutAccumulator = accumulator
+            } else if var accumulator = stderrAccumulator {
+                accumulator.append(chunk)
+                stderrAccumulator = accumulator
+            }
+            onData()
+        }
+
+        requestFinish(.readFailed)
+    }
+
+    private func successfulResult() -> GitProcessDrainResult {
+        if let accumulator = stdoutAccumulator {
+            return .data(accumulator.data)
+        }
+        return .data(stderrAccumulator?.data ?? Data())
+    }
+
+    private func requestFinish(_ result: GitProcessDrainResult) {
         lock.lock()
-        guard self.result == nil else {
+        guard self.result == nil, pendingResult == nil else {
             lock.unlock()
             return
         }
-        self.result = result
+        pendingResult = result
+        let source = source
         lock.unlock()
+
+        source?.cancel()
+    }
+
+    private func closeAndPublishPendingResult() {
+        lock.lock()
+        let shouldClose = !hasClosedHandle
+        hasClosedHandle = true
+        source = nil
+        let finalResult = pendingResult ?? .readFailed
+        guard result == nil else {
+            lock.unlock()
+            return
+        }
+        result = finalResult
+        lock.unlock()
+
+        if shouldClose {
+            try? handle.close()
+        }
         completion.signal()
+    }
+
+    private static func configureNonBlocking(fileDescriptor: Int32) -> Bool {
+        let flags: Int32
+        while true {
+            let result = Darwin.fcntl(fileDescriptor, F_GETFL)
+            if result >= 0 {
+                flags = result
+                break
+            }
+            if errno != EINTR { return false }
+        }
+
+        while true {
+            if Darwin.fcntl(fileDescriptor, F_SETFL, flags | O_NONBLOCK) == 0 {
+                return true
+            }
+            if errno != EINTR { return false }
+        }
     }
 }

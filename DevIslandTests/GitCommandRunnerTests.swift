@@ -204,6 +204,85 @@ final class GitCommandRunnerTests: XCTestCase {
         XCTAssertFalse(cancellationSignal.hasSignalled)
     }
 
+    func testFoundationExecutorDrainsLargeStdoutAndStderrWithoutDeadlock() async {
+        let chunkSize = 1_024
+        let iterationCount = 256
+        let stdoutChunk = String(repeating: "o", count: chunkSize)
+        let stderrChunk = String(repeating: "e", count: chunkSize)
+        let program = """
+        BEGIN {
+            for (i = 0; i < \(iterationCount); i++) {
+                printf "%s", "\(stdoutChunk)"
+                printf "%s", "\(stderrChunk)" > "/dev/stderr"
+            }
+        }
+        """
+
+        let result = await executeProcess(
+            executablePath: "/usr/bin/awk",
+            arguments: [program],
+            timeout: 5,
+            maxOutputBytes: chunkSize * iterationCount
+        )
+
+        XCTAssertEqual(
+            result,
+            .exited(
+                status: 0,
+                stdout: Data(repeating: 0x6f, count: chunkSize * iterationCount),
+                stderr: Data(repeating: 0x65, count: 8 * 1_024)
+            )
+        )
+    }
+
+    func testFoundationExecutorReportsOutputTooLargeBeforeTimeout() async {
+        let result = await executeProcess(
+            executablePath: "/usr/bin/yes",
+            arguments: [],
+            timeout: 5,
+            maxOutputBytes: 4 * 1_024
+        )
+
+        XCTAssertEqual(result, .outputTooLarge)
+    }
+
+    func testFoundationExecutorTimesOutAfterProcessLaunch() async {
+        let markerURL = processMarkerURL()
+        defer { try? FileManager.default.removeItem(at: markerURL) }
+
+        let result = await executeProcess(
+            executablePath: "/usr/bin/awk",
+            arguments: longRunningAWKArguments(markerURL: markerURL),
+            timeout: 1,
+            maxOutputBytes: 1_024
+        )
+
+        XCTAssertEqual(result, .timedOut)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: markerURL.path))
+    }
+
+    func testFoundationExecutorCancelsAfterProcessLaunch() async {
+        let markerURL = processMarkerURL()
+        defer { try? FileManager.default.removeItem(at: markerURL) }
+        let executor = FoundationGitProcessExecutor()
+        let request = processRequest(
+            executablePath: "/usr/bin/awk",
+            arguments: longRunningAWKArguments(markerURL: markerURL),
+            timeout: 5,
+            maxOutputBytes: 1_024
+        )
+        let task = Task {
+            await executor.execute(request)
+        }
+        let didLaunch = await waitForProcessMarker(at: markerURL)
+
+        task.cancel()
+        let result = await task.value
+
+        XCTAssertTrue(didLaunch)
+        XCTAssertEqual(result, .timedOut)
+    }
+
     func testStdoutAccumulatorAcceptsExactLimit() {
         var accumulator = GitStdoutAccumulator(limit: 4)
 
@@ -235,19 +314,49 @@ final class GitCommandRunnerTests: XCTestCase {
         XCTAssertEqual(accumulator.data, prefix)
     }
 
+    func testPipeDrainerReturnsAllChunksAfterEOF() async throws {
+        let pipe = Pipe()
+        let expected = Data((0..<(128 * 1024)).map { UInt8($0 % 251) })
+        let drainer = GitPipeDrainer(
+            handle: pipe.fileHandleForReading,
+            mode: .stdout(limit: expected.count)
+        )
+        drainer.start(readChunkSize: 1_024)
+
+        try pipe.fileHandleForWriting.write(contentsOf: expected)
+        try pipe.fileHandleForWriting.close()
+        let result = await Task.detached(priority: .utility) {
+            drainer.waitForResult(until: .now() + 1)
+        }.value
+
+        XCTAssertEqual(result, .data(expected))
+    }
+
+    func testStderrPipeDrainerContinuesDrainingAfterCaptureLimit() async throws {
+        let pipe = Pipe()
+        let expected = Data(repeating: 0x61, count: 4)
+        let drainer = GitPipeDrainer(handle: pipe.fileHandleForReading, mode: .stderr(limit: 4))
+        drainer.start(readChunkSize: 1_024)
+
+        try pipe.fileHandleForWriting.write(contentsOf: Data(repeating: 0x61, count: 128 * 1024))
+        try pipe.fileHandleForWriting.close()
+        let result = await Task.detached(priority: .utility) {
+            drainer.waitForResult(until: .now() + 1)
+        }.value
+
+        XCTAssertEqual(result, .data(expected))
+    }
+
     func testStoppingPipeDrainerBeforeEOFFailsInsteadOfReturningPartialData() async throws {
         let pipe = Pipe()
         let drainer = GitPipeDrainer(handle: pipe.fileHandleForReading, mode: .stdout(limit: 32))
         let dataRead = AsyncSignal()
-        Task.detached(priority: .utility) {
-            drainer.run(
-                readChunkSize: 16,
-                pollIntervalMilliseconds: 5,
-                onData: {
-                    dataRead.signal()
-                }
-            )
-        }
+        drainer.start(
+            readChunkSize: 16,
+            onData: {
+                dataRead.signal()
+            }
+        )
 
         try pipe.fileHandleForWriting.write(contentsOf: Data("partial".utf8))
         await dataRead.wait()
@@ -255,9 +364,44 @@ final class GitCommandRunnerTests: XCTestCase {
         let result = await Task.detached(priority: .utility) {
             drainer.waitForResult(until: .now() + 0.2)
         }.value
-        pipe.fileHandleForWriting.closeFile()
+        try pipe.fileHandleForWriting.close()
 
         XCTAssertEqual(result, .readFailed)
+    }
+
+    func testStoppingPipeDrainerBeforeStartFinishesAsReadFailure() async throws {
+        let pipe = Pipe()
+        let drainer = GitPipeDrainer(handle: pipe.fileHandleForReading, mode: .stdout(limit: 32))
+
+        drainer.requestStop()
+        drainer.start(readChunkSize: 16)
+        let result = await Task.detached(priority: .utility) {
+            drainer.waitForResult(until: .now() + 0.2)
+        }.value
+        try pipe.fileHandleForWriting.close()
+
+        XCTAssertEqual(result, .readFailed)
+    }
+
+    func testPipeDrainerStopsAtOutputLimitAndSignalsOnce() async throws {
+        let pipe = Pipe()
+        let tooLargeCount = LockIsolated(0)
+        let drainer = GitPipeDrainer(handle: pipe.fileHandleForReading, mode: .stdout(limit: 4))
+        drainer.start(
+            readChunkSize: 3,
+            onTooLarge: {
+                tooLargeCount.withValue { $0 += 1 }
+            }
+        )
+
+        try pipe.fileHandleForWriting.write(contentsOf: Data("oversized".utf8))
+        let result = await Task.detached(priority: .utility) {
+            drainer.waitForResult(until: .now() + 0.2)
+        }.value
+        try pipe.fileHandleForWriting.close()
+
+        XCTAssertEqual(result, .tooLarge)
+        XCTAssertEqual(tooLargeCount.value, 1)
     }
 
     func testFirstTimeoutOrCancellationIsNotOverriddenByLateOversizedOutput() {
@@ -383,6 +527,60 @@ final class GitCommandRunnerTests: XCTestCase {
             timeout: FoundationGitCommandRunner.defaultTimeout,
             maxOutputBytes: FoundationGitCommandRunner.defaultMaxOutputBytes
         )
+    }
+
+    private func executeProcess(
+        executablePath: String,
+        arguments: [String],
+        timeout: TimeInterval,
+        maxOutputBytes: Int
+    ) async -> GitProcessExecutionResult {
+        await FoundationGitProcessExecutor().execute(
+            processRequest(
+                executablePath: executablePath,
+                arguments: arguments,
+                timeout: timeout,
+                maxOutputBytes: maxOutputBytes
+            )
+        )
+    }
+
+    private func processRequest(
+        executablePath: String,
+        arguments: [String],
+        timeout: TimeInterval,
+        maxOutputBytes: Int
+    ) -> GitProcessRequest {
+        GitProcessRequest(
+            executableURL: URL(fileURLWithPath: executablePath),
+            arguments: arguments,
+            currentDirectoryURL: FileManager.default.temporaryDirectory,
+            environment: GitCommandEnvironment.stable(from: ProcessInfo.processInfo.environment),
+            timeout: timeout,
+            maxOutputBytes: maxOutputBytes
+        )
+    }
+
+    private func processMarkerURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("devisland-git-command-runner-\(UUID().uuidString)")
+    }
+
+    private func longRunningAWKArguments(markerURL: URL) -> [String] {
+        let program = #"BEGIN { print "launched" > marker; close(marker); while (1) {} }"#
+        return ["-v", "marker=\(markerURL.path)", program]
+    }
+
+    private func waitForProcessMarker(at markerURL: URL) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(2))
+        while clock.now < deadline {
+            if FileManager.default.fileExists(atPath: markerURL.path) {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return FileManager.default.fileExists(atPath: markerURL.path)
     }
 }
 
