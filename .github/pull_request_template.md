@@ -31,6 +31,7 @@
 
 | 검증 | 결과 |
 |---|---|
+| `swiftlint lint --no-cache` | 미실행 / 통과 / 실패 / 해당 없음 |
 | `./scripts/run-tests.sh` | 미실행 / 통과 / 실패 |
 | `./scripts/build_and_run.sh --no-kill --no-run` | 미실행 / 통과 / 실패 / 해당 없음 |
 
@@ -57,6 +58,7 @@
 ## 체크리스트
 
 - [ ] 변경 범위가 이 PR의 목표에 직접 연결되어 있습니다.
+- [ ] Swift 코드 변경 시 `swiftlint lint --no-cache`를 실행하고 통과했습니다.
 - [ ] 관련 테스트를 추가하거나 기존 테스트로 동작을 검증했습니다.
 - [ ] `project.yml` 변경 시 `xcodegen generate`를 실행했습니다.
 - [ ] 사용자 동작, 설정, 명령 또는 아키텍처 변경 시 관련 문서를 업데이트했습니다.

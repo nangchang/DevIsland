@@ -36,4 +36,7 @@ enum Log {
 
     /// Session transcript and replay recording.
     static let session = Logger(subsystem: subsystem, category: "session")
+
+    /// Fleet Radar Git scanning, caching, and view-model refreshes.
+    static let fleet = Logger(subsystem: subsystem, category: "fleet")
 }

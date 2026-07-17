@@ -10,6 +10,7 @@ enum AppWindowRouter {
     private static var replayLogController: HostedWindowController?
     private static var ptyTranscriptController: HostedWindowController?
     private static var sessionHistoryController: HostedWindowController?
+    private static let sessionCenterPresentationState = SessionCenterPresentationState()
 
     static func showSettings() {
         AppState.shared.isNotchExpanded = false
@@ -46,11 +47,17 @@ enum AppWindowRouter {
     }
 
     static func showSessionHistory() {
+        sessionCenterPresentationState.present()
         let controller = cachedController(&sessionHistoryController) {
             HostedWindowController(
-                title: L10n.shared.winSessionHistory,
-                size: NSSize(width: 800, height: 500),
-                rootView: AnyView(SessionHistoryWindowView())
+                localizedTitleKey: "winSessionHistory",
+                size: NSSize(width: 960, height: 640),
+                rootView: AnyView(SessionHistoryWindowView(
+                    presentationState: sessionCenterPresentationState
+                )),
+                onWindowWillClose: {
+                    sessionCenterPresentationState.dismiss()
+                }
             )
         }
         controller.show()

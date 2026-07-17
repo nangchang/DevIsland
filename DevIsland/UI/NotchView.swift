@@ -9,10 +9,18 @@ struct NotchView: View {
     @ObservedObject private var sessionStore = AppState.shared.sessionStore
     @ObservedObject private var settingsStore = SettingsStore.shared
     @ObservedObject private var l10n = L10n.shared
+    @StateObject private var notchFleetViewModel: FleetRadarViewModel
     @State private var buddyPulse = false
     @State private var isExpanded = false
     @State private var liveHeight: Double? = nil
     @State private var liveWidth: Double? = nil
+
+    @MainActor
+    init(fleetViewModel: FleetRadarViewModel? = nil) {
+        _notchFleetViewModel = StateObject(
+            wrappedValue: fleetViewModel ?? FleetRadarViewModel()
+        )
+    }
 
     private var tool: ToolInfo { toolInfo(for: state.currentToolName) }
     private var isActionAreaShowing: Bool {
@@ -523,10 +531,31 @@ struct NotchView: View {
 
     private var sessionsContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(l10n.notchAgentSessions)
-                .font(.system(size: 9, weight: .black))
-                .foregroundColor(.white.opacity(0.3))
-                .padding(.horizontal, 20)
+            HStack(spacing: 12) {
+                Text(l10n.notchAgentSessions)
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundColor(.white.opacity(0.3))
+
+                Spacer(minLength: 8)
+
+                Button {
+                    state.isNotchExpanded = false
+                    AppWindowRouter.showSessionHistory()
+                } label: {
+                    Label(l10n.menuSessionHistory, systemImage: "rectangle.stack")
+                        .font(.system(size: 10, weight: .semibold))
+                        .lineLimit(1)
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .frame(minHeight: 24)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .help(l10n.menuSessionHistory)
+                .accessibilityLabel(l10n.menuSessionHistory)
+            }
+            .padding(.horizontal, 20)
 
             NotchActivityContributionsView()
 
@@ -546,6 +575,24 @@ struct NotchView: View {
         }
         .padding(.top, 18)
         .padding(.bottom, 20)
+        .onAppear {
+            refreshNotchFleet(forceRefresh: true)
+        }
+        .onDisappear {
+            notchFleetViewModel.cancelRefresh()
+        }
+        .onReceive(sessionStore.$activeSessions) { sessions in
+            notchFleetViewModel.update(
+                sessions: sessions,
+                labels: state.sessionLabels
+            )
+        }
+        .onChange(of: state.sessionLabels) { _, labels in
+            notchFleetViewModel.update(
+                sessions: sessionStore.activeSessions,
+                labels: labels
+            )
+        }
     }
 
     // MARK: Session List
@@ -582,20 +629,34 @@ struct NotchView: View {
     }
 
     private func sessionList(compact: Bool) -> some View {
-        ScrollView {
+        let fleetSummaries = FleetNotchSummaryPresentation.summariesBySessionID(
+            from: notchFleetViewModel.cards,
+            compact: compact
+        )
+
+        return ScrollView {
             VStack(spacing: 8) {
                 ForEach(groupedSessions, id: \.session.id) { item in
                     SessionRowView(
                         session: item.session,
                         isCurrent: item.session.id == displayedSessionId,
                         isSubAgent: item.isSubAgent,
-                        compact: compact
+                        compact: compact,
+                        fleetSummary: fleetSummaries[item.session.id]
                     )
                 }
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
         }
+    }
+
+    private func refreshNotchFleet(forceRefresh: Bool) {
+        notchFleetViewModel.update(
+            sessions: sessionStore.activeSessions,
+            labels: state.sessionLabels,
+            forceRefresh: forceRefresh
+        )
     }
 
     private func progressColor(for progress: Double) -> Color {

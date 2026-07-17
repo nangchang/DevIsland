@@ -24,6 +24,45 @@ User-facing settings are grouped as:
 - **Integrations**: opt-in app integrations.
 - **Advanced**: provider, Bridge / IPC, and experimental PTY settings.
 
+## Session Center And Fleet Radar
+
+The menu item formerly named Session History opens **Session Center**, a cached standard
+`NSWindow` with three tabs in this order:
+
+1. **Fleet** (default): active parent sessions as attention-ranked cards, with sub-agents nested
+   under their parent.
+2. **Sessions**: the existing live/closed session table, search, favorites, and Quick Launch
+   actions.
+3. **Insights**: the existing durable session and approval summaries.
+
+Fleet's larger adaptive grid and detailed Git inspection stay in the standard window. The normal
+expanded notch session list may also render a compact cached summary on each Fleet group root:
+branch or detached HEAD, clean/changed count, unmerged state, overlap risk, and stale evidence. The
+approval/notification compact session list does not show these summaries.
+
+The normal expanded **Agent Sessions** section header includes a direct Session Center button. It
+collapses the regular notch before routing through the existing cached Session Center controller,
+so repeated opens reuse the same window and its view models. The button is not rendered in the
+approval/notification compact screen and does not change approval ownership or queue behavior.
+
+Each presentation owns a `FleetRadarViewModel` that turns active sessions into scan descriptors,
+while both share the `GitContextService` actor. The service performs bounded, read-only Git commands
+and caches snapshots off the main thread. Session Center refreshes when its window appears, sessions
+or labels change, or the user explicitly chooses Refresh. The notch view model refreshes only while
+the normal expanded session content is visible and cancels presentation-owned work when that content
+disappears. Fleet performs no network access, Git writes, background polling, or Git work on the main
+thread or hook response path.
+
+Closing Session Center marks its cached view as hidden and cancels presentation-owned Fleet refresh
+work. Session/label changes while hidden do not start scans. Reopening the cached controller advances
+the presentation generation and refreshes current session and Git state without reconstructing the
+Sessions or Insights view models. The cached `NSWindow` title and all tab/card strings follow live
+English/Korean language changes.
+
+Fleet does not mutate `AppState` approval ownership, queue order, provider responses, notification
+timers, or notch expansion. Informational notification auto-collapse remains governed by
+`notchAutoCollapseDelay`; approval requests still never auto-collapse.
+
 ## Appearance Settings
 
 These settings are managed in `SettingsStore` and applied in `NotchView` / `NotchWindowController`.

@@ -6,7 +6,7 @@ DevIsland uses XcodeGen. There is no committed `.xcodeproj`.
 
 ```bash
 # One-time setup
-brew install xcodegen xcode-build-server
+brew install xcodegen xcode-build-server swiftlint
 
 # Generate the Xcode project
 xcodegen generate
@@ -18,6 +18,9 @@ xcode-build-server config -scheme DevIsland -project DevIsland.xcodeproj
 # Open in Xcode
 open DevIsland.xcodeproj
 
+# Lint Swift sources
+swiftlint lint --no-cache
+
 # Run unit tests, recommended
 ./scripts/run-tests.sh
 
@@ -27,7 +30,9 @@ xcodebuild test -project DevIsland.xcodeproj -scheme DevIsland -destination 'pla
 
 Build target: macOS 15.0+, Xcode 16+.
 
-AI agents must run the existing unit tests before committing code changes. Prefer `./scripts/run-tests.sh` because it uses isolated mode and will not interfere with a running DevIsland instance.
+AI agents must run `swiftlint lint --no-cache` before committing Swift source changes and the existing unit tests before committing any code changes. Run lint before tests when both apply so structural regressions fail early. Prefer `./scripts/run-tests.sh` because it uses isolated mode and will not interfere with a running DevIsland instance.
+
+The repository `.swiftlint.yml` is a structural gate for Swift sources. It enforces limits such as file length, type body length, and function parameter count; keep these checks passing instead of bypassing them for new code.
 
 ## Quick Build
 

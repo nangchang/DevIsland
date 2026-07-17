@@ -98,6 +98,60 @@ extension AppStateTests {
 
     // MARK: - SessionStore
 
+    func testShowSessionDetailSynchronizesSelectionAndExpandsWithoutFocusing() {
+        let frontmostChecks = LockIsolated(0)
+        appState = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _ in
+                frontmostChecks.withValue { $0 += 1 }
+                return false
+            }
+        )
+        appState.sessionStore.updateActiveSession(
+            sessionId: "fleet-detail",
+            terminalTitle: "Fleet Terminal",
+            agentKind: .codex,
+            terminal: TerminalContext(),
+            toolName: "Read",
+            eventName: "PostToolUse",
+            message: "Detail message",
+            isPending: false,
+            workspaceRoot: "/tmp/fleet-detail"
+        )
+        appState.isNotchExpanded = false
+        appState.isExpandingFromRequest = false
+
+        appState.showSessionDetail("fleet-detail")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        XCTAssertEqual(appState.sessionStore.selectedSessionId, "fleet-detail")
+        XCTAssertEqual(appState.currentSessionId, "fleet-detail")
+        XCTAssertEqual(appState.currentToolName, "Read")
+        XCTAssertEqual(appState.currentEventName, "PostToolUse")
+        XCTAssertEqual(appState.currentMessage, "Detail message")
+        XCTAssertTrue(appState.isExpandingFromRequest)
+        XCTAssertTrue(appState.isNotchExpanded)
+        XCTAssertFalse(appState.hasResponseHandler)
+        XCTAssertEqual(frontmostChecks.value, 0)
+    }
+
+    func testShowSessionDetailDoesNotReplaceOrRespondToPendingApproval() {
+        var responseCount = 0
+        appState.sessionStore.selectedSessionId = "approval-session"
+        appState.displayState.sessionId = "approval-session"
+        appState.displayState.responseHandler = { _ in responseCount += 1 }
+        appState.isNotchExpanded = true
+
+        appState.showSessionDetail("fleet-detail")
+
+        XCTAssertEqual(appState.sessionStore.selectedSessionId, "approval-session")
+        XCTAssertEqual(appState.currentSessionId, "approval-session")
+        XCTAssertTrue(appState.hasResponseHandler)
+        XCTAssertTrue(appState.isNotchExpanded)
+        XCTAssertEqual(responseCount, 0)
+    }
+
     func testSessionMetadataUpdatedNotDuplicated() {
         let msg1 = """
         {"hook_event_name":"sessionstart","cli_source":"claude","session_id":"meta-session","terminal_title":"Terminal 1"}

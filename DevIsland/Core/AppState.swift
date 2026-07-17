@@ -2118,6 +2118,7 @@ class AppState: ObservableObject {
         displayState.sessionId = sessionId
         syncDisplayToSelectedSession()
         isExpandingFromRequest = true
+        isNotchExpanded = true
     }
 
     func dismissCurrentRequest() {
