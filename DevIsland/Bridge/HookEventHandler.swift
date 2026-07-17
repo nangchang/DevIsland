@@ -17,6 +17,13 @@ struct ParsedHookEvent {
     let toolInput: [String: Any]?
     let isSubAgentSession: Bool
     let parentSessionId: String?
+    /// Codex sub-agent identity. Codex signals a sub-agent-originated hook via
+    /// `agent_id`/`agent_type` (optional in its schema) and never sends Claude's
+    /// `parent_session_id`; the child reuses the parent `session_id`. Presence of
+    /// `agent_id` marks the event as a sub-agent session; `handleSubAgentEvent`
+    /// uses `agent_id` as the distinct child row id (parent = `sessionId`).
+    let subAgentId: String?
+    let subAgentType: String?
     let isReplayPayload: Bool
     let isPlanAction: Bool
     let sessionStartSource: String
@@ -83,6 +90,17 @@ enum HookEventHandler {
             parentSessionId = pid
         }
 
+        // Codex sub-agent identity (see `ParsedHookEvent.subAgentId`). Codex
+        // reuses the parent `session_id` and identifies the child via `agent_id`,
+        // so we treat it as a sub-agent session but resolve the distinct child
+        // row id from `agent_id` in `handleSubAgentEvent` — `sessionId` here stays
+        // the real Codex session so no other consumer sees a synthesized id.
+        let subAgentId = (parsedJSON["agent_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let subAgentType = (parsedJSON["agent_type"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        if subAgentId != nil {
+            isSubAgentSession = true
+        }
+
         Log.bridge.debug("Parsed JSON from \(sessionId.prefix(8), privacy: .private)")
 
         var terminalTitle = parsedJSON["terminal_title"] as? String ?? "Terminal"
@@ -135,6 +153,8 @@ enum HookEventHandler {
             toolInput: toolInput,
             isSubAgentSession: isSubAgentSession,
             parentSessionId: parentSessionId,
+            subAgentId: subAgentId,
+            subAgentType: subAgentType,
             isReplayPayload: isReplayPayload,
             isPlanAction: isPlanAction,
             sessionStartSource: sessionStartSource,

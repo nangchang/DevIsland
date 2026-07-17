@@ -280,6 +280,8 @@ final class PluginEventFactoryTests: XCTestCase {
             toolInput: nil,
             isSubAgentSession: false,
             parentSessionId: nil,
+            subAgentId: nil,
+            subAgentType: nil,
             isReplayPayload: false,
             isPlanAction: false,
             sessionStartSource: "",

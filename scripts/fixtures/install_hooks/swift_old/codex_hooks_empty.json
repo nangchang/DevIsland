@@ -1,59 +1,81 @@
 {
-  "hooks" : {
-    "PermissionRequest" : [
+  "hooks": {
+    "SessionStart": [
       {
-        "hooks" : [
+        "matcher": "*",
+        "hooks": [
           {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "timeout" : 86400,
-            "type" : "command"
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
           }
-        ],
-        "matcher" : "*"
+        ]
       }
     ],
-    "PostToolUse" : [
+    "PreToolUse": [
       {
-        "hooks" : [
+        "matcher": "*",
+        "hooks": [
           {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "type" : "command"
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
           }
-        ],
-        "matcher" : "*"
+        ]
       }
     ],
-    "PreToolUse" : [
+    "PostToolUse": [
       {
-        "hooks" : [
+        "matcher": "*",
+        "hooks": [
           {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "type" : "command"
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
           }
-        ],
-        "matcher" : "*"
+        ]
       }
     ],
-    "SessionStart" : [
+    "Stop": [
       {
-        "hooks" : [
+        "matcher": "*",
+        "hooks": [
           {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "type" : "command"
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
           }
-        ],
-        "matcher" : "*"
+        ]
       }
     ],
-    "Stop" : [
+    "SubagentStart": [
       {
-        "hooks" : [
+        "matcher": "*",
+        "hooks": [
           {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "type" : "command"
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
           }
-        ],
-        "matcher" : "*"
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex",
+            "timeout": 86400
+          }
+        ]
       }
     ]
   }

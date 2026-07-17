@@ -72,6 +72,46 @@ final class HookEventRouterTests: XCTestCase {
         XCTAssertEqual(r.route, .ptyOutput)
     }
 
+    // MARK: - Codex sub-agent identity (agent_id → sub-agent routing)
+
+    func testCodexAgentIdMarksSubAgentAndRoutesToSubAgent() throws {
+        let h = try parsed("""
+        {
+            "hook_event_name": "PermissionRequest",
+            "session_id": "s1",
+            "cli_source": "codex",
+            "tool_name": "shell",
+            "agent_id": "agent-7",
+            "agent_type": "reviewer"
+        }
+        """)
+        XCTAssertEqual(h.subAgentId, "agent-7")
+        XCTAssertEqual(h.subAgentType, "reviewer")
+        XCTAssertTrue(h.isSubAgentSession)
+        // Codex reuses the parent session_id; the child id is resolved from
+        // agent_id later, so parse leaves sessionId/parentSessionId untouched.
+        XCTAssertEqual(h.sessionId, "s1")
+        XCTAssertNil(h.parentSessionId)
+
+        XCTAssertEqual(HookEventRouter.route(h, settings: HookRoutingSettings()).route, .subAgent)
+    }
+
+    func testCodexWithoutAgentIdDoesNotRouteToSubAgent() throws {
+        let r = try route("""
+        { "hook_event_name": "PermissionRequest", "session_id": "s1", "cli_source": "codex", "tool_name": "shell" }
+        """)
+        XCTAssertNotEqual(r.route, .subAgent)
+    }
+
+    func testEmptyAgentFieldsAreNotASubAgent() throws {
+        let h = try parsed("""
+        { "hook_event_name": "PermissionRequest", "session_id": "s1", "cli_source": "codex", "tool_name": "shell", "agent_id": "", "agent_type": "" }
+        """)
+        XCTAssertNil(h.subAgentId)
+        XCTAssertNil(h.subAgentType)
+        XCTAssertFalse(h.isSubAgentSession)
+    }
+
     // MARK: - Stop / prompt policy / question passthrough / notification
 
     func testStopEventRoutesToStop() throws {

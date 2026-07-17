@@ -870,32 +870,54 @@ class AppState: ObservableObject {
             toolName: h.toolName,
             payload: h.parsedJSON
         )
-        if !h.sessionId.isEmpty {
-            let fullSessionId = h.sessionId
-            let pid = h.parentSessionId
-            let subAgentStopEvents: Set<String> = ["stop", "exit", "shutdown", "sessionend"]
+        // Resolve the sub-agent's own row identity. Codex reuses the parent
+        // session_id and identifies the child via agent_id, so the row is keyed
+        // on agent_id with the shared session as parent. Claude sub-agents already
+        // carry their own session_id + parent_session_id.
+        let childId: String
+        let parentId: String?
+        let childTitle: String
+        if let agentId = h.subAgentId {
+            childId = agentId
+            parentId = h.sessionId
+            childTitle = h.subAgentType ?? h.terminalTitle
+        } else {
+            childId = h.sessionId
+            parentId = h.parentSessionId
+            childTitle = h.terminalTitle
+        }
+
+        if !childId.isEmpty {
+            let subAgentStopEvents: Set<String> = ["stop", "exit", "shutdown", "sessionend", "subagentstop"]
             let normalizedSubEvent = HookEventNormalizer.normalizedName(h.event)
             if subAgentStopEvents.contains(normalizedSubEvent) {
                 DispatchQueue.main.async {
-                    self.sessionStore.removeSession(id: fullSessionId)
-                    self.ptyCoordinator.clearBuffer(sessionId: fullSessionId)
+                    self.sessionStore.removeSession(id: childId)
+                    self.ptyCoordinator.clearBuffer(sessionId: childId)
                 }
             } else {
                 DispatchQueue.main.async {
-                    self.updateActiveSession(
-                        from: h,
+                    self.sessionStore.updateActiveSession(
+                        sessionId: childId,
+                        terminalTitle: childTitle,
+                        agentKind: h.agentKind,
+                        terminal: h.terminal,
                         toolName: displayToolName,
                         eventName: h.event,
                         message: h.displayMsg,
                         isPending: false,
                         isLifecycleTracked: true,
                         isSubAgentSession: true,
-                        parentSessionId: pid
+                        parentSessionId: parentId,
+                        workspaceRoot: h.workspaceRoot
                     )
                 }
             }
         }
-        responseHandler(HookResponse(.approved).jsonString())
+        // Never intercept a sub-agent's approval decision — defer to the CLI's
+        // own flow (Codex native reviewer / Claude). Originally an auto-approve
+        // stub (a22e593) with a TODO; this completes that handling.
+        responseHandler(HookResponse(.pass).jsonString())
     }
 
     // MARK: - Phase 2c handler: Stop

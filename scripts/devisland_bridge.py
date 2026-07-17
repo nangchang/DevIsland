@@ -39,6 +39,8 @@ _FALLBACK_PASSIVE_EVENTS: frozenset[str] = frozenset({
     "AfterAgent",
     "PreInvocation",
     "PostInvocation",
+    "SubagentStart",
+    "SubagentStop",
 })
 
 

@@ -16,7 +16,7 @@
   },
   "codex": {
     "active": ["PermissionRequest"],
-    "lifecycle": ["SessionStart", "PreToolUse", "PostToolUse", "Stop"],
+    "lifecycle": ["SessionStart", "PreToolUse", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"],
     "retired": ["SessionEnd"]
   },
   "antigravity": {
