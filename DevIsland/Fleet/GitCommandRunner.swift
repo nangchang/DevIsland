@@ -168,7 +168,7 @@ struct FoundationGitProcessExecutor: GitProcessExecuting {
         Task.detached(priority: .utility) {
             let maximumSeconds = Double(UInt64.max) / 1_000_000_000
             let nanoseconds = UInt64(min(timeout, maximumSeconds) * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds)
+            try? await Task.sleep(for: .nanoseconds(nanoseconds))
             action()
         }
     }
@@ -506,8 +506,8 @@ private enum FoundationProcessOperation {
             return state.outcome == .cancelled ? .timedOut : .launchFailed
         }
 
-        stdoutPipe.fileHandleForWriting.closeFile()
-        stderrPipe.fileHandleForWriting.closeFile()
+        try? stdoutPipe.fileHandleForWriting.close()
+        try? stderrPipe.fileHandleForWriting.close()
 
         Task.detached(priority: .utility) {
             stdoutDrainer.run(
@@ -569,8 +569,8 @@ private enum FoundationProcessOperation {
     }
 
     private static func closeAllHandles(_ pipe: Pipe) {
-        pipe.fileHandleForReading.closeFile()
-        pipe.fileHandleForWriting.closeFile()
+        try? pipe.fileHandleForReading.close()
+        try? pipe.fileHandleForWriting.close()
     }
 }
 
@@ -667,7 +667,7 @@ final class GitPipeDrainer: @unchecked Sendable {
         } else {
             finalResult = .data(stderrAccumulator?.data ?? Data())
         }
-        handle.closeFile()
+        try? handle.close()
         finish(finalResult)
     }
 
