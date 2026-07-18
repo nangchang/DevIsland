@@ -389,7 +389,7 @@ final class FleetRadarViewModelTests: XCTestCase {
         let gate = AsyncGate()
         let scanner = FleetRadarScannerFake(responses: [[:]], gates: [gate])
         var viewModel: FleetRadarViewModel? = makeViewModel(scanner: scanner)
-        weak let weakViewModel = viewModel
+        weak var weakViewModel = viewModel
 
         viewModel?.update(
             sessions: [makeSession(id: "session", workspaceRoot: "/repo")],
