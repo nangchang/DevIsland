@@ -254,8 +254,12 @@ class TestHookEventsManifest(unittest.TestCase):
                 f"Truly-retired event '{event}' must not be in PASSIVE_EVENTS",
             )
 
-    def test_passive_events_matches_original_12(self):
-        """Regression: PASSIVE_EVENTS must equal the original hardcoded 12 events."""
+    def test_passive_events_matches_baseline(self):
+        """Regression: PASSIVE_EVENTS must equal the pinned baseline set.
+
+        Codex SubagentStart/SubagentStop were added so sub-agent lifecycle hooks
+        reach the app; they are passive (non-approval) lifecycle events.
+        """
         expected = frozenset({
             "PermissionRequest",
             "SessionStart",
@@ -271,6 +275,8 @@ class TestHookEventsManifest(unittest.TestCase):
             "AfterAgent",
             "PreInvocation",
             "PostInvocation",
+            "SubagentStart",
+            "SubagentStop",
         })
         self.assertEqual(PASSIVE_EVENTS, expected)
 

@@ -98,6 +98,53 @@ extension AppStateTests {
 
     // MARK: - SessionStore
 
+    func testCodexSubAgentPermissionRequestCreatesNestedRowAndPasses() {
+        appState = AppState(
+            startServer: false,
+            userDefaults: mockDefaults,
+            frontmostCheck: { _ in false }
+        )
+        // A Codex sub-agent PermissionRequest carries agent_id (its own id) but
+        // reuses the parent session_id. Driven end-to-end, it must (1) produce a
+        // distinct nested child row keyed on agent_id with parentSessionId = the
+        // real session, and (2) respond pass — DevIsland does not decide the
+        // sub-agent's approval.
+        var response: String?
+        appState.handleMessage(
+            """
+            {"hook_event_name":"PermissionRequest","cli_source":"codex","session_id":"codex-parent","tool_name":"shell","agent_id":"codex-child","agent_type":"reviewer"}
+            """
+        ) { response = $0 }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        XCTAssertEqual(parseResponse(response ?? "")?["response"] as? String, "pass")
+
+        let child = appState.sessionStore.activeSessions.first { $0.id == "codex-child" }
+        XCTAssertNotNil(child, "sub-agent must appear as its own row keyed on agent_id")
+        XCTAssertTrue(child?.isSubAgentSession ?? false)
+        XCTAssertEqual(child?.parentSessionId, "codex-parent")
+        // The parent row must NOT be turned into a sub-agent by the shared id.
+        let parent = appState.sessionStore.activeSessions.first { $0.id == "codex-parent" }
+        XCTAssertFalse(parent?.isSubAgentSession ?? false)
+    }
+
+    func testRemoveParentSessionCascadesToCodexSubAgentRow() {
+        appState = AppState(startServer: false, userDefaults: mockDefaults, frontmostCheck: { _ in false })
+        // Sub-agent activity creates the child row…
+        appState.handleMessage(
+            """
+            {"hook_event_name":"PreToolUse","cli_source":"codex","session_id":"cp","tool_name":"Bash","agent_id":"cc","agent_type":"default"}
+            """
+        ) { _ in }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        XCTAssertNotNil(appState.sessionStore.activeSessions.first { $0.id == "cc" })
+
+        // …and removing the parent session cleans up the orphaned child row
+        // (Codex may not emit SubagentStop).
+        appState.sessionStore.removeSession(id: "cp")
+        XCTAssertNil(appState.sessionStore.activeSessions.first { $0.id == "cc" })
+    }
+
     func testShowSessionDetailSynchronizesSelectionAndExpandsWithoutFocusing() {
         let frontmostChecks = LockIsolated(0)
         appState = AppState(

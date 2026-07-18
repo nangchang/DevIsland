@@ -223,5 +223,14 @@ final class SessionStore: ObservableObject {
         if let snapshot {
             onSessionChanged?(.ended(snapshot))
         }
+        // Cascade to nested sub-agent rows. Codex sub-agents may not emit a
+        // SubagentStop (the event isn't always registered), so removing the
+        // parent is the reliable cleanup for their child rows.
+        let children = activeSessions.filter { $0.parentSessionId == sessionId }
+        for child in children {
+            sessionAutoApproveTypes.removeValue(forKey: child.id)
+            activeSessions.removeAll { $0.id == child.id }
+            onSessionChanged?(.ended(child))
+        }
     }
 }

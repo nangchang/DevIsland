@@ -1,83 +1,105 @@
 {
-  "hooks" : {
-    "PermissionRequest" : [
+  "hooks": {
+    "SessionStart": [
       {
-        "hooks" : [
+        "matcher": "*",
+        "hooks": [
           {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "timeout" : 86400,
-            "type" : "command"
-          }
-        ],
-        "matcher" : "*"
-      }
-    ],
-    "PostToolUse" : [
-      {
-        "hooks" : [
-          {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "type" : "command"
-          }
-        ],
-        "matcher" : "*"
-      }
-    ],
-    "PreToolUse" : [
-      {
-        "hooks" : [
-          {
-            "command" : "\/usr\/local\/bin\/other-hook.sh",
-            "type" : "command"
-          }
-        ],
-        "matcher" : "other"
-      },
-      {
-        "hooks" : [
-          {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "type" : "command"
-          }
-        ],
-        "matcher" : "*"
-      }
-    ],
-    "SessionEnd" : [
-      {
-        "hooks" : [
-          {
-            "command" : "\/usr\/local\/bin\/other-hook.sh",
-            "type" : "command"
-          }
-        ],
-        "matcher" : "*"
-      }
-    ],
-    "SessionStart" : [
-      {
-        "hooks" : [
-          {
-            "command" : "\/usr\/local\/bin\/other-hook.sh",
-            "type" : "command"
+            "type": "command",
+            "command": "/usr/local/bin/other-hook.sh"
           },
           {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "type" : "command"
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
           }
-        ],
-        "matcher" : "*"
+        ]
       }
     ],
-    "Stop" : [
+    "PreToolUse": [
       {
-        "hooks" : [
+        "matcher": "other",
+        "hooks": [
           {
-            "command" : "\"\/BRIDGE\" --source codex",
-            "type" : "command"
+            "type": "command",
+            "command": "/usr/local/bin/other-hook.sh"
           }
-        ],
-        "matcher" : "*"
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/other-hook.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source codex",
+            "timeout": 86400
+          }
+        ]
       }
     ]
   }

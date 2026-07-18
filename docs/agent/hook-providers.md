@@ -7,7 +7,7 @@ DevIsland supports Claude Code, Codex CLI, and Gemini CLI through the same bridg
 | CLI Agent | Config File | Approval Event | Lifecycle Events |
 |---|---|---|---|
 | Claude Code | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `Stop` |
-| Codex CLI | `~/.codex/hooks.json` + `config.toml` | `PermissionRequest` | `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` |
+| Codex CLI | `~/.codex/hooks.json` + `config.toml` | `PermissionRequest` | `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStart`, `SubagentStop` |
 | Gemini CLI | `~/.gemini/settings.json` | `BeforeTool` | `SessionStart`, `SessionEnd`, `AfterAgent`, `Notification` |
 | Antigravity CLI | `~/.gemini/config/hooks.json` | `PreToolUse` | `PreInvocation`, `PostInvocation`, `PostToolUse`, `Stop` |
 
@@ -80,6 +80,16 @@ Deny output:
   }
 }
 ```
+
+### Sub-agents
+
+Codex marks a sub-agent-originated hook with `agent_id`/`agent_type` and reuses the parent `session_id` — it never sends Claude's `parent_session_id`, so `agent_id` is the only distinct child identity. Only ThreadSpawn sub-agents (the multi-agent `spawn_agent` tool) emit hooks; internal/synthetic sub-agents and guardian review sessions (`approvals_reviewer = "guardian_subagent"`) run no hooks. `agent_id`/`agent_type` are optional fields on `PreToolUse`/`PostToolUse`/`PermissionRequest` and required on `SubagentStart`/`SubagentStop`.
+
+DevIsland treats an event carrying `agent_id` as a sub-agent session: it keys a nested session row on `agent_id` (with the shared `session_id` as parent), reusing the same nested-row UI as Claude sub-agents. The child id is resolved inside `handleSubAgentEvent`; `ParsedHookEvent.sessionId` stays the real Codex session for every other consumer. Sub-agent events respond `pass` — DevIsland does not decide a sub-agent's approval; the CLI's own flow (Codex native reviewer / Claude) does.
+
+Cleanup: a `SubagentStop` removes the child row, and removing the parent session cascades to its nested children — Codex does not always emit `SubagentStop`, so parent removal is the reliable path. `SubagentStart`/`SubagentStop` only reach DevIsland after a bridge reinstall registers them; sub-agent tool calls (`PreToolUse` + `agent_id`) create the nested row without them.
+
+Bridge logs (`~/Library/Logs/DevIsland/bridge.log`) summarize events only. To inspect real payload fields such as `agent_id`, query the app's replay store: `approval-proxy.sqlite3` → `hook_events.payload_json`.
 
 ## Gemini CLI
 

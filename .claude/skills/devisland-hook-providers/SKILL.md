@@ -24,6 +24,8 @@ Codex:
 - `PreToolUse` is status tracking only and should continue without a DevIsland prompt.
 - Codex lacks native session-permission mutation; DevIsland owns SQLite rules.
 - New `SessionStart` in the same terminal identity can imply older Codex session end.
+- Sub-agent hooks carry `agent_id`/`agent_type` and reuse the parent `session_id` — Codex never sends Claude's `parent_session_id`, so `agent_id` is the only child identity. Only ThreadSpawn sub-agents fire hooks; internal/guardian-review sessions (`approvals_reviewer = "guardian_subagent"`) run none. `SubagentStart`/`SubagentStop` only reach DevIsland after a bridge reinstall registers them.
+- DevIsland keys the sub-agent's nested row on `agent_id` (parent = the shared `session_id`) and responds `pass` — it does not decide a sub-agent's approval. Resolve child/parent id inside `handleSubAgentEvent`; never overwrite `ParsedHookEvent.sessionId`. Bridge logs only summarize events — inspect real payload fields like `agent_id` in `approval-proxy.sqlite3` `hook_events.payload_json`.
 
 Gemini:
 
@@ -56,6 +58,8 @@ Bridge responsibilities stay thin:
 - Print provider output.
 
 When changing `scripts/install-bridge.sh`, `scripts/devisland-bridge.sh`, or `scripts/devisland_bridge.py`, update README or provider docs if user setup changes.
+
+Adding a hook event to a provider in `scripts/hook_events.json` requires syncing five spots or Python tests fail: `_FALLBACK_PASSIVE_EVENTS` (devisland_bridge.py), the `NORM_EVENT` prefilter `case` (devisland-bridge.sh), the passive-events regression test (test_devisland_bridge.py), and the `golden/` + `swift_old/` install fixtures (regenerate by running `install_hooks.py` on the matching `inputs/` fixture).
 
 For source and integration detection, preserve VS Code, Claude Desktop, WezTerm, tmux, and Antigravity payload behavior documented in `docs/agent/hook-providers.md`.
 

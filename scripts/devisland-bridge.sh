@@ -27,7 +27,7 @@ PY_BRIDGE="$SCRIPT_DIR/devisland_bridge.py"
 if [ -n "$HOOK_EVENT_ARG" ]; then
   NORM_EVENT=$(printf "%s" "$HOOK_EVENT_ARG" | tr '[:upper:]' '[:lower:]' | tr -d '_-')
   case "$NORM_EVENT" in
-    permissionrequest|sessionstart|sessionend|notification|stop|pretooluse|posttooluse|posttoolusefailure|userpromptsubmit|elicitation|beforetool|afteragent|preinvocation|postinvocation)
+    permissionrequest|sessionstart|sessionend|notification|stop|pretooluse|posttooluse|posttoolusefailure|userpromptsubmit|elicitation|beforetool|afteragent|preinvocation|postinvocation|subagentstart|subagentstop)
       ;;
     *)
       printf '{"continue":true,"suppressOutput":true}\n'

@@ -146,6 +146,33 @@ final class SessionStoreCallbackTests: XCTestCase {
 
     // MARK: - Helpers
 
+    // MARK: - removeSession cascades to nested sub-agent rows
+
+    func testRemoveParentCascadesToSubAgentChildren() {
+        insertSession(id: "parent")
+        // Two sub-agent rows nested under the parent.
+        store.updateActiveSession(
+            sessionId: "child-a", terminalTitle: "default", agentKind: .codex,
+            terminal: TerminalContext(), toolName: "Bash", eventName: "PreToolUse",
+            message: "m", isPending: false, isSubAgentSession: true, parentSessionId: "parent"
+        )
+        store.updateActiveSession(
+            sessionId: "child-b", terminalTitle: "reviewer", agentKind: .codex,
+            terminal: TerminalContext(), toolName: "Read", eventName: "PreToolUse",
+            message: "m", isPending: false, isSubAgentSession: true, parentSessionId: "parent"
+        )
+        changes.removeAll()
+
+        store.removeSession(id: "parent")
+
+        XCTAssertNil(store.activeSessions.first { $0.id == "parent" })
+        XCTAssertNil(store.activeSessions.first { $0.id == "child-a" })
+        XCTAssertNil(store.activeSessions.first { $0.id == "child-b" })
+        // Parent + both children each emit an .ended change.
+        let endedIds = changes.compactMap { if case .ended(let s) = $0 { return s.id } else { return nil } }
+        XCTAssertEqual(Set(endedIds), ["parent", "child-a", "child-b"])
+    }
+
     private func insertSession(
         id: String,
         agentKind: BuddyKind = .claudeCode,
