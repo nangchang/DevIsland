@@ -16,6 +16,7 @@ struct CaffeineSettingsPane: View {
                 LabeledContent(l10n.lblOnAC, value: coordinator.isOnACPower ? "ON" : "OFF")
                 LabeledContent(l10n.lblBatteryLevel, value: batteryString)
                 LabeledContent(l10n.lblCurrentSSID, value: coordinator.currentSSID ?? "—")
+                LabeledContent(l10n.lblVPNConnected, value: coordinator.isVPNConnected ? "ON" : "OFF")
                 LabeledContent(l10n.lblHoldingAssertion, value: coordinator.isHoldingAssertion ? "ON" : "OFF")
             }
 
@@ -25,6 +26,13 @@ struct CaffeineSettingsPane: View {
                     set: { store.settings.caffeineEnabled = $0 }
                 ))
                 Text(l10n.hintCaffeineRule)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Toggle(l10n.lblCaffeineActivateOnVPN, isOn: Binding(
+                    get: { store.settings.caffeineActivateOnVPN },
+                    set: { store.settings.caffeineActivateOnVPN = $0 }
+                ))
+                Text(l10n.hintCaffeineActivateOnVPN)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

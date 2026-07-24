@@ -85,6 +85,16 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
         XCTAssertFalse(store.settings.caffeineEnabled)
         XCTAssertEqual(store.settings.caffeineExcludedSSIDs, [])
+        // VPN 활성화 옵션은 기본 ON — 켜져 있는 경우 배터리에서도 VPN이면 유지.
+        XCTAssertTrue(store.settings.caffeineActivateOnVPN)
+    }
+
+    func testCaffeinePersistsActivateOnVPN() {
+        let store = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+        store.settings.caffeineActivateOnVPN = false
+
+        let reloaded = SettingsStore(userDefaults: defaults, bridgeConfigURL: bridgeConfigURL)
+        XCTAssertFalse(reloaded.settings.caffeineActivateOnVPN)
     }
 
     func testCaffeinePersistsExcludedSSIDs() {

@@ -15,6 +15,8 @@ final class CaffeineCoordinator: ObservableObject {
     @Published var isOnACPower: Bool = true
     @Published var batteryLevel: Double? = nil
     @Published var currentSSID: String? = nil
+    @Published var isVPNConnected: Bool = false
+    @Published var activateOnVPN: Bool = true
 
     // Session idle timeout inputs (set from AppState)
     @Published var sessionTimeoutEnabled: Bool = false
@@ -36,6 +38,8 @@ final class CaffeineCoordinator: ObservableObject {
     func bind() {
         let aggregate = Publishers.CombineLatest4($caffeineEnabled, $isOnACPower, $batteryLevel, $currentSSID)
             .combineLatest($excludedSSIDs)
+            .combineLatest($isVPNConnected)
+            .combineLatest($activateOnVPN)
         aggregate
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.evaluate() }
@@ -60,6 +64,8 @@ final class CaffeineCoordinator: ObservableObject {
             isOnACPower: isOnACPower,
             batteryLevel: batteryLevel,
             currentSSID: currentSSID,
+            isVPNConnected: isVPNConnected,
+            activateOnVPN: activateOnVPN,
             sessionIdleTimedOut: sessionIdleTimedOut
         ))
     }
@@ -92,6 +98,8 @@ final class CaffeineCoordinator: ObservableObject {
                 isOnACPower: self.isOnACPower,
                 batteryLevel: self.batteryLevel,
                 currentSSID: self.currentSSID,
+                isVPNConnected: self.isVPNConnected,
+                activateOnVPN: self.activateOnVPN,
                 isPreventingSleep: shouldHold,
                 effectReason: reasonString,
                 effectFailureCode: failureCode,

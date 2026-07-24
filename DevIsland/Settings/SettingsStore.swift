@@ -67,6 +67,7 @@ final class SettingsStore: ObservableObject {
         static let notchAnimationEnabled = "notchAnimationEnabled"
         static let notchAnimationSpeed = "notchAnimationSpeed"
         static let caffeineEnabled = "caffeineEnabled"
+        static let caffeineActivateOnVPN = "caffeineActivateOnVPN"
         static let caffeineExcludedSSIDs = "caffeineExcludedSSIDs"
         static let caffeineSessionTimeoutEnabled = "caffeineSessionTimeoutEnabled"
         static let caffeineSessionTimeoutMinutes = "caffeineSessionTimeoutMinutes"
@@ -157,6 +158,7 @@ final class SettingsStore: ObservableObject {
         userDefaults.set(settings.notchAnimationEnabled, forKey: DefaultsKey.notchAnimationEnabled)
         userDefaults.set(settings.notchAnimationSpeed, forKey: DefaultsKey.notchAnimationSpeed)
         userDefaults.set(settings.caffeineEnabled, forKey: DefaultsKey.caffeineEnabled)
+        userDefaults.set(settings.caffeineActivateOnVPN, forKey: DefaultsKey.caffeineActivateOnVPN)
         userDefaults.set(settings.caffeineExcludedSSIDs, forKey: DefaultsKey.caffeineExcludedSSIDs)
         userDefaults.set(settings.caffeineSessionTimeoutEnabled, forKey: DefaultsKey.caffeineSessionTimeoutEnabled)
         userDefaults.set(settings.caffeineSessionTimeoutMinutes, forKey: DefaultsKey.caffeineSessionTimeoutMinutes)

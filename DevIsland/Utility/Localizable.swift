@@ -254,6 +254,9 @@ extension L10n {
     var lblCaffeineEnabled: String { t("lblCaffeineEnabled") }
     var lblCurrentSSID: String { t("lblCurrentSSID") }
     var lblOnAC: String { t("lblOnAC") }
+    var lblVPNConnected: String { t("lblVPNConnected") }
+    var lblCaffeineActivateOnVPN: String { t("lblCaffeineActivateOnVPN") }
+    var hintCaffeineActivateOnVPN: String { t("hintCaffeineActivateOnVPN") }
     var lblBatteryLevel: String { t("lblBatteryLevel") }
     var lblHoldingAssertion: String { t("lblHoldingAssertion") }
     var btnAddSSID: String { t("btnAddSSID") }
