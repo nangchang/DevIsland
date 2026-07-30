@@ -22,7 +22,7 @@ Low-battery handling uses hysteresis and is the highest-priority safety guard am
 
 If the current SSID is unavailable, the excluded-SSID condition cannot match and the remaining conditions still apply.
 
-VPN connection is detected through SystemConfiguration: any active `State:/Network/Service/<id>/VPN|PPP|IPSec` runtime key (including FortiClient's Network Extension) marks a VPN as connected. Configured-but-disconnected services live under the `Setup:` domain and are ignored.
+VPN connection is detected through SystemConfiguration. The monitor watches `State:/Network/Service/<id>/VPN|IPSec` runtime keys for change notifications, then confirms each candidate service is actually `.connected` via `SCNetworkConnectionGetStatus` — key presence alone is insufficient because connecting/disconnecting/suspended states may leave a stale key. The `PPP` entity is intentionally excluded because PPPoE broadband uses it too; pure L2TP is effectively always paired with IPSec and is still caught through the `/IPSec` key. FortiClient's Network Extension surfaces as the `/VPN` entity.
 
 ## Session Idle Timeout
 

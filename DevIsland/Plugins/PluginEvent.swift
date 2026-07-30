@@ -99,7 +99,10 @@ struct PluginPowerStatus: Codable, Equatable {
     let currentSSID: String?
     /// Whether any VPN (e.g. FortiClient) is currently connected.
     let isVPNConnected: Bool
-    /// Whether the "activate on VPN" behavior is enabled by the user.
+    /// Whether the "activate on VPN" behavior is enabled by the user. Defaults to a
+    /// conservative `false` on this signal DTO (do not hold on VPN unless explicitly
+    /// told); the runtime value is mirrored from `SettingsStore.caffeineActivateOnVPN`
+    /// (which defaults to `true`) by `CaffeineCoordinator`.
     let activateOnVPN: Bool
     /// Result feedback (host → plugin) after a `power.preventIdleSleep` effect was applied.
     let isPreventingSleep: Bool?
