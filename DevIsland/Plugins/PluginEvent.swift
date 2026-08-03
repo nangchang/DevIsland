@@ -97,6 +97,13 @@ struct PluginPowerStatus: Codable, Equatable {
     let isOnACPower: Bool
     let batteryLevel: Double?
     let currentSSID: String?
+    /// Whether any VPN (e.g. FortiClient) is currently connected.
+    let isVPNConnected: Bool
+    /// Whether the "activate on VPN" behavior is enabled by the user. Defaults to a
+    /// conservative `false` on this signal DTO (do not hold on VPN unless explicitly
+    /// told); the runtime value is mirrored from `SettingsStore.caffeineActivateOnVPN`
+    /// (which defaults to `true`) by `CaffeineCoordinator`.
+    let activateOnVPN: Bool
     /// Result feedback (host → plugin) after a `power.preventIdleSleep` effect was applied.
     let isPreventingSleep: Bool?
     let effectReason: String?
@@ -112,6 +119,8 @@ struct PluginPowerStatus: Codable, Equatable {
         isOnACPower: Bool,
         batteryLevel: Double?,
         currentSSID: String?,
+        isVPNConnected: Bool = false,
+        activateOnVPN: Bool = false,
         isPreventingSleep: Bool? = nil,
         effectReason: String? = nil,
         effectFailureCode: Int32? = nil,
@@ -123,6 +132,8 @@ struct PluginPowerStatus: Codable, Equatable {
         self.isOnACPower = isOnACPower
         self.batteryLevel = batteryLevel
         self.currentSSID = currentSSID
+        self.isVPNConnected = isVPNConnected
+        self.activateOnVPN = activateOnVPN
         self.isPreventingSleep = isPreventingSleep
         self.effectReason = effectReason
         self.effectFailureCode = effectFailureCode

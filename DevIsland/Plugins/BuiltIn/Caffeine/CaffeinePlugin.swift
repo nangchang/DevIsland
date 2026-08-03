@@ -22,8 +22,8 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         ],
         localizedName: PluginLocalizedString(english: "Caffeine", korean: "Caffeine"),
         localizedDescription: PluginLocalizedString(
-            english: "Prevents Mac sleep on AC power. Turns off on battery, low battery, excluded Wi-Fi, or session idle timeout.",
-            korean: "AC 전원에서 Mac의 잠자기를 방지합니다. 배터리 사용, 저전력, 예외 Wi-Fi 또는 세션 유휴 시 해제됩니다."
+            english: "Prevents Mac sleep on AC power or while a VPN is connected. Turns off on battery, low battery, excluded Wi-Fi, or session idle timeout.",
+            korean: "AC 전원 또는 VPN 연결 시 Mac의 잠자기를 방지합니다. 배터리 사용, 저전력, 예외 Wi-Fi 또는 세션 유휴 시 해제됩니다."
         )
     )
 
@@ -77,6 +77,9 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         case .onAC:
             preventSleep = true
             reasonString = "onAC"
+        case .onVPN:
+            preventSleep = true
+            reasonString = "onVPN"
         case .onBattery:
             preventSleep = false
             reasonString = "onBattery"
@@ -123,7 +126,11 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
         let language = context.language
 
         if isPreventingSleep {
-            statusText = language.s("Preventing sleep (AC Power)", "슬립 차단 중 (AC 전원)")
+            if lastReason == "onVPN" {
+                statusText = language.s("Preventing sleep (VPN)", "슬립 차단 중 (VPN)")
+            } else {
+                statusText = language.s("Preventing sleep (AC Power)", "슬립 차단 중 (AC 전원)")
+            }
             tone = .success
         } else {
             tone = nil
@@ -198,6 +205,7 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
     private enum DecidedReason {
         case off
         case onAC
+        case onVPN
         case excludedSSID(String)
         case onBattery
         case lowBattery
@@ -230,17 +238,21 @@ final class CaffeinePlugin: DevIslandPlugin, @unchecked Sendable {
             return (nextLow, .excludedSSID(ssid))
         }
 
-        if !status.isOnACPower {
-            if nextLow {
-                return (nextLow, .lowBattery)
-            }
-            return (nextLow, .onBattery)
-        }
-
+        // 저전력은 전원/VPN 연결 여부와 무관한 최우선 안전장치 — 방전 방지.
         if nextLow {
             return (nextLow, .lowBattery)
         }
 
-        return (nextLow, .onAC)
+        // 전원 OR VPN: AC 전원이 연결됐거나, VPN 활성화 옵션이 켜진 상태에서
+        // VPN이 연결돼 있으면 슬립을 차단한다.
+        if status.isOnACPower {
+            return (nextLow, .onAC)
+        }
+
+        if status.activateOnVPN, status.isVPNConnected {
+            return (nextLow, .onVPN)
+        }
+
+        return (nextLow, .onBattery)
     }
 }

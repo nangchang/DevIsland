@@ -2774,13 +2774,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When enabled, sleep is prevented while on AC power; always off on excluded Wi-Fi or when battery is ≤ 20%."
+            "value": "When enabled, sleep is prevented while on AC power (or a VPN is connected); always off on excluded Wi-Fi or when battery is ≤ 20%."
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "켰을 때만 동작합니다. 전원 연결 시 슬립이 차단되며, 예외 Wi-Fi 또는 배터리 20% 이하에서는 항상 비활성화됩니다."
+            "value": "켰을 때만 동작합니다. 전원 연결(또는 VPN 연결) 시 슬립이 차단되며, 예외 Wi-Fi 또는 배터리 20% 이하에서는 항상 비활성화됩니다."
           }
         }
       }
@@ -4429,6 +4429,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "전원 연결"
+          }
+        }
+      }
+    },
+    "lblVPNConnected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN Connected"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 연결됨"
+          }
+        }
+      }
+    },
+    "lblCaffeineActivateOnVPN": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activate when VPN is connected"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 연결 시에도 활성화"
+          }
+        }
+      }
+    },
+    "hintCaffeineActivateOnVPN": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When on battery, keep preventing sleep as long as a VPN (e.g. FortiClient) is connected. Low battery still releases the assertion."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "배터리 사용 중이라도 VPN(예: FortiClient)이 연결돼 있으면 슬립을 계속 차단합니다. 저전력에서는 여전히 해제됩니다."
           }
         }
       }

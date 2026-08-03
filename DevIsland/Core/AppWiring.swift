@@ -11,6 +11,7 @@ import Combine
 final class AppWiring {
     private let powerSourceMonitor = PowerSourceMonitor()
     private let wifiMonitor = WifiSSIDMonitor()
+    private let vpnMonitor = VPNMonitor()
 
     /// Built-in plugins compiled into DevIsland, registered once at wiring.
     private static func builtInPlugins(
@@ -92,6 +93,7 @@ final class AppWiring {
 
         powerSourceMonitor.start()
         wifiMonitor.start()
+        vpnMonitor.start()
 
         // assign(to:&)는 대상 @Published의 라이프사이클에 따라 자동 정리되므로
         // 별도 cancellables 보관이 필요 없고 retain cycle 위험도 없다.
@@ -107,9 +109,14 @@ final class AppWiring {
             .receive(on: DispatchQueue.main)
             .assign(to: &caffeineCoordinator.$currentSSID)
 
+        vpnMonitor.$isVPNConnected
+            .receive(on: DispatchQueue.main)
+            .assign(to: &caffeineCoordinator.$isVPNConnected)
+
         DispatchQueue.main.async { [caffeineCoordinator] in
             let store = SettingsStore.shared
             caffeineCoordinator.caffeineEnabled = store.settings.caffeineEnabled
+            caffeineCoordinator.activateOnVPN = store.settings.caffeineActivateOnVPN
             caffeineCoordinator.excludedSSIDs = store.settings.caffeineExcludedSSIDs
 
             store.$settings
@@ -117,6 +124,12 @@ final class AppWiring {
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
                 .assign(to: &caffeineCoordinator.$caffeineEnabled)
+
+            store.$settings
+                .map(\.caffeineActivateOnVPN)
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .assign(to: &caffeineCoordinator.$activateOnVPN)
 
             store.$settings
                 .map(\.caffeineExcludedSSIDs)

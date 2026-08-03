@@ -314,6 +314,11 @@ extension SettingsStore {
                 from: userDefaults,
                 default: defaults.caffeineEnabled
             ),
+            caffeineActivateOnVPN: bool(
+                key: DefaultsKey.caffeineActivateOnVPN,
+                from: userDefaults,
+                default: defaults.caffeineActivateOnVPN
+            ),
             caffeineExcludedSSIDs: (userDefaults.stringArray(forKey: DefaultsKey.caffeineExcludedSSIDs) ?? defaults.caffeineExcludedSSIDs),
             caffeineSessionTimeoutEnabled: bool(
                 key: DefaultsKey.caffeineSessionTimeoutEnabled,

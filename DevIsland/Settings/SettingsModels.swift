@@ -291,6 +291,7 @@ struct AppSettings: Equatable {
     var notchAnimationEnabled: Bool
     var notchAnimationSpeed: Double
     var caffeineEnabled: Bool
+    var caffeineActivateOnVPN: Bool
     var caffeineExcludedSSIDs: [String]
     var caffeineSessionTimeoutEnabled: Bool
     var caffeineSessionTimeoutMinutes: Int
@@ -388,6 +389,7 @@ struct AppSettings: Equatable {
         notchAnimationEnabled: true,
         notchAnimationSpeed: 1.0,
         caffeineEnabled: false,
+        caffeineActivateOnVPN: true,
         caffeineExcludedSSIDs: [],
         caffeineSessionTimeoutEnabled: false,
         caffeineSessionTimeoutMinutes: 5,

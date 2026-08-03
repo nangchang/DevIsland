@@ -18,11 +18,11 @@ final class CaffeinePluginTests: XCTestCase {
         XCTAssertTrue(plugin.manifest.permissions.contains(.showMenubarMenu))
         XCTAssertEqual(
             plugin.manifest.displayDescription(language: .english),
-            "Prevents Mac sleep on AC power. Turns off on battery, low battery, excluded Wi-Fi, or session idle timeout."
+            "Prevents Mac sleep on AC power or while a VPN is connected. Turns off on battery, low battery, excluded Wi-Fi, or session idle timeout."
         )
         XCTAssertEqual(
             plugin.manifest.displayDescription(language: .korean),
-            "AC 전원에서 Mac의 잠자기를 방지합니다. 배터리 사용, 저전력, 예외 Wi-Fi 또는 세션 유휴 시 해제됩니다."
+            "AC 전원 또는 VPN 연결 시 Mac의 잠자기를 방지합니다. 배터리 사용, 저전력, 예외 Wi-Fi 또는 세션 유휴 시 해제됩니다."
         )
     }
 
@@ -364,6 +364,82 @@ final class CaffeinePluginTests: XCTestCase {
         let event = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status)
         let effects = try await plugin.onEvent(event, context: makeContext())
         XCTAssertEqual(effects[0].payload["reason"], "off")
+    }
+
+    func testOnBatteryWithVPNHolds() async throws {
+        let plugin = makePlugin()
+        let status = PluginPowerStatus(
+            featureEnabled: true,
+            excludedSSIDs: [],
+            isOnACPower: false,
+            batteryLevel: 0.6,
+            currentSSID: "Home",
+            isVPNConnected: true,
+            activateOnVPN: true
+        )
+        let event = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status)
+
+        let effects = try await plugin.onEvent(event, context: makeContext())
+        XCTAssertEqual(effects[0].payload["preventSleep"], "true")
+        XCTAssertEqual(effects[0].payload["reason"], "onVPN")
+
+        let contribution = try plugin.makeUIContribution(for: .menubarMenu, context: PluginUIContext(slot: .menubarMenu, timestamp: Date(), session: nil))
+        let statusComponent = contribution?.components.first(where: { $0.id == "caffeine-status" })
+        XCTAssertEqual(statusComponent?.value, "Preventing sleep (VPN)")
+    }
+
+    func testOnBatteryWithVPNButToggleOffReleases() async throws {
+        let plugin = makePlugin()
+        let status = PluginPowerStatus(
+            featureEnabled: true,
+            excludedSSIDs: [],
+            isOnACPower: false,
+            batteryLevel: 0.6,
+            currentSSID: "Home",
+            isVPNConnected: true,
+            activateOnVPN: false
+        )
+        let event = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status)
+
+        let effects = try await plugin.onEvent(event, context: makeContext())
+        XCTAssertEqual(effects[0].payload["preventSleep"], "false")
+        XCTAssertEqual(effects[0].payload["reason"], "onBattery")
+    }
+
+    func testLowBatteryReleasesEvenWithVPN() async throws {
+        let plugin = makePlugin()
+        let status = PluginPowerStatus(
+            featureEnabled: true,
+            excludedSSIDs: [],
+            isOnACPower: false,
+            batteryLevel: 0.18,
+            currentSSID: "Home",
+            isVPNConnected: true,
+            activateOnVPN: true
+        )
+        let event = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status)
+
+        let effects = try await plugin.onEvent(event, context: makeContext())
+        XCTAssertEqual(effects[0].payload["preventSleep"], "false")
+        XCTAssertEqual(effects[0].payload["reason"], "lowBattery")
+    }
+
+    func testExcludedSSIDBeatsVPN() async throws {
+        let plugin = makePlugin()
+        let status = PluginPowerStatus(
+            featureEnabled: true,
+            excludedSSIDs: ["Office-Internal"],
+            isOnACPower: false,
+            batteryLevel: 0.6,
+            currentSSID: "Office-Internal",
+            isVPNConnected: true,
+            activateOnVPN: true
+        )
+        let event = PluginEvent(id: UUID(), kind: .powerStatusChanged, timestamp: Date(), powerStatus: status)
+
+        let effects = try await plugin.onEvent(event, context: makeContext())
+        XCTAssertEqual(effects[0].payload["preventSleep"], "false")
+        XCTAssertEqual(effects[0].payload["reason"], "excludedSSID:Office-Internal")
     }
 
     func testSettingsPaneDescriptor() {
