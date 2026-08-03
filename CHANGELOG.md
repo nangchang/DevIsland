@@ -2,8 +2,12 @@
 
 ## Unreleased
 
-여러 에이전트 세션에서 지금 개입할 작업과 서로 겹치는 작업을 한눈에 찾을 수 있도록
-Session Center에 로컬 우선 Fleet Radar를 추가하는 다음 개발 버전 변경입니다.
+## v0.15.0 - 2026-08-04
+
+이번 릴리즈는 여러 에이전트 세션에서 지금 개입할 작업과 서로 겹치는 작업을 한눈에
+찾을 수 있도록 Session Center에 로컬 우선 Fleet Radar를 추가한 기능 업데이트입니다.
+Codex 서브에이전트 표시와 승인 위임, VPN 연결 중 Caffeine 활성화, 테스트 및 프로세스
+실행 안정화도 함께 담았습니다.
 
 ### Highlights
 
@@ -11,6 +15,36 @@ Session Center에 로컬 우선 Fleet Radar를 추가하는 다음 개발 버전
   worktree가 동일한 경로를 수정할 때 로컬·읽기 전용 조기 경고를 표시합니다.
 - Session History를 Fleet, Sessions, Insights 탭이 있는 Session Center로 확장하면서 기존
   검색, 즐겨찾기, Quick Launch와 인사이트 흐름을 그대로 유지합니다.
+- 확장 노치에서 브랜치, 변경 수, 충돌, overlap, stale 상태를 요약하고 Session Center로
+  바로 이동할 수 있게 했습니다.
+
+### Approval & Hooks
+
+- Codex의 `agent_id`와 `agent_type`을 사용해 서브에이전트를 부모 세션 아래 중첩된 행으로
+  표시하고, 부모 세션이 종료되면 관련 서브에이전트 행도 함께 정리합니다.
+- Claude와 Codex 서브에이전트의 승인 요청을 DevIsland가 자동 승인하지 않고 CLI 자체
+  흐름에 위임하도록 응답을 `pass`로 변경했습니다.
+- Codex hook manifest에 `SubagentStart`와 `SubagentStop`을 등록해 서브에이전트 수명주기
+  이벤트를 추적할 수 있게 했습니다.
+
+### Caffeine
+
+- 전원 연결뿐 아니라 VPN이 실제로 연결된 동안에도 Caffeine이 절전 방지를 유지할 수
+  있게 하고, 설정에서 VPN 활성화 조건을 끌 수 있게 했습니다.
+- 저전력 상태와 제외된 Wi-Fi 조건을 VPN보다 우선하는 안전장치로 유지해 배터리 방전과
+  원치 않는 절전 방지를 줄였습니다.
+- SystemConfiguration의 실제 VPN 연결 상태를 감지하고 상태 변경을 실시간 반영하도록
+  모니터링을 보강했습니다.
+
+### Stability & Internal
+
+- Fleet Radar의 Git 상태 수집에 timeout, 출력 한도, actor 기반 snapshot cache와
+  stale/unavailable 상태를 적용해 큰 저장소에서도 안전하게 저하되도록 했습니다.
+- Git process pipe 처리를 이벤트 기반으로 전환해 동시 출력 중 교착 가능성을 줄였습니다.
+- Fleet Radar 테스트의 잘못된 `weak let` 선언을 수정해 nightly 테스트 타깃이 정상적으로
+  컴파일되도록 했습니다.
+
+**Full Changelog**: https://github.com/nangchang/DevIsland/compare/v0.14.0...v0.15.0
 
 ## v0.14.0 - 2026-07-16
 
