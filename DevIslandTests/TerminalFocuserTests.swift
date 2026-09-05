@@ -13,6 +13,7 @@ final class TerminalFocuserTests: XCTestCase {
         XCTAssertEqual(TerminalFocuser.normalizedAppName("wezterm"), "WezTerm")
         XCTAssertEqual(TerminalFocuser.normalizedAppName("wez term"), "WezTerm")
         XCTAssertEqual(TerminalFocuser.normalizedAppName("wezterm.app"), "WezTerm")
+        XCTAssertEqual(TerminalFocuser.normalizedAppName("orca"), "Orca")
         XCTAssertNil(TerminalFocuser.normalizedAppName("UnknownApp"))
         XCTAssertNil(TerminalFocuser.normalizedAppName(nil))
     }
@@ -22,6 +23,14 @@ final class TerminalFocuserTests: XCTestCase {
         XCTAssertEqual(
             TerminalFocuser.wezTermCLIURL(for: appURL).path,
             "/Applications/WezTerm.app/Contents/MacOS/wezterm"
+        )
+    }
+
+    func testOrcaCLIURLUsesBundledCLI() {
+        let appURL = URL(fileURLWithPath: "/Applications/Orca.app")
+        XCTAssertEqual(
+            TerminalFocuser.orcaCLIURL(for: appURL).path,
+            "/Applications/Orca.app/Contents/Resources/bin/orca"
         )
     }
 
