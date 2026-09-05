@@ -432,6 +432,20 @@ detect_codex_desktop() {
   TERM_TITLE="${_dir:-Codex}"
 }
 
+# Orca: TERM_PROGRAM=Orca로 탐지. ORCA_TERMINAL_HANDLE/ORCA_TAB_ID/ORCA_WORKTREE_ID는
+# Orca가 셸에 직접 export하는 환경변수 — VSCODE_*와 겹치지 않아 다른 detector와 충돌 없음.
+detect_orca() {
+  [ "$TERM_PROGRAM" = "Orca" ] || return 1
+  TERM_APP="Orca"
+  # TERM_WINDOW_ID carries the terminal handle (used by `orca terminal switch --terminal <handle>`)
+  TERM_WINDOW_ID="${ORCA_TERMINAL_HANDLE:-}"
+  TERM_TAB_INDEX="${ORCA_TAB_ID:-}"
+  local _worktree_path
+  _worktree_path="${ORCA_WORKTREE_ID##*::}"
+  TERM_TITLE=$(basename "${_worktree_path:-$PWD}" 2>/dev/null)
+  TERM_TITLE="${TERM_TITLE:-Orca}"
+}
+
 # -------------------------------------------------------------------
 # 터미널 앱 감지 실행 — 첫 번째 성공한 detector에서 중단
 # 새 터미널 추가: detect_<name>() 함수를 위에 추가하고 여기에 이름만 등록
@@ -448,6 +462,7 @@ _DETECTORS=(
   detect_vscode_extension_host
   detect_claude_desktop
   detect_codex_desktop
+  detect_orca
 )
 
 for _fn in "${_DETECTORS[@]}"; do

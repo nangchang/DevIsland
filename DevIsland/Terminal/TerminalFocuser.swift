@@ -19,6 +19,7 @@ final class TerminalFocuser: Sendable {
         ("com.microsoft.VSCode",            "VSCode"),
         ("com.anthropic.claudefordesktop",  "ClaudeDesktop"),
         ("com.openai.codex",               "CodexDesktop"),
+        ("com.stablyai.orca",              "Orca"),
     ]
 
     @Sendable
@@ -343,6 +344,8 @@ final class TerminalFocuser: Sendable {
             return "ClaudeDesktop"
         case "codexdesktop", "codex desktop":
             return "CodexDesktop"
+        case "orca":
+            return "Orca"
         default:
             return nil
         }

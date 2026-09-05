@@ -128,6 +128,24 @@ class BridgeShellTest(unittest.TestCase):
         self.assertEqual(captured["TERM_WINDOW_ID"], "0")
         self.assertEqual(captured["TERM_TMUX_PANE"], "")
 
+    def test_orca_is_forwarded_as_terminal_source(self):
+        captured = self.run_bridge(
+            env={
+                "TERM_PROGRAM": "Orca",
+                "ORCA_TERMINAL_HANDLE": "term_c41bec79-b4bc-4aa0-b58c-55c85ae2c854",
+                "ORCA_TAB_ID": "3dfd4c8a-29b5-474e-9051-5131f55d9357",
+                "ORCA_WORKTREE_ID": "41057d2f-7fa5-42c1-bac0-cf40e103cd78::/Volumes/data/Github/DevIsland",
+            },
+            fake_bins={
+                "tty": "#!/bin/sh\nprintf 'not a tty\\n'\n",
+            },
+        )
+
+        self.assertEqual(captured["TERM_APP"], "Orca")
+        self.assertEqual(captured["TERM_WINDOW_ID"], "term_c41bec79-b4bc-4aa0-b58c-55c85ae2c854")
+        self.assertEqual(captured["TERM_TAB_INDEX"], "3dfd4c8a-29b5-474e-9051-5131f55d9357")
+        self.assertEqual(captured["TERM_TITLE"], "DevIsland")
+
     def test_plain_wezterm_takes_precedence_over_cmux_environment(self):
         captured = self.run_bridge(
             env={

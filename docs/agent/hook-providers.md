@@ -120,6 +120,15 @@ VS Code and Claude Desktop sessions are opt-in (`processVSCodeEnabled`, `process
 - Inside tmux, WezTerm may not preserve `TERM_PROGRAM` or `WEZTERM_PANE`; the bridge uses tmux `client_tty` and the tmux client process parent chain to identify WezTerm without relying on a global “WezTerm is running” check.
 - WezTerm detection is used only to decide whether the hook source is a terminal and to label the session. Exact WezTerm pane focusing is not part of this bridge detection path.
 
+### Orca detection (bridge)
+
+- Detected from `TERM_PROGRAM=Orca`, which Orca (https://www.onorca.dev/, bundle id `com.stablyai.orca`) exports directly — no app-running check needed.
+- `ORCA_TERMINAL_HANDLE` → `TERM_WINDOW_ID` (used by `orca terminal switch --terminal <handle>` to focus the exact tab).
+- `ORCA_TAB_ID` → `TERM_TAB_INDEX`.
+- `ORCA_WORKTREE_ID` has the form `<repo-id>::<path>`; the bridge strips the `<repo-id>::` prefix with `${ORCA_WORKTREE_ID##*::}` to recover the worktree path for `TERM_TITLE`.
+- Depends on the Orca CLI at `Contents/Resources/bin/orca` inside the app bundle (`TerminalFocuser+Orca.swift`'s `orcaCLIURL(for:)`). Focusing runs `terminal switch --terminal <handle>`; opening a new session runs `terminal create --worktree path:<workspaceRoot> --command <cmd> --focus` (`--worktree active` resolves against the *caller's* cwd, not the session's, so it must not be used from DevIsland).
+- Orca has no AppleScript dictionary and its CLI exposes no "which tab is focused" query, so `isSessionFrontmost` falls back to the app-level default (`frontmostCheckScript`'s `default` case returns `"true"`): any session reads as frontmost whenever Orca.app itself is frontmost, regardless of which tab is showing. Also unsupported for the same reason: AoE dashboard navigation (see `terminal-focus-aoe.md`).
+
 ### Claude Desktop detection (bridge)
 
 Claude Desktop has no distinguishing environment variable. Detection walks the parent process chain (up to 5 levels) looking for a process whose `comm` path matches `Claude\.app/Contents/MacOS/Claude$`.
