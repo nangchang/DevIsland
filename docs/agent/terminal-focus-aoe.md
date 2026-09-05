@@ -27,7 +27,7 @@ Users can switch **General → AoE Session Focus** to **tmux client switch** to 
 | iTerm | Default: use AppleScript to select the target window/tab/session, then send AoE navigation text with `write text ... newline false`. Optional tmux client switch mode uses tmux metadata after focus without sending text. |
 | cmux | Focus the owning workspace/terminal only. AoE dashboard session selection is unsupported. |
 | Apple Terminal | Focus the owning window/tab only. AoE dashboard session selection is unsupported. |
-| Orca | Focus the target terminal tab via the Orca CLI (`orca terminal switch --terminal <handle>`), then raise the app. No AppleScript dictionary is exposed, so AoE dashboard session selection is unsupported. |
+| Orca | Focus the target terminal tab via the Orca CLI (`orca terminal switch --terminal <handle>`), then raise the app. AoE dashboard session selection is unsupported — not for lack of text injection, but because a detached AoE session under tmux is never identified as Orca in the first place (see Limits). |
 
 ## Limits
 
@@ -35,7 +35,9 @@ Users can switch **General → AoE Session Focus** to **tmux client switch** to 
 - Apple Terminal does not expose a reliable equivalent to iTerm's `write text ... newline false` or WezTerm's `send-text` for driving an existing AoE dashboard without leaking text into the selected agent session.
 - AoE currently has `session attach`, `send`, `list --json`, and HTTP API surfaces, but no confirmed public command/API that selects an existing dashboard row in the already-running TUI.
 - Detached AoE detection infers the manager process from the tmux session prefix (`aoe_*`) and prefers a matching process with an attached TTY. Multiple visible AoE manager processes may still be ambiguous.
-- Orca has no AppleScript dictionary and its CLI does not expose tmux-style pane/text injection, so it cannot drive AoE dashboard navigation the way WezTerm/iTerm do.
+- Orca's CLI *does* expose reliable, focus-independent text injection (`orca terminal send --terminal <handle> --text <text>`) — verified to deliver raw control bytes (e.g. Ctrl+Q) into the target pty even while Orca is not frontmost, the same property WezTerm's `--no-paste` and iTerm's `write text` provide.
+- The actual blocker is upstream of the handle: a tmux pane spawned via `tmux new-session` does not preserve `TERM_PROGRAM` (or `ORCA_TERMINAL_HANDLE`/`ORCA_TAB_ID`/`ORCA_WORKTREE_ID`) from the shell that started it — confirmed via `ps eww` on a pane in a freshly isolated tmux server (`tmux -L <unique-socket>`) forked directly from an Orca-hosted shell. So for a detached AoE session, `detect_orca`'s own `TERM_PROGRAM = "Orca"` gate fails first; the session is never identified as Orca in the first place, not merely missing a handle.
+- The detached-tmux manager parent-chain walk in `devisland-bridge.sh` has no `*orca*` case to recover `TERM_APP=Orca` the way it does for iTerm/WezTerm/Ghostty/etc. — a separate gap, not addressed here (see `hook-providers.md`'s Orca detection section). Even if it were added, Orca's CLI still has no documented selector to resolve a terminal handle from an arbitrary tty/pid (only `orca diagnostics memory --json`, an undocumented diagnostics surface not listed among the CLI's selectors, happens to expose per-session pids that could be tty-correlated as an unofficial workaround).
 
 ## Manual Verification
 
@@ -49,4 +51,4 @@ For iTerm and WezTerm with the default **AoE dashboard search** mode:
 
 With **tmux client switch** mode, step 5 is different: verify the terminal app is frontmost and tmux switches to the expected session/pane without `/session title` appearing in the agent stdin.
 
-For cmux and Apple Terminal, step 5 is different: verify only that the terminal app is frontmost and the owning workspace/tab/terminal is selected when DevIsland has matching metadata. AoE session row selection is not expected.
+For cmux, Apple Terminal, and Orca, step 5 is different: verify only that the terminal app is frontmost and the owning workspace/tab/terminal is selected when DevIsland has matching metadata. AoE session row selection is not expected.

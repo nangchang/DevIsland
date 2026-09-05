@@ -127,7 +127,7 @@ VS Code and Claude Desktop sessions are opt-in (`processVSCodeEnabled`, `process
 - `ORCA_TAB_ID` → `TERM_TAB_INDEX`.
 - `ORCA_WORKTREE_ID` has the form `<repo-id>::<path>`; the bridge strips the `<repo-id>::` prefix with `${ORCA_WORKTREE_ID##*::}` to recover the worktree path for `TERM_TITLE`.
 - Depends on the Orca CLI at `Contents/Resources/bin/orca` inside the app bundle (`TerminalFocuser+Orca.swift`'s `orcaCLIURL(for:)`). Focusing runs `terminal switch --terminal <handle>`; opening a new session runs `terminal create --worktree path:<workspaceRoot> --command <cmd> --focus` (`--worktree active` resolves against the *caller's* cwd, not the session's, so it must not be used from DevIsland).
-- Orca has no AppleScript dictionary and its CLI exposes no "which tab is focused" query, so `isSessionFrontmost` falls back to the app-level default (`frontmostCheckScript`'s `default` case returns `"true"`): any session reads as frontmost whenever Orca.app itself is frontmost, regardless of which tab is showing. Also unsupported for the same reason: AoE dashboard navigation (see `terminal-focus-aoe.md`).
+- Orca has no AppleScript dictionary and its CLI exposes no "which tab is focused" query, so `isSessionFrontmost` falls back to the app-level default (`frontmostCheckScript`'s `default` case returns `"true"`): any session reads as frontmost whenever Orca.app itself is frontmost, regardless of which tab is showing. Also unsupported, but for a different reason — see `terminal-focus-aoe.md`.
 
 ### Claude Desktop detection (bridge)
 
