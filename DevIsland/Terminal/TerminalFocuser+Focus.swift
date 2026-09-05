@@ -121,8 +121,10 @@ extension TerminalFocuser {
                 // windowId carries ORCA_TERMINAL_HANDLE (set by detect_orca in the bridge).
                 let appUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: match.bundleId)
                 if let windowId, !windowId.isEmpty, let appUrl {
-                    let cli = appUrl.appendingPathComponent("Contents/Resources/bin/orca")
-                    _ = runProcess(executable: cli, arguments: ["terminal", "switch", "--terminal", windowId])
+                    let cli = orcaCLIURL(for: appUrl)
+                    if !runProcess(executable: cli, arguments: ["terminal", "switch", "--terminal", windowId]) {
+                        Log.terminal.error("terminal focus Orca error: switch failed for \(windowId, privacy: .private)")
+                    }
                 }
                 if let appUrl {
                     DispatchQueue.main.async {
@@ -361,7 +363,8 @@ extension TerminalFocuser {
 
     /// 새 창/탭을 열고 command를 실행한다.
     /// appName: normalizedAppName() 결과 또는 nil (설치된 첫 번째 터미널 자동 선택)
-    static func openNewWindow(appName: String?, command: String) {
+    /// workspaceRoot: 세션의 워크트리 경로 (Orca는 새 터미널을 만들 워크트리를 지정하는 데 사용)
+    static func openNewWindow(appName: String?, command: String, workspaceRoot: String? = nil) {
         let target = appName.flatMap { name in
             candidates.first { $0.name == name }
         } ?? candidates.first(where: {
@@ -453,10 +456,19 @@ extension TerminalFocuser {
                 }
 
             case "Orca":
-                // Open a new terminal in the active Orca worktree.
+                // `--worktree active` resolves against the caller's cwd, which for DevIsland
+                // itself is not the session's worktree — target the path explicitly instead.
+                // `--focus` is required or the tab is created without switching to it.
                 if let appUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleId) {
-                    let cli = appUrl.appendingPathComponent("Contents/Resources/bin/orca")
-                    _ = launchProcess(executable: cli, arguments: ["terminal", "create", "--worktree", "active", "--command", command])
+                    let cli = orcaCLIURL(for: appUrl)
+                    var args = ["terminal", "create"]
+                    if let root = workspaceRoot, !root.isEmpty {
+                        args += ["--worktree", "path:\(root)"]
+                    }
+                    args += ["--command", command, "--focus"]
+                    if !launchProcess(executable: cli, arguments: args) {
+                        Log.terminal.error("openNewWindow Orca error: \(cli.path, privacy: .private)")
+                    }
                 }
 
             default:

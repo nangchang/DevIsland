@@ -436,12 +436,12 @@ struct SessionRowView: View {
 
     private func openInTerminal(appName: String? = nil) {
         let name = appName ?? autoTerminalName
-        TerminalFocuser.openNewWindow(appName: name, command: resumeCommand)
+        TerminalFocuser.openNewWindow(appName: name, command: resumeCommand, workspaceRoot: session.workspaceRoot)
     }
 
     private func openNewSession(provider: BuddyKind, appName: String? = nil) {
         let name = appName ?? autoTerminalName
-        TerminalFocuser.openNewWindow(appName: name, command: session.newSessionCommand(for: provider))
+        TerminalFocuser.openNewWindow(appName: name, command: session.newSessionCommand(for: provider), workspaceRoot: session.workspaceRoot)
     }
     private var statusLabel: String? {
         switch session.status {
