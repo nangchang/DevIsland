@@ -116,6 +116,19 @@ extension TerminalFocuser {
 
                 resolvedTTY = outerTTY ?? resolvedTTY
                 wezTermAppUrl = appUrl
+            } else if name == "Orca" {
+                // Focus the specific terminal via the Orca CLI, then raise the app.
+                // windowId carries ORCA_TERMINAL_HANDLE (set by detect_orca in the bridge).
+                let appUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: match.bundleId)
+                if let windowId, !windowId.isEmpty, let appUrl {
+                    let cli = appUrl.appendingPathComponent("Contents/Resources/bin/orca")
+                    _ = runProcess(executable: cli, arguments: ["terminal", "switch", "--terminal", windowId])
+                }
+                if let appUrl {
+                    DispatchQueue.main.async {
+                        NSWorkspace.shared.openApplication(at: appUrl, configuration: NSWorkspace.OpenConfiguration())
+                    }
+                }
             } else {
                 let (_, error) = executeAppleScript(focusScript(appName: name, title: title, tty: tty, windowId: windowId, tabIndex: tabIndex))
                 if let error {
@@ -437,6 +450,13 @@ extension TerminalFocuser {
                     if !ok {
                         Log.terminal.error("openNewWindow WezTerm error: \(cli.path, privacy: .private)")
                     }
+                }
+
+            case "Orca":
+                // Open a new terminal in the active Orca worktree.
+                if let appUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: target.bundleId) {
+                    let cli = appUrl.appendingPathComponent("Contents/Resources/bin/orca")
+                    _ = launchProcess(executable: cli, arguments: ["terminal", "create", "--worktree", "active", "--command", command])
                 }
 
             default:

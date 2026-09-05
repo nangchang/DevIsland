@@ -408,6 +408,18 @@ detect_claude_desktop() {
 }
 
 # Codex Desktop app: CODEX_SHELL 환경변수 또는 부모 프로세스 체인에서 "Codex" 앱 탐지
+detect_orca() {
+  [ "$TERM_PROGRAM" = "Orca" ] || return 1
+  TERM_APP="Orca"
+  # TERM_WINDOW_ID carries the terminal handle (used by `orca terminal switch --terminal <handle>`)
+  TERM_WINDOW_ID="${ORCA_TERMINAL_HANDLE:-}"
+  TERM_TAB_INDEX="${ORCA_TAB_ID:-}"
+  local _worktree_path
+  _worktree_path="${ORCA_WORKTREE_ID##*::}"
+  TERM_TITLE=$(basename "${_worktree_path:-$PWD}" 2>/dev/null)
+  TERM_TITLE="${TERM_TITLE:-Orca}"
+}
+
 detect_codex_desktop() {
   local _is=0
   if [ -n "${CODEX_SHELL:-}" ]; then
@@ -448,6 +460,7 @@ _DETECTORS=(
   detect_vscode_extension_host
   detect_claude_desktop
   detect_codex_desktop
+  detect_orca
 )
 
 for _fn in "${_DETECTORS[@]}"; do
