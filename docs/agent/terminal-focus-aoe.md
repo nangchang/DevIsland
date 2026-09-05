@@ -27,6 +27,7 @@ Users can switch **General → AoE Session Focus** to **tmux client switch** to 
 | iTerm | Default: use AppleScript to select the target window/tab/session, then send AoE navigation text with `write text ... newline false`. Optional tmux client switch mode uses tmux metadata after focus without sending text. |
 | cmux | Focus the owning workspace/terminal only. AoE dashboard session selection is unsupported. |
 | Apple Terminal | Focus the owning window/tab only. AoE dashboard session selection is unsupported. |
+| Orca | Focus the target terminal tab via the Orca CLI (`orca terminal switch --terminal <handle>`), then raise the app. No AppleScript dictionary is exposed, so AoE dashboard session selection is unsupported. |
 
 ## Limits
 
@@ -34,6 +35,7 @@ Users can switch **General → AoE Session Focus** to **tmux client switch** to 
 - Apple Terminal does not expose a reliable equivalent to iTerm's `write text ... newline false` or WezTerm's `send-text` for driving an existing AoE dashboard without leaking text into the selected agent session.
 - AoE currently has `session attach`, `send`, `list --json`, and HTTP API surfaces, but no confirmed public command/API that selects an existing dashboard row in the already-running TUI.
 - Detached AoE detection infers the manager process from the tmux session prefix (`aoe_*`) and prefers a matching process with an attached TTY. Multiple visible AoE manager processes may still be ambiguous.
+- Orca has no AppleScript dictionary and its CLI does not expose tmux-style pane/text injection, so it cannot drive AoE dashboard navigation the way WezTerm/iTerm do.
 
 ## Manual Verification
 
