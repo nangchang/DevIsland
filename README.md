@@ -11,10 +11,12 @@
 - **Agent message display**: Renders hook-delivered messages, Markdown, and edit or replace diffs in an easy-to-read in-app view.
 - **Sub-agent grouping**: Organizes sub-agent sessions under their parent session to make parallel work easier to follow.
 - **Caffeine**: Prevents display and system idle sleep while on AC power or a connected VPN, with configurable Wi-Fi exclusions and an optional session idle timeout.
-- **Terminal focus restoration**: Guides you back to the relevant terminal (iTerm, WezTerm, Ghostty, Apple Terminal, cmux, Orca, and more) when a task needs attention.
+- **Terminal focus restoration**: Guides you back to the relevant terminal (iTerm, WezTerm, Ghostty, Apple Terminal, cmux, Orca, and more) when a task needs attention. Orca support is on `main` but not yet in a tagged release; build from source (see [Getting Started](#getting-started)) to use it before the next release ships.
 - **OpenPeon CESP sound packs**: Maps audio feedback to hook events such as approval requests, task completion, errors, and resource limits.
 
 ## Installation
+
+Requires macOS 15 or later on Apple Silicon (arm64); Intel Macs are not currently supported.
 
 Download the latest DMG from [GitHub Releases](https://github.com/nangchang/DevIsland/releases/latest).
 
