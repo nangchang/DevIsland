@@ -4,7 +4,7 @@ General project instructions for AI coding agents working in this repository.
 
 ## What This Project Is
 
-DevIsland is a macOS menubar + notch-overlay app that intercepts Claude Code, Codex CLI, and Gemini CLI hook events in real time. The bridge forwards hook payloads to the running app, DevIsland displays activity and approval prompts in a Dynamic Island-style panel, and the bridge relays allow/deny decisions back to the originating CLI.
+DevIsland is a macOS menubar + notch-overlay app that intercepts Claude Code, Codex CLI, Gemini CLI, and Antigravity CLI hook events in real time. The bridge forwards hook payloads to the running app, DevIsland displays activity and approval prompts in a Dynamic Island-style panel, and the bridge relays allow/deny decisions back to the originating CLI.
 
 ## Start Here
 
