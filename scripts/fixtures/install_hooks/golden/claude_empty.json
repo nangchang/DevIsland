@@ -40,6 +40,16 @@
         ]
       }
     ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source claude"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "hooks": [

@@ -91,6 +91,16 @@
         ]
       }
     ],
+    "SubagentStop" : [
+      {
+        "hooks" : [
+          {
+            "command" : "\"\/BRIDGE\" --source claude",
+            "type" : "command"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit" : [
       {
         "hooks" : [

@@ -6,13 +6,14 @@
       "SessionEnd",
       "Notification",
       "Stop",
+      "SubagentStop",
       "PreToolUse",
       "PostToolUse",
       "PostToolUseFailure",
       "UserPromptSubmit",
       "Elicitation"
     ],
-    "retired": ["SubagentStop", "PreCompact", "StopFailure"]
+    "retired": ["PreCompact", "StopFailure"]
   },
   "codex": {
     "active": ["PermissionRequest"],

@@ -98,6 +98,52 @@ extension AppStateTests {
 
     // MARK: - SessionStore
 
+    func testClaudeSubagentStopRemovesOnlyFinishedChildAndPasses() {
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SessionStart","cli_source":"claude","session_id":"claude-parent"}
+            """
+        ) { _ in }
+        for childId in ["claude-finished", "claude-running"] {
+            appState.handleMessage(
+                """
+                {"hook_event_name":"PreToolUse","cli_source":"claude","session_id":"claude-parent","agent_id":"\(childId)","agent_type":"Explore","tool_name":"Read"}
+                """
+            ) { response in
+                XCTAssertEqual(self.parseResponse(response)?["response"] as? String, "pass")
+            }
+        }
+        let sessionsCreated = expectation(description: "Parent and child sessions created")
+        waitUntil(timeout: 1, expectation: sessionsCreated) {
+            self.appState.sessionStore.activeSessions.count == 3
+        }
+        wait(for: [sessionsCreated], timeout: 2)
+        let child = appState.sessionStore.activeSessions.first { $0.id == "claude-finished" }
+        XCTAssertEqual(child?.parentSessionId, "claude-parent")
+        XCTAssertTrue(child?.isSubAgentSession ?? false)
+
+        // Claude sends the parent session_id and the completed child's agent_id.
+        appState.handleMessage(
+            """
+            {"hook_event_name":"SubagentStop","cli_source":"claude","session_id":"claude-parent","agent_id":"claude-finished","agent_type":"Explore","stop_hook_active":false}
+            """
+        ) { response in
+            XCTAssertEqual(self.parseResponse(response)?["response"] as? String, "pass")
+        }
+        let childRemoved = expectation(description: "Finished child session removed")
+        waitUntil(timeout: 1, expectation: childRemoved) {
+            !self.appState.sessionStore.activeSessions.contains { $0.id == "claude-finished" }
+        }
+        wait(for: [childRemoved], timeout: 2)
+
+        XCTAssertEqual(
+            Set(appState.sessionStore.activeSessions.map(\.id)),
+            ["claude-parent", "claude-running"]
+        )
+        let parent = appState.sessionStore.activeSessions.first { $0.id == "claude-parent" }
+        XCTAssertFalse(parent?.isSubAgentSession ?? true)
+    }
+
     func testCodexSubAgentPermissionRequestCreatesNestedRowAndPasses() {
         appState = AppState(
             startServer: false,
