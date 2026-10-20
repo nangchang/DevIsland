@@ -115,14 +115,6 @@
             "type" : "command"
           }
         ]
-      },
-      {
-        "hooks" : [
-          {
-            "command" : "\"\/BRIDGE\" --source claude",
-            "type" : "command"
-          }
-        ]
       }
     ],
     "UserPromptSubmit" : [

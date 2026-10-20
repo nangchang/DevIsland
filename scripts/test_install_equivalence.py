@@ -4,7 +4,8 @@
 앱(BridgeInstaller)이 자체 Swift patch 함수 대신 install_hooks.py를 subprocess로
 호출하도록 전환하기 전에, 삭제 대상이던 Swift patch 함수의 출력을
 fixtures/install_hooks/swift_old/에 캡처했다(HEAD의 BridgeEquivalenceCaptureTests).
-이 테스트는 install_hooks.py의 출력이 그 Swift 출력과 **의미적으로 동치**임을 고정한다.
+캡처 파일은 그대로 보존하고, 의도한 동작 변경만 비교 시 기대값에 명시적으로 반영한다.
+현재 Claude의 SubagentStop 등록 추가 외에는 Swift 출력과 의미적으로 동치여야 한다.
 
 바이트 동치가 아니라 의미 동치인 이유: Swift는 JSONSerialization(.sortedKeys)로
 `"a" : "\/x"`처럼 콜론 앞 공백·슬래시 이스케이프를 넣고, Python은 json.dumps로
@@ -55,7 +56,7 @@ def _run(subcommand: str, work: Path, tmp: Path) -> None:
 
 
 class InstallEquivalenceTest(unittest.TestCase):
-    def test_json_semantic_equivalence(self) -> None:
+    def test_json_matches_baseline_with_documented_changes(self) -> None:
         for subcommand, fixture in JSON_CASES:
             with self.subTest(fixture=fixture):
                 with tempfile.TemporaryDirectory() as tmp:
@@ -65,10 +66,19 @@ class InstallEquivalenceTest(unittest.TestCase):
                     _run(subcommand, work, tmp_path)
 
                     produced = json.loads(work.read_text(encoding="utf-8"))
-                    swift_old = json.loads((SWIFT_OLD / fixture).read_text(encoding="utf-8"))
+                    expected = json.loads((SWIFT_OLD / fixture).read_text(encoding="utf-8"))
+                    if subcommand == "claude":
+                        # The old installer retired SubagentStop. Keep its captured
+                        # output intact and allow only this exact new hook entry.
+                        expected["hooks"].setdefault("SubagentStop", []).append({
+                            "hooks": [{
+                                "type": "command",
+                                "command": f'"{BRIDGE}" --source claude',
+                            }],
+                        })
                     self.assertEqual(
-                        produced, swift_old,
-                        msg=f"{fixture}: Python 출력이 (구) Swift 출력과 의미적으로 다름",
+                        produced, expected,
+                        msg=f"{fixture}: Python 출력에 명시된 변경 외의 Swift 기준 차이가 있음",
                     )
 
     def test_toml_semantic_equivalence(self) -> None:
