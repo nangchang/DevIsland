@@ -45,6 +45,14 @@
             "command": "/usr/local/bin/other-hook.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/BRIDGE\" --source claude"
+          }
+        ]
       }
     ],
     "SessionEnd": [
