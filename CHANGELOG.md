@@ -2,10 +2,17 @@
 
 ## Unreleased
 
+## v0.16.1 - 2026-11-16
+
+이번 릴리즈는 Claude 서브에이전트가 작업을 마쳐도 세션 표시가 남는 문제를 수정합니다.
+종료된 서브에이전트만 정리하고 부모 세션과 실행 중인 다른 서브에이전트는 유지합니다.
+
 ### Approval & Hooks
 
 - Claude 서브에이전트의 종료 훅 등록을 복구해 작업이 끝난 세션 표시가 남는 문제를 수정했습니다.
   업데이트 후 브리지를 재설치하고 새 Claude Code 세션을 시작해야 적용됩니다.
+
+**Full Changelog**: https://github.com/nangchang/DevIsland/compare/v0.16.0...v0.16.1
 
 ## v0.16.0 - 2026-09-29
 
