@@ -9,6 +9,7 @@ install_hooks.py는 install-bridge.sh의 inline Python 블록을 순수 이동�
 """
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -67,6 +68,35 @@ class InstallHooksGoldenTest(unittest.TestCase):
         for provider, fixture, extra in CASES:
             with self.subTest(provider=provider, fixture=fixture):
                 self._run_case(provider, fixture, extra)
+
+    def test_claude_subagent_stop_is_installed_and_preserves_other_hooks(self) -> None:
+        bridge = "/DevIsland/devisland-bridge.sh"
+        for fixture in ["claude_empty.json", "claude_full.json"]:
+            with self.subTest(fixture=fixture), tempfile.TemporaryDirectory() as tmp:
+                work = Path(tmp) / fixture
+                shutil.copy(INPUTS / fixture, work)
+                args = [sys.executable, str(INSTALLER), "claude", str(work), bridge]
+                # Reinstallation must retain exactly one DevIsland stop hook.
+                for _ in range(2):
+                    result = subprocess.run(args, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, msg=result.stderr)
+                    data = json.loads(work.read_text(encoding="utf-8"))
+                    hooks = [
+                        hook
+                        for entry in data["hooks"].get("SubagentStop", [])
+                        for hook in entry.get("hooks", [])
+                    ]
+                    bridge_hooks = [
+                        hook for hook in hooks
+                        if "devisland-bridge.sh" in hook.get("command", "")
+                    ]
+                    self.assertEqual(bridge_hooks, [{
+                        "type": "command", "command": f'"{bridge}" --source claude',
+                    }])
+                    if fixture == "claude_full.json":
+                        self.assertIn({
+                            "type": "command", "command": "/usr/local/bin/other-hook.sh",
+                        }, hooks)
 
     def test_corrupt_json_fails_without_overwriting(self) -> None:
         """손상된 JSON 설정은 fail-fast하고 원본을 보존해야 한다.

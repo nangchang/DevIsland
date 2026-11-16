@@ -6,7 +6,7 @@ DevIsland supports Claude Code, Codex CLI, and Gemini CLI through the same bridg
 
 | CLI Agent | Config File | Approval Event | Lifecycle Events |
 |---|---|---|---|
-| Claude Code | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `Stop` |
+| Claude Code | `~/.claude/settings.json` | `PermissionRequest` | `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `Stop`, `SubagentStop` |
 | Codex CLI | `~/.codex/hooks.json` + `config.toml` | `PermissionRequest` | `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStart`, `SubagentStop` |
 | Gemini CLI | `~/.gemini/settings.json` | `BeforeTool` | `SessionStart`, `SessionEnd`, `AfterAgent`, `Notification` |
 | Antigravity CLI | `~/.gemini/config/hooks.json` | `PreToolUse` | `PreInvocation`, `PostInvocation`, `PostToolUse`, `Stop` |
@@ -46,6 +46,12 @@ Approval output:
 ```
 
 Exit codes: `0` success, `2` hard block with stderr shown to the user, other values warning.
+
+### Sub-agent cleanup
+
+Claude sub-agent tool hooks carrying `agent_id` create nested session rows keyed on that ID, with the shared `session_id` as their parent. The installed `SubagentStop` hook removes only the completed child's row and returns `pass`, preserving the parent and other running children. Claude's main-agent `Stop` is not a substitute for this child completion event; see the [Claude hook reference](https://code.claude.com/docs/en/hooks#subagentstop).
+
+Reinstall the bridge after updating from a version that omitted Claude's `SubagentStop` registration, then start a new Claude Code session to use the updated hooks. Already-missed completion events are not replayed; their stale rows are removed when the parent session is removed.
 
 ## Codex CLI
 
